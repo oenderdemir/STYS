@@ -491,6 +491,7 @@ public static class StructurePermissions
     /// </summary>
     public static class TicariBelgeYonetimi
     {
+        public const string Menu = "TicariBelgeYonetimi.Menu";
         public const string View = "TicariBelgeYonetimi.View";
         public const string Manage = "TicariBelgeYonetimi.Manage";
     }

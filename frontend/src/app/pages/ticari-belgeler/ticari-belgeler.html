@@ -1,0 +1,115 @@
+<p-toast></p-toast>
+<p-confirm-dialog></p-confirm-dialog>
+
+<div class="card">
+    <p-toolbar styleClass="mb-4">
+        <ng-template pTemplate="left">
+            <h3 class="m-0">Ticari Belgeler</h3>
+        </ng-template>
+    </p-toolbar>
+
+    <div class="grid formgrid p-fluid mb-3">
+        <div class="field col-12 md:col-2">
+            <label>Belge No</label>
+            <input pInputText [(ngModel)]="filter().belgeNo" (keyup.enter)="loadBelgeler()" />
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Müşteri</label>
+            <input pInputText [(ngModel)]="filter().musteri" (keyup.enter)="loadBelgeler()" />
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Belge Tipi</label>
+            <p-select [options]="belgeTipiSecenekleri" optionLabel="label" optionValue="value" [ngModel]="selectedBelgeTipi()" (ngModelChange)="selectedBelgeTipi.set($event)" [showClear]="true" placeholder="Tümü"></p-select>
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Ticari Durum</label>
+            <p-select [options]="ticariDurumSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="filter().ticariDurum" [showClear]="true" placeholder="Tümü"></p-select>
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Muhasebe Durumu</label>
+            <p-select [options]="muhasebeDurumuSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="filter().muhasebeDurumu" [showClear]="true" placeholder="Tümü"></p-select>
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Faturalama Durumu</label>
+            <p-select [options]="faturalamaDurumuSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="filter().faturalamaDurumu" [showClear]="true" placeholder="Tümü"></p-select>
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Başlangıç Tarihi</label>
+            <p-datepicker dateFormat="dd.mm.yy" [ngModel]="baslangicTarihi()" (ngModelChange)="baslangicTarihi.set($event)"></p-datepicker>
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Bitiş Tarihi</label>
+            <p-datepicker dateFormat="dd.mm.yy" [ngModel]="bitisTarihi()" (ngModelChange)="bitisTarihi.set($event)"></p-datepicker>
+        </div>
+        <div class="field col-12 md:col-2 flex align-items-end gap-2">
+            <p-button label="Ara" icon="pi pi-search" (onClick)="loadBelgeler()"></p-button>
+            <p-button label="Temizle" icon="pi pi-filter-slash" severity="secondary" [outlined]="true" (onClick)="clearFilter()"></p-button>
+        </div>
+    </div>
+
+    <p-table [value]="belgeler()" [loading]="loading()" [paginator]="true" [rows]="15" [rowsPerPageOptions]="[10,15,25,50]" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Belge No</th>
+                <th>Belge Tarihi</th>
+                <th>Belge Tipi</th>
+                <th>Kaynak Modül</th>
+                <th>Müşteri</th>
+                <th>Genel Toplam</th>
+                <th>Operasyonel Durum</th>
+                <th>Muhasebe Durumu</th>
+                <th>Faturalama Durumu</th>
+                <th>İşlemler</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-belge>
+            <tr>
+                <td>
+                    <a href="javascript:void(0)" (click)="openDetayDialog(belge)">{{ belge.belgeNo }}</a>
+                </td>
+                <td>{{ belge.belgeTarihi | date: 'dd.MM.yyyy' }}</td>
+                <td>{{ getBelgeTipiLabel(belge.belgeTipi) }}</td>
+                <td>{{ getKaynakModulLabel(belge.kaynakModul) }}</td>
+                <td>{{ getMusteriDisplayName(belge) }}</td>
+                <td>{{ belge.genelToplam | number: '1.2-2' }}</td>
+                <td><p-tag [value]="belge.operasyonelDurumAciklamasi"></p-tag></td>
+                <td><p-tag [value]="getMuhasebeDurumuLabel(belge.muhasebeDurumu)" [severity]="getMuhasebeDurumuSeverity(belge.muhasebeDurumu)"></p-tag></td>
+                <td><p-tag [value]="getFaturalamaDurumuLabel(belge.faturalamaDurumu)" [severity]="getFaturalamaDurumuSeverity(belge.faturalamaDurumu)"></p-tag></td>
+                <td>
+                    <div class="flex gap-1">
+                        <p-button icon="pi pi-eye" [rounded]="true" [text]="true" pTooltip="Görüntüle" (onClick)="openDetayDialog(belge)"></p-button>
+                        @if (canManage) {
+                            @if (belge.guncellenebilirMi) {
+                                <p-button icon="pi pi-pencil" [rounded]="true" [text]="true" pTooltip="Güncelle" (onClick)="openGuncelleDialog(belge)"></p-button>
+                            }
+                            @if (belge.muhasebeOnayinaGonderilebilirMi) {
+                                <p-button icon="pi pi-send" [rounded]="true" [text]="true" severity="info" pTooltip="Muhasebe Onayına Gönder" (onClick)="confirmMuhasebeOnayinaGonder(belge)"></p-button>
+                            }
+                            @if (belge.silinebilirMi) {
+                                <p-button icon="pi pi-trash" [rounded]="true" [text]="true" severity="danger" pTooltip="Sil" (onClick)="confirmDelete(belge)"></p-button>
+                            }
+                            @if (belge.iptalEdilebilirMi) {
+                                <p-button icon="pi pi-ban" [rounded]="true" [text]="true" severity="danger" pTooltip="İptal Et" (onClick)="confirmIptalEt(belge)"></p-button>
+                            }
+                        }
+                    </div>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr><td colspan="10">Henüz kayıt bulunmuyor.</td></tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<app-ticari-belge-detay-dialog
+    [visible]="detayDialogVisible()"
+    [belge]="detayBelge()"
+    (visibleChange)="detayDialogVisible.set($event)"></app-ticari-belge-detay-dialog>
+
+<app-ticari-belge-guncelle-dialog
+    [visible]="guncelleDialogVisible()"
+    [saving]="guncelleSaving()"
+    [formData]="guncelleFormData()"
+    (visibleChange)="guncelleDialogVisible.set($event)"
+    (save)="saveGuncelle()"></app-ticari-belge-guncelle-dialog>

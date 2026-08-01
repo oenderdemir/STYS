@@ -18,7 +18,7 @@ using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kurumlar.Entities;
 using STYS.MisafirTipleri.Entities;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
+using STYS.TicariBelgeler.Dtos;
 using STYS.OdaKullanimBloklari;
 using STYS.OdaKullanimBloklari.Entities;
 using STYS.Odalar.Entities;
@@ -4208,7 +4208,7 @@ public class RezervasyonServiceTests
         public bool FailOnOlustur { get; set; }
         public int OlusturCagriSayisi { get; private set; }
 
-        public Task<SatisBelgesiDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+        public Task<TicariBelgeDetayDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
         {
             OlusturCagriSayisi++;
             if (FailOnOlustur)
@@ -4216,7 +4216,7 @@ public class RezervasyonServiceTests
                 throw new BaseException("Test: gelir belgesi taslagi olusturulamadi.", 500);
             }
 
-            return Task.FromResult(new SatisBelgesiDto { Id = 1, BelgeNo = "TEST-1" });
+            return Task.FromResult(new TicariBelgeDetayDto { Id = 1, BelgeNo = "TEST-1" });
         }
 
         public Task<RezervasyonGelirOzetiDto> GetGelirOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default)

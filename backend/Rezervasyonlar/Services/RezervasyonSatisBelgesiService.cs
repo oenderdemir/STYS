@@ -1,10 +1,8 @@
-using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
 using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
@@ -16,12 +14,12 @@ using TOD.Platform.SharedKernel.Exceptions;
 namespace STYS.Rezervasyonlar.Services;
 
 /// <summary>
-/// Rezervasyon check-out verisinden ortak satış belgesi taslağı oluşturma servisi.
+/// Rezervasyon check-out verisinden ortak ticari belge taslağı oluşturma servisi.
 /// Otel modülü doğrudan SatisBelgesi entity'si oluşturmaz VE muhasebe servislerini
 /// (ISatisBelgesiTaslakOlusturmaService) doğrudan inject ETMEZ; bunun yerine operasyon uygulama
 /// sınırı olan ITicariBelgeService üzerinden fatura altyapısına rezervasyon verisini iletir (bkz.
-/// backend/TicariBelgeler). Dönüş tipi (SatisBelgesiDto), mevcut API JSON sözleşmesini korumak
-/// için TicariBelgeMappingProfile'daki geçici compatibility mapping ile üretilir.
+/// backend/TicariBelgeler). TicariBelgeDetayDto'yu DOĞRUDAN döner — geçici SatisBelgesiDto
+/// reverse-compatibility mapping'ine artık ihtiyaç YOKTUR (kaldırıldı).
 /// </summary>
 public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
 {
@@ -29,7 +27,6 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ITicariBelgeService _ticariBelgeService;
     private readonly IRezervasyonCariKartResolver _cariKartResolver;
-    private readonly IMapper _mapper;
     private readonly ILogger<RezervasyonSatisBelgesiService> _logger;
 
     private const string KaynakTipiRezervasyonCheckout = "RezervasyonCheckout";
@@ -45,19 +42,17 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
         IUserAccessScopeService userAccessScopeService,
         ITicariBelgeService ticariBelgeService,
         IRezervasyonCariKartResolver cariKartResolver,
-        IMapper mapper,
         ILogger<RezervasyonSatisBelgesiService> logger)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
         _ticariBelgeService = ticariBelgeService;
         _cariKartResolver = cariKartResolver;
-        _mapper = mapper;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public async Task<SatisBelgesiDto> SatisBelgesiTaslagiOlusturAsync(
+    public async Task<TicariBelgeDetayDto> SatisBelgesiTaslagiOlusturAsync(
         int rezervasyonId,
         RezervasyonSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken = default)
@@ -140,11 +135,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
             "Rezervasyon #{RezervasyonId} için satış belgesi taslağı oluşturuluyor. Gece sayısı: {GeceSayisi}, Toplam ücret: {ToplamUcret}, Kurumsal: {KurumsalMi}",
             rezervasyonId, geceSayisi, rezervasyon.ToplamUcret, musteriBilgi.kurumsalMi);
 
-        var ticariBelge = await _ticariBelgeService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
-
-        // GEÇİCİ compatibility mapping — mevcut API JSON sözleşmesi (SatisBelgesiDto) korunur,
-        // bkz. TicariBelgeMappingProfile'daki ilgili açıklama.
-        var result = _mapper.Map<SatisBelgesiDto>(ticariBelge);
+        var result = await _ticariBelgeService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
 
         _logger.LogInformation(
             "Rezervasyon #{RezervasyonId} için satış belgesi taslağı oluşturuldu. BelgeId: {BelgeId}, BelgeNo: {BelgeNo}",

@@ -5,7 +5,7 @@ using STYS.Muhasebe.CariKartlar.Dtos;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariKartlar.Services;
 using STYS.Rezervasyonlar.Reporting;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
+using STYS.TicariBelgeler.Dtos;
 using STYS.Rezervasyonlar.Services;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -489,7 +489,7 @@ public class RezervasyonController : UIController
 
     [HttpPost("kayitlar/{rezervasyonId:int}/satis-belgesi-taslagi-olustur")]
     [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
-    public async Task<ActionResult<SatisBelgesiDto>> OlusturSatisBelgesiTaslagi(
+    public async Task<ActionResult<TicariBelgeDetayDto>> OlusturSatisBelgesiTaslagi(
         [FromRoute] int rezervasyonId,
         [FromBody] RezervasyonSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken)
@@ -514,7 +514,7 @@ public class RezervasyonController : UIController
     /// içindir.</summary>
     [HttpPost("kayitlar/{rezervasyonId:int}/gelir-belgesi-olustur")]
     [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
-    public async Task<ActionResult<SatisBelgesiDto>> OlusturGelirBelgesi(
+    public async Task<ActionResult<TicariBelgeDetayDto>> OlusturGelirBelgesi(
         [FromRoute] int rezervasyonId,
         CancellationToken cancellationToken)
     {

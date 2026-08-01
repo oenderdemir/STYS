@@ -1,0 +1,113 @@
+<p-dialog
+    header="Ticari Belge Detayı"
+    [(visible)]="visible"
+    [modal]="true"
+    [style]="{ width: '55rem' }"
+    (onHide)="onHide()"
+    (visibleChange)="visibleChange.emit($event)">
+    @if (belge) {
+        <div class="grid formgrid p-fluid">
+            <div class="field col-12 md:col-6">
+                <label>Belge No</label>
+                <div class="font-semibold">{{ belge.belgeNo }}</div>
+            </div>
+            <div class="field col-12 md:col-6">
+                <label>Belge Tipi</label>
+                <div>{{ getBelgeTipiLabel(belge.belgeTipi) }}</div>
+            </div>
+
+            <div class="field col-12 md:col-4">
+                <label>Ticari Durum</label>
+                <div><p-tag [value]="getTicariDurumLabel(belge.ticariDurum)" [severity]="getTicariDurumSeverity(belge.ticariDurum)"></p-tag></div>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label>Muhasebe Durumu</label>
+                <div><p-tag [value]="getMuhasebeDurumuLabel(belge.muhasebeDurumu)" [severity]="getMuhasebeDurumuSeverity(belge.muhasebeDurumu)"></p-tag></div>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label>Faturalama Durumu</label>
+                <div><p-tag [value]="getFaturalamaDurumuLabel(belge.faturalamaDurumu)" [severity]="getFaturalamaDurumuSeverity(belge.faturalamaDurumu)"></p-tag></div>
+            </div>
+
+            <div class="field col-12 md:col-4">
+                <label>Kaynak Modül</label>
+                <div>{{ getKaynakModulLabel(belge.kaynakModul) }}</div>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label>Belge Tarihi</label>
+                <div>{{ belge.belgeTarihi | date: 'dd.MM.yyyy' }}</div>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label>Vade Tarihi</label>
+                <div>{{ belge.vadeTarihi ? (belge.vadeTarihi | date: 'dd.MM.yyyy') : '-' }}</div>
+            </div>
+
+            <div class="field col-12 md:col-6">
+                <label>Müşteri</label>
+                <div>{{ getMusteriDisplayName(belge) }}</div>
+            </div>
+            <div class="field col-12 md:col-6">
+                <label>Vergi No / TCKN</label>
+                <div>{{ belge.musteriVergiNo || belge.musteriTcKimlikNo || '-' }}</div>
+            </div>
+
+            <div class="field col-12 md:col-4">
+                <label>Genel Toplam</label>
+                <div class="font-semibold">{{ belge.genelToplam | number: '1.2-2' }}</div>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label>Resmî Fatura No</label>
+                <div>{{ belge.resmiFaturaNo || '-' }}</div>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label>Fatura Kesim Tarihi</label>
+                <div>{{ belge.faturaKesimTarihi ? (belge.faturaKesimTarihi | date: 'dd.MM.yyyy') : '-' }}</div>
+            </div>
+
+            @if (belge.redNedeni) {
+                <div class="field col-12">
+                    <label>Red Nedeni</label>
+                    <div class="text-red-600">{{ belge.redNedeni }}</div>
+                </div>
+            }
+
+            @if (belge.aciklama) {
+                <div class="field col-12">
+                    <label>Açıklama</label>
+                    <div>{{ belge.aciklama }}</div>
+                </div>
+            }
+
+            <div class="field col-12">
+                <label class="font-semibold">Satırlar</label>
+                <p-table [value]="belge.satirlar" styleClass="p-datatable-sm">
+                    <ng-template pTemplate="header">
+                        <tr>
+                            <th>Sıra</th>
+                            <th>Tip</th>
+                            <th>Açıklama</th>
+                            <th>Miktar</th>
+                            <th>Birim Fiyat</th>
+                            <th>KDV Oranı</th>
+                            <th>Satır Toplamı</th>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="body" let-satir>
+                        <tr>
+                            <td>{{ satir.siraNo }}</td>
+                            <td>{{ getSatirTipiLabel(satir.satirTipi) }}</td>
+                            <td>{{ satir.aciklama }}</td>
+                            <td>{{ satir.miktar }} {{ satir.birim }}</td>
+                            <td>{{ satir.birimFiyat | number: '1.2-2' }}</td>
+                            <td>%{{ satir.kdvOrani }}</td>
+                            <td>{{ satir.satirToplami | number: '1.2-2' }}</td>
+                        </tr>
+                    </ng-template>
+                    <ng-template pTemplate="emptymessage">
+                        <tr><td colspan="7">Satır bulunmuyor.</td></tr>
+                    </ng-template>
+                </p-table>
+            </div>
+        </div>
+    }
+</p-dialog>

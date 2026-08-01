@@ -293,43 +293,17 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         return !this.gelirOzeti?.satisBelgesiId;
     }
 
+    /** Backend'in ürettiği operasyonel durum açıklaması doğrudan gösterilir — legacy Durum
+     * yorumlama mantığı (enum adı eşleme) burada YOKTUR, bkz. TicariBelgeIslemYetkisi. */
     get gelirDurumEtiketi(): string {
-        const durum = this.gelirOzeti?.satisBelgesiDurumu;
-        switch (durum) {
-            case 'Taslak':
-                return 'Taslak';
-            case 'MuhasebeOnayinda':
-                return 'Muhasebe Onayinda';
-            case 'MuhasebeOnaylandi':
-                return 'Onaylandi';
-            case 'Reddedildi':
-                return 'Reddedildi';
-            case 'FaturaKesildi':
-                return 'Fatura Kesildi';
-            case 'MusteriyeGonderildi':
-                return 'Musteriye Gonderildi';
-            case 'IptalEdildi':
-                return 'Iptal Edildi';
-            default:
-                return 'Olusturulmadi';
-        }
+        return this.gelirOzeti?.satisBelgesiDurumu ?? 'Oluşturulmadı';
     }
 
-    get gelirDurumSeverity(): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
-        const durum = this.gelirOzeti?.satisBelgesiDurumu;
-        if (durum === 'MuhasebeOnaylandi' || durum === 'FaturaKesildi' || durum === 'MusteriyeGonderildi') {
-            return UiSeverity.Success;
+    get gelirDurumSeverity(): 'success' | 'info' | 'secondary' {
+        if (!this.gelirOzeti?.satisBelgesiId) {
+            return UiSeverity.Secondary;
         }
-
-        if (durum === 'Reddedildi' || durum === 'IptalEdildi') {
-            return UiSeverity.Danger;
-        }
-
-        if (durum === 'MuhasebeOnayinda' || durum === 'Taslak') {
-            return UiSeverity.Info;
-        }
-
-        return UiSeverity.Secondary;
+        return this.gelirOzeti?.muhasebelestirildiMi ? UiSeverity.Success : UiSeverity.Info;
     }
 
     get tahsilatKapamaDurumEtiketi(): string {
@@ -360,10 +334,17 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
         }
     }
 
-    /** Kural: satis belgesi onaylanip SatisBelgesi kaynakli CariHareket olusmadan tahsilatlar
-     * kapatilamaz — bkz. backend RezervasyonGelirTahakkukService.KapatOncekiTahsilatlariAsync. */
+    /** Karar doğrudan backend'in ürettiği TahsilatlarKapatilabilirMi alanına dayanır — bkz.
+     * RezervasyonGelirTahakkukService.GetAktifFaturaHareketiAsync (merkezi kontrol). */
     get tahsilatlariKapatDisabled(): boolean {
-        return !this.gelirOzeti?.muhasebeFisId || this.tahsilatlarKapatiliyor || this.gelirOzeti?.tahsilatKapamaDurumu === 'TamKapatildi';
+        return !this.gelirOzeti?.tahsilatlarKapatilabilirMi || this.tahsilatlarKapatiliyor || this.gelirOzeti?.tahsilatKapamaDurumu === 'TamKapatildi';
+    }
+
+    get tahsilatlariKapatDisabledTooltip(): string {
+        if (this.gelirOzeti?.tahsilatlarKapatilabilirMi === false && this.gelirOzeti.tahsilatlarKapatilamazNedeni) {
+            return this.gelirOzeti.tahsilatlarKapatilamazNedeni;
+        }
+        return '';
     }
 
     ngOnChanges(changes: SimpleChanges): void {

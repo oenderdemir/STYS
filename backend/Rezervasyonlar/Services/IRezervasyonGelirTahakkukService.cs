@@ -1,5 +1,5 @@
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Rezervasyonlar.Dto;
+using STYS.TicariBelgeler.Dtos;
 
 namespace STYS.Rezervasyonlar.Services;
 
@@ -18,7 +18,7 @@ public interface IRezervasyonGelirTahakkukService
     /// check-out'u BASARISIZ SAYMAMALIDIR — bu servis kendi icinde check-out'u engellemez,
     /// sorumluluk cagiran taraftadir.
     /// </summary>
-    Task<SatisBelgesiDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default);
+    Task<TicariBelgeDetayDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Rezervasyonun gelir ve tahsilat-kapama durumunu ekran icin ozetler.

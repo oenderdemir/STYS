@@ -12,7 +12,7 @@ using STYS.Iller.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kurumlar.Entities;
 using STYS.MisafirTipleri.Entities;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
+using STYS.TicariBelgeler.Dtos;
 using STYS.OdaSiniflari.Entities;
 using STYS.OdaTipleri.Entities;
 using STYS.Odalar.Entities;
@@ -526,8 +526,8 @@ public class RezervasyonUzatmaRollbackIntegrationTests : IAsyncLifetime
 
     private sealed class FakeRezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
     {
-        public Task<SatisBelgesiDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SatisBelgesiDto { Id = 1, BelgeNo = "TEST-1" });
+        public Task<TicariBelgeDetayDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new TicariBelgeDetayDto { Id = 1, BelgeNo = "TEST-1" });
 
         public Task<RezervasyonGelirOzetiDto> GetGelirOzetiAsync(int rezervasyonId, CancellationToken cancellationToken = default)
             => Task.FromResult(new RezervasyonGelirOzetiDto { RezervasyonId = rezervasyonId });

@@ -517,12 +517,12 @@
                                 <div class="rez-odeme-summary-value">{{ gelirOzeti?.satisBelgesiNo || '-' }}</div>
                             </div>
                             <div class="rez-odeme-summary-card">
-                                <div class="rez-odeme-summary-label">Muhasebe Fisi</div>
+                                <div class="rez-odeme-summary-label">Muhasebelestirme</div>
                                 <div class="rez-odeme-summary-value">
-                                    @if (gelirOzeti?.muhasebeFisId) {
-                                        <p-tag severity="success" value="Olusturuldu" />
+                                    @if (gelirOzeti?.muhasebelestirildiMi) {
+                                        <p-tag severity="success" value="Muhasebelestirildi" />
                                     } @else {
-                                        <p-tag severity="secondary" value="Olusturulmadi" />
+                                        <p-tag severity="secondary" value="Muhasebelestirilmedi" />
                                     }
                                 </div>
                             </div>
@@ -555,7 +555,8 @@
                                     icon="pi pi-external-link"
                                     severity="secondary"
                                     [outlined]="true"
-                                    routerLink="/muhasebe/satis-belgeleri" />
+                                    [routerLink]="'/ticari-belgeler'"
+                                    [queryParams]="{ id: gelirOzeti?.satisBelgesiId }" />
                             }
                             <p-button
                                 label="Tahsilatlari Kapat"
@@ -564,7 +565,7 @@
                                 [outlined]="true"
                                 [loading]="tahsilatlarKapatiliyor"
                                 [disabled]="tahsilatlariKapatDisabled"
-                                [pTooltip]="!gelirOzeti?.muhasebeFisId ? 'Once gelir belgesi onaylanip muhasebe fisi olusturulmalidir.' : ''"
+                                [pTooltip]="tahsilatlariKapatDisabledTooltip"
                                 (onClick)="kapatTahsilatlar()" />
                         </div>
                     }

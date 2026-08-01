@@ -571,9 +571,13 @@ export interface RezervasyonGelirOzetiDto {
     referansNo: string;
     satisBelgesiId: number | null;
     satisBelgesiNo: string | null;
+    /** Legacy Durum DEĞİL — backend TicariBelgeIslemYetkisi.OperasyonelDurumAciklamasi'ndan gelen, doğrudan gösterilebilir Türkçe özet. */
     satisBelgesiDurumu: string | null;
     genelToplam: number | null;
-    muhasebeFisId: number | null;
+    /** Muhasebe fişi kimliğine değil, aktif SatisBelgesi kaynaklı CariHareket'in varlığına göre belirlenir. */
+    muhasebelestirildiMi: boolean;
+    tahsilatlarKapatilabilirMi: boolean;
+    tahsilatlarKapatilamazNedeni: string | null;
     tahsilatKapamaDurumu: TahsilatKapamaDurumu;
     tahsilatToplamSayisi: number;
     tahsilatKapaliSayisi: number;

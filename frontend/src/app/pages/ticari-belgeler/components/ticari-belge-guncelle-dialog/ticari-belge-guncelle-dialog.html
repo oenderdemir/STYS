@@ -1,0 +1,164 @@
+<p-dialog
+    header="Ticari Belgeyi Güncelle"
+    [(visible)]="visible"
+    [modal]="true"
+    [style]="{ width: '65rem' }"
+    (onHide)="onHide()"
+    (visibleChange)="visibleChange.emit($event)">
+    @if (formData) {
+        <div class="grid formgrid p-fluid">
+            <div class="field col-12 md:col-4">
+                <label for="belgeTipi">Belge Tipi</label>
+                <p-select
+                    id="belgeTipi"
+                    [options]="belgeTipiSecenekleri"
+                    optionLabel="label"
+                    optionValue="value"
+                    [(ngModel)]="formData.belgeTipi"
+                    placeholder="Belge tipi seçin"></p-select>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label for="belgeTarihi">Belge Tarihi</label>
+                <p-datepicker
+                    id="belgeTarihi"
+                    dateFormat="dd.mm.yy"
+                    [ngModel]="belgeTarihiValue()"
+                    (ngModelChange)="onBelgeTarihiChange($event)"></p-datepicker>
+            </div>
+            <div class="field col-12 md:col-4">
+                <label for="vadeTarihi">Vade Tarihi</label>
+                <p-datepicker
+                    id="vadeTarihi"
+                    dateFormat="dd.mm.yy"
+                    [ngModel]="vadeTarihiValue()"
+                    (ngModelChange)="onVadeTarihiChange($event)"></p-datepicker>
+            </div>
+
+            <div class="field col-12 md:col-3">
+                <label for="cariKartId">Cari Kart Id</label>
+                <p-inputNumber id="cariKartId" [(ngModel)]="formData.cariKartId" [useGrouping]="false"></p-inputNumber>
+            </div>
+            <div class="field col-12 md:col-3 flex align-items-end">
+                <div class="flex align-items-center gap-2">
+                    <p-toggleSwitch [(ngModel)]="formData.kurumsalMi"></p-toggleSwitch>
+                    <label>Kurumsal Fatura</label>
+                </div>
+            </div>
+            @if (formData.kurumsalMi) {
+                <div class="field col-12 md:col-3">
+                    <label for="musteriUnvan">Müşteri Ünvanı</label>
+                    <input id="musteriUnvan" pInputText [(ngModel)]="formData.musteriUnvan" />
+                </div>
+                <div class="field col-12 md:col-3">
+                    <label for="musteriVergiNo">Vergi No</label>
+                    <input id="musteriVergiNo" pInputText [(ngModel)]="formData.musteriVergiNo" />
+                </div>
+            } @else {
+                <div class="field col-12 md:col-3">
+                    <label for="musteriAdSoyad">Müşteri Ad Soyad</label>
+                    <input id="musteriAdSoyad" pInputText [(ngModel)]="formData.musteriAdSoyad" />
+                </div>
+                <div class="field col-12 md:col-3">
+                    <label for="musteriTcKimlikNo">TC Kimlik No</label>
+                    <input id="musteriTcKimlikNo" pInputText [(ngModel)]="formData.musteriTcKimlikNo" />
+                </div>
+            }
+
+            <div class="field col-12 md:col-4">
+                <label for="musteriVergiDairesi">Vergi Dairesi</label>
+                <input id="musteriVergiDairesi" pInputText [(ngModel)]="formData.musteriVergiDairesi" />
+            </div>
+            <div class="field col-12 md:col-4">
+                <label for="musteriEposta">E-posta</label>
+                <input id="musteriEposta" pInputText [(ngModel)]="formData.musteriEposta" />
+            </div>
+            <div class="field col-12 md:col-4">
+                <label for="musteriTelefon">Telefon</label>
+                <input id="musteriTelefon" pInputText [(ngModel)]="formData.musteriTelefon" />
+            </div>
+
+            <div class="field col-12">
+                <label for="musteriAdres">Adres</label>
+                <textarea id="musteriAdres" pTextarea rows="2" [(ngModel)]="formData.musteriAdres"></textarea>
+            </div>
+
+            <div class="field col-12">
+                <label for="aciklama">Açıklama</label>
+                <textarea id="aciklama" pTextarea rows="2" [(ngModel)]="formData.aciklama"></textarea>
+            </div>
+
+            <div class="field col-12 md:col-6">
+                <label for="karsiTarafFaturaNo">Karşı Taraf Fatura No</label>
+                <input id="karsiTarafFaturaNo" pInputText [(ngModel)]="formData.karsiTarafFaturaNo" />
+            </div>
+            <div class="field col-12 md:col-6 flex align-items-end">
+                <div class="flex align-items-center gap-2">
+                    <p-checkbox [(ngModel)]="formData.iadeEdilenBelgeReferansiKaldir" [binary]="true"></p-checkbox>
+                    <label>İade edilen belge referansını kaldır</label>
+                </div>
+            </div>
+
+            <div class="field col-12">
+                <div class="flex align-items-center justify-content-between mb-2">
+                    <label class="font-semibold">Satırlar</label>
+                    <p-button label="Satır Ekle" icon="pi pi-plus" size="small" [text]="true" (onClick)="addSatir()"></p-button>
+                </div>
+
+                @for (satir of formData.satirlar ?? []; track trackBySatirIndex($index); let i = $index) {
+                    <div class="border-1 surface-border border-round p-3 mb-3">
+                        <div class="grid formgrid p-fluid">
+                            <div class="field col-12 md:col-3">
+                                <label>Satır Tipi</label>
+                                <p-select [options]="satirTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="satir.satirTipi"></p-select>
+                            </div>
+                            <div class="field col-12 md:col-5">
+                                <label>Açıklama</label>
+                                <input pInputText [(ngModel)]="satir.aciklama" />
+                            </div>
+                            <div class="field col-12 md:col-2">
+                                <label>Miktar</label>
+                                <p-inputNumber [(ngModel)]="satir.miktar" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
+                            </div>
+                            <div class="field col-12 md:col-2">
+                                <label>Birim Fiyat</label>
+                                <p-inputNumber [(ngModel)]="satir.birimFiyat" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2"></p-inputNumber>
+                            </div>
+
+                            <div class="field col-12 md:col-3">
+                                <label>KDV Uygulama Tipi</label>
+                                <p-select [options]="kdvUygulamaTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="satir.kdvUygulamaTipi"></p-select>
+                            </div>
+                            <div class="field col-12 md:col-2">
+                                <label>KDV Oranı</label>
+                                <p-inputNumber [(ngModel)]="satir.kdvOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
+                            </div>
+                            @if (isTevkifatli(satir)) {
+                                <div class="field col-12 md:col-2">
+                                    <label>Tevkifat Pay</label>
+                                    <p-inputNumber [(ngModel)]="satir.tevkifatPay" [useGrouping]="false"></p-inputNumber>
+                                </div>
+                                <div class="field col-12 md:col-2">
+                                    <label>Tevkifat Payda</label>
+                                    <p-inputNumber [(ngModel)]="satir.tevkifatPayda" [useGrouping]="false"></p-inputNumber>
+                                </div>
+                            }
+                            <div class="field col-12 md:col-2">
+                                <label>İndirim Oranı</label>
+                                <p-inputNumber [(ngModel)]="satir.indirimOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
+                            </div>
+
+                            <div class="field col-12 flex justify-content-end">
+                                <p-button label="Satırı Sil" icon="pi pi-trash" size="small" severity="danger" [text]="true" (onClick)="removeSatir(i)"></p-button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" [text]="true" (onClick)="onHide()"></p-button>
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="onSaveClick()"></p-button>
+    </ng-template>
+</p-dialog>

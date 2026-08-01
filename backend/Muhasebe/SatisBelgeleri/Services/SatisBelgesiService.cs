@@ -264,6 +264,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             .Include(x => x.IadeEdilenBelge)
             .Where(x => !x.IsDeleted);
 
+        // DAHİLİ erişim kapsamı filtresi (bkz. SatisBelgesiFilterDto.ErisimKapsamiTesisIdleri) -
+        // null ise (mevcut muhasebe ekranı) UYGULANMAZ; boş (ama null olmayan) bir koleksiyon ise
+        // sonuç KESİNLİKLE boş döner - IEnumerable.Contains() üzerinde boş liste bunu doğal olarak sağlar.
+        if (filter.ErisimKapsamiTesisIdleri is not null)
+        {
+            var kapsamTesisIdleri = filter.ErisimKapsamiTesisIdleri;
+            query = query.Where(x => x.TesisId.HasValue && kapsamTesisIdleri.Contains(x.TesisId.Value));
+        }
+
         if (filter.TesisId.HasValue)
             query = query.Where(x => x.TesisId == filter.TesisId.Value);
 
@@ -272,6 +281,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
         if (filter.Durum.HasValue)
             query = query.Where(x => x.Durum == filter.Durum.Value);
+
+        if (filter.TicariDurum.HasValue)
+            query = query.Where(x => x.TicariDurum == filter.TicariDurum.Value);
+
+        if (filter.MuhasebeDurumu.HasValue)
+            query = query.Where(x => x.MuhasebeDurumu == filter.MuhasebeDurumu.Value);
+
+        if (filter.FaturalamaDurumu.HasValue)
+            query = query.Where(x => x.FaturalamaDurumu == filter.FaturalamaDurumu.Value);
 
         if (filter.KaynakModul.HasValue)
             query = query.Where(x => x.KaynakModul == filter.KaynakModul.Value);

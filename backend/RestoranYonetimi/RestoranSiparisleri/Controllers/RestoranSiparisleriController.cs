@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Services;
 using STYS.RestoranYonetimi.Services;
+using STYS.TicariBelgeler.Dtos;
 using System.Linq;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
@@ -101,7 +101,7 @@ public class RestoranSiparisleriController : UIController
 
     [HttpPost("{siparisId:int}/satis-belgesi-taslagi-olustur")]
     [Permission(StructurePermissions.RestoranSiparisYonetimi.Manage)]
-    public async Task<ActionResult<SatisBelgesiDto>> OlusturSatisBelgesiTaslagi(
+    public async Task<ActionResult<TicariBelgeDetayDto>> OlusturSatisBelgesiTaslagi(
         [FromRoute] int siparisId,
         [FromBody] RestoranSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken)

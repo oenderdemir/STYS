@@ -1,5 +1,4 @@
 using AutoMapper;
-using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.TicariBelgeler.Dtos;
 
@@ -36,17 +35,8 @@ public class TicariBelgeMappingProfile : Profile
         CreateMap<TicariBelgeFilterDto, SatisBelgesiFilterDto>()
             .ForMember(dest => dest.Durum, opt => opt.Ignore());
 
-        // ── GEÇİCİ COMPATIBILITY MAPPING (bkz. görev H) — TicariBelgeDetayDto -> SatisBelgesiDto ──
-        // Yalnızca operasyon modüllerinin (Rezervasyon vb.) MEVCUT API JSON sözleşmesini (halen
-        // SatisBelgesiDto döndüren dış uçlar) kırmadan ITicariBelgeService'e geçebilmesi için
-        // kullanılır. Muhasebeye özgü alanlar (MuhasebeFisId, EBelgeUuid, CariKart* denormalize
-        // alanlar, Iade* görüntü alanları, KurumId) TicariBelgeDetayDto'da hiç YOKTUR ve burada
-        // varsayılan (null/0) kalır - bu BİLİNÇLİ ve GEÇİCİ bir sadeleştirmedir. Legacy Durum,
-        // SatisBelgesiDurumProjection.ProjeLegacyDurum ile üç otoriter alandan DOĞRU olarak
-        // yeniden türetilir (rastgele/varsayılan bir değere DÜŞÜRÜLMEZ).
-        CreateMap<TicariBelgeDetayDto, SatisBelgesiDto>()
-            .ForMember(dest => dest.Durum, opt => opt.MapFrom(src =>
-                SatisBelgesiDurumProjection.ProjeLegacyDurum(src.TicariDurum, src.MuhasebeDurumu, src.FaturalamaDurumu)));
-        CreateMap<TicariBelgeSatirDto, SatisBelgesiSatiriDto>();
+        // GEÇİCİ TicariBelgeDetayDto -> SatisBelgesiDto reverse-compatibility mapping'i KALDIRILDI
+        // (bkz. görev E) - tüm operasyon servisleri artık TicariBelgeDto/TicariBelgeDetayDto'yu
+        // DOĞRUDAN döner, muhasebe namespace'indeki DTO'ları dış sözleşme olarak KULLANMAZ.
     }
 }

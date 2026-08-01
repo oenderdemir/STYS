@@ -4,20 +4,20 @@ using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
-using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.RestoranSiparisleri.Dtos;
 using STYS.RestoranSiparisleri.Entities;
+using STYS.TicariBelgeler.Dtos;
+using STYS.TicariBelgeler.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.RestoranYonetimi.Services;
 
 /// <summary>
-/// Restoran sipariş verisinden ortak satış belgesi taslağı oluşturma servisi.
-/// Restoran modülü doğrudan SatisBelgesi entity'si oluşturmaz;
-/// bunun yerine ISatisBelgesiTaslakOlusturmaService üzerinden fatura altyapısına
-/// sipariş verisini iletir.
+/// Restoran sipariş verisinden ortak ticari belge taslağı oluşturma servisi.
+/// Restoran modülü doğrudan SatisBelgesi entity'si oluşturmaz VE muhasebe servislerini
+/// (ISatisBelgesiTaslakOlusturmaService) doğrudan inject ETMEZ; bunun yerine ITicariBelgeService
+/// üzerinden fatura altyapısına sipariş verisini iletir.
 ///
 /// DbContext doğrudan kullanılır — ilgili entity'ler için repository/base metodu
 /// bulunsa da Include(Restoran, Kalemler) ve AsNoTracking(KdvIstisnaTanimlari)
@@ -27,7 +27,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
-    private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
+    private readonly ITicariBelgeService _ticariBelgeService;
     private readonly ILogger<RestoranSatisBelgesiService> _logger;
 
     private const string KaynakTipiRestoranSiparis = "RestoranSiparis";
@@ -36,17 +36,17 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
     public RestoranSatisBelgesiService(
         StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
-        ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService,
+        ITicariBelgeService ticariBelgeService,
         ILogger<RestoranSatisBelgesiService> logger)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
-        _taslakOlusturmaService = taslakOlusturmaService;
+        _ticariBelgeService = ticariBelgeService;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public async Task<SatisBelgesiDto> SatisBelgesiTaslagiOlusturAsync(
+    public async Task<TicariBelgeDetayDto> SatisBelgesiTaslagiOlusturAsync(
         int siparisId,
         RestoranSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken = default)
@@ -95,7 +95,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
             ?? $"Restoran siparişi: {siparis.SiparisNo}";
 
         // 9. Taslak request oluştur
-        var taslakRequest = new SatisBelgesiTaslakOlusturRequest
+        var taslakRequest = new TicariBelgeTaslakOlusturRequest
         {
             KaynakModul = SatisKaynakModulu.Restoran,
             KaynakTipi = KaynakTipiRestoranSiparis,
@@ -121,7 +121,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
             "Restoran siparişi #{SiparisId} için satış belgesi taslağı oluşturuluyor. Kalem sayısı: {KalemSayisi}, Toplam tutar: {ToplamTutar}, Kurumsal: {KurumsalMi}",
             siparisId, aktifKalemler.Count, siparis.ToplamTutar, musteriBilgi.kurumsalMi);
 
-        var result = await _taslakOlusturmaService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
+        var result = await _ticariBelgeService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
 
         _logger.LogInformation(
             "Restoran siparişi #{SiparisId} için satış belgesi taslağı oluşturuldu. BelgeId: {BelgeId}, BelgeNo: {BelgeNo}",
@@ -192,7 +192,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
     //  Private — Satış satırlarını oluşturma
     // ──────────────────────────────────────────────
 
-    private async Task<List<SatisBelgesiTaslakSatirRequest>> BuildSatirlarAsync(
+    private async Task<List<TicariBelgeTaslakSatirRequest>> BuildSatirlarAsync(
         RestoranSiparis siparis,
         List<RestoranSiparisKalemi> aktifKalemler,
         RestoranSatisBelgesiTaslakRequest request,
@@ -229,7 +229,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
         }
 
         // Kuruş yuvarlama dengelemesi için toplam dağıtılanı hesapla
-        var satirlar = new List<SatisBelgesiTaslakSatirRequest>(aktifKalemler.Count);
+        var satirlar = new List<TicariBelgeTaslakSatirRequest>(aktifKalemler.Count);
         decimal toplamDagitilan = 0;
 
         for (var i = 0; i < aktifKalemler.Count; i++)
@@ -239,7 +239,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
             var satirToplam = kalem.SatirToplam;
             toplamDagitilan += satirToplam;
 
-            satirlar.Add(new SatisBelgesiTaslakSatirRequest
+            satirlar.Add(new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = SatisBelgesiSatirTipi.YiyecekIcecek,
                 Aciklama = kalem.UrunAdiSnapshot,
@@ -263,7 +263,7 @@ public class RestoranSatisBelgesiService : IRestoranSatisBelgesiService
                 ? Math.Round(fark / sonSatir.Miktar, 2, MidpointRounding.AwayFromZero)
                 : fark;
 
-            satirlar[^1] = new SatisBelgesiTaslakSatirRequest
+            satirlar[^1] = new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = sonSatir.SatirTipi,
                 Aciklama = sonSatir.Aciklama,

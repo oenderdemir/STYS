@@ -6,19 +6,19 @@ using STYS.Kamp.Dto;
 using STYS.Kamp.Entities;
 using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
-using STYS.Muhasebe.SatisBelgeleri.Services;
+using STYS.TicariBelgeler.Dtos;
+using STYS.TicariBelgeler.Services;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Kamp.Services;
 
 /// <summary>
-/// Kamp rezervasyon verisinden ortak satış belgesi taslağı oluşturma servisi.
-/// Kamp modülü doğrudan SatisBelgesi entity'si oluşturmaz;
-/// bunun yerine ISatisBelgesiTaslakOlusturmaService üzerinden fatura altyapısına
-/// rezervasyon verisini iletir.
+/// Kamp rezervasyon verisinden ortak ticari belge taslağı oluşturma servisi.
+/// Kamp modülü doğrudan SatisBelgesi entity'si oluşturmaz VE muhasebe servislerini
+/// (ISatisBelgesiTaslakOlusturmaService) doğrudan inject ETMEZ; bunun yerine ITicariBelgeService
+/// üzerinden fatura altyapısına rezervasyon verisini iletir.
 ///
 /// DbContext doğrudan kullanılır — KampBasvuru ve KampDonemi navigation'ları
 /// Include ile birlikte tek seferde çekilmelidir; ayrıca KDV istisna tanımları
@@ -28,7 +28,7 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
 {
     private readonly StysAppDbContext _dbContext;
     private readonly IUserAccessScopeService _userAccessScopeService;
-    private readonly ISatisBelgesiTaslakOlusturmaService _taslakOlusturmaService;
+    private readonly ITicariBelgeService _ticariBelgeService;
     private readonly ILogger<KampSatisBelgesiService> _logger;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
@@ -38,19 +38,19 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
     public KampSatisBelgesiService(
         StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
-        ISatisBelgesiTaslakOlusturmaService taslakOlusturmaService,
+        ITicariBelgeService ticariBelgeService,
         ICurrentTenantAccessor currentTenantAccessor,
         ILogger<KampSatisBelgesiService> logger)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
-        _taslakOlusturmaService = taslakOlusturmaService;
+        _ticariBelgeService = ticariBelgeService;
         _currentTenantAccessor = currentTenantAccessor;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public async Task<SatisBelgesiDto> SatisBelgesiTaslagiOlusturAsync(
+    public async Task<TicariBelgeDetayDto> SatisBelgesiTaslagiOlusturAsync(
         int rezervasyonId,
         KampSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken = default)
@@ -87,7 +87,7 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
             ?? $"Kamp rezervasyonu: {rezervasyon.RezervasyonNo}";
 
         // 8. Taslak request oluştur
-        var taslakRequest = new SatisBelgesiTaslakOlusturRequest
+        var taslakRequest = new TicariBelgeTaslakOlusturRequest
         {
             KaynakModul = SatisKaynakModulu.Kamp,
             KaynakTipi = KaynakTipiKampRezervasyon,
@@ -108,12 +108,12 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
             Satirlar = satirlar
         };
 
-        // 9. ISatisBelgesiTaslakOlusturmaService'e ilet
+        // 9. ITicariBelgeService'e ilet
         _logger.LogInformation(
             "Kamp rezervasyonu #{RezervasyonId} ({RezervasyonNo}) için satış belgesi taslağı oluşturuluyor. Tutar: {Tutar}, Kurumsal: {KurumsalMi}",
             rezervasyonId, rezervasyon.RezervasyonNo, rezervasyon.DonemToplamTutar, musteriBilgi.kurumsalMi);
 
-        var result = await _taslakOlusturmaService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
+        var result = await _ticariBelgeService.KaynaktanTaslakOlusturAsync(taslakRequest, cancellationToken);
 
         _logger.LogInformation(
             "Kamp rezervasyonu #{RezervasyonId} için satış belgesi taslağı oluşturuldu. BelgeId: {BelgeId}, BelgeNo: {BelgeNo}",
@@ -196,7 +196,7 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
     //             KampHizmeti tipinde oluşturulur.
     // ──────────────────────────────────────────────
 
-    private async Task<List<SatisBelgesiTaslakSatirRequest>> BuildSatirlarAsync(
+    private async Task<List<TicariBelgeTaslakSatirRequest>> BuildSatirlarAsync(
         KampRezervasyon rezervasyon,
         KampSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken)
@@ -232,9 +232,9 @@ public class KampSatisBelgesiService : IKampSatisBelgesiService
         }
 
         // KampHizmeti — tek satır, Miktar = 1, BirimFiyat = DonemToplamTutar
-        var satirlar = new List<SatisBelgesiTaslakSatirRequest>
+        var satirlar = new List<TicariBelgeTaslakSatirRequest>
         {
-            new SatisBelgesiTaslakSatirRequest
+            new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = SatisBelgesiSatirTipi.KampHizmeti,
                 Aciklama = $"Kamp rezervasyonu: {rezervasyon.RezervasyonNo}",

@@ -1264,6 +1264,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
         return new TicariBelgeService(
             CreateSatisBelgesiService(dbContext),
             CreateSatisBelgesiTaslakOlusturmaService(dbContext),
+            new FakeUserAccessScopeService(),
             CreateMapper());
     }
 
@@ -1274,7 +1275,6 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             new FakeUserAccessScopeService(),
             CreateTicariBelgeService(dbContext),
             new RezervasyonCariKartResolver(dbContext),
-            CreateMapper(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<RezervasyonSatisBelgesiService>.Instance);
     }
 
@@ -1285,8 +1285,7 @@ public class RezervasyonOdemeMuhasebeIntegrationTests : IAsyncLifetime
             new FakeUserAccessScopeService(),
             CreateRezervasyonSatisBelgesiService(dbContext),
             CreateTicariBelgeService(dbContext),
-            CreateCariHareketKapamaService(dbContext),
-            CreateMapper());
+            CreateCariHareketKapamaService(dbContext));
     }
 
     private static RezervasyonService CreateRezervasyonService(StysAppDbContext dbContext)

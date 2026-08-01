@@ -227,6 +227,12 @@ public class SatisBelgesiFilterDto
     public int? TesisId { get; set; }
     public List<SatisBelgesiTipi>? BelgeTipleri { get; set; }
     public SatisBelgesiDurumu? Durum { get; set; }
+    /// <summary>OTORİTER alan filtresi — TicariBelgeService (operasyon katmanı) tarafından kullanılır, legacy Durum'un yerini almaz.</summary>
+    public TicariBelgeDurumu? TicariDurum { get; set; }
+    /// <summary>OTORİTER alan filtresi — bkz. TicariDurum.</summary>
+    public TicariBelgeMuhasebeDurumu? MuhasebeDurumu { get; set; }
+    /// <summary>OTORİTER alan filtresi — bkz. TicariDurum.</summary>
+    public TicariBelgeFaturalamaDurumu? FaturalamaDurumu { get; set; }
     public SatisKaynakModulu? KaynakModul { get; set; }
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }
@@ -236,6 +242,15 @@ public class SatisBelgesiFilterDto
     public DateTime? BitisTarihi { get; set; }
     public string? KarsiTarafFaturaNo { get; set; }
     public int? IadeEdilenBelgeId { get; set; }
+
+    /// <summary>
+    /// DAHİLİ erişim kapsamı filtresi — JSON'dan ASLA bağlanmaz (istemci belirleyemez), yalnızca
+    /// sunucu tarafı çağıranlar (bkz. TicariBelgeService) tarafından SET edilir. Null ise (mevcut
+    /// muhasebe ekranı davranışı KORUNUR) kapsam filtresi UYGULANMAZ. Boş (ama null OLMAYAN) bir
+    /// koleksiyon ise sonuç KESİNLİKLE boş döner - "filtre yok" olarak YORUMLANMAZ.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyCollection<int>? ErisimKapsamiTesisIdleri { get; set; }
 }
 
 public class SatisBelgesiKaynakDto

@@ -371,6 +371,7 @@ public class RezervasyonGelirTahakkukuTests
         return new TicariBelgeService(
             CreateSatisBelgesiService(dbContext),
             CreateSatisBelgesiTaslakOlusturmaService(dbContext),
+            new FakeUserAccessScopeService(),
             CreateMapper());
     }
 
@@ -381,7 +382,6 @@ public class RezervasyonGelirTahakkukuTests
             new FakeUserAccessScopeService(),
             CreateTicariBelgeService(dbContext),
             new RezervasyonCariKartResolver(dbContext),
-            CreateMapper(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<RezervasyonSatisBelgesiService>.Instance);
     }
 
@@ -392,8 +392,7 @@ public class RezervasyonGelirTahakkukuTests
             new FakeUserAccessScopeService(),
             CreateRezervasyonSatisBelgesiService(dbContext),
             CreateTicariBelgeService(dbContext),
-            CreateCariHareketKapamaService(dbContext),
-            CreateMapper());
+            CreateCariHareketKapamaService(dbContext));
     }
 
     // ──────────────────────────────────────────────

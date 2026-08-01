@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using STYS.Kamp.Dto;
 using STYS.Kamp.Services;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
+using STYS.TicariBelgeler.Dtos;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
 
@@ -37,7 +37,7 @@ public class KampRezervasyonController : UIController
 
     [HttpPost("{rezervasyonId:int}/satis-belgesi-taslagi-olustur")]
     [Permission(StructurePermissions.KampRezervasyonYonetimi.Manage)]
-    public async Task<ActionResult<SatisBelgesiDto>> OlusturSatisBelgesiTaslagi(
+    public async Task<ActionResult<TicariBelgeDetayDto>> OlusturSatisBelgesiTaslagi(
         [FromRoute] int rezervasyonId,
         [FromBody] KampSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken)

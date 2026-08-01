@@ -1,15 +1,13 @@
-using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.Common.Constants;
-using STYS.Muhasebe.SatisBelgeleri;
-using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
+using STYS.TicariBelgeler.Dtos;
 using STYS.TicariBelgeler.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -23,39 +21,35 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
     private readonly IRezervasyonSatisBelgesiService _rezervasyonSatisBelgesiService;
     private readonly ITicariBelgeService _ticariBelgeService;
     private readonly ICariHareketKapamaService _cariHareketKapamaService;
-    private readonly IMapper _mapper;
 
     public RezervasyonGelirTahakkukService(
         StysAppDbContext dbContext,
         IUserAccessScopeService userAccessScopeService,
         IRezervasyonSatisBelgesiService rezervasyonSatisBelgesiService,
         ITicariBelgeService ticariBelgeService,
-        ICariHareketKapamaService cariHareketKapamaService,
-        IMapper mapper)
+        ICariHareketKapamaService cariHareketKapamaService)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
         _rezervasyonSatisBelgesiService = rezervasyonSatisBelgesiService;
         _ticariBelgeService = ticariBelgeService;
         _cariHareketKapamaService = cariHareketKapamaService;
-        _mapper = mapper;
     }
 
     // ──────────────────────────────────────────────
     //  OlusturTaslakAsync — idempotent taslak olusturma
     // ──────────────────────────────────────────────
 
-    public async Task<SatisBelgesiDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
+    public async Task<TicariBelgeDetayDto> OlusturTaslakAsync(int rezervasyonId, CancellationToken cancellationToken = default)
     {
         var rezervasyon = await GetScopedRezervasyonAsync(rezervasyonId, cancellationToken);
 
         // Katman 1 — idempotency: belge zaten varsa yenisini yaratma, mevcut olani don.
-        // ISatisBelgesiService yerine ITicariBelgeService kullanilir (bkz. gorev H); GEÇİCİ
-        // compatibility mapping ile mevcut SatisBelgesiDto sözleşmesi korunur.
+        // ISatisBelgesiService yerine ITicariBelgeService kullanilir (bkz. gorev D) - TicariBelgeDetayDto
+        // DOĞRUDAN döner, geçici reverse-compatibility mapping'e ihtiyaç YOKTUR.
         if (rezervasyon.SatisBelgesiId.HasValue)
         {
-            var mevcut = await _ticariBelgeService.GetByIdAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
-            return _mapper.Map<SatisBelgesiDto>(mevcut);
+            return await _ticariBelgeService.GetByIdAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
         }
 
         // Katman 2 — RezervasyonSatisBelgesiService.SatisBelgesiTaslagiOlusturAsync zaten
@@ -98,14 +92,8 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
 
         // Kural: satis belgesi onaylanip SatisBelgesi kaynakli CariHareket olusmadan onceki
         // tahsilatlar kapatilamaz. Fis/onay durumunu degil, dogrudan bu CariHareket'in varligini
-        // arariz — otoriter sinyal budur.
-        var faturaHareket = await _dbContext.CariHareketler
-            .FirstOrDefaultAsync(
-                x => !x.IsDeleted
-                     && x.Durum == CariHareketDurumlari.Aktif
-                     && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
-                     && x.KaynakId == rezervasyon.SatisBelgesiId.Value,
-                cancellationToken);
+        // arariz — otoriter sinyal budur (bkz. GetAktifFaturaHareketiAsync, BuildOzetAsync ile PAYLAŞILIR).
+        var faturaHareket = await GetAktifFaturaHareketiAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
 
         if (faturaHareket is null)
         {
@@ -186,25 +174,35 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
 
         if (!rezervasyon.SatisBelgesiId.HasValue)
         {
+            ozet.TahsilatlarKapatilabilirMi = false;
+            ozet.TahsilatlarKapatilamazNedeni = "Önce gelir belgesi oluşturulmalıdır.";
             return ozet;
         }
 
-        var belge = await _dbContext.SatisBelgeleri
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == rezervasyon.SatisBelgesiId.Value, cancellationToken);
+        // Belge bilgileri artık doğrudan _dbContext.SatisBelgeleri yerine ITicariBelgeService
+        // üzerinden alınır - muhasebe ayrıntısına (MuhasebeFisId dahil) bağımlılık YOKTUR (bkz. görev C).
+        var ticariBelge = await _ticariBelgeService.GetByIdAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
 
-        if (belge is null)
+        ozet.SatisBelgesiNo = ticariBelge.BelgeNo;
+        ozet.SatisBelgesiDurumu = ticariBelge.OperasyonelDurumAciklamasi;
+        ozet.GenelToplam = ticariBelge.GenelToplam;
+
+        // Muhasebeleştirilmiş mi kararı muhasebe fişi kimliğinin varlığına DEĞİL, aktif SatisBelgesi
+        // kaynaklı CariHareket'in varlığına göre verilir (bkz. GetAktifFaturaHareketiAsync,
+        // KapatOncekiTahsilatlariAsync ile PAYLAŞILAN merkezi kontrol).
+        var faturaHareket = await GetAktifFaturaHareketiAsync(rezervasyon.SatisBelgesiId.Value, cancellationToken);
+        ozet.MuhasebelestirildiMi = faturaHareket is not null;
+
+        if (faturaHareket is null)
         {
-            return ozet;
+            ozet.TahsilatlarKapatilabilirMi = false;
+            ozet.TahsilatlarKapatilamazNedeni =
+                "Gelir belgesi için henüz muhasebe fişi onaylanmamış (SatisBelgesi kaynaklı cari hareket bulunamadı).";
         }
-
-        ozet.SatisBelgesiNo = belge.BelgeNo;
-        // Legacy SatisBelgesiDurumu yerine üç otoriter alandan türetilen operasyonel durum
-        // açıklaması kullanılır (bkz. görev H, TicariBelgeIslemYetkisi.OperasyonelDurumAciklamasi).
-        ozet.SatisBelgesiDurumu = TicariBelgeIslemYetkisi.OperasyonelDurumAciklamasi(
-            belge.TicariDurum, belge.MuhasebeDurumu, belge.FaturalamaDurumu);
-        ozet.GenelToplam = belge.GenelToplam;
-        ozet.MuhasebeFisId = belge.MuhasebeFisId;
+        else
+        {
+            ozet.TahsilatlarKapatilabilirMi = true;
+        }
 
         var odemeIdleri = await _dbContext.RezervasyonOdemeler
             .Where(x => x.RezervasyonId == rezervasyon.Id)
@@ -255,6 +253,23 @@ public class RezervasyonGelirTahakkukService : IRezervasyonGelirTahakkukService
                     : TahsilatKapamaDurumlari.KismenKapatildi;
 
         return ozet;
+    }
+
+    /// <summary>
+    /// "Muhasebeleştirildi mi" sinyalinin OTORİTER, TEK kaynağı: aktif, SatisBelgesi kaynaklı
+    /// CariHareket'in varlığı (muhasebe fişi kimliğinin varlığı DEĞİL). BuildOzetAsync ve
+    /// KapatOncekiTahsilatlariAsync arasında PAYLAŞILIR - aynı kontrol iki yerde ayrı ayrı
+    /// yeniden uygulanmaz.
+    /// </summary>
+    private async Task<CariHareket?> GetAktifFaturaHareketiAsync(int satisBelgesiId, CancellationToken cancellationToken)
+    {
+        return await _dbContext.CariHareketler
+            .FirstOrDefaultAsync(
+                x => !x.IsDeleted
+                     && x.Durum == CariHareketDurumlari.Aktif
+                     && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
+                     && x.KaynakId == satisBelgesiId,
+                cancellationToken);
     }
 
     // ──────────────────────────────────────────────

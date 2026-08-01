@@ -88,26 +88,24 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         if (belgeOnOkuma.IsDeleted)
             throw new BaseException("Satış belgesi silinmiş.", 400);
 
-        // OTORİTER: eski Durum yerine MuhasebeDurumu üzerinden karar verilir (bkz. C.9) -
-        // MuhasebeDurumu=Onaylandi ise eski Durum tutarsız olsa bile bu yeterlidir; değilse eski
-        // Durum uygun görünse dahi reddedilir.
-        if (belgeOnOkuma.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi)
-            throw new BaseException(
-                $"Satış belgesi 'MuhasebeOnaylandı' durumunda değil. Mevcut durum: {belgeOnOkuma.Durum}",
-                400);
+        // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi TEK
+        // merkezi kaynaktır (bkz. UI'daki SatisBelgesiDto.MuhasebeFisiOlusturulabilirMi ile AYNI
+        // kural). Yalnızca SatisFaturasi/AlisFaturasi/SatisIadeFaturasi/AlisIadeFaturasi (allowlist)
+        // MuhasebeDurumu=Onaylandi VE MuhasebeFisId boşken desteklenir - FaturaTaslagi, Proforma,
+        // legacy IadeFaturasi ve tanımsız enum değerleri burada da (ön kontrolde) reddedilir.
+        if (!TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+                belgeOnOkuma.MuhasebeDurumu, belgeOnOkuma.MuhasebeFisId, belgeOnOkuma.BelgeTipi))
+        {
+            if (belgeOnOkuma.MuhasebeFisId.HasValue)
+                throw new BaseException("Bu satış belgesi için daha önce muhasebe fişi oluşturulmuş.", 409);
 
-        if (belgeOnOkuma.MuhasebeFisId.HasValue)
-            throw new BaseException("Bu satış belgesi için daha önce muhasebe fişi oluşturulmuş.", 409);
+            throw new BaseException(
+                $"Bu belge için muhasebe fişi oluşturulamaz. (MuhasebeDurumu: {belgeOnOkuma.MuhasebeDurumu}, BelgeTipi: {belgeOnOkuma.BelgeTipi})",
+                400);
+        }
 
         if (!belgeOnOkuma.TesisId.HasValue)
             throw new BaseException("Satış belgesinde tesis bilgisi bulunamadı.", 400);
-
-        // Desteklenmeyen belge tipleri
-        if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.Proforma)
-            throw new BaseException("Proforma belgeler için muhasebe fişi oluşturulamaz.", 400);
-
-        if (belgeOnOkuma.BelgeTipi == SatisBelgesiTipi.IadeFaturasi)
-            throw new BaseException("İade faturaları için otomatik muhasebe fişi üretimi henüz desteklenmemektedir.", 400);
 
         // Toplam kontroller
         if (belgeOnOkuma.ToplamMatrah <= 0)
@@ -165,14 +163,19 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (belge is null)
                     throw new BaseException("Satış belgesi bulunamadı.", 404);
 
-                // Transaction içinde duplicate kontrol (race condition önlemi) - OTORİTER: MuhasebeDurumu (bkz. C.9).
-                if (belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi)
-                    throw new BaseException(
-                        $"Satış belgesi 'MuhasebeOnaylandı' durumunda değil. Mevcut durum: {belge.Durum}",
-                        400);
+                // Transaction içindeki NİHAİ kontrol (race condition önlemi) - ön kontrolle AYNI
+                // merkezi TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi kuralı; ön okumadan
+                // sonra belge tipi/durumu değişmiş olabileceği için burada da tekrar doğrulanır.
+                if (!TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+                        belge.MuhasebeDurumu, belge.MuhasebeFisId, belge.BelgeTipi))
+                {
+                    if (belge.MuhasebeFisId.HasValue)
+                        throw new BaseException("Bu satış belgesi için daha önce muhasebe fişi oluşturulmuş.", 409);
 
-                if (belge.MuhasebeFisId.HasValue)
-                    throw new BaseException("Bu satış belgesi için daha önce muhasebe fişi oluşturulmuş.", 409);
+                    throw new BaseException(
+                        $"Bu belge için muhasebe fişi oluşturulamaz. (MuhasebeDurumu: {belge.MuhasebeDurumu}, BelgeTipi: {belge.BelgeTipi})",
+                        400);
+                }
 
                 // Aynı kaynakla oluşturulmuş aktif fiş var mı?
                 var mevcutFis = await _dbContext.MuhasebeFisler

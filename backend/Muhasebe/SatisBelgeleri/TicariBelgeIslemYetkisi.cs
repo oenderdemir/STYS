@@ -58,17 +58,22 @@ public static class TicariBelgeIslemYetkisi
 
     /// <summary>
     /// Muhasebe fişi YALNIZCA MuhasebeDurumu=Onaylandi VE henüz bağlı bir MuhasebeFisId yokken
-    /// oluşturulabilir. FaturaTaslagi, Proforma ve legacy IadeFaturasi için (bu belge tiplerinde
-    /// fiş oluşturma akışı desteklenmediği için) HER ZAMAN false döner — desteklenen SatisFaturasi,
-    /// AlisFaturasi, SatisIadeFaturasi ve AlisIadeFaturasi için diğer koşullar sağlanınca true döner.
+    /// oluşturulabilir. Belge tipi bir İZİN LİSTESİYLE (allowlist) doğrulanır — YALNIZCA
+    /// SatisFaturasi, AlisFaturasi, SatisIadeFaturasi ve AlisIadeFaturasi desteklenir.
+    /// FaturaTaslagi, Proforma, legacy IadeFaturasi VE tanımsız/gelecekte eklenecek herhangi bir
+    /// enum değeri (fail-closed - blocklist DEĞİL, allowlist) HER ZAMAN false döner.
     /// </summary>
     public static bool MuhasebeFisiOlusturulabilirMi(
         TicariBelgeMuhasebeDurumu muhasebeDurumu, int? muhasebeFisId, SatisBelgesiTipi belgeTipi)
-        => muhasebeDurumu == TicariBelgeMuhasebeDurumu.Onaylandi
-           && !muhasebeFisId.HasValue
-           && belgeTipi != SatisBelgesiTipi.FaturaTaslagi
-           && belgeTipi != SatisBelgesiTipi.Proforma
-           && belgeTipi != SatisBelgesiTipi.IadeFaturasi;
+    {
+        if (muhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi || muhasebeFisId.HasValue)
+            return false;
+
+        return belgeTipi is SatisBelgesiTipi.SatisFaturasi
+            or SatisBelgesiTipi.AlisFaturasi
+            or SatisBelgesiTipi.SatisIadeFaturasi
+            or SatisBelgesiTipi.AlisIadeFaturasi;
+    }
 
     /// <summary>
     /// Üç otoriter durumdan operasyon personeline gösterilecek KISA, insan-okur bir Türkçe durum

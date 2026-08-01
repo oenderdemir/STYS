@@ -752,8 +752,10 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onaylama", cancellationToken);
 
-            // OTORİTER giriş kontrolü (bkz. C.4): MuhasebeDurumu=Onayda.
-            if (belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onayda)
+            // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.MuhasebeOnaylanabilirMi TEK merkezi
+            // kaynaktır; UI (SatisBelgesiDto.MuhasebeOnaylanabilirMi) ve bu endpoint AYNI kuralı
+            // kullanır, farklı karar üretemez.
+            if (!TicariBelgeIslemYetkisi.MuhasebeOnaylanabilirMi(belge.TicariDurum, belge.MuhasebeDurumu))
             {
                 throw new BaseException(
                     $"Sadece Muhasebe Onayında durumundaki belgeler onaylanabilir. Mevcut durum: {belge.Durum}",
@@ -1218,8 +1220,10 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
         await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "reddetme", cancellationToken);
 
-        // OTORİTER giriş kontrolü (bkz. C.5): MuhasebeDurumu=Onayda.
-        if (belge.MuhasebeDurumu != TicariBelgeMuhasebeDurumu.Onayda)
+        // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.ReddedilebilirMi TEK merkezi kaynaktır;
+        // UI (SatisBelgesiDto.ReddedilebilirMi) ve bu endpoint AYNI kuralı kullanır, farklı karar
+        // üretemez.
+        if (!TicariBelgeIslemYetkisi.ReddedilebilirMi(belge.TicariDurum, belge.MuhasebeDurumu))
         {
             throw new BaseException(
                 $"Sadece Muhasebe Onayında durumundaki belgeler reddedilebilir. Mevcut durum: {belge.Durum}",

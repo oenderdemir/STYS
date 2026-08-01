@@ -1,47 +1,92 @@
+using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
+using STYS.Infrastructure.EntityFramework;
+using STYS.Iller.Entities;
+using STYS.Kurumlar.Entities;
+using STYS.Muhasebe.CariKartlar.Entities;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Services;
+using STYS.Tesisler.Entities;
 using STYS.TicariBelgeler.Services;
+using TOD.Platform.SharedKernel.Exceptions;
 using Xunit;
 
 namespace STYS.Tests;
 
 /// <summary>
 /// Operasyonel ui/ticari-belgeler ekranı (TicariBelgeService) ile Muhasebe Satış/Alış Belgeleri
-/// ekranının (SatisBelgeleriController -> ISatisBelgesiService) AYNI belge üzerinde, AYNI
-/// ISatisBelgesiService kaynağı üzerinden çalıştığını kanıtlayan hızlı, DB gerektirmeyen birim
-/// testi. TicariBelgeService kendi durum makinesini KOPYALAMAZ - MuhasebeOnayinaGonderAsync
-/// doğrudan ISatisBelgesiService.MuhasebeOnayinaGonderAsync'e delege eder; bu yüzden operasyon
-/// ekranından "Onayda"ya gönderilen bir belge, muhasebe ekranından (aynı Id ile, aynı servis
-/// üzerinden) sorunsuzca işlenebilir.
+/// ekranının (SatisBelgeleriController -> ISatisBelgesiService) AYNI belge üzerinde, GERÇEK SQL
+/// Server'a karşı çalışan GERÇEK durum geçişleriyle uyumlu olduğunu kanıtlayan hedefli entegrasyon
+/// testleri. Önceki sürümde bu dosya her çağrıyı sessizce kabul eden bir sahte (fake)
+/// ISatisBelgesiService kullanıyordu - bu, delegasyonun VAROLDUĞUNU kanıtlıyordu ama gerçek durum
+/// makinesinin (Taslak -> Onayda -> Onaylandi) doğru işlediğini KANITLAMIYORDU. Bu sürüm
+/// SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService ile gerçek bir SatisBelgesiService
+/// örneği kullanır; TicariBelgeService bu örneği SARARAK (facade) operasyon tarafını temsil eder.
 /// </summary>
-public class MuhasebeOnayAkisiUyumlulukTests
+[Trait("Category", "Integration")]
+[Collection(SqlServerIntegrationCollection.Name)]
+public class MuhasebeOnayAkisiUyumlulukTests : IAsyncLifetime
 {
-    [Fact]
-    public async Task MuhasebeOnayinaGonderAsync_AyniIdIleAltMuhasebeServisineDelegeEder()
+    private const string TestMarker = "ONAYAKIS-771";
+
+    private string _uniqueSuffix = TestMarker;
+    private int _kurumId;
+    private int _ilId;
+    private int _tesisId;
+    private int _musteriKartId;
+
+    public async Task InitializeAsync()
     {
-        var fakeSatisBelgesiService = new FakeSatisBelgesiService();
-        var service = new TicariBelgeService(
-            fakeSatisBelgesiService,
-            taslakOlusturmaService: null!,
-            new UnscopedUserAccessScopeService(),
-            mapper: null!);
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        {
+            return;
+        }
 
-        const int belgeId = 123;
-        await service.MuhasebeOnayinaGonderAsync(belgeId);
+        _uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
 
-        // Operasyon ekranının "onaya gönder" çağrısı, muhasebe ekranının (SatisBelgeleriController)
-        // AYNI belge üzerinde MuhasebeOnaylaAsync/ReddetAsync çağırdığı AYNI ISatisBelgesiService
-        // örneğine, AYNI Id ile ulaşmalıdır - iki ayrı/senkronize edilmesi gereken bir durum deposu
-        // YOKTUR.
-        Assert.Equal(belgeId, fakeSatisBelgesiService.MuhasebeOnayinaGonderilenId);
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var (kurum, il, tesis) = await SatisBelgesiMuhasebeTestSupport.SeedKurumIlTesisAsync(dbContext, _uniqueSuffix);
+        _kurumId = kurum.Id;
+        _ilId = il.Id;
+        _tesisId = tesis.Id;
 
-        // Aynı belge, aynı servis üzerinden artık muhasebe tarafından onaylanabilir/reddedilebilir
-        // durumdadır - operasyon ekranının eylemi ile muhasebe ekranının eylemi aynı kayda uygulanır.
-        await fakeSatisBelgesiService.MuhasebeOnaylaAsync(belgeId);
-        Assert.Equal(belgeId, fakeSatisBelgesiService.MuhasebeOnaylananId);
+        var musteriKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(
+            _uniqueSuffix, "MUS", CariKartTipleri.Musteri, _tesisId, muhasebeHesapPlaniId: null);
+        dbContext.CariKartlar.Add(musteriKart);
+        await dbContext.SaveChangesAsync();
+        _musteriKartId = musteriKart.Id;
     }
+
+    public async Task DisposeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString) || _kurumId <= 0)
+        {
+            return;
+        }
+
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix, _tesisId, _kurumId, _ilId);
+    }
+
+    private CreateSatisBelgesiRequest BuildRequest(SatisBelgesiTipi belgeTipi) => new()
+    {
+        BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+        BelgeTipi = belgeTipi,
+        TesisId = _tesisId,
+        CariKartId = _musteriKartId,
+        BelgeTarihi = new DateTime(2026, 3, 1),
+        MusteriAdSoyad = "Test Musteri " + _uniqueSuffix,
+        Satirlar =
+        [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Test satir", Miktar = 1, BirimFiyat = 1000m,
+                KdvUygulamaTipi = (int)STYS.Muhasebe.Kdv.Enums.KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]
+    };
 
     private sealed class UnscopedUserAccessScopeService : IUserAccessScopeService
     {
@@ -49,54 +94,65 @@ public class MuhasebeOnayAkisiUyumlulukTests
             => Task.FromResult(DomainAccessScope.Unscoped());
     }
 
-    private sealed class FakeSatisBelgesiService : ISatisBelgesiService
+    [IntegrationFact]
+    public async Task OperasyonEkraniOnayaGonderir_MuhasebeEkraniOnaylar_BelgeOnaylandiOlurVeFisYetenegiDogruHesaplanir()
     {
-        public int? MuhasebeOnayinaGonderilenId { get; private set; }
-        public int? MuhasebeOnaylananId { get; private set; }
-        public int? ReddedilenId { get; private set; }
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisBelgesiService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
 
-        public Task<SatisBelgesiDto> GetByIdAsync(int id, CancellationToken cancellationToken = default)
-            => Task.FromResult(new SatisBelgesiDto
-            {
-                Id = id,
-                BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
-                TesisId = 1
-            });
+        // Operasyon (ui/ticari-belgeler) ekranını temsil eden gerçek TicariBelgeService — gerçek
+        // ISatisBelgesiService'i SARAR, kendi durum makinesini KOPYALAMAZ (bkz. ITicariBelgeService
+        // XML doc'u: MuhasebeOnaylaAsync/ReddetAsync/MuhasebeFisiOlusturAsync bilinçli olarak
+        // SUNULMAZ).
+        var operasyonServisi = new TicariBelgeService(
+            satisBelgesiService,
+            taslakOlusturmaService: null!,
+            new UnscopedUserAccessScopeService(),
+            mapper: null!);
 
-        public Task<List<SatisBelgesiDto>> FilterAsync(SatisBelgesiFilterDto filter, CancellationToken cancellationToken = default)
-            => Task.FromResult(new List<SatisBelgesiDto>());
+        var created = await satisBelgesiService.CreateAsync(BuildRequest(SatisBelgesiTipi.SatisFaturasi));
+        var belgeId = created.Id!.Value;
 
-        public Task<SatisBelgesiDto> CreateAsync(CreateSatisBelgesiRequest request, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        // Taslak/Bekliyor -> Onayda (operasyon ekranı üzerinden)
+        await operasyonServisi.MuhasebeOnayinaGonderAsync(belgeId);
 
-        public Task<SatisBelgesiDto> UpdateAsync(int id, UpdateSatisBelgesiRequest request, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        var onaydakiBelge = await satisBelgesiService.GetByIdAsync(belgeId);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onayda, onaydakiBelge.MuhasebeDurumu);
+        Assert.True(onaydakiBelge.MuhasebeOnaylanabilirMi);
+        Assert.True(onaydakiBelge.ReddedilebilirMi);
+        Assert.False(onaydakiBelge.MuhasebeFisiOlusturulabilirMi);
 
-        public Task DeleteAsync(int id, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        // Onayda -> Onaylandi (muhasebe ekranı üzerinden — AYNI Id, AYNI ISatisBelgesiService)
+        await satisBelgesiService.MuhasebeOnaylaAsync(belgeId);
 
-        public Task MuhasebeOnayinaGonderAsync(int id, CancellationToken cancellationToken = default)
-        {
-            MuhasebeOnayinaGonderilenId = id;
-            return Task.CompletedTask;
-        }
+        var onaylananBelge = await satisBelgesiService.GetByIdAsync(belgeId);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, onaylananBelge.MuhasebeDurumu);
+        Assert.False(onaylananBelge.MuhasebeOnaylanabilirMi);
+        Assert.False(onaylananBelge.ReddedilebilirMi);
+        Assert.Null(onaylananBelge.MuhasebeFisId);
+        Assert.True(onaylananBelge.MuhasebeFisiOlusturulabilirMi);
+    }
 
-        public Task MuhasebeOnaylaAsync(int id, CancellationToken cancellationToken = default)
-        {
-            MuhasebeOnaylananId = id;
-            return Task.CompletedTask;
-        }
+    [IntegrationFact]
+    public async Task FaturaTaslagi_OnaylandiOlsaBileMuhasebeFisiOlusturmaEndpointiReddeder()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisBelgesiService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var muhasebeFisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
 
-        public Task<SatisBelgesiDto> FaturaKesAsync(int id, FaturaKesRequest request, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        var onaylanan = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(
+            satisBelgesiService, BuildRequest(SatisBelgesiTipi.FaturaTaslagi));
 
-        public Task ReddetAsync(int id, string redNedeni, CancellationToken cancellationToken = default)
-        {
-            ReddedilenId = id;
-            return Task.CompletedTask;
-        }
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, onaylanan.MuhasebeDurumu);
 
-        public Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        // FaturaTaslagi allowlist'te DEĞİLDİR - MuhasebeDurumu=Onaylandi olsa dahi
+        // MuhasebeFisiOlusturulabilirMi=false olmalı ve doğrudan servis çağrısı REDDEDİLMELİDİR.
+        Assert.False(onaylanan.MuhasebeFisiOlusturulabilirMi);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(
+            () => muhasebeFisService.MuhasebeFisiOlusturAsync(onaylanan.Id!.Value));
+        Assert.Equal(400, ex.ErrorCode);
+
+        await SatisBelgesiMuhasebeTestSupport.AssertHicMuhasebeKaydiOlusmadiAsync(dbContext, onaylanan.Id!.Value);
     }
 }

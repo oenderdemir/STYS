@@ -52,6 +52,7 @@
                     [dropdown]="true"
                     [showClear]="true"
                     [minLength]="0"
+                    [disabled]="cariKartlarYukleniyor"
                     placeholder="Cari kart seçiniz (unvan, vergi no veya kod ile arayın)...">
                     <ng-template let-cari pTemplate="item">
                         <span>{{ formatCariDisplay(cari) }}</span>

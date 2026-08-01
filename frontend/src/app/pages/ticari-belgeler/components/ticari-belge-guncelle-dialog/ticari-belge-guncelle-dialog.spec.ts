@@ -805,6 +805,9 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         component.visible = true;
         component.ngOnChanges(VISIBLE_ILK_ACILIS);
         component.iadeEdilenBelgeSuggestions = [{ id: 77, belgeNo: 'ESKI-ONERI', belgeTarihi: '2026-03-01' }];
+        // Yeni cari, GUNCEL (yuklenmis) lookup listesinde yer almali - aksi halde stale/bilinmeyen
+        // bir secim olarak REDDEDILIR (bkz. gorev 2).
+        component.cariKartlar = [ornekCariKart({ id: 5 }), ornekCariKart({ id: 8, unvanAdSoyad: 'Baska Musteri' })];
 
         component.onCariKartSecildi(ornekCariKart({ id: 8, unvanAdSoyad: 'Baska Musteri' }));
 
@@ -832,10 +835,111 @@ describe('TicariBelgeGuncelleDialogComponent - iade kaynak satir esleme', () => 
         serviceSpy.getKaynakSatirlar.and.returnValue(of([ornekKaynakSatir({ id: 10, iadeEdilebilirKalanMiktar: 6 })]));
         component.visible = true;
         component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        component.cariKartlar = [ornekCariKart({ id: 5 })];
 
         component.onCariKartSecildi(ornekCariKart({ id: 5 }));
 
         expect(component.formData!.iadeEdilenBelgeId).toBe(50);
         expect(component.formData!.satirlar!.length).toBe(1);
+    });
+
+    it('yon degisince eski cari secenekleri hemen temizlenir ve yukleme sirasinda secim yapilamaz', () => {
+        const component = createComponent();
+        component.belgeId = 99;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisFaturasi,
+            cariKartId: 5,
+            iadeEdilenBelgeId: null,
+            satirlar: []
+        });
+        // Ilk acilis - senkron of([...]) doner, cariKartlar/selectedCari GERCEKTEN dolar.
+        serviceSpy.getCariKartLookup.and.returnValue(of([ornekCariKart({ id: 5 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        expect(component.cariKartlar.length).toBe(1);
+        expect(component.selectedCari?.id).toBe(5);
+
+        // Yon degisimi baslar - YENI istek HENUZ cozulmeden ESKI liste/secim HEMEN temizlenmis
+        // ve yukleniyor bayragi acilmis olmali (bkz. gorev 1).
+        const subject = new Subject<TicariBelgeCariKartLookupDto[]>();
+        serviceSpy.getCariKartLookup.and.returnValue(subject.asObservable());
+        component.onBelgeTipiChange(SatisBelgesiTipi.AlisFaturasi);
+
+        expect(component.cariKartlar).toEqual([]);
+        expect(component.filteredCariKartlar).toEqual([]);
+        expect(component.selectedCari).toBeNull();
+        expect(component.cariKartlarYukleniyor).toBeTrue();
+
+        // Yukleme SURERKEN bir secim denemesi REDDEDILMELI - selectedCari DEGISMEMELI (bkz. gorev 2).
+        component.onCariKartSecildi(ornekCariKart({ id: 9, cariTipi: 'Tedarikci', unvanAdSoyad: 'Tedarikci X' }));
+        expect(component.selectedCari).toBeNull();
+        expect(component.formData!.cariKartId).toBeNull();
+
+        // Yukleme TAMAMLANIR - artik cariKartlarYukleniyor false, ayni secim ARTIK kabul edilmeli.
+        subject.next([ornekCariKart({ id: 9, cariTipi: 'Tedarikci', unvanAdSoyad: 'Tedarikci X' })]);
+        expect(component.cariKartlarYukleniyor).toBeFalse();
+
+        component.onCariKartSecildi(ornekCariKart({ id: 9, cariTipi: 'Tedarikci', unvanAdSoyad: 'Tedarikci X' }));
+        expect(component.formData!.cariKartId).toBe(9);
+    });
+
+    it('dialog yeniden acilirken onceki selectedCari gosterilmez', () => {
+        const component = createComponent();
+        component.belgeId = 1;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisFaturasi,
+            cariKartId: 5,
+            iadeEdilenBelgeId: null,
+            satirlar: []
+        });
+        serviceSpy.getCariKartLookup.and.returnValue(of([ornekCariKart({ id: 5 })]));
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        expect(component.selectedCari?.id).toBe(5);
+
+        // Dialog FARKLI bir belge icin YENIDEN aciliyor - yeni lookup HENUZ cozulmeden onceki
+        // belgeye ait eski secim GORUNMEMELI (bkz. gorev 1).
+        const subject = new Subject<TicariBelgeCariKartLookupDto[]>();
+        serviceSpy.getCariKartLookup.and.returnValue(subject.asObservable());
+        component.belgeId = 2;
+        component.formData = ornekFormData({
+            belgeTipi: SatisBelgesiTipi.SatisFaturasi,
+            cariKartId: 8,
+            iadeEdilenBelgeId: null,
+            satirlar: []
+        });
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        expect(component.selectedCari).toBeNull();
+        expect(component.cariKartlar).toEqual([]);
+
+        subject.next([ornekCariKart({ id: 8, unvanAdSoyad: 'Yeni Belge Carisi' })]);
+        expect(component.selectedCari?.id).toBe(8);
+    });
+
+    it('onceki dialogun gec gelen iade-adayi yaniti yeni belgeye uygulanmaz', () => {
+        const subject = new Subject<TicariBelgeIadeAdayiDto[]>();
+        serviceSpy.getIadeAdaylari.and.returnValue(subject.asObservable());
+
+        const component = createComponent();
+        component.belgeId = 1;
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi, cariKartId: 5, iadeEdilenBelgeId: null });
+        component.visible = true;
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+
+        // Onceki (1.) belge icin bir arama BASLATILIR, yaniti HENUZ gelmez.
+        component.searchIadeEdilenBelge({ query: 'ESKI' });
+
+        // Dialog KAPANIP FARKLI bir belge icin YENIDEN aciliyor - bu, onceki aramanin
+        // token'ini GECERSIZ kilmali ve onerileri temizlemelidir (bkz. gorev 3).
+        component.belgeId = 2;
+        component.formData = ornekFormData({ belgeTipi: SatisBelgesiTipi.SatisIadeFaturasi, cariKartId: 9, iadeEdilenBelgeId: null });
+        component.ngOnChanges(VISIBLE_ILK_ACILIS);
+        expect(component.iadeEdilenBelgeSuggestions).toEqual([]);
+
+        // Onceki (1.) belgenin GEC gelen yaniti simdi gelir - YENI belgeye SESSIZCE uygulanmamali.
+        subject.next([{ id: 70, belgeNo: 'ESKI-BELGE-70', belgeTarihi: '2026-01-01' }]);
+
+        expect(component.iadeEdilenBelgeSuggestions).toEqual([]);
     });
 });

@@ -85,6 +85,12 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     filteredCariKartlar: TicariBelgeCariKartLookupDto[] = [];
     selectedCari: TicariBelgeCariKartLookupDto | null = null;
 
+    /** Cari kart lookup isteği DEVAM EDERKEN true - bu sırada cari seçimi şablonda devre dışı
+     * bırakılır ([disabled]) VE onCariKartSecildi savunma amaçlı olarak seçimi reddeder (bkz.
+     * görev 1/2). Yeni bir lookup başlar başlamaz true'ya döner; yalnızca o isteğin kendi
+     * (stale olmayan) sonucu/hatası ile false'a döner. */
+    cariKartlarYukleniyor = false;
+
     // ── KDV istisna tanımı seçimi (satır bazlı, KdvUygulamaTipi'ne göre lazy cache) ──
     private kdvIstisnaCache = new Map<KdvUygulamaTipi, TicariBelgeKdvIstisnaLookupDto[]>();
 
@@ -131,11 +137,15 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             this.oncekiBelgeTipi = this.formData.belgeTipi;
             this.kdvIstisnaCache.clear();
             this.kaynakSatirHataMesaji = null;
-            // Dialog (yeniden) açılıyor - önceki belgeye ait, artık ALAKASIZ bir bekleyen kaynak
-            // isteği varsa geçersiz kılınır (bkz. token doc'u); bu belge için gerekiyorsa aşağıdaki
-            // loader zaten kendi token'ını alıp loading'i yeniden başlatacaktır.
+            // Dialog (yeniden) açılıyor - önceki belgeye ait, artık ALAKASIZ bekleyen istekler
+            // (kaynak satır VE iade adayı araması) geçersiz kılınır (bkz. token doc'ları); bu
+            // belge için gerekiyorsa aşağıdaki loader'lar zaten kendi token'larını alıp loading'i
+            // yeniden başlatacaktır. Önceki dialogdan (farklı bir belge) kalan, geç gelebilecek
+            // bir iade adayı yanıtının bu YENİ belgeye SESSİZCE uygulanmaması için önce buradaki
+            // öneriler de temizlenir (bkz. görev 3).
             this.kaynakSatirRequestToken++;
             this.kaynakSatirlarYukleniyor = false;
+            this.invalidateIadeAdayiAramasi();
             this.loadCariKartlar();
             this.resolveIadeEdilenBelgeGosterim();
             if (this.formData.iadeEdilenBelgeId) {
@@ -322,14 +332,24 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
 
     /** Cari kart lookup'ı bir request-token ile korunur - belge tipi/tesis hızlı ardışık
      * değiştirildiğinde eski (stale) bir isteğin yanıtı, yeni belge tipinin listesinin ÜZERİNE
-     * SESSİZCE yazamaz (bkz. görev 2). */
+     * SESSİZCE yazamaz (bkz. görev 2). Yeni bir lookup BAŞLAR BAŞLAMAZ eski liste/seçim HEMEN
+     * temizlenir - önceki belgeye/yöne ait bir görsel seçim (selectedCari) asla gösterilmeye
+     * devam ETMEZ; lookup tamamlanana kadar cariKartlarYukleniyor=true kalır ve cari seçimi
+     * şablonda/onCariKartSecildi'de devre dışı bırakılır (bkz. görev 1/2). formData.cariKartId
+     * (kayıtlı belgenin GERÇEK cari referansı) bu metotta HİÇBİR ZAMAN silinmez - yalnızca UI'daki
+     * geçici (selectedCari) gösterim etkilenir. */
     private loadCariKartlar(): void {
         const tesisId = this.formData?.tesisId ?? null;
         const belgeTipi = this.formData?.belgeTipi ?? null;
         const token = ++this.cariKartRequestToken;
+
+        this.cariKartlar = [];
+        this.filteredCariKartlar = [];
+        this.selectedCari = null;
+        this.cariKartlarYukleniyor = true;
+
         if (!tesisId || !belgeTipi) {
-            this.cariKartlar = [];
-            this.filteredCariKartlar = [];
+            this.cariKartlarYukleniyor = false;
             return;
         }
         this.ticariBelgeService.getCariKartLookup(tesisId, belgeTipi).subscribe({
@@ -337,6 +357,7 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
                 if (token !== this.cariKartRequestToken) {
                     return;
                 }
+                this.cariKartlarYukleniyor = false;
                 this.cariKartlar = list;
                 this.filteredCariKartlar = [...this.cariKartlar];
                 this.selectedCari = this.cariKartlar.find(c => c.id === this.formData?.cariKartId) ?? null;
@@ -345,6 +366,7 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
                 if (token !== this.cariKartRequestToken) {
                     return;
                 }
+                this.cariKartlarYukleniyor = false;
                 this.cariKartlar = [];
                 this.filteredCariKartlar = [];
             }
@@ -367,15 +389,33 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
      * çağrılır (bkz. şablon/görev 1) - kullanıcının arama kutusuna YAZDIĞI serbest metin
      * (ngModelChange) burayı ASLA tetiklemez; aksi halde yazılan metin bir STRING olarak buraya
      * gelip cariKartId'yi ve müşteri snapshot alanlarını (unvan/ad-soyad/vergi no vb.) sessizce
-     * BOZARDI. Cari seçildiğinde yalnızca cariKartId DEĞİL, mevcut satış belgesi ekranıyla uyumlu
-     * şekilde tüm müşteri snapshot alanları da doldurulur (bkz. görev D). Cari GERÇEKTEN
-     * değiştiyse (eski cariKartId'den farklıysa): eski (artık ilgisiz) iade adayı önerileri
-     * temizlenir; bir iade referansı ZATEN seçiliyse bu referans yeni cari ile artık uyumlu
-     * olmayabileceğinden referans+kaynak satırlar birlikte temizlenip yeniden seçim zorunlu
-     * kılınır (bkz. görev 3). */
+     * BOZARDI. Bir cari SEÇİMİ (cari != null) yalnızca ŞU İKİ koşul da sağlanırsa kabul edilir
+     * (bkz. görev 2): (a) lookup DEVAM ETMİYOR olmalı (b) seçilen cari GÜNCEL cariKartlar
+     * listesinde bulunmalı VE mevcut belge yönüne uygun olmalı - aksi halde bu, eskimiş (stale)
+     * bir dropdown'dan (ör. önceki bir belge/yöne ait render edilmiş bir öğeden) gelen geçersiz
+     * bir seçimdir ve SESSİZCE reddedilir (formData/selectedCari DEĞİŞTİRİLMEZ). Temizleme
+     * (cari === null) bu kısıtlamalara tabi DEĞİLDİR - her zaman kabul edilir. Cari seçildiğinde
+     * yalnızca cariKartId DEĞİL, mevcut satış belgesi ekranıyla uyumlu şekilde tüm müşteri
+     * snapshot alanları da doldurulur (bkz. görev D). Cari GERÇEKTEN değiştiyse (eski
+     * cariKartId'den farklıysa): eski (artık ilgisiz) iade adayı önerileri temizlenir; bir iade
+     * referansı ZATEN seçiliyse bu referans yeni cari ile artık uyumlu olmayabileceğinden
+     * referans+kaynak satırlar birlikte temizlenip yeniden seçim zorunlu kılınır (bkz. görev 3). */
     onCariKartSecildi(cari: TicariBelgeCariKartLookupDto | null): void {
-        this.selectedCari = cari;
         if (!this.formData) return;
+
+        if (cari) {
+            if (this.cariKartlarYukleniyor) {
+                return;
+            }
+            const guncelListedeMi = this.cariKartlar.some(c => c.id === cari.id);
+            const belgeTipi = this.formData.belgeTipi;
+            const yoneUygunMu = belgeTipi ? this.cariYeniYonaUygunMu(cari, belgeTipi) : true;
+            if (!guncelListedeMi || !yoneUygunMu) {
+                return;
+            }
+        }
+
+        this.selectedCari = cari;
 
         const cariDegisti = this.formData.cariKartId !== (cari?.id ?? null);
 

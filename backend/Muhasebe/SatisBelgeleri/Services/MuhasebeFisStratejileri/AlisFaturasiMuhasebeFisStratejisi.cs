@@ -72,17 +72,20 @@ public sealed class AlisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFis
 
         if (belge.ToplamKdv > 0)
         {
-            if (!context.KdvHesapPlaniId.HasValue)
-                throw new BaseException("Alış faturası için 191 İndirilecek KDV hesabı bulunamadı.", 400);
-
-            satirlar.Add(new MuhasebeFisSatiriTaslak
+            foreach (var (oran, tutar) in KdvOranGruplamaHelper.Grupla(belge.Satirlar))
             {
-                MuhasebeHesapPlaniId = context.KdvHesapPlaniId.Value,
-                SiraNo = siraNo++,
-                Borc = belge.ToplamKdv,
-                Alacak = 0,
-                Aciklama = $"İndirilecek KDV - {belge.BelgeNo}"
-            });
+                if (!context.KdvHesaplariByOran.TryGetValue(oran, out var hesapId))
+                    throw new BaseException($"%{oran} oranlı İndirilecek KDV için 191 hesabı bulunamadı.", 400);
+
+                satirlar.Add(new MuhasebeFisSatiriTaslak
+                {
+                    MuhasebeHesapPlaniId = hesapId,
+                    SiraNo = siraNo++,
+                    Borc = tutar,
+                    Alacak = 0,
+                    Aciklama = $"İndirilecek KDV (%{oran}) - {belge.BelgeNo}"
+                });
+            }
         }
 
         satirlar.Add(new MuhasebeFisSatiriTaslak

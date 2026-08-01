@@ -284,6 +284,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         belge.BelgeNo,
                         belge.CariKartId,
                         kdvGerekli,
+                        aktifSatirlar,
                         cancellationToken),
                     _ => await BuildSatisFisContextAsync(
                         belge.TesisId!.Value,
@@ -293,6 +294,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                         belge.BelgeNo,
                         belge.CariKartId,
                         kdvGerekli,
+                        aktifSatirlar,
                         cancellationToken)
                 };
 
@@ -538,6 +540,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         string belgeNo,
         int? cariKartId,
         bool kdvGerekli,
+        IReadOnlyList<SatisBelgesiSatiri> aktifSatirlar,
         CancellationToken cancellationToken)
     {
         // Borç/alacak cari satırı, belgenin kendi müşterisinin (SatisBelgesi.CariKartId)
@@ -556,9 +559,9 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             tamCariDogrulamasiUygula: true,
             cancellationToken);
         var gelir = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.GelirSatis, tesisId, cancellationToken);
-        var kdv = kdvGerekli
-            ? await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVHesaplanan, true, cancellationToken)
-            : null;
+        var kdvHesaplariByOran = kdvGerekli
+            ? await ResolveKdvHesaplariByOranAsync(tesisId, aktifSatirlar, MuhasebeAnaHesapKodlari.KDVHesaplanan, satisMi: true, cancellationToken)
+            : new Dictionary<decimal, int>();
 
         return new SatisBelgesiMuhasebeFisContext
         {
@@ -571,7 +574,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             CariHesapPlaniId = cariHesabi.Id,
             CariKartId = cariKartId,
             GelirHesapPlaniId = gelir.Id,
-            KdvHesapPlaniId = kdv?.Id
+            KdvHesaplariByOran = kdvHesaplariByOran
         };
     }
 
@@ -658,6 +661,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         string belgeNo,
         int? cariKartId,
         bool kdvGerekli,
+        IReadOnlyList<SatisBelgesiSatiri> aktifSatirlar,
         CancellationToken cancellationToken)
     {
         // Borç/alacak cari satırı, belgenin kendi tedarikçisinin (SatisBelgesi.CariKartId)
@@ -673,15 +677,32 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             yanlisTipHatasi: "Alış belgelerinde tedarikçi cari kart seçilmelidir.",
             tamCariDogrulamasiUygula: true,
             cancellationToken);
-        var stok = await GetHesapPlaniAsync(MuhasebeAnaHesapKodlari.StokTicariMal, tesisId, cancellationToken);
-        var hizmet = await GetHesapPlaniFallbackAsync(
-            tesisId,
-            cancellationToken,
-            MuhasebeAnaHesapKodlari.GiderHizmetMaliyet,
-            MuhasebeAnaHesapKodlari.GiderGenelYonetim);
-        var kdv = kdvGerekli
-            ? await GetKdvHesabiAsync(tesisId, MuhasebeAnaHesapKodlari.KDVIndirilecek, false, cancellationToken)
+
+        // Stok (153) ve hizmet gider hesapları artık KOŞULSUZ aranmaz/zorunlu tutulmaz (bkz.
+        // görev 1): global 153 hesabı yalnızca belgede GERÇEKTEN bir ürün satırı (TasinirKartId
+        // dolu) varsa VE o satırın taşınır kartının kendi doğrudan hesabı/eşlemesi YOKSA
+        // gerekebilir - bu yüzden burada TryGetHesapPlaniAsync (bulunamazsa exception FIRLATMAZ,
+        // null döner) kullanılır; asıl zorunluluk kontrolü, taşınır kartın direkt hesabı
+        // bulunamadığında strateji içindeki ResolveSatirHesabiAsync'te (context.StokHesapPlaniId
+        // null ise orada throw edilir) yapılır. Aynı şekilde hizmet gider hesabı yalnızca
+        // belgede en az bir hizmet satırı (TasinirKartId boş) varsa aranır - saf ürün-only bir
+        // alış/alış iade belgesi artık hizmet hesabı yokluğu yüzünden REDDEDİLMEZ.
+        var urunSatiriVarMi = aktifSatirlar.Any(s => s.TasinirKartId.HasValue);
+        var hizmetSatiriVarMi = aktifSatirlar.Any(s => !s.TasinirKartId.HasValue);
+
+        var stok = urunSatiriVarMi
+            ? await TryGetHesapPlaniAsync(MuhasebeAnaHesapKodlari.StokTicariMal, tesisId, cancellationToken)
             : null;
+        var hizmet = hizmetSatiriVarMi
+            ? await TryGetHesapPlaniFallbackAsync(
+                tesisId,
+                cancellationToken,
+                MuhasebeAnaHesapKodlari.GiderHizmetMaliyet,
+                MuhasebeAnaHesapKodlari.GiderGenelYonetim)
+            : null;
+        var kdvHesaplariByOran = kdvGerekli
+            ? await ResolveKdvHesaplariByOranAsync(tesisId, aktifSatirlar, MuhasebeAnaHesapKodlari.KDVIndirilecek, satisMi: false, cancellationToken)
+            : new Dictionary<decimal, int>();
 
         return new SatisBelgesiMuhasebeFisContext
         {
@@ -694,9 +715,9 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             CariHesapPlaniId = cari.Id,
             CariKartId = cariKartId,
             GelirHesapPlaniId = 0,
-            KdvHesapPlaniId = kdv?.Id,
-            StokHesapPlaniId = stok.Id,
-            HizmetGiderHesapPlaniId = hizmet.Id
+            KdvHesaplariByOran = kdvHesaplariByOran,
+            StokHesapPlaniId = stok?.Id,
+            HizmetGiderHesapPlaniId = hizmet?.Id
         };
     }
 
@@ -1191,12 +1212,12 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         await _dbContext.CariHareketler.AddAsync(cariHareket, cancellationToken);
     }
 
-    private async Task<MuhasebeHesapPlani> GetHesapPlaniAsync(
+    private async Task<MuhasebeHesapPlani?> TryGetHesapPlaniAsync(
         string anaKod,
         int tesisId,
         CancellationToken cancellationToken)
     {
-        var hesap = await _dbContext.MuhasebeHesapPlanlari
+        return await _dbContext.MuhasebeHesapPlanlari
             .AsNoTracking()
             .Where(x => !x.IsDeleted
                         && x.AktifMi
@@ -1210,6 +1231,14 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             .OrderByDescending(x => x.TesisId == tesisId)
             .ThenBy(x => x.TamKod)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<MuhasebeHesapPlani> GetHesapPlaniAsync(
+        string anaKod,
+        int tesisId,
+        CancellationToken cancellationToken)
+    {
+        var hesap = await TryGetHesapPlaniAsync(anaKod, tesisId, cancellationToken);
 
         if (hesap is null)
             throw new BaseException(
@@ -1221,70 +1250,98 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     }
 
     /// <summary>
-    /// KDV hesabını (191/391) bulur.
-    ///
-    /// Arama sırası:
-    /// 1. MuhasebeVergiHesapEslemeleri tablosunda VergiTipi = "KDV" olan ve
-    ///    tesis özel (TesisId eşleşen) veya global (TesisId=null) aktif eşleme ara.
-    ///    Eşlemede satış KDV hesabı (SatisKdvHesap) kullanılır.
-    /// 2. Eşleme bulunamazsa fallback: MuhasebeHesapPlanlari üzerinden TamKod == "391"
-    ///    veya TamKod "391." prefix'i ile başlayan hesap ara.
-    ///
-    /// Her iki yöntemde de hesap aktif, hareket görebilir ve detay hesap olmalıdır.
-    /// Tesis özel sonuç global sonuca göre önceliklidir.
-    ///
-    /// MuhasebeFisService.GetKdvHesabiAsync private olduğu için aynı pattern
-    /// (VergiHesapEsleme tablosu ile zenginleştirilmiş) burada uygulanmıştır.
+    /// Birden çok ana kod adayını sırayla dener, İLK bulunanı döner; hiçbiri bulunamazsa
+    /// (throw ETMEZ) null döner - çağıran, bu hesabın gerçekten GEREKLİ olup olmadığına
+    /// (ör. belgede hiç hizmet satırı yoksa hiç gerekmez) kendisi karar verir.
     /// </summary>
-    private async Task<MuhasebeHesapPlani> GetHesapPlaniFallbackAsync(
+    private async Task<MuhasebeHesapPlani?> TryGetHesapPlaniFallbackAsync(
         int tesisId,
         CancellationToken cancellationToken,
         params string[] anaKodlar)
     {
-        BaseException? lastError = null;
         foreach (var anaKod in anaKodlar)
         {
-            try
-            {
-                return await GetHesapPlaniAsync(anaKod, tesisId, cancellationToken);
-            }
-            catch (BaseException ex)
-            {
-                lastError = ex;
-            }
+            var hesap = await TryGetHesapPlaniAsync(anaKod, tesisId, cancellationToken);
+            if (hesap is not null)
+                return hesap;
         }
 
-        throw lastError ?? new BaseException("Hesap planı bulunamadı.", 400);
+        return null;
     }
 
-    private async Task<MuhasebeHesapPlani> GetKdvHesabiAsync(
+    /// <summary>
+    /// Belgedeki KDV içeren (KdvTutari>0) her AYRI KdvOrani için ayrı bir KDV hesabı (191/391)
+    /// çözümler (bkz. görev: KDV hesaplarını oran bazında çöz) - tek, oran'dan bağımsız bir
+    /// KDV hesabı ARTIK KULLANILMAZ. Sonuç, oran → hesap Id sözlüğüdür; bir oran için hesap
+    /// çözümlenemezse (ne oran-özel eşleme ne fallback bulunursa) o oran sözlükte YER ALMAZ -
+    /// strateji, o oranı fiş satırına dönüştürmeye çalıştığında bunu KENDİSİ tespit edip
+    /// açık bir hata fırlatır (bkz. TicariBelgeler stratejileri).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<decimal, int>> ResolveKdvHesaplariByOranAsync(
         int tesisId,
-        string tamKod,
+        IReadOnlyList<SatisBelgesiSatiri> aktifSatirlar,
+        string tamKodFallback,
         bool satisMi,
         CancellationToken cancellationToken)
     {
-        // ── 1. Önce VergiHesapEsleme tablosunda satış KDV eşlemesi ara ──
-        var esleme = await _dbContext.MuhasebeVergiHesapEslemeleri
+        var oranGruplari = KdvOranGruplamaHelper.Grupla(aktifSatirlar);
+        var sonuc = new Dictionary<decimal, int>();
+
+        foreach (var (oran, _) in oranGruplari)
+        {
+            var hesapId = await ResolveKdvHesabiIdForOranAsync(tesisId, oran, tamKodFallback, satisMi, cancellationToken);
+            if (hesapId.HasValue)
+                sonuc[oran] = hesapId.Value;
+        }
+
+        return sonuc;
+    }
+
+    /// <summary>
+    /// Tek bir KDV oranı için hesap çözümler.
+    ///
+    /// Arama sırası (bkz. görev: KDV hesaplarını oran bazında çöz):
+    /// 1. MuhasebeVergiHesapEslemeleri'nde VergiTipi="KDV", Oran=oran VE TesisId=tesisId
+    ///    (tesis özel + oran eşleşmesi) olan aktif bir eşleme ara.
+    /// 2. Bulunamazsa AYNI oran için GLOBAL (TesisId=null) bir eşleme ara - tesis özel eşleme
+    ///    HER ZAMAN global eşlemeden ÖNCE denenir.
+    /// 3. Eşleme bulunduysa, işaret ettiği hesabın aktif/hareket görebilir/detay hesap VE
+    ///    (başka bir tesise değil) AYNI tesise ait ya da GLOBAL olduğu doğrulanır - uygunsuzsa
+    ///    eşleme YOK SAYILIR ve adım 4'e geçilir.
+    /// 4. Uygun bir oran eşlemesi yoksa, MEVCUT (oran'dan bağımsız) TamKod tabanlı 391/191
+    ///    fallback araması kullanılabilir.
+    ///
+    /// Hiçbiri bulunamazsa null döner (throw ETMEZ) - "hesap bulunamadı" hatası, bu oranın
+    /// GERÇEKTEN bir fiş satırına dönüştürülmesi gerektiği an, çağıran strateji tarafından
+    /// üretilir.
+    /// </summary>
+    private async Task<int?> ResolveKdvHesabiIdForOranAsync(
+        int tesisId,
+        decimal oran,
+        string tamKodFallback,
+        bool satisMi,
+        CancellationToken cancellationToken)
+    {
+        var tesisOzelEsleme = await _dbContext.MuhasebeVergiHesapEslemeleri
             .AsNoTracking()
-            .Where(e => e.VergiTipi == "KDV"
-                        && !e.IsDeleted
-                        && e.AktifMi
-                        && (e.TesisId == tesisId || e.TesisId == null))
-            .OrderByDescending(e => e.TesisId == tesisId) // tesis özel öncelikli
+            .Where(e => e.VergiTipi == "KDV" && !e.IsDeleted && e.AktifMi && e.Oran == oran && e.TesisId == tesisId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var esleme = tesisOzelEsleme ?? await _dbContext.MuhasebeVergiHesapEslemeleri
+            .AsNoTracking()
+            .Where(e => e.VergiTipi == "KDV" && !e.IsDeleted && e.AktifMi && e.Oran == oran && e.TesisId == null)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (esleme is not null)
         {
-            var hesapId = satisMi ? esleme.SatisKdvHesapId : esleme.AlisKdvHesapId;
+            var eslemeHesapId = satisMi ? esleme.SatisKdvHesapId : esleme.AlisKdvHesapId;
 
-            // Eşlemedeki KDV hesabını doğrula: aktif, hareket görebilir, detay hesap VE
-            // (bkz. görev 4.2) yalnızca AYNI tesise ait veya GLOBAL (TesisId=null) bir hesap
-            // kullanılabilir - eşleme global olsa bile, işaret ettiği hesap BAŞKA bir tesise
-            // özelse bu fişte KULLANILMAZ (aksi halde başka bir tesisin 391/191 hesabına
-            // yanlışlıkla yazılabilirdi); bu durumda aşağıdaki fallback'lere düşülür.
+            // Eşlemedeki hesabı doğrula: aktif, hareket görebilir, detay hesap VE yalnızca AYNI
+            // tesise ait veya GLOBAL bir hesap kullanılabilir - başka bir tesisin 391/191
+            // hesabına yanlışlıkla yazılamaz; uygunsuzsa aşağıdaki fallback'e düşülür.
             var eslemeHesap = await _dbContext.MuhasebeHesapPlanlari
                 .AsNoTracking()
-                .Where(x => x.Id == hesapId
+                .Where(x => x.Id == eslemeHesapId
                             && !x.IsDeleted
                             && x.AktifMi
                             && x.HareketGorebilirMi
@@ -1293,47 +1350,11 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (eslemeHesap is not null)
-                return eslemeHesap;
+                return eslemeHesap.Id;
         }
 
-        // ── 2. Fallback: HesapPlanı üzerinden TamKod ile ara ──
-        var kdvHesap = await _dbContext.MuhasebeHesapPlanlari
-            .AsNoTracking()
-            .Where(x => x.TamKod == tamKod
-                        && !x.IsDeleted
-                        && x.AktifMi
-                        && x.HareketGorebilirMi
-                        && x.DetayHesapMi
-                        && (x.TesisId == tesisId || x.TesisId == null))
-            .OrderByDescending(x => x.TesisId == tesisId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (kdvHesap is not null)
-            return kdvHesap;
-
-        // ── 3. Son çare: TamKod/Kod prefix ile başlayan detay hesap ara ──
-        kdvHesap = await _dbContext.MuhasebeHesapPlanlari
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted
-                        && x.AktifMi
-                        && x.HareketGorebilirMi
-                        && x.DetayHesapMi
-                        && (x.TesisId == tesisId || x.TesisId == null)
-                        && (x.TamKod == tamKod
-                            || x.Kod == tamKod
-                            || x.AnaHesapKodu == tamKod
-                            || x.TamKod.StartsWith(tamKod + ".")))
-            .OrderByDescending(x => x.TesisId == tesisId)
-            .ThenBy(x => x.TamKod)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (kdvHesap is not null)
-            return kdvHesap;
-
-        throw new BaseException(
-            satisMi
-                ? "Satış KDV hesabı (Hesaplanan KDV 391) bulunamadı. Lütfen Muhasebe Vergi-Hesap Eşleme sayfasından KDV için satış KDV hesabı eşlemesi tanımlayın, veya hesap planında 391 kodlu aktif ve hareket görebilir bir detay hesap oluşturun."
-                : "Alış KDV hesabı (İndirilecek KDV 191) bulunamadı. Lütfen Muhasebe Vergi-Hesap Eşleme sayfasından KDV için alış KDV hesabı eşlemesi tanımlayın, veya hesap planında 191 kodlu aktif ve hareket görebilir bir detay hesap oluşturun.",
-            400);
+        // Uygun bir oran eşlemesi yok - mevcut (oran'dan bağımsız) TamKod tabanlı fallback.
+        var fallbackHesap = await TryGetHesapPlaniAsync(tamKodFallback, tesisId, cancellationToken);
+        return fallbackHesap?.Id;
     }
 }

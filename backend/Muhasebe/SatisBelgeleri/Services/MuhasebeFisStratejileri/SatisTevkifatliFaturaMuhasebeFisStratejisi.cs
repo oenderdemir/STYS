@@ -47,9 +47,6 @@ public sealed class SatisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMu
 
         var tevkifatliSatirlar = tevkifatliHamSatirlar;
 
-        if (!context.KdvHesapPlaniId.HasValue)
-            throw new BaseException("Satış KDV hesabı bulunamadı.", 400);
-
         var satirlar = new List<MuhasebeFisSatiriTaslak>
         {
             new()
@@ -128,14 +125,20 @@ public sealed class SatisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMu
             Aciklama = $"Satış geliri - {belge.BelgeNo}"
         });
 
-        satirlar.Add(new MuhasebeFisSatiriTaslak
+        foreach (var (oran, tutar) in KdvOranGruplamaHelper.Grupla(belge.Satirlar))
         {
-            MuhasebeHesapPlaniId = context.KdvHesapPlaniId!.Value,
-            SiraNo = siraNo,
-            Borc = 0,
-            Alacak = belge.ToplamKdv,
-            Aciklama = $"Hesaplanan KDV - {belge.BelgeNo}"
-        });
+            if (!context.KdvHesaplariByOran.TryGetValue(oran, out var hesapId))
+                throw new BaseException($"%{oran} oranlı Hesaplanan KDV için hesap bulunamadı.", 400);
+
+            satirlar.Add(new MuhasebeFisSatiriTaslak
+            {
+                MuhasebeHesapPlaniId = hesapId,
+                SiraNo = siraNo++,
+                Borc = 0,
+                Alacak = tutar,
+                Aciklama = $"Hesaplanan KDV (%{oran}) - {belge.BelgeNo}"
+            });
+        }
 
         var toplamBorc = satirlar.Sum(x => x.Borc);
         var toplamAlacak = satirlar.Sum(x => x.Alacak);

@@ -1,6 +1,7 @@
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.Kdv.Enums;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
 
@@ -42,16 +43,23 @@ public sealed class SatisFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhasebeFi
             }
         };
 
-        if (belge.ToplamKdv > 0 && context.KdvHesapPlaniId.HasValue)
+        if (belge.ToplamKdv > 0)
         {
-            satirlar.Add(new MuhasebeFisSatiriTaslak
+            var siraNo = 3;
+            foreach (var (oran, tutar) in KdvOranGruplamaHelper.Grupla(belge.Satirlar))
             {
-                MuhasebeHesapPlaniId = context.KdvHesapPlaniId.Value,
-                SiraNo = 3,
-                Borc = 0,
-                Alacak = belge.ToplamKdv,
-                Aciklama = $"Hesaplanan KDV - {belge.BelgeNo}"
-            });
+                if (!context.KdvHesaplariByOran.TryGetValue(oran, out var hesapId))
+                    throw new BaseException($"%{oran} oranlı Hesaplanan KDV için hesap bulunamadı.", 400);
+
+                satirlar.Add(new MuhasebeFisSatiriTaslak
+                {
+                    MuhasebeHesapPlaniId = hesapId,
+                    SiraNo = siraNo++,
+                    Borc = 0,
+                    Alacak = tutar,
+                    Aciklama = $"Hesaplanan KDV (%{oran}) - {belge.BelgeNo}"
+                });
+            }
         }
 
         return Task.FromResult<IReadOnlyList<MuhasebeFisSatiriTaslak>>(satirlar);

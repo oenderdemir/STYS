@@ -591,7 +591,8 @@ public class SatisBelgesiAlisTedarikciHesabiTests
     }
 
     private static SatisBelgesiMuhasebeFisContext BuildAlisFisContext(
-        int cariHesapPlaniId, int kdvHesapPlaniId, int? cariKartId, int? stokHesapPlaniId = null, int? hizmetGiderHesapPlaniId = null) => new()
+        int cariHesapPlaniId, int kdvHesapPlaniId, int? cariKartId, int? stokHesapPlaniId = null, int? hizmetGiderHesapPlaniId = null,
+        decimal kdvOrani = 20m) => new()
     {
         TesisId = 1,
         MaliYil = 2026,
@@ -602,7 +603,7 @@ public class SatisBelgesiAlisTedarikciHesabiTests
         CariHesapPlaniId = cariHesapPlaniId,
         CariKartId = cariKartId,
         GelirHesapPlaniId = 0,
-        KdvHesapPlaniId = kdvHesapPlaniId,
+        KdvHesaplariByOran = new Dictionary<decimal, int> { [kdvOrani] = kdvHesapPlaniId },
         StokHesapPlaniId = stokHesapPlaniId,
         HizmetGiderHesapPlaniId = hizmetGiderHesapPlaniId
     };

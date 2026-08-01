@@ -54,6 +54,9 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
     private int _tedarikciHesapId;
     private int _depoId;
     private int _tasinirKartId;
+    private int _tasinirKodId;
+    private int _tamIstisnaIstisnaId;
+    private readonly List<int> _olusturulanEslemeIdleri = [];
 
     public async Task InitializeAsync()
     {
@@ -128,14 +131,17 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
 
         var tasinirKod = new TasinirKod
         {
+            // TasinirKodlar.Kod kolonu en fazla 16 karakter - uniqueSuffix'i barındıramaz, bu
+            // yüzden kısa bir rastgele değer kullanılır; TamKod (64) tanımlayıcı kalır.
             TamKod = $"TK-{_uniqueSuffix}",
-            Kod = $"TK-{_uniqueSuffix}",
+            Kod = Guid.NewGuid().ToString("N")[..16],
             Ad = "Test Taşınır Kod " + _uniqueSuffix,
             DuzeyNo = 1,
             AktifMi = true
         };
         dbContext.TasinirKodlar.Add(tasinirKod);
         await dbContext.SaveChangesAsync();
+        _tasinirKodId = tasinirKod.Id;
 
         var tasinirKart = new TasinirKart
         {
@@ -153,6 +159,21 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
         dbContext.TasinirKartlar.Add(tasinirKart);
         await dbContext.SaveChangesAsync();
         _tasinirKartId = tasinirKart.Id;
+
+        // TamIstisna satırlar KDV istisna tanımı ZORUNLU kılar (bkz. SatisBelgesiService.
+        // ValidateSatirRequestAsync) - ToplamKdv=0 senaryosunu test etmek için kullanılır.
+        var tamIstisnaTanim = new STYS.Muhasebe.Kdv.Entities.KdvIstisnaTanim
+        {
+            Kod = $"TAMIST-{_uniqueSuffix}",
+            Ad = "Test Tam İstisna " + _uniqueSuffix,
+            UygulamaTipi = KdvUygulamaTipi.TamIstisna,
+            SatisIslemlerindeKullanilirMi = true,
+            AlisIslemlerindeKullanilirMi = true,
+            AktifMi = true
+        };
+        dbContext.KdvIstisnaTanimlari.Add(tamIstisnaTanim);
+        await dbContext.SaveChangesAsync();
+        _tamIstisnaIstisnaId = tamIstisnaTanim.Id;
     }
 
     public async Task DisposeAsync()
@@ -164,16 +185,33 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
 
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         await dbContext.KurumFaturaNumaraSayaclari.Where(x => x.KurumId == _kurumId).ExecuteDeleteAsync();
-        await dbContext.MuhasebeVergiHesapEslemeleri
-            .Where(x => x.TesisId == _tesisId || x.TesisId == null || x.TesisId == _tesisBId)
-            .Where(x => x.CreatedAt >= DateTime.UtcNow.AddHours(-1))
-            .ExecuteDeleteAsync();
+        // Global (TesisId=null) kayıtları CreatedAt zaman aralığıyla silmek yerine, oluşturulan
+        // eşlemenin ID'si SAKLANIR ve yalnızca O kayıt silinir - paylaşılan test veritabanında
+        // eşzamanlı çalışan başka bir testin global bir eşlemesini yanlışlıkla silmemek için.
+        if (_olusturulanEslemeIdleri.Count > 0)
+        {
+            await dbContext.MuhasebeVergiHesapEslemeleri
+                .Where(x => _olusturulanEslemeIdleri.Contains(x.Id))
+                .ExecuteDeleteAsync();
+        }
+        // İKİ AŞAMALI temizlik: (1) belgeler (tesisId=null ile) ÖNCE silinir - SatisBelgesiSatirlari
+        // .TasinirKartId Restrict FK'si nedeniyle taşınır kart bundan önce silinemez. (2) Taşınır
+        // kart/kod/depo temizlenir (Tesis hâlâ mevcut - Depolar->Tesisler FK'si için gerekli). (3)
+        // Son olarak tesis/kurum/il/cari/hesap planı GERÇEK id'lerle temizlenir.
+        await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix);
+        await dbContext.TasinirKartlar.Where(x => x.Id == _tasinirKartId)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.MuhasebeHesapPlaniId, (int?)null));
         await dbContext.StokHareketleri.Where(x => x.TasinirKartId == _tasinirKartId).ExecuteDeleteAsync();
         await dbContext.TasinirKartlar.Where(x => x.Id == _tasinirKartId).ExecuteDeleteAsync();
-        await dbContext.TasinirKodlar.Where(x => x.Kod != null && x.Kod.Contains(_uniqueSuffix)).ExecuteDeleteAsync();
+        await dbContext.TasinirKodlar.Where(x => x.Id == _tasinirKodId).ExecuteDeleteAsync();
         await dbContext.Depolar.Where(x => x.Id == _depoId).ExecuteDeleteAsync();
-        await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix, _tesisId, _kurumId, _ilId);
+        // Tesis B'nin kendi hesap planı (kdvSatisHesapTesisB), Tesis B'ye Restrict FK ile
+        // bağlıdır - bu yüzden ÖNCE hesap planı, SONRA Tesis B silinir; Tesis B de İl'e Restrict
+        // FK ile bağlı olduğundan bu ikisi, İl'i de silen aşağıdaki CleanupAsync çağrısından ÖNCE
+        // temizlenmelidir.
+        await dbContext.MuhasebeHesapPlanlari.Where(x => x.Id == _kdvSatisHesapTesisBId).ExecuteDeleteAsync();
         await dbContext.Tesisler.Where(x => x.Id == _tesisBId).ExecuteDeleteAsync();
+        await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix, _tesisId, _kurumId, _ilId);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -447,7 +485,7 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
             {
                 SiraNo = 1, Aciklama = "Tam istisna satis", SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
                 Miktar = 1, BirimFiyat = 500m,
-                KdvUygulamaTipi = (int)KdvUygulamaTipi.TamIstisna, KdvOrani = 0m
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.TamIstisna, KdvOrani = 0m, KdvIstisnaTanimId = _tamIstisnaIstisnaId
             }
         ]);
 
@@ -477,7 +515,7 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
 
         // GLOBAL (TesisId=null) bir eşleme, SatisKdvHesapId olarak TESİS B'ye özel bir hesabı
         // gösteriyor - bu, tesis A için oluşturulan fişte KULLANILMAMALIDIR.
-        dbContext.MuhasebeVergiHesapEslemeleri.Add(new MuhasebeVergiHesapEsleme
+        var esleme = new MuhasebeVergiHesapEsleme
         {
             TesisId = null,
             VergiTipi = "KDV",
@@ -485,8 +523,10 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
             AlisKdvHesapId = _kdvAlisHesapId,
             SatisKdvHesapId = _kdvSatisHesapTesisBId,
             AktifMi = true
-        });
+        };
+        dbContext.MuhasebeVergiHesapEslemeleri.Add(esleme);
         await dbContext.SaveChangesAsync();
+        _olusturulanEslemeIdleri.Add(esleme.Id);
 
         var request = YeniBelgeRequest(SatisBelgesiTipi.SatisFaturasi, _musteriKartId,
         [
@@ -602,6 +642,23 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
         dbContext.CariKartlar.Add(tedarikci);
         await dbContext.SaveChangesAsync();
 
+        // KdvKapsamDisi satırlar KDV istisna tanımı ZORUNLU kılar (bkz. SatisBelgesiService.
+        // ValidateSatirRequestAsync) - bu testin amacı KDV ile ilgisiz olduğundan (yalnızca
+        // hizmet gider hesabının bulunamamasını hedefler) burada aktif bir tanım seed edilir.
+        var kdvIstisnaTanim = new STYS.Muhasebe.Kdv.Entities.KdvIstisnaTanim
+        {
+            // Kod'a uniqueSuffix-IZOLE gömülür - CleanupAsync'in Kod.Contains(uniqueSuffix)
+            // ile bu satırı da otomatik temizlemesi için.
+            Kod = $"KDVKAP-{_uniqueSuffix}-IZOLE",
+            Ad = "Izole KDV Kapsam Dışı " + _uniqueSuffix,
+            UygulamaTipi = KdvUygulamaTipi.KdvKapsamDisi,
+            SatisIslemlerindeKullanilirMi = true,
+            AlisIslemlerindeKullanilirMi = true,
+            AktifMi = true
+        };
+        dbContext.KdvIstisnaTanimlari.Add(kdvIstisnaTanim);
+        await dbContext.SaveChangesAsync();
+
         var request = new CreateSatisBelgesiRequest
         {
             BelgeNo = $"BLG-{_uniqueSuffix}-IZOLE-{Guid.NewGuid():N}"[..40],
@@ -616,7 +673,7 @@ public class TicariBelgeMuhasebeEtkileriIntegrationTests : IAsyncLifetime
                 {
                     SiraNo = 1, Aciklama = "Hizmet - hesap eslemesi yok", SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
                     Miktar = 1, BirimFiyat = 500m,
-                    KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi, KdvOrani = 0m
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi, KdvOrani = 0m, KdvIstisnaTanimId = kdvIstisnaTanim.Id
                 }
             ]
         };

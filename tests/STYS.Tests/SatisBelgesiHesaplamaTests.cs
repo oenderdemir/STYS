@@ -452,7 +452,7 @@ public class SatisBelgesiHesaplamaTests
         ]);
         belge.BelgeTipi = SatisBelgesiTipi.SatisIadeFaturasi;
 
-        var context = BuildFisContext();
+        var context = BuildFisContext(kdvOrani: 10m);
         var strateji = new SatisIadeFaturasiMuhasebeFisStratejisi(dbContext);
 
         var satirlar = await strateji.SatirlariOlusturAsync(belge, context, CancellationToken.None);
@@ -747,7 +747,7 @@ public class SatisBelgesiHesaplamaTests
         return belge;
     }
 
-    private static SatisBelgesiMuhasebeFisContext BuildFisContext() => new()
+    private static SatisBelgesiMuhasebeFisContext BuildFisContext(decimal kdvOrani = 20m) => new()
     {
         TesisId = 1,
         MaliYil = 2026,
@@ -758,11 +758,12 @@ public class SatisBelgesiHesaplamaTests
         CariHesapPlaniId = 100,
         CariKartId = 1,
         GelirHesapPlaniId = 200,
-        KdvHesapPlaniId = 300
+        KdvHesaplariByOran = new Dictionary<decimal, int> { [kdvOrani] = 300 }
     };
 
     private static SatisBelgesiMuhasebeFisContext BuildAlisFisContext(
-        int cariHesapPlaniId, int kdvHesapPlaniId, int? stokHesapPlaniId = null, int? hizmetGiderHesapPlaniId = null) => new()
+        int cariHesapPlaniId, int kdvHesapPlaniId, int? stokHesapPlaniId = null, int? hizmetGiderHesapPlaniId = null,
+        decimal kdvOrani = 20m) => new()
     {
         TesisId = 1,
         MaliYil = 2026,
@@ -772,7 +773,7 @@ public class SatisBelgesiHesaplamaTests
         BelgeNo = "TEST-1",
         CariHesapPlaniId = cariHesapPlaniId,
         GelirHesapPlaniId = 0,
-        KdvHesapPlaniId = kdvHesapPlaniId,
+        KdvHesaplariByOran = new Dictionary<decimal, int> { [kdvOrani] = kdvHesapPlaniId },
         StokHesapPlaniId = stokHesapPlaniId,
         HizmetGiderHesapPlaniId = hizmetGiderHesapPlaniId
     };

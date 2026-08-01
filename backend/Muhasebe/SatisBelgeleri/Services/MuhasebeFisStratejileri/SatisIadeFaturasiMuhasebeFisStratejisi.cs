@@ -32,12 +32,6 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
         if (belge.Satirlar.Count == 0)
             throw new BaseException("Satış iade belgesinde aktif satır bulunamadı.", 400);
 
-        // KDV hesabı yalnızca belgede GERÇEKTEN KDV varsa (ToplamKdv>0) zorunludur - ToplamKdv=0
-        // olan (ör. tam istisna) bir iade belgesi için KDV hesabı yokluğu fiş oluşturmayı
-        // ENGELLEMEMELİDİR (bkz. görev 4.1).
-        if (belge.ToplamKdv > 0 && !context.KdvHesapPlaniId.HasValue)
-            throw new BaseException("Satış iade faturası için 391 Hesaplanan KDV hesabı bulunamadı.", 400);
-
         var iadeHesabi = await ResolveHesapByAnaKodAsync(MuhasebeAnaHesapKodlari.SatisIade, belge.TesisId!.Value, cancellationToken);
 
         // ÖTV/ÖİV/konaklama vergisi içeren belgeler için bu strateji hiç çağrılmaz —
@@ -59,14 +53,20 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
 
         if (belge.ToplamKdv > 0)
         {
-            satirlar.Add(new MuhasebeFisSatiriTaslak
+            foreach (var (oran, tutar) in KdvOranGruplamaHelper.Grupla(belge.Satirlar))
             {
-                MuhasebeHesapPlaniId = context.KdvHesapPlaniId!.Value,
-                SiraNo = siraNo++,
-                Borc = belge.ToplamKdv,
-                Alacak = 0,
-                Aciklama = $"Hesaplanan KDV iadesi - {belge.BelgeNo}"
-            });
+                if (!context.KdvHesaplariByOran.TryGetValue(oran, out var hesapId))
+                    throw new BaseException($"%{oran} oranlı Hesaplanan KDV iadesi için 391 hesabı bulunamadı.", 400);
+
+                satirlar.Add(new MuhasebeFisSatiriTaslak
+                {
+                    MuhasebeHesapPlaniId = hesapId,
+                    SiraNo = siraNo++,
+                    Borc = tutar,
+                    Alacak = 0,
+                    Aciklama = $"Hesaplanan KDV iadesi (%{oran}) - {belge.BelgeNo}"
+                });
+            }
         }
 
         satirlar.Add(new MuhasebeFisSatiriTaslak

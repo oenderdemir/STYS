@@ -56,9 +56,6 @@ public sealed class AlisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMuh
         if (tevkifatliSatirlar.Any(s => s.TevkifatPay.GetValueOrDefault() <= 0 || s.TevkifatPayda.GetValueOrDefault() <= 0))
             throw new BaseException("Geçersiz tevkifat oranı tespit edildi.", 400);
 
-        if (!context.KdvHesapPlaniId.HasValue)
-            throw new BaseException("Alış faturası için 191 İndirilecek KDV hesabı bulunamadı.", 400);
-
         var satirlar = new List<MuhasebeFisSatiriTaslak>();
         var siraNo = 1;
 
@@ -90,14 +87,20 @@ public sealed class AlisTevkifatliFaturaMuhasebeFisStratejisi : ISatisBelgesiMuh
             });
         }
 
-        satirlar.Add(new MuhasebeFisSatiriTaslak
+        foreach (var (oran, tutar) in KdvOranGruplamaHelper.Grupla(belge.Satirlar))
         {
-            MuhasebeHesapPlaniId = context.KdvHesapPlaniId.Value,
-            SiraNo = siraNo++,
-            Borc = belge.ToplamKdv,
-            Alacak = 0,
-            Aciklama = $"İndirilecek KDV - {belge.BelgeNo}"
-        });
+            if (!context.KdvHesaplariByOran.TryGetValue(oran, out var kdvHesapId))
+                throw new BaseException($"%{oran} oranlı İndirilecek KDV için 191 hesabı bulunamadı.", 400);
+
+            satirlar.Add(new MuhasebeFisSatiriTaslak
+            {
+                MuhasebeHesapPlaniId = kdvHesapId,
+                SiraNo = siraNo++,
+                Borc = tutar,
+                Alacak = 0,
+                Aciklama = $"İndirilecek KDV (%{oran}) - {belge.BelgeNo}"
+            });
+        }
 
         var gruplanmisTevkifatlar = tevkifatliSatirlar
             .GroupBy(s => new { Pay = s.TevkifatPay!.Value, Payda = s.TevkifatPayda!.Value })

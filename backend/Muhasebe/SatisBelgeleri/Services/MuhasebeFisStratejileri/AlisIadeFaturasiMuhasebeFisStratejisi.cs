@@ -42,10 +42,6 @@ public sealed class AlisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhaseb
             .OrderBy(x => x.SiraNo)
             .ToList();
 
-        // KDV hesabı yalnızca belgede GERÇEKTEN KDV varsa (ToplamKdv>0) zorunludur (bkz. görev 4.1).
-        if (belge.ToplamKdv > 0 && !context.KdvHesapPlaniId.HasValue)
-            throw new BaseException("Alış iade faturası için 191 İndirilecek KDV hesabı bulunamadı.", 400);
-
         var satirlar = new List<MuhasebeFisSatiriTaslak>();
         var siraNo = 1;
 
@@ -89,14 +85,20 @@ public sealed class AlisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhaseb
 
         if (belge.ToplamKdv > 0)
         {
-            satirlar.Add(new MuhasebeFisSatiriTaslak
+            foreach (var (oran, tutar) in KdvOranGruplamaHelper.Grupla(belge.Satirlar))
             {
-                MuhasebeHesapPlaniId = context.KdvHesapPlaniId!.Value,
-                SiraNo = siraNo,
-                Borc = 0,
-                Alacak = belge.ToplamKdv,
-                Aciklama = $"İndirilecek KDV iadesi - {belge.BelgeNo}"
-            });
+                if (!context.KdvHesaplariByOran.TryGetValue(oran, out var hesapId))
+                    throw new BaseException($"%{oran} oranlı İndirilecek KDV iadesi için 191 hesabı bulunamadı.", 400);
+
+                satirlar.Add(new MuhasebeFisSatiriTaslak
+                {
+                    MuhasebeHesapPlaniId = hesapId,
+                    SiraNo = siraNo++,
+                    Borc = 0,
+                    Alacak = tutar,
+                    Aciklama = $"İndirilecek KDV iadesi (%{oran}) - {belge.BelgeNo}"
+                });
+            }
         }
 
         var toplamBorc = satirlar.Sum(x => x.Borc);

@@ -10,6 +10,14 @@
 
     <div class="grid formgrid p-fluid mb-3">
         <div class="field col-12 md:col-2">
+            <label>Tesis</label>
+            <p-select [options]="tesisler()" optionLabel="ad" optionValue="id" [filter]="true" [(ngModel)]="filter().tesisId" [showClear]="true" placeholder="Tümü"></p-select>
+        </div>
+        <div class="field col-12 md:col-2">
+            <label>Kaynak Modül</label>
+            <p-select [options]="kaynakModulSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="filter().kaynakModul" [showClear]="true" placeholder="Tümü"></p-select>
+        </div>
+        <div class="field col-12 md:col-2">
             <label>Belge No</label>
             <input pInputText [(ngModel)]="filter().belgeNo" (keyup.enter)="loadBelgeler()" />
         </div>

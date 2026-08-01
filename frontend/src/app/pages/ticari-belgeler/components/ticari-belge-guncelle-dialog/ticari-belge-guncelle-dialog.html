@@ -34,9 +34,28 @@
                     (ngModelChange)="onVadeTarihiChange($event)"></p-datepicker>
             </div>
 
-            <div class="field col-12 md:col-3">
-                <label for="cariKartId">Cari Kart Id</label>
-                <p-inputNumber id="cariKartId" [(ngModel)]="formData.cariKartId" [useGrouping]="false"></p-inputNumber>
+            <div class="field col-12 md:col-6">
+                <label for="cariKart">Cari Kart</label>
+                <p-autoComplete
+                    id="cariKart"
+                    styleClass="w-full"
+                    inputStyleClass="w-full"
+                    [ngModel]="selectedCari"
+                    (ngModelChange)="onCariKartSecildi($event)"
+                    [suggestions]="filteredCariKartlar"
+                    (completeMethod)="filterCari($event)"
+                    [showEmptyMessage]="true"
+                    emptyMessage="Cari kart bulunamadı"
+                    [dropdown]="true"
+                    [minLength]="0"
+                    placeholder="Cari kart seçiniz (unvan, vergi no veya kod ile arayın)...">
+                    <ng-template let-cari pTemplate="item">
+                        <span>{{ formatCariDisplay(cari) }}</span>
+                    </ng-template>
+                    <ng-template let-cari pTemplate="selectedItem">
+                        <span>{{ formatCariDisplay(cari) }}</span>
+                    </ng-template>
+                </p-autoComplete>
             </div>
             <div class="field col-12 md:col-3 flex align-items-end">
                 <div class="flex align-items-center gap-2">
@@ -91,11 +110,37 @@
                 <label for="karsiTarafFaturaNo">Karşı Taraf Fatura No</label>
                 <input id="karsiTarafFaturaNo" pInputText [(ngModel)]="formData.karsiTarafFaturaNo" />
             </div>
-            <div class="field col-12 md:col-6 flex align-items-end">
-                <div class="flex align-items-center gap-2">
-                    <p-checkbox [(ngModel)]="formData.iadeEdilenBelgeReferansiKaldir" [binary]="true"></p-checkbox>
-                    <label>İade edilen belge referansını kaldır</label>
-                </div>
+
+            <div class="field col-12">
+                <label>İade Edilen Belge Referansı</label>
+                @if (iadeEdilenBelgeGosterim && !formData.iadeEdilenBelgeReferansiKaldir) {
+                    <div class="flex align-items-center gap-2">
+                        <span class="font-semibold">{{ iadeEdilenBelgeGosterim.belgeNo }}</span>
+                        <span class="text-color-secondary">({{ iadeEdilenBelgeGosterim.belgeTarihi | date: 'dd.MM.yyyy' }})</span>
+                        <p-button label="Kaldır" icon="pi pi-times" size="small" severity="danger" [text]="true" (onClick)="clearIadeEdilenBelgeReferansi()"></p-button>
+                    </div>
+                } @else {
+                    <div class="flex align-items-center gap-2">
+                        <p-autoComplete
+                            styleClass="w-full flex-1"
+                            inputStyleClass="w-full"
+                            [ngModel]="null"
+                            (ngModelChange)="onIadeEdilenBelgeSecildi($event)"
+                            [suggestions]="iadeEdilenBelgeSuggestions"
+                            (completeMethod)="searchIadeEdilenBelge($event)"
+                            [showEmptyMessage]="true"
+                            emptyMessage="Belge bulunamadı"
+                            [minLength]="0"
+                            placeholder="Belge no ile arayın...">
+                            <ng-template let-belge pTemplate="item">
+                                <span>{{ belge.belgeNo }} ({{ belge.belgeTarihi | date: 'dd.MM.yyyy' }})</span>
+                            </ng-template>
+                        </p-autoComplete>
+                        @if (formData.iadeEdilenBelgeReferansiKaldir) {
+                            <span class="text-color-secondary text-sm">Referans kaldırılacak</span>
+                        }
+                    </div>
+                }
             </div>
 
             <div class="field col-12">
@@ -126,12 +171,30 @@
 
                             <div class="field col-12 md:col-3">
                                 <label>KDV Uygulama Tipi</label>
-                                <p-select [options]="kdvUygulamaTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="satir.kdvUygulamaTipi"></p-select>
+                                <p-select
+                                    [options]="kdvUygulamaTipiSecenekleri"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    [ngModel]="satir.kdvUygulamaTipi"
+                                    (ngModelChange)="onSatirKdvTipiChange(satir, $event)"></p-select>
                             </div>
                             <div class="field col-12 md:col-2">
                                 <label>KDV Oranı</label>
                                 <p-inputNumber [(ngModel)]="satir.kdvOrani" suffix="%" [minFractionDigits]="0" [maxFractionDigits]="2"></p-inputNumber>
                             </div>
+                            @if (getKdvIstisnaSecenekleri(satir).length > 0 || satir.kdvIstisnaTanimId) {
+                                <div class="field col-12 md:col-3">
+                                    <label>KDV İstisna Tanımı</label>
+                                    <p-select
+                                        [options]="getKdvIstisnaSecenekleri(satir)"
+                                        optionLabel="label"
+                                        optionValue="value"
+                                        [(ngModel)]="satir.kdvIstisnaTanimId"
+                                        [filter]="true"
+                                        [showClear]="true"
+                                        placeholder="İstisna tanımı seçiniz"></p-select>
+                                </div>
+                            }
                             @if (isTevkifatli(satir)) {
                                 <div class="field col-12 md:col-2">
                                     <label>Tevkifat Pay</label>

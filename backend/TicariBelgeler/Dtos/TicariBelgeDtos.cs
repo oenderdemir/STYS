@@ -116,6 +116,7 @@ public class TicariBelgeFilterDto
     public List<SatisBelgesiTipi>? BelgeTipleri { get; set; }
     public TicariBelgeDurumu? TicariDurum { get; set; }
     public TicariBelgeMuhasebeDurumu? MuhasebeDurumu { get; set; }
+    public TicariBelgeFaturalamaDurumu? FaturalamaDurumu { get; set; }
     public SatisKaynakModulu? KaynakModul { get; set; }
     public string? KaynakTipi { get; set; }
     public string? KaynakId { get; set; }

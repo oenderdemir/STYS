@@ -16,6 +16,8 @@ import { TooltipModule } from 'primeng/tooltip';
 import { finalize } from 'rxjs';
 import { toLocalDateString } from '../../core/utils/date-time.util';
 import { AuthService } from '../auth';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { TicariBelgeDetayDialogComponent } from './components/ticari-belge-detay-dialog/ticari-belge-detay-dialog';
 import { TicariBelgeGuncelleDialogComponent } from './components/ticari-belge-guncelle-dialog/ticari-belge-guncelle-dialog';
 import {
@@ -28,6 +30,7 @@ import {
     SATIS_BELGESI_TIPI_LABELS,
     SATIS_BELGESI_TIPI_SECENEKLERI,
     SATIS_KAYNAK_MODULU_LABELS,
+    SATIS_KAYNAK_MODULU_SECENEKLERI,
     TICARI_BELGE_DURUM_SECENEKLERI,
     TICARI_BELGE_DURUMU_LABELS,
     TICARI_BELGE_DURUMU_SEVERITIES,
@@ -70,16 +73,16 @@ import { TicariBelgeService } from './ticari-belge.service';
 })
 export class TicariBelgelerComponent implements OnInit {
     private readonly service = inject(TicariBelgeService);
+    private readonly tesisService = inject(TesisYonetimiService);
     private readonly authService = inject(AuthService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly messageService = inject(MessageService);
     private readonly route = inject(ActivatedRoute);
 
-    private pendingOpenId: number | null = null;
-
     belgeler = signal<TicariBelgeDto[]>([]);
     loading = signal(false);
     filter = signal<TicariBelgeFilterDto>(createDefaultTicariBelgeFilter());
+    tesisler = signal<TesisDto[]>([]);
     /** p-select tekli seçim için ayrı tutulur; loadBelgeler() sırasında filter().belgeTipleri'ne yansıtılır. */
     selectedBelgeTipi = signal<SatisBelgesiTipi | null>(null);
     /** p-datepicker Date bekler; loadBelgeler() sırasında filter'ın string alanlarına dönüştürülür. */
@@ -97,6 +100,7 @@ export class TicariBelgelerComponent implements OnInit {
     readonly belgeTipiLabels = SATIS_BELGESI_TIPI_LABELS;
     readonly belgeTipiSecenekleri = SATIS_BELGESI_TIPI_SECENEKLERI;
     readonly kaynakModulLabels = SATIS_KAYNAK_MODULU_LABELS;
+    readonly kaynakModulSecenekleri = SATIS_KAYNAK_MODULU_SECENEKLERI;
     readonly ticariDurumLabels = TICARI_BELGE_DURUMU_LABELS;
     readonly ticariDurumSeverities = TICARI_BELGE_DURUMU_SEVERITIES;
     readonly ticariDurumSecenekleri = TICARI_BELGE_DURUM_SECENEKLERI;
@@ -133,24 +137,31 @@ export class TicariBelgelerComponent implements OnInit {
         return this.faturalamaDurumuSeverities[durum] ?? 'secondary';
     }
 
-    get canView(): boolean {
-        return this.authService.hasPermission('TicariBelgeYonetimi.View');
-    }
-
     get canManage(): boolean {
         return this.authService.hasPermission('TicariBelgeYonetimi.Manage');
     }
 
     ngOnInit(): void {
+        this.loadTesisler();
+        this.loadBelgeler();
+
+        // Query parametresiyle gelen belge Id'si, mevcut filtre sonucunda (listede) bulunmasa
+        // bile DOĞRUDAN GetById ile açılabilmelidir - liste yüklemesine bağımlı DEĞİLDİR
+        // (bkz. görev F).
         const idParam = this.route.snapshot.queryParams['id'];
         if (idParam) {
             const parsed = Number(idParam);
             if (!isNaN(parsed) && parsed > 0) {
-                this.pendingOpenId = parsed;
+                this.openDetayDialogById(parsed);
             }
         }
+    }
 
-        this.loadBelgeler();
+    private loadTesisler(): void {
+        this.tesisService.getTesisler().subscribe({
+            next: tesisler => this.tesisler.set([...tesisler].sort((a, b) => (a.ad ?? '').localeCompare(b.ad ?? ''))),
+            error: () => this.tesisler.set([])
+        });
     }
 
     loadBelgeler(): void {
@@ -166,10 +177,7 @@ export class TicariBelgelerComponent implements OnInit {
             .filter(effectiveFilter)
             .pipe(finalize(() => this.loading.set(false)))
             .subscribe({
-                next: belgeler => {
-                    this.belgeler.set(belgeler);
-                    this.handlePendingOpen();
-                },
+                next: belgeler => this.belgeler.set(belgeler),
                 error: err => this.showError(err, 'Belgeler yüklenemedi.')
             });
     }
@@ -183,7 +191,13 @@ export class TicariBelgelerComponent implements OnInit {
     }
 
     openDetayDialog(belge: TicariBelgeDto): void {
-        this.service.getById(belge.id).subscribe({
+        this.openDetayDialogById(belge.id);
+    }
+
+    /** Belgenin mevcut filtre sonucunda (listede) bulunması GEREKMEZ - doğrudan GetById çağrılır
+     * (bkz. görev F). Scope/permission nedeniyle 403 alınırsa mevcut hata gösterme düzeni (showError) kullanılır. */
+    private openDetayDialogById(id: number): void {
+        this.service.getById(id).subscribe({
             next: detay => {
                 this.detayBelge.set(detay);
                 this.detayDialogVisible.set(true);
@@ -300,21 +314,6 @@ export class TicariBelgelerComponent implements OnInit {
 
     private refreshDetay(id: number): void {
         this.service.getById(id).subscribe({ next: detay => this.detayBelge.set(detay) });
-    }
-
-    private handlePendingOpen(): void {
-        const id = this.pendingOpenId;
-        if (!id) {
-            return;
-        }
-        this.pendingOpenId = null;
-
-        const kayit = this.belgeler().find(b => b.id === id);
-        if (!kayit) {
-            this.messageService.add({ severity: 'warn', summary: 'Uyarı', detail: `Belge listede bulunamadı. Id: ${id}` });
-            return;
-        }
-        this.openDetayDialog(kayit);
     }
 
     private showError(err: unknown, fallback: string): void {

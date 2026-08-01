@@ -29,9 +29,12 @@ public class TicariBelgeMappingProfile : Profile
         CreateMap<TicariBelgeGuncelleRequest, UpdateSatisBelgesiRequest>();
         CreateMap<TicariBelgeGuncelleSatirRequest, CreateSatisBelgesiSatiriRequest>();
 
-        // ── TicariBelgeFilterDto -> SatisBelgesiFilterDto (yalnızca ortak alanlar; TicariDurum/
-        // MuhasebeDurumu filtreleri TicariBelgeService tarafından sonuç üzerinde ayrıca uygulanır
-        // - SatisBelgesiFilterDto yalnızca legacy Durum filtresini destekler ve BURADA DEĞİŞTİRİLMEZ). ──
+        // ── TicariBelgeFilterDto -> SatisBelgesiFilterDto ──
+        // TicariDurum/MuhasebeDurumu/FaturalamaDurumu convention ile eşlenir ve
+        // SatisBelgesiService.FilterAsync tarafından SQL sorgusunda uygulanır - burada veya
+        // TicariBelgeService'te bellek içi ikinci bir süzme YAPILMAZ. Legacy Durum filtresi
+        // (SatisBelgesiFilterDto.Durum) BİLİNÇLİ OLARAK yok sayılır - operasyon katmanı legacy
+        // Durum filtresi KULLANMAZ.
         CreateMap<TicariBelgeFilterDto, SatisBelgesiFilterDto>()
             .ForMember(dest => dest.Durum, opt => opt.Ignore());
 

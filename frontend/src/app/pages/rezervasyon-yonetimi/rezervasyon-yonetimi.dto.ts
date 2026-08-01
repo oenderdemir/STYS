@@ -584,16 +584,6 @@ export interface RezervasyonGelirOzetiDto {
     tahsilatHataliSayisi: number;
 }
 
-/** Muhasebe > Satis Belgeleri ekranindaki tam SatisBelgesiDto'nun rezervasyon panelinin
- * ihtiyac duydugu alt kumesi. */
-export interface RezervasyonGelirBelgesiSonucuDto {
-    id: number;
-    belgeNo: string;
-    durum: string;
-    genelToplam: number;
-    muhasebeFisId: number | null;
-}
-
 export interface RezervasyonTahsilatKapamaSonucuDto {
     basariliSayisi: number;
     hataliSayisi: number;

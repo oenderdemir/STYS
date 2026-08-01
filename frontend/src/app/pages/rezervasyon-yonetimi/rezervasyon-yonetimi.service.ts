@@ -4,6 +4,7 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
 import { CariKartModel } from '../muhasebe/cari-kartlar/cari-kartlar.dto';
+import { TicariBelgeDetayDto } from '../ticari-belgeler/ticari-belge.models';
 import {
     KonaklamaSenaryoAramaRequestDto,
     KonaklamaSenaryoDto,
@@ -31,7 +32,6 @@ import {
     RezervasyonOdemeKaydetRequestDto,
     RezervasyonOdemeOzetDto,
     RezervasyonGelirOzetiDto,
-    RezervasyonGelirBelgesiSonucuDto,
     RezervasyonTahsilatKapamaSonucuDto,
     RezervasyonOdaDegisimKaydetRequestDto,
     RezervasyonOdaDegisimSecenekDto,
@@ -498,8 +498,8 @@ export class RezervasyonYonetimiService {
     }
 
     /** Idempotenttir: gelir belgesi zaten varsa yenisini yaratmaz, mevcudunu doner. */
-    olusturGelirBelgesi(rezervasyonId: number): Observable<RezervasyonGelirBelgesiSonucuDto> {
-        return this.http.post<ApiResponse<RezervasyonGelirBelgesiSonucuDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/gelir-belgesi-olustur`, {}).pipe(
+    olusturGelirBelgesi(rezervasyonId: number): Observable<TicariBelgeDetayDto> {
+        return this.http.post<ApiResponse<TicariBelgeDetayDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/gelir-belgesi-olustur`, {}).pipe(
             map((responseEnvelope) => {
                 if (responseEnvelope.success && responseEnvelope.data) {
                     return responseEnvelope.data;

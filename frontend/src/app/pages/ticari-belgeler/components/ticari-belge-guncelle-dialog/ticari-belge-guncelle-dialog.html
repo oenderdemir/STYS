@@ -152,6 +152,10 @@
                     }
                 </div>
 
+                @if (kaynakSatirBulunamadiMesaji) {
+                    <div class="p-message p-message-error p-3 mb-3">{{ kaynakSatirBulunamadiMesaji }}</div>
+                }
+
                 @for (satir of formData.satirlar ?? []; track trackBySatirIndex($index); let i = $index) {
                     <div class="border-1 surface-border border-round p-3 mb-3">
                         <div class="grid formgrid p-fluid">
@@ -232,6 +236,6 @@
 
     <ng-template pTemplate="footer">
         <p-button label="Vazgeç" severity="secondary" [text]="true" (onClick)="onHide()"></p-button>
-        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="onSaveClick()"></p-button>
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" [disabled]="!!kaynakSatirBulunamadiMesaji" (onClick)="onSaveClick()"></p-button>
     </ng-template>
 </p-dialog>

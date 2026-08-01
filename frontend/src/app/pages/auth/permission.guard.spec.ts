@@ -44,21 +44,30 @@ describe('permissionGuard', () => {
         expect(routerSpy.createUrlTree).toHaveBeenCalledWith(['/dashboard']);
     });
 
-    it('defaultRoute erişilmeye çalışılan URL ile AYNIYSA döngü oluşturmadan güvenli kök rotaya (/) düşer', () => {
+    it('defaultRoute erişilmeye çalışılan URL ile AYNIYSA döngü oluşturmadan güvenli fallback rotaya (/notfound) düşer', () => {
         authServiceSpy.hasPermission.and.returnValue(false);
         authServiceSpy.getLandingRoute.and.returnValue('/ticari-belgeler');
 
         runGuard('/ticari-belgeler');
 
-        expect(routerSpy.createUrlTree).toHaveBeenCalledWith(['/']);
+        expect(routerSpy.createUrlTree).toHaveBeenCalledWith(['/notfound']);
         expect(routerSpy.createUrlTree).not.toHaveBeenCalledWith(['/ticari-belgeler']);
     });
 
-    it('güvenli kök rota da hedefle AYNIYSA sonsuz döngü yerine navigasyonu engeller (false)', () => {
+    it('"/" fallback OLARAK KULLANILMAZ - authGuard "/"e yapılan navigasyonu defaultRoute\'a geri yönlendirip döngüyü YENİDEN oluşturur', () => {
         authServiceSpy.hasPermission.and.returnValue(false);
-        authServiceSpy.getLandingRoute.and.returnValue('/');
+        authServiceSpy.getLandingRoute.and.returnValue('/ticari-belgeler');
 
-        const result = runGuard('/');
+        runGuard('/ticari-belgeler');
+
+        expect(routerSpy.createUrlTree).not.toHaveBeenCalledWith(['/']);
+    });
+
+    it('güvenli fallback rota da hedefle AYNIYSA sonsuz döngü yerine navigasyonu engeller (false)', () => {
+        authServiceSpy.hasPermission.and.returnValue(false);
+        authServiceSpy.getLandingRoute.and.returnValue('/notfound');
+
+        const result = runGuard('/notfound');
 
         expect(result).toBeFalse();
         expect(routerSpy.createUrlTree).not.toHaveBeenCalled();

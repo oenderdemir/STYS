@@ -96,16 +96,30 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     // miktar/açıklama değiştirebilir (bkz. görev F). ──
     kaynakSatirlar: TicariBelgeKaynakSatirDto[] = [];
 
+    /** Kaynak satır lookup'ı yüklenemediğinde (servis hatası) true - bu durumda "bulunamadı"
+     * doğrulaması ÇALIŞTIRILMAZ (gerçek eksiklikle geçici yükleme hatası birbirine KARIŞTIRILMAZ). */
+    private kaynakSatirlarYuklenemedi = false;
+
+    /** Mevcut (kayıtlı) bir iade satırının KaynakSatirId'si, güncel kaynak satır listesinde ARTIK
+     * bulunamadığında dolar - kaydetme bu mesaj varken ENGELLENİR (bkz. görev 1/onSaveClick). */
+    kaynakSatirBulunamadiMesaji: string | null = null;
+
     private oncekiBelgeTipi: SatisBelgesiTipi | null | undefined = undefined;
 
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['visible'] && this.visible && this.formData) {
             this.oncekiBelgeTipi = this.formData.belgeTipi;
             this.kdvIstisnaCache.clear();
+            this.kaynakSatirBulunamadiMesaji = null;
             this.loadCariKartlar();
             this.resolveIadeEdilenBelgeGosterim();
             if (this.formData.iadeEdilenBelgeId) {
-                this.loadKaynakSatirlar(this.formData.iadeEdilenBelgeId);
+                // DİKKAT: dialog AÇILIRKEN (mevcut, zaten kayıtlı bir iade belgesi) kaynak lookup
+                // yalnızca kalan miktar/mali alan doğrulaması İÇİN yüklenir - kayıtlı satırlar
+                // (miktar/açıklama/eşleşme) SESSİZCE yeniden oluşturulmaz (bkz. görev 1). Satırların
+                // sıfırdan yeniden eşlenmesi YALNIZCA kullanıcı FARKLI bir kaynak seçtiğinde
+                // (onIadeEdilenBelgeSecildi) yapılır.
+                this.loadKaynakSatirlarForMevcutBelge(this.formData.iadeEdilenBelgeId);
             } else {
                 this.kaynakSatirlar = [];
             }
@@ -369,17 +383,20 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             });
     }
 
-    /** Yeni bir iade kaynağı seçildiğinde: eski KaynakSatirId'ler SESSİZCE taşınmaz - satırlar
-     * seçilen kaynağın satırlarıyla AÇIKÇA yeniden eşlenir (bkz. görev F). */
+    /** Kullanıcı FARKLI bir iade kaynağı seçtiğinde: eski KaynakSatirId'ler SESSİZCE taşınmaz -
+     * satırlar seçilen YENİ kaynağın satırlarıyla SIFIRDAN, AÇIKÇA yeniden eşlenir (bkz. görev
+     * F/1). Bu, yalnızca kullanıcının burada bilinçli bir seçim yaptığı yoldur - dialog mevcut bir
+     * belgeyi AÇARKEN bu yol ASLA çağrılmaz (bkz. ngOnChanges/loadKaynakSatirlarForMevcutBelge). */
     onIadeEdilenBelgeSecildi(belge: TicariBelgeIadeAdayiDto | null): void {
         this.iadeEdilenBelgeGosterim = belge ? { id: belge.id, belgeNo: belge.belgeNo, belgeTarihi: belge.belgeTarihi } : null;
         if (!this.formData) return;
 
         this.formData.iadeEdilenBelgeId = belge?.id ?? null;
         this.formData.iadeEdilenBelgeReferansiKaldir = false;
+        this.kaynakSatirBulunamadiMesaji = null;
 
         if (belge) {
-            this.loadKaynakSatirlar(belge.id);
+            this.loadKaynakSatirlarForYeniSecim(belge.id);
         } else {
             this.kaynakSatirlar = [];
             this.formData.satirlar = [];
@@ -389,6 +406,7 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     clearIadeEdilenBelgeReferansi(): void {
         this.iadeEdilenBelgeGosterim = null;
         this.kaynakSatirlar = [];
+        this.kaynakSatirBulunamadiMesaji = null;
         if (this.formData) {
             this.formData.iadeEdilenBelgeId = null;
             this.formData.iadeEdilenBelgeReferansiKaldir = true;
@@ -398,29 +416,113 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
         }
     }
 
-    private loadKaynakSatirlar(kaynakBelgeId: number): void {
+    /** Kullanıcı YENİ bir kaynak seçtiğinde çağrılır - satırlar TAMAMEN, sıfırdan yeniden
+     * oluşturulur (bkz. onIadeEdilenBelgeSecildi doc'u). */
+    private loadKaynakSatirlarForYeniSecim(kaynakBelgeId: number): void {
         this.ticariBelgeService.getKaynakSatirlar(kaynakBelgeId, this.belgeId).subscribe({
             next: satirlar => {
                 this.kaynakSatirlar = satirlar;
+                this.kaynakSatirlarYuklenemedi = false;
                 this.remapSatirlarFromKaynak(satirlar);
             },
             error: () => {
                 this.kaynakSatirlar = [];
+                this.kaynakSatirlarYuklenemedi = true;
             }
         });
     }
 
-    /** İade satırlarını seçilen kaynağın satırlarıyla AÇIKÇA yeniden eşler - her satırın mali
-     * alanları kaynaktan gelir ve frontend'de başka bir değere DÖNÜŞMEZ; kullanıcı yalnızca
-     * miktar/açıklama değiştirebilir (bkz. görev F). */
+    /** Dialog, MEVCUT (zaten kayıtlı) bir iade belgesi için AÇILDIĞINDA çağrılır - kaynak lookup
+     * YALNIZCA kalan miktar/mali alan doğrulaması için yüklenir; kayıtlı satırların miktar/açıklama
+     * değerleri ve KaynakSatirId eşleşmeleri KORUNUR, sessizce yeniden oluşturulmaz/üzerine
+     * yazılmaz (bkz. görev 1). Kaynakta olup mevcut satırlarda bulunmayan (asıl belgeye sonradan
+     * eklenmiş olabilecek) satırlar otomatik eklenir; mevcut bir satırın kaynak satırı artık
+     * bulunamıyorsa (silinmiş/taşınmış) kaydetme engellenir ve açık bir hata gösterilir. */
+    private loadKaynakSatirlarForMevcutBelge(kaynakBelgeId: number): void {
+        this.ticariBelgeService.getKaynakSatirlar(kaynakBelgeId, this.belgeId).subscribe({
+            next: satirlar => {
+                this.kaynakSatirlar = satirlar;
+                this.kaynakSatirlarYuklenemedi = false;
+                this.mergeSatirlarWithKaynak(satirlar);
+            },
+            error: () => {
+                this.kaynakSatirlar = [];
+                this.kaynakSatirlarYuklenemedi = true;
+                this.kaynakSatirBulunamadiMesaji =
+                    'Kaynak belge satırları yüklenemedi. Kaydetmeden önce sayfayı yeniden açıp tekrar deneyin.';
+            }
+        });
+    }
+
+    /** Mevcut satırları kaynakla EŞLER - miktar/açıklama gibi kullanıcı tarafından girilmiş
+     * değerlere DOKUNMAZ. Kaynakta olup mevcut satırlarda karşılığı olmayan satırlar (miktar=0
+     * ile) otomatik eklenir; mevcut bir satırın KaynakSatirId'si kaynak listesinde bulunamazsa
+     * (silinmiş/geçersiz hale gelmiş) bu SESSİZCE YOK SAYILMAZ - kaydetmeyi engelleyen açık bir
+     * hata mesajına dönüştürülür (bkz. görev 1: "Kaynak satır bulunamazsa kaydetmeyi engelle"). */
+    private mergeSatirlarWithKaynak(kaynakSatirlar: TicariBelgeKaynakSatirDto[]): void {
+        if (!this.formData) return;
+
+        const kaynakMap = new Map(kaynakSatirlar.map(k => [k.id, k]));
+        const mevcutSatirlar = this.formData.satirlar ?? [];
+        const eslesenKaynakIdler = new Set<number>();
+        const bulunamayanSiraNolar: number[] = [];
+
+        for (const satir of mevcutSatirlar) {
+            const kaynakId = satir.kaynakSatirId ? Number(satir.kaynakSatirId) : NaN;
+            if (Number.isNaN(kaynakId)) {
+                continue;
+            }
+            if (kaynakMap.has(kaynakId)) {
+                eslesenKaynakIdler.add(kaynakId);
+            } else {
+                bulunamayanSiraNolar.push(satir.siraNo);
+            }
+        }
+
+        // Kaynakta olup mevcut iadede henüz bir satırla karşılanmayan kaynak satırları (asıl
+        // belgeye SONRADAN eklenmiş olabilir) otomatik eklenir - miktarı kullanıcı kendisi girer.
+        const eklenecekler = kaynakSatirlar
+            .filter(k => !eslesenKaynakIdler.has(k.id))
+            .map(k => this.kaynakSatirdanSatirOlustur(k, 0));
+
+        if (eklenecekler.length > 0) {
+            const baslangicSiraNo = mevcutSatirlar.reduce((max, s) => Math.max(max, s.siraNo), 0);
+            eklenecekler.forEach((satir, index) => (satir.siraNo = baslangicSiraNo + index + 1));
+            this.formData.satirlar = [...mevcutSatirlar, ...eklenecekler];
+            for (const satir of eklenecekler) {
+                this.ensureKdvIstisnalarLoaded(satir.kdvUygulamaTipi);
+            }
+        }
+
+        this.kaynakSatirBulunamadiMesaji =
+            bulunamayanSiraNolar.length > 0
+                ? `Satır ${bulunamayanSiraNolar.join(', ')} için kaynak satır bulunamadı - bu belge bu haliyle kaydedilemez. Lütfen sistem yöneticinizle iletişime geçin.`
+                : null;
+    }
+
+    /** İade satırlarını seçilen kaynağın satırlarıyla SIFIRDAN, AÇIKÇA yeniden eşler - her satırın
+     * mali alanları kaynaktan gelir ve frontend'de başka bir değere DÖNÜŞMEZ; kullanıcı yalnızca
+     * miktar/açıklama değiştirebilir (bkz. görev F). Yalnızca YENİ kaynak seçiminde çağrılır. */
     private remapSatirlarFromKaynak(kaynakSatirlar: TicariBelgeKaynakSatirDto[]): void {
         if (!this.formData) return;
-        this.formData.satirlar = kaynakSatirlar.map((k, index) => ({
-            siraNo: index + 1,
+        this.formData.satirlar = kaynakSatirlar.map((k, index) => {
+            const satir = this.kaynakSatirdanSatirOlustur(k, k.iadeEdilebilirKalanMiktar > 0 ? Math.min(1, k.iadeEdilebilirKalanMiktar) : 0);
+            satir.siraNo = index + 1;
+            return satir;
+        });
+        this.kaynakSatirBulunamadiMesaji = null;
+        for (const satir of this.formData.satirlar) {
+            this.ensureKdvIstisnalarLoaded(satir.kdvUygulamaTipi);
+        }
+    }
+
+    private kaynakSatirdanSatirOlustur(k: TicariBelgeKaynakSatirDto, miktar: number): TicariBelgeGuncelleSatirRequest {
+        return {
+            siraNo: 0,
             satirTipi: SatisBelgesiSatirTipi.Iade,
             aciklama: k.aciklama,
             birim: k.birim,
-            miktar: k.iadeEdilebilirKalanMiktar > 0 ? Math.min(1, k.iadeEdilebilirKalanMiktar) : 0,
+            miktar,
             birimFiyat: k.birimFiyat,
             indirimOrani: k.indirimOrani,
             indirimTutari: 0,
@@ -436,10 +538,7 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
             konaklamaVergisiOrani: 0,
             konaklamaVergisiTutari: 0,
             kaynakSatirId: String(k.id)
-        }));
-        for (const satir of this.formData.satirlar) {
-            this.ensureKdvIstisnalarLoaded(satir.kdvUygulamaTipi);
-        }
+        };
     }
 
     // ── Satırlar ──
@@ -481,6 +580,10 @@ export class TicariBelgeGuncelleDialogComponent implements OnChanges {
     }
 
     onSaveClick(): void {
+        if (this.kaynakSatirBulunamadiMesaji) {
+            this.messageService.add({ severity: 'error', summary: 'Kaydedilemedi', detail: this.kaynakSatirBulunamadiMesaji });
+            return;
+        }
         this.save.emit();
     }
 }

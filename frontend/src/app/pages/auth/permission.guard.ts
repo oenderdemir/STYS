@@ -2,7 +2,18 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from './auth.service';
 
-const GUVENLI_KOK_ROTA = '/';
+/**
+ * Döngü YARATMAYAN güvenli fallback rota. Uygulamada özel bir "erişim reddedildi" sayfası
+ * bulunmuyor; en yakın uygun aday '/notfound' - app.routes.ts'te authGuard/authChildGuard'ın
+ * (ve dolayısıyla herhangi bir permission/defaultRoute mantığının) DIŞINDA, üst seviyede,
+ * guard'sız tanımlı tek genel-amaçlı sayfa budur (bkz. app.routes.ts: 'notfound' rotası
+ * AppLayout/authGuard alt ağacına DAHİL DEĞİLDİR). "/" KASTEN kullanılmaz: authGuard, "/"e
+ * yapılan HER navigasyonu (kullanıcı yetkili de olsa) otomatik olarak authService.getDefaultRoute()
+ * rotasına yönlendirir (bkz. auth.guard.ts satır 18-23) - bu, permissionGuard "/"e düşürdüğünde
+ * authGuard'ın onu doğrudan defaultRoute'a (yani kullanıcının zaten yetkisiz olduğu, reddedildiği
+ * ASIL hedefe) geri göndermesine, dolayısıyla sonsuz bir yönlendirme döngüsüne yol açar.
+ */
+const GUVENLI_FALLBACK_ROTA = '/notfound';
 
 /**
  * Yeniden kullanılabilir functional permission guard. Kullanım:
@@ -20,9 +31,10 @@ const GUVENLI_KOK_ROTA = '/';
  * Yönlendirme döngüsü koruması: kullanıcının defaultRoute'u tam olarak erişmeye çalıştığı
  * (yetkisiz) URL'yle AYNIYSA, oraya TEKRAR yönlendirmek ya sonsuz bir döngü ya da Angular'ın
  * "aynı URL'ye navigasyon iptal edildi" davranışıyla sessiz bir no-op'a yol açar. Bu durumda
- * bunun yerine uygulamanın güvenli kök rotasına ("/") düşülür; kök rota da hedefle AYNIYSA
- * (örn. defaultRoute yapılandırması bozuksa) döngüyü kesin olarak kırmak için navigasyon
- * tamamen ENGELLENİR (false).
+ * "/" YERİNE (bkz. GUVENLI_FALLBACK_ROTA doc'u - "/" authGuard tarafından defaultRoute'a geri
+ * yönlendirilip döngüyü YENİDEN oluşturur) '/notfound'a düşülür; O da (teorik olarak,
+ * defaultRoute yanlışlıkla '/notfound' olarak yapılandırılmışsa) hedefle AYNIYSA döngüyü kesin
+ * olarak kırmak için navigasyon tamamen ENGELLENİR (false).
  */
 export function permissionGuard(permission: string): CanActivateFn {
     return (_route, state) => {
@@ -37,7 +49,7 @@ export function permissionGuard(permission: string): CanActivateFn {
         const defaultRoute = authService.getLandingRoute();
 
         if (defaultRoute === hedefUrl) {
-            return GUVENLI_KOK_ROTA === hedefUrl ? false : router.createUrlTree([GUVENLI_KOK_ROTA]);
+            return GUVENLI_FALLBACK_ROTA === hedefUrl ? false : router.createUrlTree([GUVENLI_FALLBACK_ROTA]);
         }
 
         return router.createUrlTree([defaultRoute]);

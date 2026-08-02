@@ -474,13 +474,13 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
         if (aBasarili)
         {
             Assert.False(bBasarili);
-            Assert.Contains("silinmiş", bHata, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Satış belgesi bulunamadı", bHata, StringComparison.OrdinalIgnoreCase);
             Assert.True(belgeDb.IsDeleted);
         }
         else
         {
             Assert.False(aBasarili);
-            Assert.Contains("güncellenemez", aHata, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("silinemez", aHata, StringComparison.OrdinalIgnoreCase);
             Assert.False(belgeDb.IsDeleted);
             Assert.Equal(TicariBelgeDurumu.Hazir, belgeDb.TicariDurum);
             Assert.Equal(TicariBelgeMuhasebeDurumu.Onayda, belgeDb.MuhasebeDurumu);

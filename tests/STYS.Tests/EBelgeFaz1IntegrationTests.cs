@@ -157,11 +157,11 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
     private CreateSatisBelgesiRequest BuildSatisBelgesiRequest(SatisBelgesiTipi belgeTipi = SatisBelgesiTipi.SatisFaturasi)
         => new()
         {
-            BelgeNo = $"{_uniqueSuffix}-EBF-{Guid.NewGuid():N}"[..40],
+            BelgeNo = TruncateToMax($"{_uniqueSuffix}-EBF-{Guid.NewGuid():N}", 40),
             BelgeTipi = belgeTipi,
             TesisId = _tesisId,
             CariKartId = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? _tedarikciKartId : _musteriKartId,
-            KarsiTarafFaturaNo = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? $"KTF-{_uniqueSuffix}"[..40] : null,
+            KarsiTarafFaturaNo = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? TruncateToMax($"KTF-{_uniqueSuffix}", 40) : null,
             BelgeTarihi = new DateTime(2026, 3, 1),
             Satirlar =
             [
@@ -193,7 +193,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
         var satir2 = new CreateSatisBelgesiSatiriRequest
         {
-            SiraNo = 2,
+            SiraNo = 1,
             Aciklama = "Satir-2",
             SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
             Miktar = 2,
@@ -204,13 +204,32 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
         return new CreateSatisBelgesiRequest
         {
-            BelgeNo = $"{_uniqueSuffix}-EBF-2-{Guid.NewGuid():N}"[..40],
+            BelgeNo = TruncateToMax($"{_uniqueSuffix}-EBF-2-{Guid.NewGuid():N}", 40),
             BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
             TesisId = _tesisId,
             CariKartId = _musteriKartId,
             BelgeTarihi = new DateTime(2026, 3, 1),
             Satirlar = tersSirali ? [satir2, satir1] : [satir1, satir2]
         };
+    }
+
+    private static string TruncateToMax(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
+
+    private async Task EnsureMuhasebeFisIdAsync(StysAppDbContext dbContext, int satisBelgesiId)
+    {
+        var belge = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == satisBelgesiId);
+
+        if (!belge.MuhasebeFisId.HasValue)
+        {
+            belge.MuhasebeFisId = await dbContext.MuhasebeFisler
+                .Where(x => x.KaynakId == satisBelgesiId)
+                .Select(x => x.Id)
+                .SingleAsync();
+            await dbContext.SaveChangesAsync();
+        }
+
+        Assert.True(belge.MuhasebeFisId.HasValue);
     }
 
     private async Task<SatisBelgesiDto> CreateAndApproveOutgoingInvoiceAsync()
@@ -225,15 +244,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
         await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
-        var belgeFisli = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
-        if (!belgeFisli.MuhasebeFisId.HasValue)
-        {
-            belgeFisli.MuhasebeFisId = await dbContext.MuhasebeFisler
-                .Where(x => x.KaynakId == created.Id.Value)
-                .Select(x => x.Id)
-                .SingleAsync();
-            await dbContext.SaveChangesAsync();
-        }
+        await EnsureMuhasebeFisIdAsync(dbContext, created.Id.Value);
 
         await using var kesimCtx = CreateDbContext();
         var kesimService = CreateService(kesimCtx);
@@ -480,7 +491,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             var belge = new SatisBelgesi
             {
                 KurumId = _kurumId,
-                BelgeNo = $"YENI-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+                BelgeNo = TruncateToMax($"YENI-{_uniqueSuffix}-{Guid.NewGuid():N}", 40),
                 BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
                 Durum = SatisBelgesiDurumu.FaturaKesildi,
                 TicariDurum = TicariBelgeDurumu.Hazir,
@@ -505,7 +516,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             var ikinciBelge = new SatisBelgesi
             {
                 KurumId = _kurumId,
-                BelgeNo = $"YENI2-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+                BelgeNo = TruncateToMax($"YENI2-{_uniqueSuffix}-{Guid.NewGuid():N}", 40),
                 BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
                 Durum = SatisBelgesiDurumu.FaturaKesildi,
                 TicariDurum = TicariBelgeDurumu.Hazir,
@@ -626,6 +637,11 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(seedCtx);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(seedCtx, donemService);
+        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
+        await EnsureMuhasebeFisIdAsync(seedCtx, created.Id.Value);
+
         await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
 
         await using var snapshotCtx = CreateDbContext();
@@ -702,29 +718,38 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var created = await service.CreateAsync(BuildCiftSatirliSatisBelgesiRequest());
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
-        await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
+        await EnsureMuhasebeFisIdAsync(dbContext, created.Id.Value);
 
-        var belge = await dbContext.SatisBelgeleri
+        await using var kesimCtx = CreateDbContext();
+        var kesimService = CreateService(kesimCtx);
+        await kesimService.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+
+        await using var snapshotCtx = CreateDbContext();
+        var belge = await snapshotCtx.SatisBelgeleri
             .AsNoTracking()
             .Include(x => x.Satirlar)
             .Include(x => x.CariKart)
             .Include(x => x.EBelgeKaydi)
             .SingleAsync(x => x.Id == created.Id.Value);
 
-        var kurum = await dbContext.Kurumlar.AsNoTracking().SingleAsync(x => x.Id == _kurumId);
-        var tesis = await dbContext.Tesisler.AsNoTracking().Include(x => x.Kurum).SingleAsync(x => x.Id == _tesisId);
-        var cariKart = await dbContext.CariKartlar.AsNoTracking().SingleAsync(x => x.Id == _musteriKartId);
+        var kurum = await snapshotCtx.Kurumlar.AsNoTracking().SingleAsync(x => x.Id == _kurumId);
+        var tesis = await snapshotCtx.Tesisler.AsNoTracking().Include(x => x.Kurum).SingleAsync(x => x.Id == _tesisId);
+        var cariKart = await snapshotCtx.CariKartlar.AsNoTracking().SingleAsync(x => x.Id == _musteriKartId);
         var eBelgeKaydi = belge.EBelgeKaydi!;
+        var kararZamani = new DateTime(2026, 3, 1, 12, 34, 56, DateTimeKind.Utc);
 
         var factory = typeof(SatisBelgesiService).Assembly.GetType("STYS.Muhasebe.SatisBelgeleri.EBelgeSnapshotFactory", throwOnError: true)!;
         var createMethod = factory.GetMethod("CreateSnapshot", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
-        object[] args = [eBelgeKaydi, belge, kurum, tesis, cariKart, DateTime.UtcNow];
+        object[] args = [eBelgeKaydi, belge, kurum, tesis, cariKart, kararZamani];
 
         var snapshot1 = createMethod.Invoke(null, args)!;
         var json1 = (string)snapshot1.GetType().GetProperty("CanonicalJson")!.GetValue(snapshot1)!;
         var sha1 = (string)snapshot1.GetType().GetProperty("CanonicalSha256")!.GetValue(snapshot1)!;
 
-        belge.Satirlar = belge.Satirlar.OrderByDescending(x => x.SiraNo).ToList();
+        belge.Satirlar = belge.Satirlar.OrderByDescending(x => x.Id).ToList();
         var snapshot2 = createMethod.Invoke(null, args)!;
         var json2 = (string)snapshot2.GetType().GetProperty("CanonicalJson")!.GetValue(snapshot2)!;
         var sha2 = (string)snapshot2.GetType().GetProperty("CanonicalSha256")!.GetValue(snapshot2)!;

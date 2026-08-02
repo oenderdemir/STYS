@@ -143,13 +143,6 @@ END
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_EBelgeSnapshots_EBelgeKaydiId",
-                schema: "muhasebe",
-                table: "EBelgeSnapshots",
-                column: "EBelgeKaydiId",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_EBelgeSnapshots_EBelgeKaydiId_BelgeVersiyonu",
                 schema: "muhasebe",
                 table: "EBelgeSnapshots",

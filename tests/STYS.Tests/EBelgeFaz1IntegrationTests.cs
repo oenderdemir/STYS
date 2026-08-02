@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
+using System.Reflection;
 using System.Text.Json;
 using AutoMapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -50,11 +52,6 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         _uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
 
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
@@ -105,11 +102,6 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString) || _kurumId <= 0)
-        {
-            return;
-        }
-
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         await dbContext.KurumFaturaNumaraSayaclari.Where(x => x.KurumId == _kurumId).ExecuteDeleteAsync();
         await SatisBelgesiMuhasebeTestSupport.CleanupAsync(dbContext, _uniqueSuffix, _tesisId, _kurumId, _ilId);
@@ -165,10 +157,11 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
     private CreateSatisBelgesiRequest BuildSatisBelgesiRequest(SatisBelgesiTipi belgeTipi = SatisBelgesiTipi.SatisFaturasi)
         => new()
         {
-            BelgeNo = $"EBF-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeNo = $"{_uniqueSuffix}-EBF-{Guid.NewGuid():N}"[..40],
             BelgeTipi = belgeTipi,
             TesisId = _tesisId,
             CariKartId = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? _tedarikciKartId : _musteriKartId,
+            KarsiTarafFaturaNo = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? $"KTF-{_uniqueSuffix}"[..40] : null,
             BelgeTarihi = new DateTime(2026, 3, 1),
             Satirlar =
             [
@@ -185,6 +178,41 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             ]
         };
 
+    private CreateSatisBelgesiRequest BuildCiftSatirliSatisBelgesiRequest(bool tersSirali = false)
+    {
+        var satir1 = new CreateSatisBelgesiSatiriRequest
+        {
+            SiraNo = 1,
+            Aciklama = "Satir-1",
+            SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
+            Miktar = 1,
+            BirimFiyat = 1000m,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20m
+        };
+
+        var satir2 = new CreateSatisBelgesiSatiriRequest
+        {
+            SiraNo = 2,
+            Aciklama = "Satir-2",
+            SatirTipi = SatisBelgesiSatirTipi.EkHizmet,
+            Miktar = 2,
+            BirimFiyat = 500m,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20m
+        };
+
+        return new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"{_uniqueSuffix}-EBF-2-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _musteriKartId,
+            BelgeTarihi = new DateTime(2026, 3, 1),
+            Satirlar = tersSirali ? [satir2, satir1] : [satir1, satir2]
+        };
+    }
+
     private async Task<SatisBelgesiDto> CreateAndApproveOutgoingInvoiceAsync()
     {
         await using var dbContext = CreateDbContext();
@@ -193,26 +221,52 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var created = await service.CreateAsync(BuildSatisBelgesiRequest());
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
-        return await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
-    }
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
-    [Fact]
-    public async Task AyniBelgeIkiKezKesildiginde_TekNumaraTekUuidTekKayitOlusur()
-    {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        var belgeFisli = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
+        if (!belgeFisli.MuhasebeFisId.HasValue)
         {
-            return;
+            belgeFisli.MuhasebeFisId = await dbContext.MuhasebeFisler
+                .Where(x => x.KaynakId == created.Id.Value)
+                .Select(x => x.Id)
+                .SingleAsync();
+            await dbContext.SaveChangesAsync();
         }
 
+        await using var kesimCtx = CreateDbContext();
+        var kesimService = CreateService(kesimCtx);
+        return await kesimService.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+    }
+
+    [IntegrationFact]
+    public async Task AyniBelgeIkiKezKesildiginde_TekNumaraTekUuidTekKayitOlusur()
+    {
         await using var dbContext = CreateDbContext();
         var service = CreateService(dbContext);
 
         var created = await service.CreateAsync(BuildSatisBelgesiRequest());
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
-        var ilk = await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
-        var ikinci = await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+        var belgeFisli = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
+        if (!belgeFisli.MuhasebeFisId.HasValue)
+        {
+            belgeFisli.MuhasebeFisId = await dbContext.MuhasebeFisler
+                .Where(x => x.KaynakId == created.Id.Value)
+                .Select(x => x.Id)
+                .SingleAsync();
+            await dbContext.SaveChangesAsync();
+        }
+
+        await using var kesimCtx = CreateDbContext();
+        var kesimService = CreateService(kesimCtx);
+        var ilk = await kesimService.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+        var ikinci = await kesimService.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
 
         Assert.Equal(ilk.ResmiFaturaNo, ikinci.ResmiFaturaNo);
         Assert.Equal(ilk.EBelgeUuid, ikinci.EBelgeUuid);
@@ -262,19 +316,17 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task IkiDbContextEszamanliKesimdeMukerrerKayitOlusmaz()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var seedCtx = CreateDbContext();
         var seedService = CreateService(seedCtx);
         var created = await seedService.CreateAsync(BuildSatisBelgesiRequest());
         await seedService.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await seedService.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        var seedDonemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(seedCtx);
+        var seedFisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(seedCtx, seedDonemService);
+        await seedFisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
         var gate = new SemaphoreSlim(0, 2);
         var ready = new CountdownEvent(2);
@@ -303,14 +355,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         Assert.Equal(1, await verifyCtx.EBelgeSnapshots.CountAsync(x => x.EBelgeKaydi.SatisBelgesiId == created.Id.Value));
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task KesimSonrasiMasterDataDegisseDeCanonicalJsonVeHashDegismez()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         var cut = await CreateAndApproveOutgoingInvoiceAsync();
 
         await using var snapshotCtx = CreateDbContext();
@@ -340,14 +387,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         Assert.Equal(shaOnce, snapshotAfter.CanonicalSha256);
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task EBelgeSnapshotUpdateVeyaDeleteEdilemez()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         var cut = await CreateAndApproveOutgoingInvoiceAsync();
 
         await using var dbContext = CreateDbContext();
@@ -361,38 +403,48 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         await Assert.ThrowsAsync<BaseException>(() => deleteCtx.SaveChangesAsync());
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task GelenBelgeIcinEBelgeKaydiOlusmaz()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var dbContext = CreateDbContext();
         var service = CreateService(dbContext);
         var created = await service.CreateAsync(BuildSatisBelgesiRequest(SatisBelgesiTipi.AlisFaturasi));
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
+        await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
+        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
+        var belgeFisli = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
+        if (!belgeFisli.MuhasebeFisId.HasValue)
+        {
+            belgeFisli.MuhasebeFisId = await dbContext.MuhasebeFisler
+                .Where(x => x.KaynakId == created.Id.Value)
+                .Select(x => x.Id)
+                .SingleAsync();
+            await dbContext.SaveChangesAsync();
+        }
+
+        await using var kesimCtx = CreateDbContext();
+        var kesimService = CreateService(kesimCtx);
         var ex = await Assert.ThrowsAsync<BaseException>(
-            () => service.FaturaKesAsync(created.Id!.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None));
+            () => kesimService.FaturaKesAsync(created.Id!.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None));
 
         Assert.Contains("giden belgeler", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(await dbContext.EBelgeKayitlari.AnyAsync(x => x.SatisBelgesiId == created.Id.Value));
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task TenantDisiSatisBelgesineEBelgeKaydiBaglanamaz()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var seedCtx = CreateDbContext();
         var seedService = CreateService(seedCtx);
         var created = await seedService.CreateAsync(BuildSatisBelgesiRequest());
         await seedService.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await seedService.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        var seedDonemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(seedCtx);
+        var seedFisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(seedCtx, seedDonemService);
+        await seedFisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
         await using var isolatedCtx = CreateDbContext(currentKurumId: _kurumId + 999, isSuperAdmin: false);
         var isolatedService = CreateService(isolatedCtx);
@@ -403,14 +455,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         Assert.Contains("Satış belgesi bulunamadı", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task SoftDeleteEdilmisKayitNumaraVeUuidIcinYenidenKullanimYapilamaz()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         var cut = await CreateAndApproveOutgoingInvoiceAsync();
         var resmiFaturaNo = cut.ResmiFaturaNo!;
         var eBelgeUuid = cut.EBelgeUuid!;
@@ -483,14 +530,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         }
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task AyniKurumdaNullResmiFaturaNoIleIkiBelgeOluşturulabilir()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var dbContext = CreateDbContext();
         var service = CreateService(dbContext);
 
@@ -504,19 +546,27 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             await dbContext.SatisBelgeleri.CountAsync(x => x.Id == ilk.Id!.Value || x.Id == ikinci.Id!.Value));
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task KanalBayraklariIkisiDeFalseIseKesimTamamenRollbackOlur()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var seedCtx = CreateDbContext();
         var service = CreateService(seedCtx);
         var created = await service.CreateAsync(BuildSatisBelgesiRequest());
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(seedCtx);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(seedCtx, donemService);
+        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
+
+        var belgeFisli = await seedCtx.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
+        if (!belgeFisli.MuhasebeFisId.HasValue)
+        {
+            belgeFisli.MuhasebeFisId = await seedCtx.MuhasebeFisler
+                .Where(x => x.KaynakId == created.Id.Value)
+                .Select(x => x.Id)
+                .SingleAsync();
+            await seedCtx.SaveChangesAsync();
+        }
 
         var sayacOnce = await seedCtx.KurumFaturaNumaraSayaclari
             .AsNoTracking()
@@ -530,8 +580,10 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             await mutateCtx.SaveChangesAsync();
         }
 
+        await using var kesimCtx = CreateDbContext();
+        var kesimService = CreateService(kesimCtx);
         var ex = await Assert.ThrowsAsync<BaseException>(
-            () => service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None));
+            () => kesimService.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None));
 
         Assert.Contains("e-Fatura ya da e-Arşiv", ex.Message, StringComparison.OrdinalIgnoreCase);
 
@@ -550,14 +602,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         Assert.Equal(sayacOnce.SonNumara, sayacSonra.SonNumara);
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task SnapshotAliciAlanlariSatisBelgesiSnapshotindanGelsin()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var seedCtx = CreateDbContext();
         var service = CreateService(seedCtx);
         var created = await service.CreateAsync(BuildSatisBelgesiRequest());
@@ -597,14 +644,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         Assert.NotEqual("CANLI-CARI-KART-DEGISTI", GetNullableString(alici, "musteriUnvan"));
     }
 
-    [Fact]
+    [IntegrationFact]
     public async Task CrossoverTenantEBelgeKaydiVeSnapshotDbTarafindanReddedilir()
     {
-        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
-        {
-            return;
-        }
-
         await using var seedCtx = CreateDbContext();
         var service = CreateService(seedCtx);
         var created = await service.CreateAsync(BuildSatisBelgesiRequest());
@@ -649,6 +691,70 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
             await Assert.ThrowsAsync<DbUpdateException>(() => snapshotCtx.SaveChangesAsync());
         }
+    }
+
+    [IntegrationFact]
+    public async Task CanonicalSnapshotSatirSirasiCollectionOrderdanBagimsizdir()
+    {
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext);
+
+        var created = await service.CreateAsync(BuildCiftSatirliSatisBelgesiRequest());
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
+        await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+
+        var belge = await dbContext.SatisBelgeleri
+            .AsNoTracking()
+            .Include(x => x.Satirlar)
+            .Include(x => x.CariKart)
+            .Include(x => x.EBelgeKaydi)
+            .SingleAsync(x => x.Id == created.Id.Value);
+
+        var kurum = await dbContext.Kurumlar.AsNoTracking().SingleAsync(x => x.Id == _kurumId);
+        var tesis = await dbContext.Tesisler.AsNoTracking().Include(x => x.Kurum).SingleAsync(x => x.Id == _tesisId);
+        var cariKart = await dbContext.CariKartlar.AsNoTracking().SingleAsync(x => x.Id == _musteriKartId);
+        var eBelgeKaydi = belge.EBelgeKaydi!;
+
+        var factory = typeof(SatisBelgesiService).Assembly.GetType("STYS.Muhasebe.SatisBelgeleri.EBelgeSnapshotFactory", throwOnError: true)!;
+        var createMethod = factory.GetMethod("CreateSnapshot", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
+        object[] args = [eBelgeKaydi, belge, kurum, tesis, cariKart, DateTime.UtcNow];
+
+        var snapshot1 = createMethod.Invoke(null, args)!;
+        var json1 = (string)snapshot1.GetType().GetProperty("CanonicalJson")!.GetValue(snapshot1)!;
+        var sha1 = (string)snapshot1.GetType().GetProperty("CanonicalSha256")!.GetValue(snapshot1)!;
+
+        belge.Satirlar = belge.Satirlar.OrderByDescending(x => x.SiraNo).ToList();
+        var snapshot2 = createMethod.Invoke(null, args)!;
+        var json2 = (string)snapshot2.GetType().GetProperty("CanonicalJson")!.GetValue(snapshot2)!;
+        var sha2 = (string)snapshot2.GetType().GetProperty("CanonicalSha256")!.GetValue(snapshot2)!;
+
+        Assert.Equal(json1, json2);
+        Assert.Equal(sha1, sha2);
+    }
+
+    [IntegrationFact]
+    public async Task ResmiFaturaNoIndexFilterDefinitionIsDeletedIcermemelidir()
+    {
+        var connectionString = SatisBelgesiMuhasebeTestSupport.ConnectionString
+            ?? throw new InvalidOperationException("Connection string bulunamadi.");
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+SELECT filter_definition
+FROM sys.indexes
+WHERE name = N'IX_SatisBelgeleri_KurumId_ResmiFaturaNo'
+  AND object_id = OBJECT_ID(N'[muhasebe].[SatisBelgeleri]')
+""";
+
+        var filterDefinition = (string?)await command.ExecuteScalarAsync();
+
+        Assert.NotNull(filterDefinition);
+        Assert.Contains("[ResmiFaturaNo] IS NOT NULL", filterDefinition, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("IsDeleted", filterDefinition, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? GetNullableString(JsonElement parent, string propertyName)

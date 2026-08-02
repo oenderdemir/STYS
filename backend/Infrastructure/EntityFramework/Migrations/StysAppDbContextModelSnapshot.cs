@@ -5136,7 +5136,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.HasIndex("SatisBelgesiId")
                         .IsUnique();
 
-                    b.HasAlternateKey("Id", "KurumId");
+                    b.HasIndex("SatisBelgesiId", "KurumId")
+                        .IsUnique();
 
                     b.ToTable("EBelgeKayitlari", "muhasebe", t =>
                         {
@@ -5198,10 +5199,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EBelgeKaydiId")
+                    b.HasIndex("EBelgeKaydiId", "BelgeVersiyonu")
                         .IsUnique();
 
-                    b.HasIndex("EBelgeKaydiId", "BelgeVersiyonu")
+                    b.HasIndex("EBelgeKaydiId", "KurumId")
                         .IsUnique();
 
                     b.ToTable("EBelgeSnapshots", "muhasebe");

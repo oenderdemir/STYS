@@ -118,7 +118,8 @@ END
                 schema: "muhasebe",
                 table: "SatisBelgeleri",
                 columns: new[] { "KurumId", "ResmiFaturaNo" },
-                unique: true);
+                unique: true,
+                filter: "[ResmiFaturaNo] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_EBelgeKayitlari_EBelgeUuid",
@@ -132,6 +133,13 @@ END
                 schema: "muhasebe",
                 table: "EBelgeKayitlari",
                 column: "SatisBelgesiId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EBelgeKayitlari_SatisBelgesiId_KurumId",
+                schema: "muhasebe",
+                table: "EBelgeKayitlari",
+                columns: new[] { "SatisBelgesiId", "KurumId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

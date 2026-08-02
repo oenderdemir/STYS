@@ -94,6 +94,7 @@ internal static class EBelgeSnapshotFactory
             belge.Satirlar
                 .Where(x => !x.IsDeleted)
                 .OrderBy(x => x.SiraNo)
+                .ThenBy(x => x.Id)
                 .Select(x => new EBelgeCanonicalSatirSection(
                     x.SiraNo,
                     x.SatirTipi,

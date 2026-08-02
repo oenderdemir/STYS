@@ -213,6 +213,19 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 if (aktifSatirlar.Count == 0)
                     throw new BaseException("Satış belgesinde aktif satır bulunamadı.", 400);
 
+                // Satır tipi semantiği, transaction içinde YENİDEN OKUNAN gerçek DB satırları
+                // üzerinde TEKRAR doğrulanır (bkz. görev: "satır tipi semantiğini muhasebe
+                // transaction'ında da doğrula") - yazma anındaki (SatisBelgesiService.
+                // ValidateSatirRequestAsync) doğrulama atlatılmış olabilecek eski/tutarsız veya
+                // doğrudan SQL ile eklenmiş satırlar (ör. tanımsız bir SatirTipi, ya da taşınır
+                // kartlı bir "hizmet" satırı) burada, HERHANGİ bir fiş/cari/stok kaydı
+                // oluşturulmadan ÖNCE fail-closed olarak reddedilir - sessizce hizmet hesabına
+                // (ya da tersine, stok hesabına) aktarılmaz.
+                foreach (var satir in aktifSatirlar)
+                {
+                    SatisBelgesiSatirTipiSemantigi.Dogrula(satir.SatirTipi, satir.TasinirKartId, satir.DepoId, satir.SiraNo);
+                }
+
                 // ÖTV, ÖİV ve konaklama vergisi için mevcut domain modelinde güvenilir/açık
                 // bir muhasebe hesap eşlemesi (hesap planı alanı) TANIMLI DEĞİL (bkz.
                 // SatisBelgesiMuhasebeFisContext). Bu vergileri gelir/gider/stok hesabına

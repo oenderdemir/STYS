@@ -1858,26 +1858,11 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         }
 
         // SatirTipi=Urun OTORİTER olarak stok etkisini belirler (bkz. görev 2/3/4) - TasinirKartId
-        // dolu/boş olması satır tipini ASLA değiştirmez/ima etmez. Bu yüzden burada iki yönlü, simetrik
-        // bir kural uygulanır: Urun satırları taşınır kart+depoyu ZORUNLU kılar, Urun DIŞINDAKİ (hizmet)
-        // satırlar bu ikisinin GÖNDERİLMESİNİ REDDEDER - "hizmet satırı ama taşınır kartı da var" gibi
-        // tutarsız bir durum asla kabul edilmez.
-        if (request.SatirTipi == SatisBelgesiSatirTipi.Urun)
-        {
-            if (!request.TasinirKartId.HasValue)
-                throw new BaseException($"Ürün satırlarında taşınır kart seçimi zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
-
-            if (!request.DepoId.HasValue)
-                throw new BaseException($"Ürün satırlarında depo seçimi zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
-        }
-        else
-        {
-            if (request.TasinirKartId.HasValue)
-                throw new BaseException($"Ürün dışındaki satırlarda taşınır kart seçilemez. (SıraNo: {request.SiraNo})", errorCode: 400);
-
-            if (request.DepoId.HasValue)
-                throw new BaseException($"Ürün dışındaki satırlarda depo seçilemez. (SıraNo: {request.SiraNo})", errorCode: 400);
-        }
+        // dolu/boş olması satır tipini ASLA değiştirmez/ima etmez. Kural TEK merkezi kaynaktan
+        // (SatisBelgesiSatirTipiSemantigi) alınır - aynı kural muhasebe fişi oluşturma anında,
+        // transaction içinde yeniden okunan DB satırları üzerinde DE uygulanır; burada AYRI AYRI
+        // yeniden üretilmez.
+        SatisBelgesiSatirTipiSemantigi.Dogrula(request.SatirTipi, request.TasinirKartId, request.DepoId, request.SiraNo);
 
         if (request.TasinirKartId.HasValue)
         {

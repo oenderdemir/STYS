@@ -43,136 +43,184 @@ public class CariHareketKapamaService : ICariHareketKapamaService
         int tahsilatOdemeBelgesiId,
         CancellationToken cancellationToken = default)
     {
-        var belge = await _tahsilatOdemeBelgesiRepository.GetByIdAsync(
-            tahsilatOdemeBelgesiId,
-            q => q.Include(x => x.CariKart));
-
-        if (belge is null)
+        // Ambient transaction farkındalığı (bkz. görev 1, GeriAlAsync ile AYNI desen): bu metod
+        // başka bir servisin (ör. TahsilatOdemeBelgesiService.AddAsync) ZATEN açık transaction'ı
+        // içinde çağrılabilir - iç içe BeginTransactionAsync çağrısı yapılmaz, sahip OLUNMAYAN bir
+        // transaction asla commit/rollback edilmez. Kilit yalnızca YENİ açılan (veya devralınan)
+        // TEK bir transaction boyunca anlamlıdır - önceki sürümde bu metodun KENDİ transaction'ı
+        // yoktu; ambient bir transaction da yoksa (doğrudan çağrıldığında) WITH (UPDLOCK, ROWLOCK)
+        // ile alınan kilit, SELECT tamamlanır tamamlanmaz (auto-commit) HEMEN serbest bırakılıyor,
+        // dolayısıyla doğrulama+ekleme+güncelleme+SaveChanges boyunca HİÇBİR koruma sağlamıyordu.
+        var ownsTransaction = _dbContext.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        try
         {
-            throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
-        }
+            // Tahsilat/ödeme belgesini transaction içinde, kilitli ve GÜNCEL DB durumuyla oku
+            // (bkz. görev 1). Raw SQL Server kilit ifadesi yalnızca GERÇEK SQL Server sağlayıcısında
+            // (Database.IsSqlServer() ile AÇIKÇA doğrulanır - Database.IsRelational() DEĞİL, çünkü
+            // UPDLOCK/ROWLOCK SQL Server'a özgüdür) istenir; InMemory'de (birim testleri) düz bir
+            // okumaya düşülür.
+            var belgeSorgusu = _dbContext.Database.IsSqlServer()
+                ? _dbContext.TahsilatOdemeBelgeleri.FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[TahsilatOdemeBelgeleri] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {tahsilatOdemeBelgesiId} AND [IsDeleted] = 0")
+                : _dbContext.TahsilatOdemeBelgeleri.Where(x => x.Id == tahsilatOdemeBelgesiId && !x.IsDeleted);
 
-        if (belge.CariKartId <= 0)
-        {
-            throw new BaseException("Cari kart secimi zorunludur.", 400);
-        }
+            var belge = await belgeSorgusu
+                .Include(x => x.CariKart)
+                .FirstOrDefaultAsync(cancellationToken);
 
-        if (belge.Tutar <= 0m)
-        {
-            throw new BaseException("Tutar sifirdan buyuk olmali.", 400);
-        }
+            if (belge is null)
+            {
+                throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+            }
 
-        if (!belge.KapatilacakCariHareketId.HasValue)
-        {
-            return null;
-        }
+            if (belge.CariKartId <= 0)
+            {
+                throw new BaseException("Cari kart secimi zorunludur.", 400);
+            }
 
-        var duplicate = await _dbContext.CariHareketler.AnyAsync(x =>
-            !x.IsDeleted
-            && x.Durum == CariHareketDurumlari.Aktif
-            && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
-            && x.KaynakId == belge.Id,
-            cancellationToken);
+            if (belge.Tutar <= 0m)
+            {
+                throw new BaseException("Tutar sifirdan buyuk olmali.", 400);
+            }
 
-        if (duplicate)
-        {
-            throw new BaseException("Bu tahsilat/ödeme belgesi için cari hareket daha önce oluşturulmuş.", 400);
-        }
+            if (!belge.KapatilacakCariHareketId.HasValue)
+            {
+                if (ownsTransaction && transaction is not null)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                }
 
-        // WITH (UPDLOCK, ROWLOCK) - kapatılacak cari hareket, Durum/KapandiMi/KalanTutar
-        // OKUNMADAN ÖNCE kilitlenir (bkz. görev 3). SatisBelgesiService.IptalEtCariHareketleriAsync
-        // AYNI satırı AYNI kilitleme disipliniyle okur - bu belge iptali ile bu kapama işlemi
-        // eşzamanlı çalışırsa, ikinci gelen transaction birincinin commit/rollback'ini bekler ve
-        // GÜNCEL (artık Iptal olabilecek) durumla değerlendirir; iptal edilmiş bir hareket bu
-        // yüzden sonradan kapatılamaz.
-        // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek ilişkisel bir sağlayıcıya (SQL Server) karşı
-        // desteklenir - InMemory sağlayıcıyla çalışan birim testleri (ör. RezervasyonGelirTahakkukService
-        // üzerinden bu metodu dolaylı çağıranlar) FromSqlInterpolated'i ÇEVİREMEZ, bu yüzden orada
-        // düz (kilitsiz) bir okumaya düşülür.
-        var kapatilacakSorgusu = _dbContext.Database.IsRelational()
-            ? _dbContext.CariHareketler.FromSqlInterpolated($@"
+                return null;
+            }
+
+            // WITH (UPDLOCK, ROWLOCK) - kapatılacak cari hareket, Durum/KapandiMi/KalanTutar
+            // OKUNMADAN ÖNCE kilitlenir (bkz. görev 3, c799337). SatisBelgesiService.
+            // IptalEtCariHareketleriAsync AYNI satırı AYNI kilitleme disipliniyle okur - bu belge
+            // iptali ile bu kapama işlemi eşzamanlı çalışırsa, ikinci gelen transaction birincinin
+            // commit/rollback'ini bekler ve GÜNCEL (artık Iptal olabilecek) durumla değerlendirir;
+            // iptal edilmiş bir hareket bu yüzden sonradan kapatılamaz. TahsilatOdemeBelgeleri
+            // satırının kilidi (yukarıda) ile BİRLİKTE, aynı tahsilat belgesi için eşzamanlı İKİ
+            // çağrı da bu noktada birbirini bekler - ikincisi, birincinin commit'i SONRASI GÜNCEL
+            // (artık duplicate) durumu görüp aşağıda reddedilir.
+            var kapatilacakSorgusu = _dbContext.Database.IsSqlServer()
+                ? _dbContext.CariHareketler.FromSqlInterpolated($@"
 SELECT * FROM [muhasebe].[CariHareketler] WITH (UPDLOCK, ROWLOCK)
 WHERE [Id] = {belge.KapatilacakCariHareketId.Value} AND [IsDeleted] = 0")
-            : _dbContext.CariHareketler.Where(x => x.Id == belge.KapatilacakCariHareketId.Value && !x.IsDeleted);
+                : _dbContext.CariHareketler.Where(x => x.Id == belge.KapatilacakCariHareketId.Value && !x.IsDeleted);
 
-        var kapatilacak = await kapatilacakSorgusu
-            .Include(x => x.CariKart)
-            .FirstOrDefaultAsync(cancellationToken);
+            var kapatilacak = await kapatilacakSorgusu
+                .Include(x => x.CariKart)
+                .FirstOrDefaultAsync(cancellationToken);
 
-        if (kapatilacak is null)
-        {
-            throw new BaseException("Kapama ilişkisi bulunamadı.", 400);
-        }
-
-        if (kapatilacak.IsDeleted || kapatilacak.Durum != CariHareketDurumlari.Aktif)
-        {
-            throw new BaseException("Kapatilacak cari hareket aktif degil.", 400);
-        }
-
-        if (kapatilacak.KapandiMi || kapatilacak.KalanTutar <= 0m)
-        {
-            throw new BaseException("Kapatilacak cari hareket kapali.", 400);
-        }
-
-        if (kapatilacak.CariKartId != belge.CariKartId)
-        {
-            throw new BaseException("Kapatilacak cari hareket secilen cari kart ile uyumlu degil.", 400);
-        }
-
-        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
-        if (scope.IsScoped)
-        {
-            var cariTesisId = kapatilacak.CariKart?.TesisId;
-            if (!cariTesisId.HasValue || !scope.TesisIds.Contains(cariTesisId.Value))
+            if (kapatilacak is null)
             {
-                throw new BaseException("Kapatilacak cari hareket icin yetkiniz bulunmuyor.", 403);
+                throw new BaseException("Kapama ilişkisi bulunamadı.", 400);
             }
+
+            // Duplicate kontrolü, HEM belge HEM hedef (kapatilacak) kilitleri alındıktan SONRA,
+            // transaction içinde YENİDEN yapılır (bkz. görev 1) - aksi halde iki eşzamanlı çağrı
+            // (ör. aynı tahsilat belgesi için çift tıklama) ikisi de "henüz duplicate yok" görüp
+            // aynı tahsilat belgesi için İKİ kapama hareketi üretebilirdi.
+            var duplicate = await _dbContext.CariHareketler.AnyAsync(x =>
+                !x.IsDeleted
+                && x.Durum == CariHareketDurumlari.Aktif
+                && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
+                && x.KaynakId == belge.Id,
+                cancellationToken);
+
+            if (duplicate)
+            {
+                throw new BaseException("Bu tahsilat/ödeme belgesi için cari hareket daha önce oluşturulmuş.", 400);
+            }
+
+            if (kapatilacak.IsDeleted || kapatilacak.Durum != CariHareketDurumlari.Aktif)
+            {
+                throw new BaseException("Kapatilacak cari hareket aktif degil.", 400);
+            }
+
+            if (kapatilacak.KapandiMi || kapatilacak.KalanTutar <= 0m)
+            {
+                throw new BaseException("Kapatilacak cari hareket kapali.", 400);
+            }
+
+            if (kapatilacak.CariKartId != belge.CariKartId)
+            {
+                throw new BaseException("Kapatilacak cari hareket secilen cari kart ile uyumlu degil.", 400);
+            }
+
+            var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+            if (scope.IsScoped)
+            {
+                var cariTesisId = kapatilacak.CariKart?.TesisId;
+                if (!cariTesisId.HasValue || !scope.TesisIds.Contains(cariTesisId.Value))
+                {
+                    throw new BaseException("Kapatilacak cari hareket icin yetkiniz bulunmuyor.", 403);
+                }
+            }
+
+            if (belge.Tutar > kapatilacak.KalanTutar + 0.01m)
+            {
+                throw new BaseException("Kapama geri alma tutarı cari hareketle uyumsuz.", 400);
+            }
+
+            var kapamaTutari = Math.Min(belge.Tutar, kapatilacak.KalanTutar);
+            var borcMu = kapatilacak.BorcTutari > 0m;
+
+            var yeniHareket = new CariHareket
+            {
+                CariKartId = belge.CariKartId,
+                HareketTarihi = belge.BelgeTarihi,
+                BelgeTuru = belge.BelgeTipi,
+                BelgeNo = belge.BelgeNo,
+                Aciklama = $"Tahsilat/ödeme cari kapama - {belge.BelgeNo}",
+                BorcTutari = borcMu ? 0m : kapamaTutari,
+                AlacakTutari = borcMu ? kapamaTutari : 0m,
+                KapananTutar = 0m,
+                KalanTutar = 0m,
+                ParaBirimi = belge.ParaBirimi,
+                VadeTarihi = null,
+                Durum = CariHareketDurumlari.Aktif,
+                KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi,
+                KaynakId = belge.Id,
+                IliskiliCariHareketId = kapatilacak.Id,
+                KapandiMi = true
+            };
+
+            kapatilacak.KapananTutar += kapamaTutari;
+            kapatilacak.KalanTutar -= kapamaTutari;
+            if (kapatilacak.KalanTutar <= 0.01m)
+            {
+                kapatilacak.KalanTutar = 0m;
+                kapatilacak.KapandiMi = true;
+            }
+            else
+            {
+                kapatilacak.KapandiMi = false;
+            }
+
+            _dbContext.CariHareketler.Add(yeniHareket);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            return _mapper.Map<CariHareketDto>(yeniHareket);
         }
-
-        if (belge.Tutar > kapatilacak.KalanTutar + 0.01m)
+        catch
         {
-            throw new BaseException("Kapama geri alma tutarı cari hareketle uyumsuz.", 400);
+            if (ownsTransaction && transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+
+            throw;
         }
-
-        var kapamaTutari = Math.Min(belge.Tutar, kapatilacak.KalanTutar);
-        var borcMu = kapatilacak.BorcTutari > 0m;
-
-        var yeniHareket = new CariHareket
-        {
-            CariKartId = belge.CariKartId,
-            HareketTarihi = belge.BelgeTarihi,
-            BelgeTuru = belge.BelgeTipi,
-            BelgeNo = belge.BelgeNo,
-            Aciklama = $"Tahsilat/ödeme cari kapama - {belge.BelgeNo}",
-            BorcTutari = borcMu ? 0m : kapamaTutari,
-            AlacakTutari = borcMu ? kapamaTutari : 0m,
-            KapananTutar = 0m,
-            KalanTutar = 0m,
-            ParaBirimi = belge.ParaBirimi,
-            VadeTarihi = null,
-            Durum = CariHareketDurumlari.Aktif,
-            KaynakModul = MuhasebeKaynakModulleri.TahsilatOdemeBelgesi,
-            KaynakId = belge.Id,
-            IliskiliCariHareketId = kapatilacak.Id,
-            KapandiMi = true
-        };
-
-        kapatilacak.KapananTutar += kapamaTutari;
-        kapatilacak.KalanTutar -= kapamaTutari;
-        if (kapatilacak.KalanTutar <= 0.01m)
-        {
-            kapatilacak.KalanTutar = 0m;
-            kapatilacak.KapandiMi = true;
-        }
-        else
-        {
-            kapatilacak.KapandiMi = false;
-        }
-
-        _dbContext.CariHareketler.Add(yeniHareket);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return _mapper.Map<CariHareketDto>(yeniHareket);
     }
 
     public async Task GeriAlAsync(int tahsilatOdemeBelgesiId, CancellationToken cancellationToken = default)

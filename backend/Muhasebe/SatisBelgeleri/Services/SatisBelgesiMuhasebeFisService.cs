@@ -156,12 +156,17 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                     staleSatirEntry.State = EntityState.Detached;
                 }
 
-                var belge = await _dbContext.SatisBelgeleri
-                    .Include(x => x.Satirlar.Where(s => !s.IsDeleted).OrderBy(s => s.SiraNo))
-                    .FirstOrDefaultAsync(x => x.Id == satisBelgesiId && !x.IsDeleted, cancellationToken);
-
-                if (belge is null)
-                    throw new BaseException("Satış belgesi bulunamadı.", 404);
+                // Diğer TÜM durum geçişi akışlarıyla (bkz. SatisBelgesiLockluOkumaHelper) AYNI,
+                // paylaşılan kilitli/güncel okuma - fiş oluşturma, eşzamanlı çalışan bir iptal/
+                // onay/red işlemiyle artık YARIŞAMAZ (bkz. görev: "yalnız iptal tarafını
+                // kilitlemenin yeterli olmadığı problemi düzelt"). Yukarıdaki DETACH adımı hâlâ
+                // GEREKLİDİR - WITH (UPDLOCK, ROWLOCK) DB'den taze veri getirse bile, bu DbContext
+                // ZATEN aynı Id için izlenen bir örneğe sahipse EF'in identity resolution'ı yine de
+                // o (artık bayat) izlenen örneği döndürür.
+                var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                    _dbContext, satisBelgesiId,
+                    q => q.Include(x => x.Satirlar.Where(s => !s.IsDeleted).OrderBy(s => s.SiraNo)),
+                    cancellationToken);
 
                 // Transaction içindeki NİHAİ kontrol (race condition önlemi) - ön kontrolle AYNI
                 // merkezi TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi kuralı; ön okumadan

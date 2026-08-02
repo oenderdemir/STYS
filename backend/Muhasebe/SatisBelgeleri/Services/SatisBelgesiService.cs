@@ -699,10 +699,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var belge = await Repository.FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                q => q.Include(x => x.Satirlar))
-                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+            // Belge, TÜM diğer durum geçişi akışlarıyla (bkz. SatisBelgesiLockluOkumaHelper)
+            // PAYLAŞILAN, kilitli/güncel bir DB okumasıyla alınır - bir onaya-gönderme işlemi,
+            // eşzamanlı çalışan bir iptal/red/onaylama işlemiyle artık YARIŞAMAZ.
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                _db, id, q => q.Include(x => x.Satirlar), cancellationToken);
 
             await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onayına gönderme", cancellationToken);
 
@@ -745,10 +746,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var belge = await Repository.FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                q => q.Include(x => x.Satirlar))
-                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                _db, id, q => q.Include(x => x.Satirlar), cancellationToken);
 
             await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "muhasebe onaylama", cancellationToken);
 
@@ -1214,30 +1213,41 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         if (string.IsNullOrWhiteSpace(redNedeni))
             throw new BaseException("Ret nedeni zorunludur.", errorCode: 400);
 
-        var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted)
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
-
-        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "reddetme", cancellationToken);
-
-        // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.ReddedilebilirMi TEK merkezi kaynaktır;
-        // UI (SatisBelgesiDto.ReddedilebilirMi) ve bu endpoint AYNI kuralı kullanır, farklı karar
-        // üretemez.
-        if (!TicariBelgeIslemYetkisi.ReddedilebilirMi(belge.TicariDurum, belge.MuhasebeDurumu))
+        // Diğer durum geçişi akışlarıyla (bkz. SatisBelgesiLockluOkumaHelper) AYNI kilitleme
+        // disiplini - önceden bu metodun kendi transaction'ı YOKTU, belge kilitsiz okunuyordu;
+        // bu, eşzamanlı bir iptal/onay işlemiyle yarışabilirdi.
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new BaseException(
-                $"Sadece Muhasebe Onayında durumundaki belgeler reddedilebilir. Mevcut durum: {belge.Durum}",
-                errorCode: 400);
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(_db, id, cancellationToken: cancellationToken);
+
+            await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "reddetme", cancellationToken);
+
+            // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.ReddedilebilirMi TEK merkezi
+            // kaynaktır; UI (SatisBelgesiDto.ReddedilebilirMi) ve bu endpoint AYNI kuralı kullanır,
+            // farklı karar üretemez.
+            if (!TicariBelgeIslemYetkisi.ReddedilebilirMi(belge.TicariDurum, belge.MuhasebeDurumu))
+            {
+                throw new BaseException(
+                    $"Sadece Muhasebe Onayında durumundaki belgeler reddedilebilir. Mevcut durum: {belge.Durum}",
+                    errorCode: 400);
+            }
+
+            belge.RedNedeni = redNedeni.Trim();
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.Hazir,
+                TicariBelgeMuhasebeDurumu.Reddedildi,
+                SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
-
-        belge.RedNedeni = redNedeni.Trim();
-        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
-            belge,
-            TicariBelgeDurumu.Hazir,
-            TicariBelgeMuhasebeDurumu.Reddedildi,
-            SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
-
-        await Repository.SaveChangesAsync(cancellationToken);
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -1272,23 +1282,14 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek ilişkisel bir sağlayıcıya (SQL Server)
-            // karşı desteklenir - InMemory sağlayıcıyla çalışan birim testleri FromSqlInterpolated'i
-            // ÇEVİREMEZ (bkz. RezervasyonService.UzatmaKaydet.AcquireReservationApplicationLockAsync
-            // ile AYNI, mevcut kod tabanı kalıbı). InMemory'de gerçek eşzamanlılık/kilit riski
-            // olmadığından, bu durumda düz (kilitsiz) bir okumaya düşülür.
-            var belgeSorgusu = _db.Database.IsRelational()
-                ? _db.SatisBelgeleri
-                    .FromSqlInterpolated($@"
-SELECT * FROM [muhasebe].[SatisBelgeleri] WITH (UPDLOCK, ROWLOCK)
-WHERE [Id] = {id} AND [IsDeleted] = 0")
-                : _db.SatisBelgeleri.Where(x => x.Id == id && !x.IsDeleted);
-
-            var belge = await belgeSorgusu
-                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-                .Include(x => x.CariKart)
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+            // Diğer durum geçişi akışlarıyla (bkz. SatisBelgesiLockluOkumaHelper) AYNI, paylaşılan
+            // kilitli/güncel okuma - operasyon girişinin artık transaction-dışı bir GetByIdAsync
+            // ön kontrolüne dayanmaması (bkz. görev 1/2), eşzamanlı bir onay/fiş oluşturma
+            // işlemiyle yarışmayı yapısal olarak imkânsız kılar.
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                _db, id,
+                q => q.Include(x => x.Satirlar.Where(s => !s.IsDeleted)).Include(x => x.CariKart),
+                cancellationToken);
 
             await validateEntryAsync(belge, cancellationToken);
 
@@ -1442,10 +1443,11 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
         // sorgusunu BİRİNCİ transaction commit/rollback olduktan SONRA, GÜNCEL durumla çalıştırır;
         // böylece iptal edilmiş bir hareket sonradan kapatılamaz, kapatılmış bir hareket de
         // sonradan (aynı anda yarışan bir istekle) iptal edilemez.
-        // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek ilişkisel bir sağlayıcıya (SQL Server) karşı
-        // desteklenir - InMemory sağlayıcıyla çalışan birim testleri FromSqlInterpolated'i
-        // ÇEVİREMEZ, bu yüzden orada düz (kilitsiz) bir okumaya düşülür (bkz. IptalEtOrtakAsync).
-        var hareketlerSorgusu = _db.Database.IsRelational()
+        // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek SQL Server sağlayıcısında istenir
+        // (Database.IsSqlServer() ile AÇIKÇA doğrulanır - Database.IsRelational() DEĞİL, bkz.
+        // SatisBelgesiLockluOkumaHelper). InMemory sağlayıcıyla çalışan birim testleri
+        // FromSqlInterpolated'i ÇEVİREMEZ, bu yüzden orada düz (kilitsiz) bir okumaya düşülür.
+        var hareketlerSorgusu = _db.Database.IsSqlServer()
             ? _db.CariHareketler.FromSqlInterpolated($@"
 SELECT * FROM [muhasebe].[CariHareketler] WITH (UPDLOCK, ROWLOCK)
 WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}

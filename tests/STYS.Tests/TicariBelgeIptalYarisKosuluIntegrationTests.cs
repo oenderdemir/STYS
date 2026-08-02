@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariHareketler.Entities;
@@ -22,7 +23,6 @@ using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Mapping;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Repositories;
-using STYS.TicariBelgeler.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using Xunit;
 
@@ -106,6 +106,57 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
     // Yardımcılar
     // ─────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// SatisBelgesiLockluOkumaHelper'ın ürettiği kilitli SELECT ([muhasebe].[SatisBelgeleri]
+    /// WITH (UPDLOCK, ROWLOCK)) SQL Server'a GÖNDERİLMEDEN HEMEN ÖNCE (yalnızca İLK eşleşen
+    /// komutta) iki tarafı bariyerde durdurup AYNI ANDA serbest bırakan bir DbCommandInterceptor -
+    /// PosTahsilatValorIntegrationTests.PosValorSelectBarrierInterceptor ile AYNI, mevcut kod
+    /// tabanı kalıbı. Bu, yarışın Task.WhenAll/Task.Run'ın rastgele zamanlamasına değil, GERÇEK
+    /// SQL Server satır kilidi rekabetine dayanmasını sağlar (Task.Delay/sleep KULLANILMAZ).
+    /// </summary>
+    private sealed class SatisBelgesiSelectBarrierInterceptor : DbCommandInterceptor
+    {
+        private readonly SemaphoreSlim _gate;
+        private readonly CountdownEvent _hazir;
+        private bool _tetiklendi;
+
+        public SatisBelgesiSelectBarrierInterceptor(SemaphoreSlim gate, CountdownEvent hazir)
+        {
+            _gate = gate;
+            _hazir = hazir;
+        }
+
+        public override async ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<System.Data.Common.DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_tetiklendi
+                && command.CommandText.Contains("SatisBelgeleri", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("UPDLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                _tetiklendi = true;
+                _hazir.Signal();
+                await _gate.WaitAsync(cancellationToken);
+            }
+
+            return await base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
+    private static StysAppDbContext CreateDbContextWithInterceptor(IInterceptor interceptor)
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseSqlServer(SatisBelgesiMuhasebeTestSupport.ConnectionString)
+            .AddInterceptors(interceptor)
+            .Options;
+        return new StysAppDbContext(
+            options,
+            new SatisBelgesiMuhasebeTestSupport.FakeCurrentUserAccessor(),
+            new SatisBelgesiMuhasebeTestSupport.FakeCurrentTenantAccessor());
+    }
+
     private CreateSatisBelgesiRequest YeniHizmetBelgesiRequest() => new()
     {
         BelgeNo = $"BLG-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
@@ -176,51 +227,94 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 1: Operasyonel ön okuma sonrası eşzamanlı onay+fiş oluşturma - iptal reddedilir, ters fiş oluşmaz
+    // 1: Operasyonel iptal ile MuhasebeOnaylaAsync GERÇEKTEN eşzamanlı yarışır - yalnızca biri
+    // başarılı olur, karışık/otoriter-olmayan bir durum asla oluşmaz
     // ─────────────────────────────────────────────────────────────
 
     [IntegrationFact]
-    public async Task OperasyonelIptal_EszamanliFisOlusturmaIleYarisirsa_ReddedilirVeTersFisOlusmaz()
+    public async Task OperasyonelIptal_OnaylamaIleGercektenEszamanliYarisirsa_YalnizcaBiriBasariliVeKarisikDurumOlusmaz()
     {
+        // Belge MuhasebeDurumu=Onayda durumunda başlar (Onaylandi DEĞİL) - hem operasyonel iptal
+        // (mali etkisi HENÜZ doğmamış, Onayda bunu tetiklemez) hem MuhasebeOnaylaAsync bu belgeyi
+        // AYNI ANDA hedefleyebilir.
         await using var setupCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var setupSatisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(setupCtx);
         var created = await setupSatisService.CreateAsync(YeniHizmetBelgesiRequest());
         await setupSatisService.MuhasebeOnayinaGonderAsync(created.Id!.Value);
-        await setupSatisService.MuhasebeOnaylaAsync(created.Id!.Value);
-        // Bu noktada MuhasebeDurumu=Onaylandi, MuhasebeFisId hâlâ null - fiş oluşturma ve
-        // operasyonel iptal artık AYNI satırı hedefleyen, gerçekten eşzamanlı iki transaction
-        // olarak yarışabilir.
 
-        await using var ctx1 = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        await using var ctx2 = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var oncekiBelge = await setupCtx.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == created.Id);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onayda, oncekiBelge.MuhasebeDurumu);
+
+        // Deterministik bariyer: her iki taraf da kilitli SELECT'i SQL Server'a göndermeden HEMEN
+        // önce senkronize olur - yarış Task.Run'ın rastgele zamanlamasına DEĞİL, GERÇEK satır
+        // kilidi rekabetine dayanır (Task.Delay/sleep KULLANILMAZ).
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var interceptorA = new SatisBelgesiSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new SatisBelgesiSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
+        await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
         var satisServiceA = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx1);
-        var ticariBelgeServiceA = new TicariBelgeService(
-            satisServiceA, taslakOlusturmaService: null!, new SatisBelgesiMuhasebeTestSupport.FakeUserAccessScopeService(), mapper: null!);
-        var fisServiceB = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(ctx2);
+        var satisServiceB = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx2);
 
-        var taskA = SafeCallAsync(() => ticariBelgeServiceA.IptalEtAsync(created.Id!.Value, CancellationToken.None));
-        var taskB = fisServiceB.MuhasebeFisiOlusturAsync(created.Id!.Value, CancellationToken.None);
+        var taskA = Task.Run(() => SafeCallAsync(() => satisServiceA.OperasyonelIptalEtAsync(created.Id!.Value, CancellationToken.None)));
+        var taskB = Task.Run(() => SafeCallAsync(() => satisServiceB.MuhasebeOnaylaAsync(created.Id!.Value, CancellationToken.None)));
+
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(10));
+        if (!ikisiDeHazir)
+        {
+            gate.Release(2);
+            Assert.Fail("Ön-koşul ihlali: iki taraf da beklenen sürede kilitli SELECT'e ulaşmadı.");
+        }
+        gate.Release(2);
 
         var (aBasarili, aHata) = await taskA;
-        var bDto = await taskB;
+        var (bBasarili, bHata) = await taskB;
 
-        // Operasyonel iptal, belge zaten Onaylandi olduğundan (fiş oluşturma ile eşzamanlı
-        // çalışsa dahi, kilitli/güncel okuma bunu HER durumda görür) reddedilmelidir.
-        Assert.False(aBasarili);
-        Assert.Contains("operasyon ekranından iptal edilemez", aHata);
-        Assert.NotNull(bDto.MuhasebeFisId);
+        // İki işlem aynı anda başarılı OLAMAZ, ama en az biri başarılı OLMALIDIR (satır kilidi
+        // ikisini de reddetmez - yalnızca sırayla işler).
+        Assert.False(aBasarili && bBasarili, $"İkisi de başarılı olamaz. A={aBasarili} ({aHata}), B={bBasarili} ({bHata})");
+        Assert.True(aBasarili || bBasarili, $"En az biri başarılı olmalı. A={aHata}, B={bHata}");
 
         await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var belgeDb = await verifyCtx.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == created.Id);
-        Assert.Equal(TicariBelgeDurumu.Hazir, belgeDb.TicariDurum);
-        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, belgeDb.MuhasebeDurumu);
-        Assert.True(belgeDb.MuhasebeFisId.HasValue);
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(verifyCtx);
 
-        // Ters fiş (veya herhangi bir iptal edilen fiş) hiç oluşmamalı - operasyonel iptal bu
-        // belgeye ait fiş üzerinde SatisBelgesiFisiIptalEtAsync'i ASLA çağırmaz.
-        Assert.False(await verifyCtx.MuhasebeFisler.AsNoTracking()
-            .AnyAsync(x => x.KaynakId == created.Id && x.Durum != MuhasebeFisDurumlari.Taslak && x.Durum != MuhasebeFisDurumlari.Onayli));
-        Assert.False(await verifyCtx.MuhasebeFisler.AsNoTracking().AnyAsync(x => x.IptalEdilenFisId != null && x.KaynakId == created.Id));
+        if (bBasarili)
+        {
+            // Onay kazandı: operasyonel iptal (kilitli/güncel okuması artık MuhasebeDurumu=
+            // Onaylandi'yi GÖRÜR) reddedilmiş olmalı - belge NET şekilde onaylanmış durumda kalır,
+            // İptal ile karışık bir kombinasyon oluşmaz.
+            Assert.False(aBasarili);
+            Assert.Contains("operasyon ekranından iptal edilemez", aHata);
+
+            Assert.Equal(TicariBelgeDurumu.Hazir, belgeDb.TicariDurum);
+            Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, belgeDb.MuhasebeDurumu);
+
+            // Onay kazandığı için fiş oluşturma da (ardından, ayrı bir adım olarak) SERBEST
+            // bırakılmalıdır - belge iptal edilmemiş, mali etkisi tam olarak ilerleyebilmelidir.
+            var fisDto = await fisService.MuhasebeFisiOlusturAsync(created.Id!.Value, CancellationToken.None);
+            Assert.True(fisDto.MuhasebeFisId.HasValue);
+        }
+        else
+        {
+            // İptal kazandı: onay (kilitli/güncel okuması artık TicariDurum=IptalEdildi'yi GÖRÜR)
+            // reddedilmiş olmalı - belge NET şekilde iptal edilmiş durumda kalır, üç otoriter alan
+            // (TicariDurum/MuhasebeDurumu/FaturalamaDurumu) TUTARLI şekilde IptalEdildi'dir.
+            Assert.True(aBasarili);
+            Assert.False(bBasarili);
+            Assert.Contains("Sadece Muhasebe Onayında durumundaki belgeler onaylanabilir", bHata);
+
+            Assert.Equal(TicariBelgeDurumu.IptalEdildi, belgeDb.TicariDurum);
+            Assert.Equal(TicariBelgeMuhasebeDurumu.IptalEdildi, belgeDb.MuhasebeDurumu);
+            Assert.Equal(TicariBelgeFaturalamaDurumu.IptalEdildi, belgeDb.FaturalamaDurumu);
+
+            // Onay zaten reddedildiği için MuhasebeDurumu hiçbir zaman Onaylandi'ya ulaşmamıştır -
+            // bu yüzden ardından denenen fiş oluşturma da (farklı bir gerekçeyle) reddedilmelidir.
+            await Assert.ThrowsAsync<BaseException>(
+                () => fisService.MuhasebeFisiOlusturAsync(created.Id!.Value, CancellationToken.None));
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -327,5 +421,77 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
             Assert.False(tekrarIptal.Basarili);
             Assert.Contains("kapat", tekrarIptal.HataMesaji!, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3: Aynı tahsilat belgesi için eşzamanlı İKİ çağrı - kısmi kapamada yalnızca TEK kapama
+    // hareketi oluşur, KalanTutar yalnızca BİR kez azalır, yetim/mükerrer kapama oluşmaz
+    // ─────────────────────────────────────────────────────────────
+
+    [IntegrationFact]
+    public async Task IkiEsZamanliAyniTahsilatCagrisi_KismiKapamadaYalnizcaTekKapamaHareketiOlusturur()
+    {
+        await using var setupCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var (satisServiceSetup, muhasebeFisServiceSetup) = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiServiceWithMuhasebeFisIptal(setupCtx);
+        var onaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisServiceSetup, YeniHizmetBelgesiRequest());
+
+        var fisServiceSetup = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(setupCtx);
+        var fisDto = await fisServiceSetup.MuhasebeFisiOlusturAsync(onaylanmis.Id!.Value, CancellationToken.None);
+        await muhasebeFisServiceSetup.OnaylaAsync(fisDto.MuhasebeFisId!.Value, CancellationToken.None);
+
+        var cariHareketId = (await setupCtx.CariHareketler.AsNoTracking()
+            .SingleAsync(x => x.KaynakId == onaylanmis.Id && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi)).Id;
+
+        // Kısmi kapama - hareketin tamamını KAPATMAYACAK bir tutar seçilir; iki eşzamanlı çağrının
+        // İKİSİ DE başarılı olsaydı KalanTutar İKİ kez düşerdi (mükerrer kapama) - bu test tam
+        // olarak bunu engeller.
+        var kismiTutar = Math.Round(onaylanmis.GenelToplam / 3m, 2);
+        var tahsilatBelge = new TahsilatOdemeBelgesi
+        {
+            BelgeNo = $"THS-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTarihi = new DateTime(2026, 3, 10),
+            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = _musteriKartId,
+            Tutar = kismiTutar,
+            ParaBirimi = "TRY",
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            KapatilacakCariHareketId = cariHareketId,
+            Durum = TahsilatOdemeBelgeDurumlari.Aktif
+        };
+        setupCtx.TahsilatOdemeBelgeleri.Add(tahsilatBelge);
+        await setupCtx.SaveChangesAsync();
+
+        // AYNI tahsilat belgesi için İKİ AYRI DbContext üzerinden, dışarıdan ambient transaction
+        // VERİLMEDEN (doğrudan) eşzamanlı çağrı - bir çift-tıklama/yeniden-deneme senaryosunu
+        // simüle eder (bkz. görev 1: CariHareketKapamaService artık kendi transaction'ını açar).
+        await using var ctx1 = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        await using var ctx2 = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var kapamaServiceA = CreateCariHareketKapamaService(ctx1);
+        var kapamaServiceB = CreateCariHareketKapamaService(ctx2);
+
+        var taskA = Task.Run(() => SafeCallAsync(async () =>
+            await kapamaServiceA.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(tahsilatBelge.Id, CancellationToken.None)));
+        var taskB = Task.Run(() => SafeCallAsync(async () =>
+            await kapamaServiceB.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(tahsilatBelge.Id, CancellationToken.None)));
+
+        var (aBasarili, aHata) = await taskA;
+        var (bBasarili, bHata) = await taskB;
+
+        Assert.True(aBasarili ^ bBasarili, $"Tam olarak biri başarılı olmalı. A={aBasarili} ({aHata}), B={bBasarili} ({bHata})");
+        Assert.Contains("daha önce oluşturulmuş", (aBasarili ? bHata : aHata)!, StringComparison.OrdinalIgnoreCase);
+
+        await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+
+        // Yalnızca TEK bir kapama hareketi oluşmuş olmalı - yetim/mükerrer kapama YOK.
+        var kapamaHareketleri = await verifyCtx.CariHareketler.AsNoTracking()
+            .Where(x => x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi && x.KaynakId == tahsilatBelge.Id)
+            .ToListAsync();
+        Assert.Single(kapamaHareketleri);
+
+        // KalanTutar yalnızca BİR kez azalmış olmalı (iki başarılı çağrı olsaydı iki kat düşerdi).
+        var hedefHareket = await verifyCtx.CariHareketler.AsNoTracking().SingleAsync(x => x.Id == cariHareketId);
+        Assert.Equal(onaylanmis.GenelToplam - kismiTutar, hedefHareket.KalanTutar);
+        Assert.Equal(kismiTutar, hedefHareket.KapananTutar);
+        Assert.False(hedefHareket.KapandiMi);
     }
 }

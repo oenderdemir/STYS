@@ -216,20 +216,16 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
     private static string TruncateToMax(string value, int maxLength)
         => value.Length <= maxLength ? value : value[..maxLength];
 
-    private async Task EnsureMuhasebeFisIdAsync(StysAppDbContext dbContext, int satisBelgesiId)
+    private async Task EnsureMuhasebeFisIdAsync(int satisBelgesiId)
     {
-        var belge = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == satisBelgesiId);
+        await using var verifyCtx = CreateDbContext();
+        var muhasebeFisId = await verifyCtx.SatisBelgeleri
+            .AsNoTracking()
+            .Where(x => x.Id == satisBelgesiId)
+            .Select(x => x.MuhasebeFisId)
+            .SingleAsync();
 
-        if (!belge.MuhasebeFisId.HasValue)
-        {
-            belge.MuhasebeFisId = await dbContext.MuhasebeFisler
-                .Where(x => x.KaynakId == satisBelgesiId)
-                .Select(x => x.Id)
-                .SingleAsync();
-            await dbContext.SaveChangesAsync();
-        }
-
-        Assert.True(belge.MuhasebeFisId.HasValue);
+        Assert.True(muhasebeFisId.HasValue);
     }
 
     private async Task<SatisBelgesiDto> CreateAndApproveOutgoingInvoiceAsync()
@@ -244,7 +240,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
         await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
 
-        await EnsureMuhasebeFisIdAsync(dbContext, created.Id.Value);
+        await EnsureMuhasebeFisIdAsync(created.Id.Value);
 
         await using var kesimCtx = CreateDbContext();
         var kesimService = CreateService(kesimCtx);
@@ -640,9 +636,11 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(seedCtx);
         var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(seedCtx, donemService);
         await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
-        await EnsureMuhasebeFisIdAsync(seedCtx, created.Id.Value);
+        await EnsureMuhasebeFisIdAsync(created.Id.Value);
 
-        await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+        await using var kesimCtx = CreateDbContext();
+        var kesimService = CreateService(kesimCtx);
+        await kesimService.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
 
         await using var snapshotCtx = CreateDbContext();
         var snapshotJson = await snapshotCtx.EBelgeSnapshots
@@ -721,7 +719,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
         var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
         await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
-        await EnsureMuhasebeFisIdAsync(dbContext, created.Id.Value);
+        await EnsureMuhasebeFisIdAsync(created.Id.Value);
 
         await using var kesimCtx = CreateDbContext();
         var kesimService = CreateService(kesimCtx);

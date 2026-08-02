@@ -196,7 +196,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         q => q.Include(x => x.Satirlar);
 
     private static Func<IQueryable<SatisBelgesi>, IQueryable<SatisBelgesi>> IncludeSatirlarVeCariKart =>
-        q => q.Include(x => x.Satirlar).Include(x => x.CariKart).Include(x => x.IadeEdilenBelge);
+        q => q.Include(x => x.Satirlar).Include(x => x.CariKart).Include(x => x.IadeEdilenBelge).Include(x => x.EBelgeKaydi);
 
     // ──────────────────────────────────────────────
     //  GetByIdAsync (ISatisBelgesiService) — nullable olmayan dönüş
@@ -247,6 +247,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             .Include(x => x.Satirlar)
             .Include(x => x.CariKart)
             .Include(x => x.IadeEdilenBelge)
+            .Include(x => x.EBelgeKaydi)
             .Where(x => !x.IsDeleted);
 
         // DAHİLİ erişim kapsamı filtresi (bkz. SatisBelgesiFilterDto.ErisimKapsamiTesisIdleri) -
@@ -865,7 +866,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             // FaturaKesAsync isteği, ikisi de sırayla bu satırı bekler; ikincisi birincinin
             // commit ettiği (artık FaturaKesildi olan) durumu görür ve aşağıdaki idempotent
             // dalından döner - ikinci bir numara TÜKETİLMEZ.
-            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(_db, id, cancellationToken: cancellationToken);
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                _db,
+                id,
+                q => q.Include(x => x.Satirlar)
+                    .Include(x => x.CariKart)
+                    .Include(x => x.IadeEdilenBelge)
+                        .ThenInclude(x => x!.EBelgeKaydi)
+                    .Include(x => x.EBelgeKaydi),
+                cancellationToken);
 
             if (!belge.BelgeTipi.OtomatikResmiNumaraUretilebilirMi())
             {
@@ -883,6 +892,10 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             // numara/durum ASLA üzerine yazılmaz.
             var resmiNumaraDoluMu = !string.IsNullOrWhiteSpace(belge.ResmiFaturaNo);
             var faturalamaKesildiMi = belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Kesildi;
+            var mevcutEBelgeKaydi = await _db.EBelgeKayitlari
+                .AsNoTracking()
+                .Include(x => x.Snapshot)
+                .FirstOrDefaultAsync(x => x.SatisBelgesiId == id, cancellationToken);
 
             if (resmiNumaraDoluMu && !faturalamaKesildiMi)
             {
@@ -907,12 +920,30 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                     errorCode: 500);
             }
 
-            // İdempotency: belge zaten kesilmişse yeni numara TÜKETİLMEZ, mevcut sonuç
-            // döndürülür — ama önce mevcut numaranın gerçekten tutarlı olduğu (format, yıl,
-            // seri, çakışma, sayaç durumu) doğrulanır; sessizce devam edilmez, herhangi bir
-            // tutarsızlıkta açık hata verilir.
             if (faturalamaKesildiMi)
             {
+                if (mevcutEBelgeKaydi is null)
+                {
+                    throw new BaseException(
+                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeKaydi bulunamadı; canlı verilerden yeni snapshot üretilemez. (Id: {id})",
+                        errorCode: 500);
+                }
+
+                if (mevcutEBelgeKaydi.Snapshot is null)
+                {
+                    throw new BaseException(
+                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeSnapshot bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        errorCode: 500);
+                }
+
+                if (!string.IsNullOrWhiteSpace(belge.EBelgeUuid)
+                    && !string.Equals(belge.EBelgeUuid, mevcutEBelgeKaydi.EBelgeUuid, StringComparison.Ordinal))
+                {
+                    throw new BaseException(
+                        $"Belgenin legacy EBelgeUuid değeri ({belge.EBelgeUuid}) ile EBelgeKaydi değeri ({mevcutEBelgeKaydi.EBelgeUuid}) uyuşmuyor; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        errorCode: 500);
+                }
+
                 if (!TryParseResmiFaturaNo(belge.ResmiFaturaNo!, out var mevcutSeriKodu, out var mevcutYil, out var mevcutSiraNo))
                 {
                     throw new BaseException(
@@ -969,6 +1000,13 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
                 await transaction.CommitAsync(cancellationToken);
                 return Mapper.Map<SatisBelgesiDto>(belge);
+            }
+
+            if (mevcutEBelgeKaydi is not null)
+            {
+                throw new BaseException(
+                    $"Belgede EBelgeKaydi bulunuyor ancak FaturalamaDurumu 'Kesildi' değil; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                    errorCode: 500);
             }
 
             // OTORİTER giriş kontrolü (bkz. C.6): TicariDurum=Hazir + MuhasebeDurumu=Onaylandi +
@@ -1089,12 +1127,57 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             var resmiFaturaNo = $"{seriKodu}{maliYil:0000}{siraNo:000000000}";
 
             belge.ResmiFaturaNo = resmiFaturaNo;
-            belge.FaturaKesimTarihi = DateTime.UtcNow;
+            var faturaKesimZamaniUtc = DateTime.UtcNow;
+            belge.FaturaKesimTarihi = faturaKesimZamaniUtc;
             SatisBelgesiDurumProjection.OtoriterDurumlariAta(
                 belge,
                 TicariBelgeDurumu.Hazir,
                 TicariBelgeMuhasebeDurumu.Onaylandi,
                 TicariBelgeFaturalamaDurumu.Kesildi);
+
+            var cariKart = belge.CariKart
+                ?? throw new BaseException("E-belge kanalını belirlemek için cari kart bilgisi bulunamadı.", errorCode: 400);
+
+            var eBelgeKanali = ResolveEBelgeKanali(cariKart);
+
+            var tesis = await _db.Tesisler
+                .AsNoTracking()
+                .Include(x => x.Kurum)
+                .FirstOrDefaultAsync(x => x.Id == belge.TesisId.Value, cancellationToken)
+                ?? throw new BaseException("Belgenin tesis bilgisi bulunamadı; e-belge oluşturulamaz.", errorCode: 400);
+
+            if (tesis.Kurum is null)
+            {
+                throw new BaseException("Belgenin düzenleyen kurum bilgisi bulunamadı; e-belge oluşturulamaz.", errorCode: 400);
+            }
+
+            if (tesis.KurumId != belge.KurumId)
+            {
+                throw new BaseException(
+                    "Belgenin tesis ve kurum bilgileri tutarsız; e-belge oluşturulamaz.",
+                    errorCode: 500);
+            }
+
+            var eBelgeKaydi = new EBelgeKaydi
+            {
+                KurumId = belge.KurumId,
+                SatisBelgesiId = belge.Id,
+                SatisBelgesi = belge,
+                EBelgeUuid = Guid.NewGuid().ToString("D"),
+                EBelgeKanali = eBelgeKanali,
+                Durum = EBelgeKaydiDurumu.SnapshotHazir
+            };
+
+            var snapshot = EBelgeSnapshotFactory.CreateSnapshot(
+                eBelgeKaydi,
+                belge,
+                tesis.Kurum,
+                tesis,
+                cariKart,
+                faturaKesimZamaniUtc);
+
+            eBelgeKaydi.Snapshot = snapshot;
+            _db.EBelgeKayitlari.Add(eBelgeKaydi);
 
             try
             {
@@ -1132,6 +1215,16 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         }
 
         return normalized;
+    }
+
+    private static EBelgeKanali ResolveEBelgeKanali(CariKart cariKart)
+    {
+        if (cariKart.EFaturaMukellefiMi)
+        {
+            return EBelgeKanali.EFatura;
+        }
+
+        return EBelgeKanali.EArsiv;
     }
 
     private static bool IsUniqueConflict(DbUpdateException ex)

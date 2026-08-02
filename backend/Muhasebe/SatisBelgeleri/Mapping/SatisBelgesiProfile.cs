@@ -19,6 +19,8 @@ public class SatisBelgesiProfile : Profile
             .ForMember(dest => dest.CariKartUnvanAdSoyad, opt => opt.MapFrom(src => src.CariKart != null ? src.CariKart.UnvanAdSoyad : null))
             .ForMember(dest => dest.CariKartTipi, opt => opt.MapFrom(src => src.CariKart != null ? src.CariKart.CariTipi : null))
             .ForMember(dest => dest.CariKartVergiNoTckn, opt => opt.MapFrom(src => src.CariKart != null ? src.CariKart.VergiNoTckn : null))
+            .ForMember(dest => dest.EBelgeUuid, opt => opt.MapFrom(src =>
+                src.EBelgeKaydi != null ? src.EBelgeKaydi.EBelgeUuid : src.EBelgeUuid))
             .ForMember(dest => dest.Satirlar, opt => opt.MapFrom(src =>
                 src.Satirlar
                     .Where(s => !s.IsDeleted)
@@ -60,6 +62,8 @@ public class SatisBelgesiProfile : Profile
         CreateMap<SatisBelgesiDto, SatisBelgesi>()
             .ForMember(dest => dest.Satirlar, opt => opt.Ignore())
             .ForMember(dest => dest.CariKart, opt => opt.Ignore())
+            .ForMember(dest => dest.EBelgeKaydi, opt => opt.Ignore())
+            .ForMember(dest => dest.EBelgeUuid, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.IsDeleted, opt => opt.Ignore());

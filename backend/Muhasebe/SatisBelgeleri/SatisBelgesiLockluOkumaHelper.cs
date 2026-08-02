@@ -76,6 +76,22 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
         {
             Detach(staleSatirEntry);
         }
+
+        foreach (var staleEBelgeKaydiEntry in dbContext.ChangeTracker.Entries<EBelgeKaydi>()
+                     .Where(e => e.Entity.SatisBelgesiId == id)
+                     .ToList())
+        {
+            Detach(staleEBelgeKaydiEntry);
+        }
+
+        foreach (var staleEBelgeSnapshotEntry in dbContext.ChangeTracker.Entries<EBelgeSnapshot>()
+                     .Where(e => e.Entity.EBelgeKaydiId != 0 &&
+                                 dbContext.ChangeTracker.Entries<EBelgeKaydi>()
+                                     .Any(k => k.Entity.Id == e.Entity.EBelgeKaydiId && k.Entity.SatisBelgesiId == id))
+                     .ToList())
+        {
+            Detach(staleEBelgeSnapshotEntry);
+        }
     }
 
     private static void Detach(EntityEntry entry)

@@ -66,7 +66,7 @@ Yalnız giden belgeler için resmî numara, UBL, PDF ve gönderim akışı tasar
 - `MusteriyeGonderildi`
 - `IptalEdildi`
 
-Bu alan çift yönlü ve çelişebilen bağımsız bir durum alanı olmamalıdır. Ayrıntılı issuance / delivery state `EBelgeKaydi` altında tutulmalı, `TicariBelgeFaturalamaDurumu` buradan üretilmelidir.
+Bu alan çift yönlü ve çelişebilen bağımsız bir durum alanı olmamalıdır. `TicariBelgeFaturalamaDurumu` mevcut `SatisBelgesi` yaşam döngüsünün otoriter projection’ıdır; `EBelgeKaydi`'ndan türetilmesi sonraki fazlarda ayrıca kararlaştırılabilir.
 
 ### Mevcut altyapı tespiti
 
@@ -86,7 +86,7 @@ Kod tabanındaki gözlem şu şekilde:
 - Önerilen ad `EBelgeKaydi`dır; `EBelgeBelge` yerine daha açıktır.
 - `EBelgeKaydi`, `SatisBelgesiId` üzerinden `SatisBelgesi`’ne bire bir bağlı olmalıdır.
 - `EBelgeKaydi` yalnız issuance, snapshot, render, artefakt ve delivery yaşam döngüsünün otoritesi olmalıdır.
-- `EBelgeKaydi` ayrıca e-Fatura / e-Arşiv kararının, snapshot şema sürümünün ve canonical hash’in otoritesidir.
+- `EBelgeKaydi` ayrıca e-Fatura / e-Arşiv kararının otoritesidir; snapshot şema sürümü, belge versiyonu, canonical JSON ve canonical hash ise yalnız `EBelgeSnapshot` üzerinde otoritedir. Aynı alanların `EBelgeKaydi` üzerinde ikinci writable kopyası oluşturulmaz.
 - `SatisBelgesi.EBelgeUuid` alanı varsa onun kaderi nettir: Faz 1 geçişinde legacy uyumluluk için yalnız okunur tutulur, writable otorite `EBelgeKaydi.EBelgeUuid` olur. İki tabloda bağımsız writable UUID bırakılmaz; gerekirse migration ile mevcut değerler `EBelgeKaydi`’na backfill edilir ve sonra `SatisBelgesi` tarafı read-only compatibility alanına düşürülür.
 
 ### Otorite tablosu
@@ -100,7 +100,7 @@ Kod tabanındaki gözlem şu şekilde:
 | Resmî numara | `SatisBelgesi` | Faz 1’de tek otorite buradadır; snapshot’a kopyalanabilir ama snapshot otoriter değildir. |
 | e-Fatura / e-Arşiv kararı | `EBelgeKaydi` | İssuance kararı burada otoriterdir. |
 | `EBelgeUuid` | `EBelgeKaydi` | UUID otoritesi burada olur; `SatisBelgesi` tarafı legacy uyumluluk dışında writable kalmaz. |
-| Snapshot şema sürümü / canonical hash | `EBelgeKaydi` | Snapshot bütünlüğü ve sürümleme burada otoriterdir. |
+| Snapshot şema sürümü / belge versiyonu / canonical JSON / canonical hash | `EBelgeSnapshot` | Bu alanlar snapshot’ta otoriterdir; `EBelgeKaydi` üzerinde writable kopya tutulmaz. |
 | UBL / PDF artefaktları | `EBelgeKaydi` + `EBelgeArtefakt` | Hash, yol, sürüm burada tutulur. |
 | Delivery / retry state | `EBelgeKaydi` + `EBelgeDeliveryAttempt` | Entegratör ve worker state burada olur. |
 | `TicariBelgeFaturalamaDurumu` | Projection | `EBelgeKaydi` üzerinden üretilir. |
@@ -206,6 +206,8 @@ Commit sonrası worker başlamadan işin kaybolmaması için transactional outbo
 - `SatisBelgesi` ticari gerçeğin kaydıdır.
 - `EBelgeSnapshot` bu gerçeğin issuance anındaki immutable izdüşümüdür.
 - aynı veri iki yerde editable olarak tutulmaz.
+- geçmiş belgeler için canlı `Kurum` / `Tesis` / `CariKart` verilerinden geriye dönük hukuki snapshot üretimi yapılmaz.
+- legacy belgeler read-only tutulur; yalnız güvenilir tarihsel veri varsa ayrıca veri envanteri/migration aşamasında ele alınır.
 
 Eksik olup `EBelgeSnapshot` içinde saklanması gerekenler:
 
@@ -239,10 +241,6 @@ Faz 2 sonrasındaki e-belge durumu örneği:
 
 Faz 1’de mevcut `SatisBelgesiDurumProjection` ve otoriter `FaturalamaDurumu` yapısı değiştirilmemelidir. İleride projection yapılacaksa bunun `SatisBelgesi + opsiyonel EBelgeKaydi` üzerinden üretileceği ayrı karar olarak not edilmelidir.
 
-Önerilen ana akış:
-
-`Taslak -> Hazir -> KesimBekliyor -> Kesildi -> Entegratorde -> Alindi / Hata -> Gonderildi`
-
 İptal hattı:
 
 `Kesildi / Gonderildi -> IptalTalebi -> IptalEdildi`
@@ -250,7 +248,7 @@ Faz 1’de mevcut `SatisBelgesiDurumProjection` ve otoriter `FaturalamaDurumu` y
 Kurallar:
 
 - resmî numara yalnız giden belgelerde üretilir.
-- UBL / PDF üretimi `Kesildi` state’ine bağlıdır.
+- UBL / PDF üretimi sonraki fazların konusudur; Faz 1’de yoktur.
 - delivery retry’ları belgeyi yeniden düzenlenebilir hale getirmez.
 - iptal edilmiş belgenin artefaktları korunur.
 

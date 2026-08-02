@@ -333,6 +333,23 @@ public static class SatisBelgesiMuhasebeTestSupport
             .Where(x => x.BelgeNo.Contains(uniqueSuffix))
             .Select(x => x.Id)
             .ToListAsync();
+
+        var eBelgeKaydiIds = await dbContext.EBelgeKayitlari
+            .Where(x => belgeIds.Contains(x.SatisBelgesiId))
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        if (eBelgeKaydiIds.Count > 0)
+        {
+            await dbContext.EBelgeSnapshots
+                .Where(x => eBelgeKaydiIds.Contains(x.EBelgeKaydiId))
+                .ExecuteDeleteAsync();
+
+            await dbContext.EBelgeKayitlari
+                .Where(x => eBelgeKaydiIds.Contains(x.Id))
+                .ExecuteDeleteAsync();
+        }
+
         var fisIds = new List<int>();
         if (belgeIds.Count > 0)
         {

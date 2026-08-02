@@ -186,6 +186,8 @@ public class StysAppDbContext : DbContext
     public DbSet<KdvIstisnaTanim> KdvIstisnaTanimlari => Set<KdvIstisnaTanim>();
     public DbSet<SatisBelgesi> SatisBelgeleri => Set<SatisBelgesi>();
     public DbSet<SatisBelgesiSatiri> SatisBelgesiSatirlari => Set<SatisBelgesiSatiri>();
+    public DbSet<EBelgeKaydi> EBelgeKayitlari => Set<EBelgeKaydi>();
+    public DbSet<EBelgeSnapshot> EBelgeSnapshots => Set<EBelgeSnapshot>();
     public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
@@ -2772,8 +2774,7 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.KurumId);
 
             entity.HasIndex(x => new { x.KurumId, x.ResmiFaturaNo })
-                .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [ResmiFaturaNo] IS NOT NULL");
+                .IsUnique();
 
             // Karşı taraf fatura numarası GLOBAL benzersiz değildir - tekillik anahtarı
             // KurumId + CariKartId + KarsiTarafFaturaNo'dur. Filtre yalnızca aktif, dolu ve
@@ -2791,6 +2792,74 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EBelgeKaydi>(entity =>
+        {
+            entity.ToTable("EBelgeKayitlari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_EBelgeKayitlari_Durum",
+                    "[Durum] IN (1)");
+            });
+
+            entity.Property(x => x.EBelgeUuid)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.SatisBelgesiId)
+                .IsRequired();
+
+            entity.Property(x => x.EBelgeKanali)
+                .IsRequired();
+
+            entity.Property(x => x.Durum)
+                .IsRequired();
+
+            entity.HasIndex(x => x.SatisBelgesiId)
+                .IsUnique();
+
+            entity.HasIndex(x => x.EBelgeUuid)
+                .IsUnique();
+
+            entity.HasOne(x => x.SatisBelgesi)
+                .WithOne(x => x.EBelgeKaydi)
+                .HasForeignKey<EBelgeKaydi>(x => x.SatisBelgesiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EBelgeSnapshot>(entity =>
+        {
+            entity.ToTable("EBelgeSnapshots", muhasebeSchema);
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.BelgeVersiyonu)
+                .IsRequired();
+
+            entity.Property(x => x.SnapshotSchemaVersion)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(x => x.CanonicalJson)
+                .HasColumnType("nvarchar(max)")
+                .IsRequired();
+
+            entity.Property(x => x.CanonicalSha256)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.HasIndex(x => new { x.EBelgeKaydiId, x.BelgeVersiyonu })
+                .IsUnique();
+
+            entity.HasOne(x => x.EBelgeKaydi)
+                .WithOne(x => x.Snapshot)
+                .HasForeignKey<EBelgeSnapshot>(x => x.EBelgeKaydiId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<KurumFaturaNumaraSayaci>(entity =>
@@ -2954,6 +3023,13 @@ public class StysAppDbContext : DbContext
         {
             var entity = entry.Entity;
             var originalState = entry.State;
+
+            if (entity is STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeSnapshot &&
+                (originalState == EntityState.Modified || originalState == EntityState.Deleted))
+            {
+                throw new BaseException("EBelgeSnapshot oluşturulduktan sonra güncellenemez veya silinemez.", 400);
+            }
+
             switch (entry.State)
             {
                 case EntityState.Added:

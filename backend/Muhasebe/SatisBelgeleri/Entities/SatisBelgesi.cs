@@ -69,8 +69,13 @@ public class SatisBelgesi : BaseEntity<int>, ITenantEntity
     public string? Aciklama { get; set; }
     public string? RedNedeni { get; set; }
 
+    /// <summary>
+    /// GERİYE UYUMLULUK ALANI — yeni kesimlerde yazılmaz. Oturmuş kayıtlar için okunabilir
+    /// kalabilir; yeni writable otorite EBelgeKaydi.EBelgeUuid'dir.
+    /// </summary>
     public string? ResmiFaturaNo { get; set; }
     public string? EBelgeUuid { get; set; }
+    public EBelgeKaydi? EBelgeKaydi { get; set; }
 
     /// <summary>
     /// Karşı tarafın (tedarikçi/müşteri) kendi düzenlediği fatura üzerindeki numara. Yalnızca

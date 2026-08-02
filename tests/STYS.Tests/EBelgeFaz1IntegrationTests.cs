@@ -410,13 +410,31 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
 
+        var sayacOnce = await dbContext.KurumFaturaNumaraSayaclari
+            .AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "EBF");
+
         await using var kesimCtx = CreateDbContext();
         var kesimService = CreateService(kesimCtx);
         var ex = await Assert.ThrowsAsync<BaseException>(
             () => kesimService.FaturaKesAsync(created.Id!.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None));
 
         Assert.Contains("giden belgeler", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(await dbContext.EBelgeKayitlari.AnyAsync(x => x.SatisBelgesiId == created.Id.Value));
+
+        await using var verifyCtx = CreateDbContext();
+        var belge = await verifyCtx.SatisBelgeleri
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == created.Id.Value);
+
+        Assert.Null(belge.ResmiFaturaNo);
+        Assert.False(await verifyCtx.EBelgeKayitlari.IgnoreQueryFilters().AnyAsync(x => x.SatisBelgesiId == created.Id.Value));
+        Assert.False(await verifyCtx.EBelgeSnapshots.IgnoreQueryFilters().AnyAsync(x => x.EBelgeKaydi.SatisBelgesiId == created.Id.Value));
+
+        var sayacSonra = await verifyCtx.KurumFaturaNumaraSayaclari
+            .AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "EBF");
+
+        Assert.Equal(sayacOnce.SonNumara, sayacSonra.SonNumara);
     }
 
     [IntegrationFact]

@@ -1244,18 +1244,53 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
     //  IptalEtAsync
     // ──────────────────────────────────────────────
 
-    public async Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
+        => IptalEtOrtakAsync(id, ValidateMuhasebeIptalYetkisiAsync, cancellationToken);
+
+    /// <inheritdoc />
+    public Task OperasyonelIptalEtAsync(int id, CancellationToken cancellationToken = default)
+        => IptalEtOrtakAsync(id, ValidateOperasyonelIptalYetkisiAsync, cancellationToken);
+
+    /// <summary>
+    /// İki giriş noktasının (muhasebe/operasyon) PAYLAŞTIĞI ortak iptal akışı - hangi girişten
+    /// çağrıldığını bir boolean/flag ile TAŞIMAZ (bkz. görev 1); bunun yerine her giriş kendi
+    /// yetki kontrol metodunu (<paramref name="validateEntryAsync"/>) parametre olarak geçirir.
+    /// Belge, transaction İÇİNDE, WITH (UPDLOCK, ROWLOCK) ile GÜNCEL DB durumuyla kilitli okunur -
+    /// operasyon girişinin artık transaction-dışı bir GetByIdAsync ön kontrolüne dayanmaması
+    /// (bkz. görev 1/2), eşzamanlı bir onay/fiş oluşturma işlemiyle yarışmayı yapısal olarak
+    /// imkânsız kılar: entry-özel yetki kontrolü ÇALIŞTIĞI ANDA belge satırı zaten kilitlidir,
+    /// başka hiçbir transaction bu satırı bu transaction commit/rollback olana kadar değiştiremez.
+    /// Operasyonel girişin (ValidateOperasyonelIptalYetkisiAsync) yetki kontrolü geçtiğinde
+    /// belge.MuhasebeFisId KESİN olarak null'dur (aksi halde reddedilmiş olurdu) - bu yüzden
+    /// aşağıdaki "if (belge.MuhasebeFisId.HasValue)" dalı operasyonel giriş için YAPISAL olarak
+    /// hiç çalışmaz; SatisBelgesiFisiIptalEtAsync/ters kayıt operasyonel girişten ASLA tetiklenmez.
+    /// </summary>
+    private async Task IptalEtOrtakAsync(
+        int id, Func<SatisBelgesi, CancellationToken, Task> validateEntryAsync, CancellationToken cancellationToken)
     {
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var belge = await _db.SatisBelgeleri
+            // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek ilişkisel bir sağlayıcıya (SQL Server)
+            // karşı desteklenir - InMemory sağlayıcıyla çalışan birim testleri FromSqlInterpolated'i
+            // ÇEVİREMEZ (bkz. RezervasyonService.UzatmaKaydet.AcquireReservationApplicationLockAsync
+            // ile AYNI, mevcut kod tabanı kalıbı). InMemory'de gerçek eşzamanlılık/kilit riski
+            // olmadığından, bu durumda düz (kilitsiz) bir okumaya düşülür.
+            var belgeSorgusu = _db.Database.IsRelational()
+                ? _db.SatisBelgeleri
+                    .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[SatisBelgeleri] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {id} AND [IsDeleted] = 0")
+                : _db.SatisBelgeleri.Where(x => x.Id == id && !x.IsDeleted);
+
+            var belge = await belgeSorgusu
                 .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
                 .Include(x => x.CariKart)
-                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
+                .FirstOrDefaultAsync(cancellationToken)
                 ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
 
-            await ValidateTicariBelgeIptalAsync(belge, cancellationToken);
+            await validateEntryAsync(belge, cancellationToken);
 
             if (belge.MuhasebeFisId.HasValue)
             {
@@ -1296,14 +1331,53 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         }
     }
 
-    private async Task ValidateTicariBelgeIptalAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    private async Task ValidateMuhasebeIptalYetkisiAsync(SatisBelgesi belge, CancellationToken cancellationToken)
     {
         // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.IptalEdilebilirMi TEK merkezi
         // kaynaktır; UI (SatisBelgesiDto.IptalEdilebilirMi) ve bu endpoint AYNI kuralı kullanır,
-        // farklı karar üretemez (bkz. görev 3). Mevcut izin kapsamı GENİŞLETİLMEZ, yalnızca karar
-        // kaynağı değişir; iki ayrı hata mesajı (zaten iptal / fatura kesilmiş) korunur.
+        // farklı karar üretemez (bkz. görev 3, c799337). Mevcut izin kapsamı GENİŞLETİLMEZ,
+        // yalnızca karar kaynağı değişir; iki ayrı hata mesajı (zaten iptal / fatura kesilmiş)
+        // korunur.
         if (!TicariBelgeIslemYetkisi.IptalEdilebilirMi(belge.TicariDurum, belge.FaturalamaDurumu))
         {
+            if (belge.TicariDurum == TicariBelgeDurumu.IptalEdildi)
+            {
+                throw new BaseException("Belge zaten iptal edilmiş.", 400);
+            }
+
+            throw new BaseException(
+                $"'{belge.Durum}' durumundaki bir belge iptal edilemez. " +
+                "Fatura kesilmiş veya müşteriye gönderilmiş belgeler iptal edilemez.",
+                400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && (!belge.TesisId.HasValue || !scope.TesisIds.Contains(belge.TesisId.Value)))
+        {
+            throw new BaseException("Bu belge için yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    /// <summary>
+    /// Operasyon sınırı (ui/ticari-belgeler) için yetki kontrolü - artık TicariBelgeService'in
+    /// transaction-dışı bir GetByIdAsync ön okumasına DEĞİL, bu metodun aldığı, aynı transaction
+    /// içinde WITH (UPDLOCK, ROWLOCK) ile kilitli okunmuş GÜNCEL <paramref name="belge"/> nesnesine
+    /// dayanır (bkz. görev 1/2). Mali etkisi doğmuş (bağlı muhasebe fişi VEYA
+    /// MuhasebeDurumu=Onaylandi) bir belge bu girişten HİÇBİR KOŞULDA iptal edilemez.
+    /// </summary>
+    private async Task ValidateOperasyonelIptalYetkisiAsync(SatisBelgesi belge, CancellationToken cancellationToken)
+    {
+        if (!TicariBelgeIslemYetkisi.OperasyonelIptalEdilebilirMi(
+                belge.TicariDurum, belge.MuhasebeDurumu, belge.FaturalamaDurumu, belge.MuhasebeFisId))
+        {
+            if (TicariBelgeIslemYetkisi.MaliEtkisiOlusmusMu(belge.MuhasebeDurumu, belge.MuhasebeFisId))
+            {
+                throw new BaseException(
+                    "Bu belge muhasebece onaylanmış ve/veya bağlı bir muhasebe fişine sahip; operasyon ekranından iptal edilemez. " +
+                    "İlgili işlem yalnızca Muhasebe Satış/Alış Belgeleri ekranından yapılabilir.",
+                    403);
+            }
+
             if (belge.TicariDurum == TicariBelgeDurumu.IptalEdildi)
             {
                 throw new BaseException("Belge zaten iptal edilmiş.", 400);
@@ -1361,13 +1435,26 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
     private async Task IptalEtCariHareketleriAsync(SatisBelgesi belge, CancellationToken cancellationToken)
     {
-        var hareketler = await _db.CariHareketler
-            .Where(x =>
-                !x.IsDeleted
-                && x.Durum == CariHareketDurumlari.Aktif
-                && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
-                && x.KaynakId == belge.Id)
-            .ToListAsync(cancellationToken);
+        // WITH (UPDLOCK, ROWLOCK) - bu belgeye ait cari hareketler, kapama durumu okunmadan ÖNCE
+        // kilitlenir (bkz. görev 3). CariHareketKapamaService.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync
+        // AYNI satırları AYNI kilitleme disipliniyle okur - iki işlem yarışırsa (biri iptal
+        // etmeye, diğeri kapatmaya çalışırsa) ikinci gelen bu satır kilidini bekler ve kendi
+        // sorgusunu BİRİNCİ transaction commit/rollback olduktan SONRA, GÜNCEL durumla çalıştırır;
+        // böylece iptal edilmiş bir hareket sonradan kapatılamaz, kapatılmış bir hareket de
+        // sonradan (aynı anda yarışan bir istekle) iptal edilemez.
+        // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek ilişkisel bir sağlayıcıya (SQL Server) karşı
+        // desteklenir - InMemory sağlayıcıyla çalışan birim testleri FromSqlInterpolated'i
+        // ÇEVİREMEZ, bu yüzden orada düz (kilitsiz) bir okumaya düşülür (bkz. IptalEtOrtakAsync).
+        var hareketlerSorgusu = _db.Database.IsRelational()
+            ? _db.CariHareketler.FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[CariHareketler] WITH (UPDLOCK, ROWLOCK)
+WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
+    AND [KaynakModul] = {MuhasebeKaynakModulleri.SatisBelgesi} AND [KaynakId] = {belge.Id}")
+            : _db.CariHareketler.Where(x =>
+                !x.IsDeleted && x.Durum == CariHareketDurumlari.Aktif
+                && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi && x.KaynakId == belge.Id);
+
+        var hareketler = await hareketlerSorgusu.ToListAsync(cancellationToken);
 
         var kapatilmisHareketVar = hareketler.Any(x =>
         {

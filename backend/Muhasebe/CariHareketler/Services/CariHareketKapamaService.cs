@@ -79,9 +79,25 @@ public class CariHareketKapamaService : ICariHareketKapamaService
             throw new BaseException("Bu tahsilat/ödeme belgesi için cari hareket daha önce oluşturulmuş.", 400);
         }
 
-        var kapatilacak = await _cariHareketRepository.GetByIdAsync(
-            belge.KapatilacakCariHareketId.Value,
-            q => q.Include(x => x.CariKart));
+        // WITH (UPDLOCK, ROWLOCK) - kapatılacak cari hareket, Durum/KapandiMi/KalanTutar
+        // OKUNMADAN ÖNCE kilitlenir (bkz. görev 3). SatisBelgesiService.IptalEtCariHareketleriAsync
+        // AYNI satırı AYNI kilitleme disipliniyle okur - bu belge iptali ile bu kapama işlemi
+        // eşzamanlı çalışırsa, ikinci gelen transaction birincinin commit/rollback'ini bekler ve
+        // GÜNCEL (artık Iptal olabilecek) durumla değerlendirir; iptal edilmiş bir hareket bu
+        // yüzden sonradan kapatılamaz.
+        // WITH (UPDLOCK, ROWLOCK) yalnızca gerçek ilişkisel bir sağlayıcıya (SQL Server) karşı
+        // desteklenir - InMemory sağlayıcıyla çalışan birim testleri (ör. RezervasyonGelirTahakkukService
+        // üzerinden bu metodu dolaylı çağıranlar) FromSqlInterpolated'i ÇEVİREMEZ, bu yüzden orada
+        // düz (kilitsiz) bir okumaya düşülür.
+        var kapatilacakSorgusu = _dbContext.Database.IsRelational()
+            ? _dbContext.CariHareketler.FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[CariHareketler] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {belge.KapatilacakCariHareketId.Value} AND [IsDeleted] = 0")
+            : _dbContext.CariHareketler.Where(x => x.Id == belge.KapatilacakCariHareketId.Value && !x.IsDeleted);
+
+        var kapatilacak = await kapatilacakSorgusu
+            .Include(x => x.CariKart)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (kapatilacak is null)
         {

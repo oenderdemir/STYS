@@ -100,20 +100,14 @@ public class TicariBelgeService : ITicariBelgeService
         await EnsureBelgeErisimKapsamindaAsync(id, cancellationToken);
 
         // Mali etkisi doğmuş (bağlı bir muhasebe fişi olan VE/VEYA muhasebece onaylanmış) bir
-        // belge operasyon ekranından ASLA iptal edilemez (bkz. görev 2) - aksi halde fiş ters
-        // kayda alınırken kaynak belgenin cari/stok hareketleri ve durumları güncellenmeden
-        // kalabiliyordu. Bu belgeler yalnızca Muhasebe Satış/Alış Belgeleri ekranından
-        // (MuhasebeSatisBelgeleriYonetimi.Manage) iptal edilebilir.
-        var belge = await _satisBelgesiService.GetByIdAsync(id, cancellationToken);
-        if (TicariBelgeIslemYetkisi.MaliEtkisiOlusmusMu(belge.MuhasebeDurumu, belge.MuhasebeFisId))
-        {
-            throw new BaseException(
-                "Bu belge muhasebece onaylanmış ve/veya bağlı bir muhasebe fişine sahip; operasyon ekranından iptal edilemez. " +
-                "İlgili işlem yalnızca Muhasebe Satış/Alış Belgeleri ekranından yapılabilir.",
-                403);
-        }
-
-        await _satisBelgesiService.IptalEtAsync(id, cancellationToken);
+        // belge operasyon ekranından ASLA iptal edilemez (bkz. görev 2, c799337). Bu karar ARTIK
+        // burada, transaction-dışı bir GetByIdAsync ön okumasıyla VERİLMEZ (bu, eşzamanlı bir
+        // onay/fiş oluşturma işlemiyle yarışabilen, bayat bir kontrol olurdu) - ISatisBelgesiService.
+        // OperasyonelIptalEtAsync bu KARARI, KENDİ transaction'ı içinde, kilitli/güncel bir DB
+        // okumasına dayanarak verir (bkz. görev 1/2). Bu belgeler yalnızca Muhasebe Satış/Alış
+        // Belgeleri ekranından (MuhasebeSatisBelgeleriYonetimi.Manage, ISatisBelgesiService.
+        // IptalEtAsync) iptal edilebilir.
+        await _satisBelgesiService.OperasyonelIptalEtAsync(id, cancellationToken);
     }
 
     // ──────────────────────────────────────────────

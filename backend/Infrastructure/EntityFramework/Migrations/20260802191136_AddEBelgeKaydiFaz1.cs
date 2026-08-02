@@ -29,6 +29,12 @@ END
                 schema: "muhasebe",
                 table: "SatisBelgeleri");
 
+            migrationBuilder.AddUniqueConstraint(
+                name: "AK_SatisBelgeleri_Id_KurumId",
+                schema: "muhasebe",
+                table: "SatisBelgeleri",
+                columns: new[] { "Id", "KurumId" });
+
             migrationBuilder.CreateTable(
                 name: "EBelgeKayitlari",
                 schema: "muhasebe",
@@ -53,14 +59,13 @@ END
                 {
                     table.PrimaryKey("PK_EBelgeKayitlari", x => x.Id);
                     table.CheckConstraint("CK_EBelgeKayitlari_Durum", "[Durum] IN (1)");
-                    table.ForeignKey(
-                        name: "FK_EBelgeKayitlari_SatisBelgeleri_SatisBelgesiId",
-                        column: x => x.SatisBelgesiId,
-                        principalSchema: "muhasebe",
-                        principalTable: "SatisBelgeleri",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
                 });
+
+            migrationBuilder.AddUniqueConstraint(
+                name: "AK_EBelgeKayitlari_Id_KurumId",
+                schema: "muhasebe",
+                table: "EBelgeKayitlari",
+                columns: new[] { "Id", "KurumId" });
 
             migrationBuilder.CreateTable(
                 name: "EBelgeSnapshots",
@@ -86,14 +91,27 @@ END
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_EBelgeSnapshots", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_EBelgeSnapshots_EBelgeKayitlari_EBelgeKaydiId",
-                        column: x => x.EBelgeKaydiId,
-                        principalSchema: "muhasebe",
-                        principalTable: "EBelgeKayitlari",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_EBelgeKayitlari_SatisBelgeleri_SatisBelgesiId_KurumId",
+                schema: "muhasebe",
+                table: "EBelgeKayitlari",
+                columns: new[] { "SatisBelgesiId", "KurumId" },
+                principalSchema: "muhasebe",
+                principalTable: "SatisBelgeleri",
+                principalColumns: new[] { "Id", "KurumId" },
+                onDelete: ReferentialAction.Restrict);
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_EBelgeSnapshots_EBelgeKayitlari_EBelgeKaydiId_KurumId",
+                schema: "muhasebe",
+                table: "EBelgeSnapshots",
+                columns: new[] { "EBelgeKaydiId", "KurumId" },
+                principalSchema: "muhasebe",
+                principalTable: "EBelgeKayitlari",
+                principalColumns: new[] { "Id", "KurumId" },
+                onDelete: ReferentialAction.Cascade);
 
             migrationBuilder.CreateIndex(
                 name: "IX_SatisBelgeleri_KurumId_ResmiFaturaNo",
@@ -141,6 +159,11 @@ END
             migrationBuilder.DropTable(
                 name: "EBelgeKayitlari",
                 schema: "muhasebe");
+
+            migrationBuilder.DropUniqueConstraint(
+                name: "AK_SatisBelgeleri_Id_KurumId",
+                schema: "muhasebe",
+                table: "SatisBelgeleri");
 
             migrationBuilder.DropIndex(
                 name: "IX_SatisBelgeleri_KurumId_ResmiFaturaNo",

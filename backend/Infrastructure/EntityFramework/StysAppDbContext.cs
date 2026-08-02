@@ -2774,7 +2774,8 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.KurumId);
 
             entity.HasIndex(x => new { x.KurumId, x.ResmiFaturaNo })
-                .IsUnique();
+                .IsUnique()
+                .HasFilter("[ResmiFaturaNo] IS NOT NULL");
 
             // Karşı taraf fatura numarası GLOBAL benzersiz değildir - tekillik anahtarı
             // KurumId + CariKartId + KarsiTarafFaturaNo'dur. Filtre yalnızca aktif, dolu ve
@@ -2792,6 +2793,8 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasAlternateKey(x => new { x.Id, x.KurumId });
         });
 
         modelBuilder.Entity<EBelgeKaydi>(entity =>
@@ -2827,8 +2830,11 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.SatisBelgesi)
                 .WithOne(x => x.EBelgeKaydi)
-                .HasForeignKey<EBelgeKaydi>(x => x.SatisBelgesiId)
+                .HasForeignKey<EBelgeKaydi>(x => new { x.SatisBelgesiId, x.KurumId })
+                .HasPrincipalKey<SatisBelgesi>(x => new { x.Id, x.KurumId })
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasAlternateKey(x => new { x.Id, x.KurumId });
         });
 
         modelBuilder.Entity<EBelgeSnapshot>(entity =>
@@ -2858,7 +2864,8 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.EBelgeKaydi)
                 .WithOne(x => x.Snapshot)
-                .HasForeignKey<EBelgeSnapshot>(x => x.EBelgeKaydiId)
+                .HasForeignKey<EBelgeSnapshot>(x => new { x.EBelgeKaydiId, x.KurumId })
+                .HasPrincipalKey<EBelgeKaydi>(x => new { x.Id, x.KurumId })
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -63,6 +64,30 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
 
     private static void DetachTrackedEntities(StysAppDbContext dbContext, int id)
     {
+        var staleCariKartIds = dbContext.ChangeTracker.Entries<SatisBelgesi>()
+            .Where(e => e.Entity.Id == id && e.Entity.CariKartId.HasValue)
+            .Select(e => e.Entity.CariKartId!.Value)
+            .ToHashSet();
+
+        var staleEBelgeKaydiIds = dbContext.ChangeTracker.Entries<EBelgeKaydi>()
+            .Where(e => e.Entity.SatisBelgesiId == id)
+            .Select(e => e.Entity.Id)
+            .ToHashSet();
+
+        foreach (var staleCariKartEntry in dbContext.ChangeTracker.Entries<CariKart>()
+                     .Where(e => staleCariKartIds.Contains(e.Entity.Id))
+                     .ToList())
+        {
+            Detach(staleCariKartEntry);
+        }
+
+        foreach (var staleEBelgeSnapshotEntry in dbContext.ChangeTracker.Entries<EBelgeSnapshot>()
+                     .Where(e => staleEBelgeKaydiIds.Contains(e.Entity.EBelgeKaydiId))
+                     .ToList())
+        {
+            Detach(staleEBelgeSnapshotEntry);
+        }
+
         foreach (var staleBelgeEntry in dbContext.ChangeTracker.Entries<SatisBelgesi>()
                      .Where(e => e.Entity.Id == id)
                      .ToList())
@@ -82,15 +107,6 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
                      .ToList())
         {
             Detach(staleEBelgeKaydiEntry);
-        }
-
-        foreach (var staleEBelgeSnapshotEntry in dbContext.ChangeTracker.Entries<EBelgeSnapshot>()
-                     .Where(e => e.Entity.EBelgeKaydiId != 0 &&
-                                 dbContext.ChangeTracker.Entries<EBelgeKaydi>()
-                                     .Any(k => k.Entity.Id == e.Entity.EBelgeKaydiId && k.Entity.SatisBelgesiId == id))
-                     .ToList())
-        {
-            Detach(staleEBelgeSnapshotEntry);
         }
     }
 

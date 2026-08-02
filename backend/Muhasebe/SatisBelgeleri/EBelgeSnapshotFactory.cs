@@ -62,17 +62,19 @@ internal static class EBelgeSnapshotFactory
                 tesis.Adres,
                 tesis.Telefon,
                 tesis.Eposta),
-            new EBelgeCanonicalCariSection(
+            new EBelgeCanonicalAliciSection(
+                belge.MusteriUnvan,
+                belge.MusteriAdSoyad,
+                belge.MusteriVergiNo,
+                belge.MusteriTcKimlikNo,
+                belge.MusteriVergiDairesi,
+                belge.MusteriAdres,
+                belge.MusteriEposta,
+                belge.MusteriTelefon,
+                belge.KurumsalMi),
+            new EBelgeCanonicalCariKartSection(
                 cariKart.Id,
                 cariKart.CariKodu,
-                cariKart.UnvanAdSoyad,
-                cariKart.VergiNoTckn,
-                cariKart.VergiDairesi,
-                cariKart.Adres,
-                cariKart.Telefon,
-                cariKart.Eposta,
-                cariKart.Il,
-                cariKart.Ilce,
                 cariKart.EFaturaMukellefiMi,
                 cariKart.EArsivKapsamindaMi),
             new EBelgeCanonicalIadeSection(
@@ -85,7 +87,7 @@ internal static class EBelgeSnapshotFactory
                 null,
                 null,
                 null,
-                null),
+                belge.VadeTarihi),
             belge.ToplamMatrah,
             belge.ToplamKdv,
             belge.GenelToplam,
@@ -138,7 +140,8 @@ internal static class EBelgeSnapshotFactory
         EBelgeCanonicalBelgeSection Belge,
         EBelgeCanonicalKurumSection Kurum,
         EBelgeCanonicalTesisSection Tesis,
-        EBelgeCanonicalCariSection Cari,
+        EBelgeCanonicalAliciSection Alici,
+        EBelgeCanonicalCariKartSection CariKart,
         EBelgeCanonicalIadeSection? Iade,
         EBelgeCanonicalOdemeSection Odeme,
         decimal ToplamMatrah,
@@ -178,17 +181,20 @@ internal static class EBelgeSnapshotFactory
         string Telefon,
         string? Eposta);
 
-    private sealed record EBelgeCanonicalCariSection(
+    private sealed record EBelgeCanonicalAliciSection(
+        string? MusteriUnvan,
+        string? MusteriAdSoyad,
+        string? MusteriVergiNo,
+        string? MusteriTcKimlikNo,
+        string? MusteriVergiDairesi,
+        string? MusteriAdres,
+        string? MusteriEposta,
+        string? MusteriTelefon,
+        bool KurumsalMi);
+
+    private sealed record EBelgeCanonicalCariKartSection(
         int CariKartId,
         string CariKodu,
-        string UnvanAdSoyad,
-        string? VergiNoTckn,
-        string? VergiDairesi,
-        string? Adres,
-        string? Telefon,
-        string? Eposta,
-        string? Il,
-        string? Ilce,
         bool EFaturaMukellefiMi,
         bool EArsivKapsamindaMi);
 

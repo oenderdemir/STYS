@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Data.Common;
+using System.Text.Json;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -192,7 +193,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var created = await service.CreateAsync(BuildSatisBelgesiRequest());
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
-        return await service.GetByIdAsync(created.Id.Value, CancellationToken.None);
+        return await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
     }
 
     [Fact]
@@ -417,11 +418,13 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         await using (var softDeleteCtx = CreateDbContext())
         {
             var belge = await softDeleteCtx.SatisBelgeleri
+                .IgnoreQueryFilters()
                 .Include(x => x.EBelgeKaydi)
                 .SingleAsync(x => x.Id == cut.Id.Value);
 
             softDeleteCtx.Remove(belge.EBelgeKaydi!);
             softDeleteCtx.Remove(belge);
+            Assert.True(belge.IsDeleted == false);
             await softDeleteCtx.SaveChangesAsync();
         }
 
@@ -448,7 +451,10 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
         await using (var uuidCtx = CreateDbContext())
         {
-            var belge = await uuidCtx.SatisBelgeleri.SingleAsync(x => x.Id == cut.Id.Value);
+            var belge = await uuidCtx.SatisBelgeleri
+                .IgnoreQueryFilters()
+                .SingleAsync(x => x.Id == cut.Id.Value);
+            Assert.True(belge.IsDeleted);
             var ikinciBelge = new SatisBelgesi
             {
                 KurumId = _kurumId,
@@ -475,6 +481,180 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             });
             await Assert.ThrowsAsync<DbUpdateException>(() => uuidCtx.SaveChangesAsync());
         }
+    }
+
+    [Fact]
+    public async Task AyniKurumdaNullResmiFaturaNoIleIkiBelgeOluşturulabilir()
+    {
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        {
+            return;
+        }
+
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext);
+
+        var ilk = await service.CreateAsync(BuildSatisBelgesiRequest());
+        var ikinci = await service.CreateAsync(BuildSatisBelgesiRequest());
+
+        Assert.Null(ilk.ResmiFaturaNo);
+        Assert.Null(ikinci.ResmiFaturaNo);
+        Assert.Equal(
+            2,
+            await dbContext.SatisBelgeleri.CountAsync(x => x.Id == ilk.Id!.Value || x.Id == ikinci.Id!.Value));
+    }
+
+    [Fact]
+    public async Task KanalBayraklariIkisiDeFalseIseKesimTamamenRollbackOlur()
+    {
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        {
+            return;
+        }
+
+        await using var seedCtx = CreateDbContext();
+        var service = CreateService(seedCtx);
+        var created = await service.CreateAsync(BuildSatisBelgesiRequest());
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
+        await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+
+        var sayacOnce = await seedCtx.KurumFaturaNumaraSayaclari
+            .AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "EBF");
+
+        await using (var mutateCtx = CreateDbContext())
+        {
+            var cariKart = await mutateCtx.CariKartlar.SingleAsync(x => x.Id == _musteriKartId);
+            cariKart.EFaturaMukellefiMi = false;
+            cariKart.EArsivKapsamindaMi = false;
+            await mutateCtx.SaveChangesAsync();
+        }
+
+        var ex = await Assert.ThrowsAsync<BaseException>(
+            () => service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None));
+
+        Assert.Contains("e-Fatura ya da e-Arşiv", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        await using var verifyCtx = CreateDbContext();
+        var belge = await verifyCtx.SatisBelgeleri
+            .AsNoTracking()
+            .Include(x => x.EBelgeKaydi)
+            .SingleAsync(x => x.Id == created.Id.Value);
+
+        Assert.Null(belge.ResmiFaturaNo);
+        Assert.Equal(TicariBelgeFaturalamaDurumu.KesimBekliyor, belge.FaturalamaDurumu);
+        Assert.Null(belge.EBelgeKaydi);
+        var sayacSonra = await verifyCtx.KurumFaturaNumaraSayaclari
+            .AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "EBF");
+        Assert.Equal(sayacOnce.SonNumara, sayacSonra.SonNumara);
+    }
+
+    [Fact]
+    public async Task SnapshotAliciAlanlariSatisBelgesiSnapshotindanGelsin()
+    {
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        {
+            return;
+        }
+
+        await using var seedCtx = CreateDbContext();
+        var service = CreateService(seedCtx);
+        var created = await service.CreateAsync(BuildSatisBelgesiRequest());
+
+        var orijinalUnvan = created.MusteriUnvan;
+        var orijinalAdres = created.MusteriAdres;
+        var orijinalTelefon = created.MusteriTelefon;
+        var orijinalEposta = created.MusteriEposta;
+
+        await using (var mutateCtx = CreateDbContext())
+        {
+            var cariKart = await mutateCtx.CariKartlar.SingleAsync(x => x.Id == _musteriKartId);
+            cariKart.UnvanAdSoyad = "CANLI-CARI-KART-DEGISTI";
+            cariKart.Adres = "CANLI-ADRES-DEGISTI";
+            cariKart.Telefon = "05000000000";
+            cariKart.Eposta = "canli-degisti@example.com";
+            await mutateCtx.SaveChangesAsync();
+        }
+
+        await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
+        await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
+        await service.FaturaKesAsync(created.Id.Value, new FaturaKesRequest { SeriKodu = "EBF" }, CancellationToken.None);
+
+        await using var snapshotCtx = CreateDbContext();
+        var snapshotJson = await snapshotCtx.EBelgeSnapshots
+            .AsNoTracking()
+            .Include(x => x.EBelgeKaydi)
+            .SingleAsync(x => x.EBelgeKaydi.SatisBelgesiId == created.Id.Value);
+
+        using var document = JsonDocument.Parse(snapshotJson.CanonicalJson);
+        var alici = document.RootElement.GetProperty("alici");
+
+        Assert.Equal(orijinalUnvan, GetNullableString(alici, "musteriUnvan"));
+        Assert.Equal(orijinalAdres, GetNullableString(alici, "musteriAdres"));
+        Assert.Equal(orijinalTelefon, GetNullableString(alici, "musteriTelefon"));
+        Assert.Equal(orijinalEposta, GetNullableString(alici, "musteriEposta"));
+        Assert.NotEqual("CANLI-CARI-KART-DEGISTI", GetNullableString(alici, "musteriUnvan"));
+    }
+
+    [Fact]
+    public async Task CrossoverTenantEBelgeKaydiVeSnapshotDbTarafindanReddedilir()
+    {
+        if (string.IsNullOrWhiteSpace(SatisBelgesiMuhasebeTestSupport.ConnectionString))
+        {
+            return;
+        }
+
+        await using var seedCtx = CreateDbContext();
+        var service = CreateService(seedCtx);
+        var created = await service.CreateAsync(BuildSatisBelgesiRequest());
+
+        await using (var invalidKayitCtx = CreateDbContext())
+        {
+            invalidKayitCtx.EBelgeKayitlari.Add(new EBelgeKaydi
+            {
+                KurumId = _kurumId + 999,
+                SatisBelgesiId = created.Id!.Value,
+                EBelgeUuid = Guid.NewGuid().ToString("D"),
+                EBelgeKanali = EBelgeKanali.EArsiv,
+                Durum = EBelgeKaydiDurumu.SnapshotHazir
+            });
+
+            await Assert.ThrowsAsync<DbUpdateException>(() => invalidKayitCtx.SaveChangesAsync());
+        }
+
+        await using (var snapshotCtx = CreateDbContext())
+        {
+            var kayit = new EBelgeKaydi
+            {
+                KurumId = _kurumId,
+                SatisBelgesiId = created.Id!.Value,
+                EBelgeUuid = Guid.NewGuid().ToString("D"),
+                EBelgeKanali = EBelgeKanali.EArsiv,
+                Durum = EBelgeKaydiDurumu.SnapshotHazir
+            };
+
+            snapshotCtx.EBelgeKayitlari.Add(kayit);
+            await snapshotCtx.SaveChangesAsync();
+
+            snapshotCtx.EBelgeSnapshots.Add(new EBelgeSnapshot
+            {
+                KurumId = _kurumId + 999,
+                EBelgeKaydiId = kayit.Id,
+                BelgeVersiyonu = 2,
+                SnapshotSchemaVersion = "1",
+                CanonicalJson = "{}",
+                CanonicalSha256 = new string('a', 64)
+            });
+
+            await Assert.ThrowsAsync<DbUpdateException>(() => snapshotCtx.SaveChangesAsync());
+        }
+    }
+
+    private static string? GetNullableString(JsonElement parent, string propertyName)
+    {
+        var property = parent.GetProperty(propertyName);
+        return property.ValueKind == JsonValueKind.Null ? null : property.GetString();
     }
 
     private sealed class TestTenantAccessor : ICurrentTenantAccessor

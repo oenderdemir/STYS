@@ -1224,7 +1224,14 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             return EBelgeKanali.EFatura;
         }
 
-        return EBelgeKanali.EArsiv;
+        if (cariKart.EArsivKapsamindaMi)
+        {
+            return EBelgeKanali.EArsiv;
+        }
+
+        throw new BaseException(
+            "Cari kart için e-Fatura ya da e-Arşiv kanalı seçilemedi; her iki mükellefiyet bayrağı da kapalı.",
+            errorCode: 400);
     }
 
     private static bool IsUniqueConflict(DbUpdateException ex)

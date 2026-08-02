@@ -103,7 +103,7 @@ Kod tabanındaki gözlem şu şekilde:
 | Snapshot şema sürümü / belge versiyonu / canonical JSON / canonical hash | `EBelgeSnapshot` | Bu alanlar snapshot’ta otoriterdir; `EBelgeKaydi` üzerinde writable kopya tutulmaz. |
 | UBL / PDF artefaktları | `EBelgeKaydi` + `EBelgeArtefakt` | Hash, yol, sürüm burada tutulur. |
 | Delivery / retry state | `EBelgeKaydi` + `EBelgeDeliveryAttempt` | Entegratör ve worker state burada olur. |
-| `TicariBelgeFaturalamaDurumu` | Projection | `EBelgeKaydi` üzerinden üretilir. |
+| `TicariBelgeFaturalamaDurumu` | Projection | Faz 1’de `SatisBelgesi` üzerinde otoriter kalır; `EBelgeKaydi` üzerinden projection üretimi sonraki faz kararıdır. |
 
 İki tarafta bağımsız ve çelişebilecek durum yazımları tasarlanmamalıdır.
 
@@ -239,7 +239,7 @@ Faz 2 sonrasındaki e-belge durumu örneği:
 
 `SnapshotHazir -> RenderBekliyor -> ArtefaktHazir -> GonderimBekliyor -> Gonderiliyor -> Gonderildi / Hata -> IptalEdildi`
 
-Faz 1’de mevcut `SatisBelgesiDurumProjection` ve otoriter `FaturalamaDurumu` yapısı değiştirilmemelidir. İleride projection yapılacaksa bunun `SatisBelgesi + opsiyonel EBelgeKaydi` üzerinden üretileceği ayrı karar olarak not edilmelidir.
+Faz 1’de mevcut `SatisBelgesiDurumProjection` ve otoriter `FaturalamaDurumu` yapısı değiştirilmemelidir. İleride projection yapılacaksa bunun `SatisBelgesi + opsiyonel EBelgeKaydi` üzerinden üretileceği ayrı karar olarak not edilmelidir; Faz 1’de bu projection'ın otoritesi hâlâ `SatisBelgesi`'dir.
 
 İptal hattı:
 

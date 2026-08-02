@@ -5136,6 +5136,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.HasIndex("SatisBelgesiId")
                         .IsUnique();
 
+                    b.HasAlternateKey("Id", "KurumId");
+
                     b.ToTable("EBelgeKayitlari", "muhasebe", t =>
                         {
                             t.HasCheckConstraint("CK_EBelgeKayitlari_Durum", "[Durum] IN (1)");
@@ -5450,7 +5452,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasFilter("[MuhasebeFisId] IS NOT NULL AND [IsDeleted] = 0");
 
                     b.HasIndex("KurumId", "ResmiFaturaNo")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[ResmiFaturaNo] IS NOT NULL");
 
                     b.HasIndex("TesisId", "BelgeTarihi");
 
@@ -5461,6 +5464,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.HasIndex("KurumId", "CariKartId", "KarsiTarafFaturaNo")
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0 AND [KarsiTarafFaturaNo] IS NOT NULL AND [BelgeTipi] IN (5, 6)");
+
+                    b.HasAlternateKey("Id", "KurumId");
 
                     b.ToTable("SatisBelgeleri", "muhasebe", t =>
                         {
@@ -9114,7 +9119,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 {
                     b.HasOne("STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi", "SatisBelgesi")
                         .WithOne("EBelgeKaydi")
-                        .HasForeignKey("STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeKaydi", "SatisBelgesiId")
+                        .HasForeignKey("STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeKaydi", "SatisBelgesiId", "KurumId")
+                        .HasPrincipalKey("STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesi", "Id", "KurumId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -9125,7 +9131,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 {
                     b.HasOne("STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeKaydi", "EBelgeKaydi")
                         .WithOne("Snapshot")
-                        .HasForeignKey("STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeSnapshot", "EBelgeKaydiId")
+                        .HasForeignKey("STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeSnapshot", "EBelgeKaydiId", "KurumId")
+                        .HasPrincipalKey("STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeKaydi", "Id", "KurumId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

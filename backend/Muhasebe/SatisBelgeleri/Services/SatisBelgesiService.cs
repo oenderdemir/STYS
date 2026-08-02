@@ -1857,9 +1857,26 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 cancellationToken);
         }
 
-        if ((request.SatirTipi == SatisBelgesiSatirTipi.Urun || request.TasinirKartId.HasValue) && !request.DepoId.HasValue)
+        // SatirTipi=Urun OTORİTER olarak stok etkisini belirler (bkz. görev 2/3/4) - TasinirKartId
+        // dolu/boş olması satır tipini ASLA değiştirmez/ima etmez. Bu yüzden burada iki yönlü, simetrik
+        // bir kural uygulanır: Urun satırları taşınır kart+depoyu ZORUNLU kılar, Urun DIŞINDAKİ (hizmet)
+        // satırlar bu ikisinin GÖNDERİLMESİNİ REDDEDER - "hizmet satırı ama taşınır kartı da var" gibi
+        // tutarsız bir durum asla kabul edilmez.
+        if (request.SatirTipi == SatisBelgesiSatirTipi.Urun)
         {
-            throw new BaseException($"Stok/ürün satırlarında depo seçimi zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
+            if (!request.TasinirKartId.HasValue)
+                throw new BaseException($"Ürün satırlarında taşınır kart seçimi zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+            if (!request.DepoId.HasValue)
+                throw new BaseException($"Ürün satırlarında depo seçimi zorunludur. (SıraNo: {request.SiraNo})", errorCode: 400);
+        }
+        else
+        {
+            if (request.TasinirKartId.HasValue)
+                throw new BaseException($"Ürün dışındaki satırlarda taşınır kart seçilemez. (SıraNo: {request.SiraNo})", errorCode: 400);
+
+            if (request.DepoId.HasValue)
+                throw new BaseException($"Ürün dışındaki satırlarda depo seçilemez. (SıraNo: {request.SiraNo})", errorCode: 400);
         }
 
         if (request.TasinirKartId.HasValue)

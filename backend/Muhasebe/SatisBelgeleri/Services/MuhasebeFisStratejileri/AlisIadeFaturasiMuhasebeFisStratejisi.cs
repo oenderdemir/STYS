@@ -118,8 +118,13 @@ public sealed class AlisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhaseb
         SatisBelgesiMuhasebeFisContext context,
         CancellationToken cancellationToken)
     {
-        if (belgeSatiri.TasinirKartId.HasValue)
+        // OTORİTER ayrım SatirTipi'dir (bkz. görev 3) - TasinirKartId dolu/boş olması hesap
+        // seçimini ASLA belirlemez.
+        if (belgeSatiri.SatirTipi == SatisBelgesiSatirTipi.Urun)
         {
+            if (!belgeSatiri.TasinirKartId.HasValue)
+                throw new BaseException($"Alış iade faturası stok satırı için taşınır kart seçilmelidir. Satır: {belgeSatiri.SiraNo}", 400);
+
             var kart = await _dbContext.TasinirKartlar
                 .Include(x => x.TasinirKod)
                 .AsNoTracking()

@@ -679,16 +679,21 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             cancellationToken);
 
         // Stok (153) ve hizmet gider hesapları artık KOŞULSUZ aranmaz/zorunlu tutulmaz (bkz.
-        // görev 1): global 153 hesabı yalnızca belgede GERÇEKTEN bir ürün satırı (TasinirKartId
-        // dolu) varsa VE o satırın taşınır kartının kendi doğrudan hesabı/eşlemesi YOKSA
-        // gerekebilir - bu yüzden burada TryGetHesapPlaniAsync (bulunamazsa exception FIRLATMAZ,
-        // null döner) kullanılır; asıl zorunluluk kontrolü, taşınır kartın direkt hesabı
-        // bulunamadığında strateji içindeki ResolveSatirHesabiAsync'te (context.StokHesapPlaniId
-        // null ise orada throw edilir) yapılır. Aynı şekilde hizmet gider hesabı yalnızca
-        // belgede en az bir hizmet satırı (TasinirKartId boş) varsa aranır - saf ürün-only bir
-        // alış/alış iade belgesi artık hizmet hesabı yokluğu yüzünden REDDEDİLMEZ.
-        var urunSatiriVarMi = aktifSatirlar.Any(s => s.TasinirKartId.HasValue);
-        var hizmetSatiriVarMi = aktifSatirlar.Any(s => !s.TasinirKartId.HasValue);
+        // görev 1): global 153 hesabı yalnızca belgede GERÇEKTEN bir ürün satırı (SatirTipi=Urun)
+        // varsa VE o satırın taşınır kartının kendi doğrudan hesabı/eşlemesi YOKSA gerekebilir -
+        // bu yüzden burada TryGetHesapPlaniAsync (bulunamazsa exception FIRLATMAZ, null döner)
+        // kullanılır; asıl zorunluluk kontrolü, taşınır kartın direkt hesabı bulunamadığında
+        // strateji içindeki ResolveSatirHesabiAsync'te (context.StokHesapPlaniId null ise orada
+        // throw edilir) yapılır. Aynı şekilde hizmet gider hesabı yalnızca belgede en az bir
+        // hizmet satırı (SatirTipi≠Urun) varsa aranır - saf ürün-only bir alış/alış iade belgesi
+        // artık hizmet hesabı yokluğu yüzünden REDDEDİLMEZ.
+        //
+        // OTORİTER ayrım SatirTipi'dir - TasinirKartId DEĞİL (bkz. görev 2): satır doğrulaması
+        // (ValidateSatirRequestAsync) artık SatirTipi=Urun ⇔ TasinirKartId dolu eşleşmesini zaten
+        // zorunlu kıldığından bu ikisi burada pratikte aynı sonucu verir, ama karar OTORİTER
+        // kaynaktan (SatirTipi) alınır - TasinirKartId'nin satır tipini "ima etmesine" izin verilmez.
+        var urunSatiriVarMi = aktifSatirlar.Any(s => s.SatirTipi == SatisBelgesiSatirTipi.Urun);
+        var hizmetSatiriVarMi = aktifSatirlar.Any(s => s.SatirTipi != SatisBelgesiSatirTipi.Urun);
 
         var stok = urunSatiriVarMi
             ? await TryGetHesapPlaniAsync(MuhasebeAnaHesapKodlari.StokTicariMal, tesisId, cancellationToken)
@@ -726,7 +731,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         CancellationToken cancellationToken)
     {
         var stokSatirlari = belge.Satirlar
-            .Where(x => !x.IsDeleted && x.TasinirKartId.HasValue && x.Miktar > 0)
+            .Where(x => !x.IsDeleted && x.SatirTipi == SatisBelgesiSatirTipi.Urun && x.Miktar > 0)
             .OrderBy(x => x.SiraNo)
             .ToList();
 
@@ -820,7 +825,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         CancellationToken cancellationToken)
     {
         var stokSatirlari = belge.Satirlar
-            .Where(x => !x.IsDeleted && x.TasinirKartId.HasValue && x.Miktar > 0)
+            .Where(x => !x.IsDeleted && x.SatirTipi == SatisBelgesiSatirTipi.Urun && x.Miktar > 0)
             .OrderBy(x => x.SiraNo)
             .ToList();
 
@@ -914,7 +919,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         CancellationToken cancellationToken)
     {
         var stokSatirlari = belge.Satirlar
-            .Where(x => !x.IsDeleted && x.TasinirKartId.HasValue && x.Miktar > 0)
+            .Where(x => !x.IsDeleted && x.SatirTipi == SatisBelgesiSatirTipi.Urun && x.Miktar > 0)
             .OrderBy(x => x.SiraNo)
             .ToList();
 
@@ -1007,7 +1012,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         CancellationToken cancellationToken)
     {
         var stokSatirlari = belge.Satirlar
-            .Where(x => !x.IsDeleted && x.TasinirKartId.HasValue && x.Miktar > 0)
+            .Where(x => !x.IsDeleted && x.SatirTipi == SatisBelgesiSatirTipi.Urun && x.Miktar > 0)
             .OrderBy(x => x.SiraNo)
             .ToList();
 

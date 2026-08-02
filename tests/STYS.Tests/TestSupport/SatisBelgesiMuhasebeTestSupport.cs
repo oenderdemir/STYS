@@ -330,11 +330,13 @@ public static class SatisBelgesiMuhasebeTestSupport
             .Where(x => x.BelgeNo != null && x.BelgeNo.Contains(uniqueSuffix))
             .ExecuteDeleteAsync();
         var belgeIds = await dbContext.SatisBelgeleri
+            .IgnoreQueryFilters()
             .Where(x => x.BelgeNo.Contains(uniqueSuffix))
             .Select(x => x.Id)
             .ToListAsync();
 
         var eBelgeKaydiIds = await dbContext.EBelgeKayitlari
+            .IgnoreQueryFilters()
             .Where(x => belgeIds.Contains(x.SatisBelgesiId))
             .Select(x => x.Id)
             .ToListAsync();
@@ -342,10 +344,12 @@ public static class SatisBelgesiMuhasebeTestSupport
         if (eBelgeKaydiIds.Count > 0)
         {
             await dbContext.EBelgeSnapshots
+                .IgnoreQueryFilters()
                 .Where(x => eBelgeKaydiIds.Contains(x.EBelgeKaydiId))
                 .ExecuteDeleteAsync();
 
             await dbContext.EBelgeKayitlari
+                .IgnoreQueryFilters()
                 .Where(x => eBelgeKaydiIds.Contains(x.Id))
                 .ExecuteDeleteAsync();
         }
@@ -354,15 +358,25 @@ public static class SatisBelgesiMuhasebeTestSupport
         if (belgeIds.Count > 0)
         {
             fisIds = await dbContext.MuhasebeFisler
+                .IgnoreQueryFilters()
                 .Where(x => x.KaynakId != null && belgeIds.Contains(x.KaynakId.Value))
                 .Select(x => x.Id)
                 .ToListAsync();
-            await dbContext.SatisBelgeleri.Where(x => belgeIds.Contains(x.Id)).ExecuteDeleteAsync();
+            await dbContext.SatisBelgeleri
+                .IgnoreQueryFilters()
+                .Where(x => belgeIds.Contains(x.Id))
+                .ExecuteDeleteAsync();
         }
         if (fisIds.Count > 0)
         {
-            await dbContext.MuhasebeFisSatirlari.Where(x => fisIds.Contains(x.MuhasebeFisId)).ExecuteDeleteAsync();
-            await dbContext.MuhasebeFisler.Where(x => fisIds.Contains(x.Id)).ExecuteDeleteAsync();
+            await dbContext.MuhasebeFisSatirlari
+                .IgnoreQueryFilters()
+                .Where(x => fisIds.Contains(x.MuhasebeFisId))
+                .ExecuteDeleteAsync();
+            await dbContext.MuhasebeFisler
+                .IgnoreQueryFilters()
+                .Where(x => fisIds.Contains(x.Id))
+                .ExecuteDeleteAsync();
         }
 
         await dbContext.KdvIstisnaTanimlari
@@ -371,8 +385,13 @@ public static class SatisBelgesiMuhasebeTestSupport
 
         if (tesisId.HasValue)
         {
-            await dbContext.CariKartlar.Where(x => x.TesisId == tesisId.Value).ExecuteDeleteAsync();
             await dbContext.MuhasebeDonemler.Where(x => x.TesisId == tesisId.Value).ExecuteDeleteAsync();
+            await dbContext.CariKartlar
+                .IgnoreQueryFilters()
+                .Where(x => x.TesisId == tesisId.Value
+                            && ((x.CariKodu != null && x.CariKodu.Contains(uniqueSuffix))
+                                || (x.UnvanAdSoyad != null && x.UnvanAdSoyad.Contains(uniqueSuffix))))
+                .ExecuteDeleteAsync();
             // Global TestMarker DEĞİL, örneğe özel uniqueSuffix ile filtrelenir — eş zamanlı çalışan
             // başka bir IntegrationFact örneğinin hâlâ canlı hesap planı kaydını silmeye çalışıp FK
             // Restrict hatası almaması için (bkz. SqlServerIntegrationCollection notu).

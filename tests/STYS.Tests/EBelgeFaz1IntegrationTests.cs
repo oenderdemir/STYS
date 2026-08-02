@@ -259,16 +259,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
         var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
         await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
-
-        var belgeFisli = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
-        if (!belgeFisli.MuhasebeFisId.HasValue)
-        {
-            belgeFisli.MuhasebeFisId = await dbContext.MuhasebeFisler
-                .Where(x => x.KaynakId == created.Id.Value)
-                .Select(x => x.Id)
-                .SingleAsync();
-            await dbContext.SaveChangesAsync();
-        }
+        await EnsureMuhasebeFisIdAsync(created.Id.Value);
 
         await using var kesimCtx = CreateDbContext();
         var kesimService = CreateService(kesimCtx);
@@ -418,19 +409,6 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var created = await service.CreateAsync(BuildSatisBelgesiRequest(SatisBelgesiTipi.AlisFaturasi));
         await service.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None);
         await service.MuhasebeOnaylaAsync(created.Id.Value, CancellationToken.None);
-        var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(dbContext);
-        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext, donemService);
-        await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
-
-        var belgeFisli = await dbContext.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
-        if (!belgeFisli.MuhasebeFisId.HasValue)
-        {
-            belgeFisli.MuhasebeFisId = await dbContext.MuhasebeFisler
-                .Where(x => x.KaynakId == created.Id.Value)
-                .Select(x => x.Id)
-                .SingleAsync();
-            await dbContext.SaveChangesAsync();
-        }
 
         await using var kesimCtx = CreateDbContext();
         var kesimService = CreateService(kesimCtx);
@@ -564,16 +542,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         var donemService = SatisBelgesiMuhasebeTestSupport.CreateRealMuhasebeDonemService(seedCtx);
         var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(seedCtx, donemService);
         await fisService.MuhasebeFisiOlusturAsync(created.Id.Value, CancellationToken.None);
-
-        var belgeFisli = await seedCtx.SatisBelgeleri.SingleAsync(x => x.Id == created.Id.Value);
-        if (!belgeFisli.MuhasebeFisId.HasValue)
-        {
-            belgeFisli.MuhasebeFisId = await seedCtx.MuhasebeFisler
-                .Where(x => x.KaynakId == created.Id.Value)
-                .Select(x => x.Id)
-                .SingleAsync();
-            await seedCtx.SaveChangesAsync();
-        }
+        await EnsureMuhasebeFisIdAsync(created.Id.Value);
 
         var sayacOnce = await seedCtx.KurumFaturaNumaraSayaclari
             .AsNoTracking()

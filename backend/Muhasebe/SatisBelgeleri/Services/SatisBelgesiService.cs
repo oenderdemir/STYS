@@ -469,85 +469,86 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         UpdateSatisBelgesiRequest request,
         CancellationToken cancellationToken = default)
     {
-        var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted,
-            q => q.Include(x => x.Satirlar))
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
-
-        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "güncelleme", cancellationToken);
-
-        // Durum kontrolü — OTORİTER: TicariDurum=Taslak YA DA MuhasebeDurumu=Reddedildi (bkz. C.1).
-        if (!BelgeGuncellenebilirMi(belge))
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new BaseException(
-                $"'{belge.Durum}' durumundaki bir satış belgesi güncellenemez. " +
-                "Sadece Taslak veya Reddedildi durumundaki belgeler güncellenebilir.",
-                errorCode: 400);
-        }
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                _db, id, q => q.Include(x => x.Satirlar), cancellationToken);
 
-        // Reddedildi → Taslak durumuna döndürülecekse RedNedeni temizlenir - GERÇEK OTORİTER durum
-        // ataması (TicariDurum/MuhasebeDurumu/FaturalamaDurumu + türetilen legacy Durum) burada
-        // YAPILMAZ, aşağıda (ApplyBelgeUpdatesAsync sonrası, kaydetmeden hemen önce) NİHAİ BelgeTipi
-        // ile TEK SEFERDE yapılır - iki giriş yolu (Taslak'ta kalma / Reddedildi'den dönme) HER
-        // ZAMAN aynı (Taslak, Bekliyor, ...) hedef kombinasyonunda birleştiğinden erken/geçici bir
-        // hesaplamaya gerek YOKTUR.
-        if (belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Reddedildi)
-        {
-            belge.RedNedeni = null;
-        }
+            await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "güncelleme", cancellationToken);
 
-        // Belge no değiştiyse duplicate kontrolü
-        if (!string.IsNullOrWhiteSpace(request.BelgeNo) && request.BelgeNo != belge.BelgeNo)
-        {
-            await ThrowIfBelgeNoDuplicateAsync(request.BelgeNo, excludeId: id, cancellationToken);
-        }
+            // Durum kontrolü — OTORİTER: TicariDurum=Taslak YA DA MuhasebeDurumu=Reddedildi (bkz. C.1).
+            if (!BelgeGuncellenebilirMi(belge))
+            {
+                throw new BaseException(
+                    $"'{belge.Durum}' durumundaki bir satış belgesi güncellenemez. " +
+                    "Sadece Taslak veya Reddedildi durumundaki belgeler güncellenebilir.",
+                    errorCode: 400);
+            }
 
-        request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken, belge.TesisId);
+            // Reddedildi → Taslak durumuna döndürülecekse RedNedeni temizlenir - GERÇEK OTORİTER durum
+            // ataması (TicariDurum/MuhasebeDurumu/FaturalamaDurumu + türetilen legacy Durum) burada
+            // YAPILMAZ, aşağıda (ApplyBelgeUpdatesAsync sonrası, kaydetmeden hemen önce) NİHAİ BelgeTipi
+            // ile TEK SEFERDE yapılır - iki giriş yolu (Taslak'ta kalma / Reddedildi'den dönme) HER
+            // ZAMAN aynı (Taslak, Bekliyor, ...) hedef kombinasyonunda birleştiğinden erken/geçici bir
+            // hesaplamaya gerek YOKTUR.
+            if (belge.MuhasebeDurumu == TicariBelgeMuhasebeDurumu.Reddedildi)
+            {
+                belge.RedNedeni = null;
+            }
+
+            // Belge no değiştiyse duplicate kontrolü
+            if (!string.IsNullOrWhiteSpace(request.BelgeNo) && request.BelgeNo != belge.BelgeNo)
+            {
+                await ThrowIfBelgeNoDuplicateAsync(request.BelgeNo, excludeId: id, cancellationToken);
+            }
+
+            request.TesisId = await ResolveWriteTesisIdAsync(request.TesisId, cancellationToken, belge.TesisId);
 
         // Tesis değiştiriliyorsa (mevcut TesisId'den farklıysa), yeni tesisin AYNI kuruma ait
         // olduğu doğrulanır - belge başka bir kuruma taşınamaz. KurumId'nin kendisi (belge.KurumId)
         // burada asla değiştirilmez; yalnızca tutarlılık kontrolü yapılır (gerçek değişmezlik
         // garantisi StysAppDbContext.ApplyTenantRules'ta SaveChanges sırasında ayrıca uygulanır).
-        if (request.TesisId.HasValue && request.TesisId.Value != belge.TesisId)
-        {
-            var yeniTesisKurumId = await ResolveKurumIdFromTesisAsync(request.TesisId.Value, cancellationToken);
-            if (yeniTesisKurumId != belge.KurumId)
+            if (request.TesisId.HasValue && request.TesisId.Value != belge.TesisId)
             {
-                throw new BaseException(
-                    "Belge başka bir kuruma ait tesise taşınamaz.",
-                    errorCode: 400);
+                var yeniTesisKurumId = await ResolveKurumIdFromTesisAsync(request.TesisId.Value, cancellationToken);
+                if (yeniTesisKurumId != belge.KurumId)
+                {
+                    throw new BaseException(
+                        "Belge başka bir kuruma ait tesise taşınamaz.",
+                        errorCode: 400);
+                }
             }
-        }
 
-        if (request.CariKartId.HasValue)
-        {
-            var cari = await ResolveAndValidateCariKartAsync(
-                request.CariKartId.Value,
-                request.TesisId,
-                request.BelgeTipi ?? belge.BelgeTipi,
-                cancellationToken);
-            ApplyCariSnapshotToUpdateRequest(request, cari);
-        }
-        else if ((request.BelgeTipi.HasValue || request.TesisId.HasValue) && belge.CariKartId.HasValue)
-        {
-            // CariKartId bu istekte YENİDEN gönderilmemiş olsa bile, belge YÖNÜ (BelgeTipi) veya
-            // TESİSİ değişiyorsa mevcut cari NİHAİ değerlerle yeniden doğrulanır (bkz. görev 4) -
-            // aksi halde ör. bir tedarikçi carisi belge satış yönüne çevrilirken sessizce asılı
-            // kalabilir, ya da cari başka bir tesise ait olduğu halde fark edilmeyebilirdi.
-            // Uyumsuzsa güncelleme AÇIKÇA reddedilir (sessizce temizlenmez/değiştirilmez).
-            var mevcutCari = await ResolveAndValidateCariKartAsync(
-                belge.CariKartId.Value,
-                request.TesisId,
-                request.BelgeTipi ?? belge.BelgeTipi,
-                cancellationToken);
-            ApplyCariSnapshotToUpdateRequest(request, mevcutCari);
-        }
+            if (request.CariKartId.HasValue)
+            {
+                var cari = await ResolveAndValidateCariKartAsync(
+                    request.CariKartId.Value,
+                    request.TesisId,
+                    request.BelgeTipi ?? belge.BelgeTipi,
+                    cancellationToken);
+                ApplyCariSnapshotToUpdateRequest(request, cari);
+            }
+            else if ((request.BelgeTipi.HasValue || request.TesisId.HasValue) && belge.CariKartId.HasValue)
+            {
+                // CariKartId bu istekte YENİDEN gönderilmemiş olsa bile, belge YÖNÜ (BelgeTipi) veya
+                // TESİSİ değişiyorsa mevcut cari NİHAİ değerlerle yeniden doğrulanır (bkz. görev 4) -
+                // aksi halde ör. bir tedarikçi carisi belge satış yönüne çevrilirken sessizce asılı
+                // kalabilir, ya da cari başka bir tesise ait olduğu halde fark edilmeyebilirdi.
+                // Uyumsuzsa güncelleme AÇIKÇA reddedilir (sessizce temizlenmez/değiştirilmez).
+                var mevcutCari = await ResolveAndValidateCariKartAsync(
+                    belge.CariKartId.Value,
+                    request.TesisId,
+                    request.BelgeTipi ?? belge.BelgeTipi,
+                    cancellationToken);
+                ApplyCariSnapshotToUpdateRequest(request, mevcutCari);
+            }
 
-        // NİHAİ belge tipi - ApplyBelgeUpdatesAsync HENÜZ çalışmadığından belge.BelgeTipi burada
-        // hâlâ ESKİ değeri taşır; request.BelgeTipi verilmişse o, verilmemişse mevcut değer NİHAİ
-        // tiptir (ApplyBelgeUpdatesAsync'in belge.BelgeTipi'yi ayarlarken kullandığı AYNI kural).
-        var nihaiBelgeTipi = request.BelgeTipi ?? belge.BelgeTipi;
-        var nihaiBelgeIadeTipiMi = nihaiBelgeTipi is SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi;
+            // NİHAİ belge tipi - ApplyBelgeUpdatesAsync HENÜZ çalışmadığından belge.BelgeTipi burada
+            // hâlâ ESKİ değeri taşır; request.BelgeTipi verilmişse o, verilmemişse mevcut değer NİHAİ
+            // tiptir (ApplyBelgeUpdatesAsync'in belge.BelgeTipi'yi ayarlarken kullandığı AYNI kural).
+            var nihaiBelgeTipi = request.BelgeTipi ?? belge.BelgeTipi;
+            var nihaiBelgeIadeTipiMi = nihaiBelgeTipi is SatisBelgesiTipi.SatisIadeFaturasi or SatisBelgesiTipi.AlisIadeFaturasi;
 
         // İADE REFERANSI KALDIRMA + SATIRLARI TEMİZLEME — TEK, ATOMİK İSTİSNA (bkz. görev 2/3):
         // istemci AÇIKÇA IadeEdilenBelgeReferansiKaldir=true VE Satirlar=[] gönderiyorsa (belgenin
@@ -560,73 +561,80 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         // için istismar edilebilirdi (bkz. görev 3). İadeden normale geçişte satırlar zaten BOŞ
         // DEĞİL (istemci kaynak satırları normal satıra dönüştürüp gönderir), bu yüzden bu
         // kısıtlama meşru "normalden iadeye" senaryosunu ENGELLEMEZ.
-        var referansKaldirVeSatirlariTemizle =
-            request.IadeEdilenBelgeReferansiKaldir
-            && belge.IadeEdilenBelgeId.HasValue
-            && nihaiBelgeIadeTipiMi
-            && request.Satirlar is { Count: 0 };
+            var referansKaldirVeSatirlariTemizle =
+                request.IadeEdilenBelgeReferansiKaldir
+                && belge.IadeEdilenBelgeId.HasValue
+                && nihaiBelgeIadeTipiMi
+                && request.Satirlar is { Count: 0 };
 
         // Satirlar alanı AÇIKÇA (null DEĞİL) gönderilmiş ama BOŞSA - yukarıdaki TEK istisna
         // dışında - reddedilir. Bu, "satırları dokunmadan bırak" (null) ile "tüm satırları sil"
         // (client'ın muhtemelen KASTETMEDİĞİ, ör. bir önceki adımda satırların yanlışlıkla
         // boşaltıldığı) durumlarını AYIRT eder; Update uç noktası (bu tek istisna hariç) satır
         // SİLME için tasarlanmamıştır (bkz. görev 4a).
-        if (request.Satirlar is { Count: 0 } && !referansKaldirVeSatirlariTemizle)
-        {
-            throw new BaseException(
-                "Satirlar alanı gönderildiyse en az bir satır içermelidir; satırları değiştirmeden " +
-                "bırakmak için bu alanı hiç göndermeyin (null).",
-                errorCode: 400);
-        }
-
-        // Ana alanları güncelle
-        await ApplyBelgeUpdatesAsync(belge, request, cancellationToken);
-
-        // Satırlar gönderildiyse güncelle
-        if (request.Satirlar is { Count: > 0 })
-        {
-            await UpdateSatirlarAsync(belge, request.Satirlar, cancellationToken);
-        }
-        else if (referansKaldirVeSatirlariTemizle)
-        {
-            // Referans kaldırıldı (ApplyBelgeUpdatesAsync belge.IadeEdilenBelgeId'yi zaten null
-            // yaptı) - mevcut TÜM satırlar soft-delete edilir, böylece eski KaynakSatirId'ler
-            // hiçbir AKTİF satırda kalmaz (bkz. görev 2).
-            foreach (var mevcutSatir in belge.Satirlar)
+            if (request.Satirlar is { Count: 0 } && !referansKaldirVeSatirlariTemizle)
             {
-                mevcutSatir.IsDeleted = true;
+                throw new BaseException(
+                    "Satirlar alanı gönderildiyse en az bir satır içermelidir; satırları değiştirmeden " +
+                    "bırakmak için bu alanı hiç göndermeyin (null).",
+                    errorCode: 400);
             }
-            belge.Satirlar.Clear();
+
+            // Ana alanları güncelle
+            await ApplyBelgeUpdatesAsync(belge, request, cancellationToken);
+
+            // Satırlar gönderildiyse güncelle
+            if (request.Satirlar is { Count: > 0 })
+            {
+                await UpdateSatirlarAsync(belge, request.Satirlar, cancellationToken);
+            }
+            else if (referansKaldirVeSatirlariTemizle)
+            {
+                // Referans kaldırıldı (ApplyBelgeUpdatesAsync belge.IadeEdilenBelgeId'yi zaten null
+                // yaptı) - mevcut TÜM satırlar soft-delete edilir, böylece eski KaynakSatirId'ler
+                // hiçbir AKTİF satırda kalmaz (bkz. görev 2).
+                foreach (var mevcutSatir in belge.Satirlar)
+                {
+                    mevcutSatir.IsDeleted = true;
+                }
+                belge.Satirlar.Clear();
+            }
+
+            // İade satırlarının kaynak bağlantısı HER ZAMAN yeniden doğrulanır - satırlar bu istekte
+            // GÖNDERİLMEMİŞ olsa (dokunulmadan taşınsa) bile, IadeEdilenBelgeId bu istekle DEĞİŞMİŞ
+            // olabilir (bkz. ApplyBelgeUpdatesAsync); bu durumda mevcut (değişmemiş) satırların
+            // KaynakSatirId'lerinin YENİ IadeEdilenBelgeId'ye ait olup olmadığı buradan geçerken
+            // yakalanır (bkz. görev 4b) - normal SatisFaturasi/AlisFaturasi için bu çağrı no-op'tur.
+            await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: false, cancellationToken);
+
+            HesaplaBelgeToplamlari(belge);
+
+            // OTORİTER durum ataması - UpdateAsync'in GEÇERLİ giriş kombinasyonlarının (TicariDurum=
+            // Taslak YA DA MuhasebeDurumu=Reddedildi - bkz. BelgeGuncellenebilirMi) HER İKİSİ de bu
+            // metodun sonunda AYNI (Taslak, Bekliyor, ...) hedef kombinasyonuna ulaşır - bu yüzden
+            // koşulsuz TEK bir atama yeterlidir. FaturalamaDurumu, ApplyBelgeUpdatesAsync'in olası
+            // şekilde değiştirmiş olabileceği NİHAİ BelgeTipi ile hesaplanır (bkz. görev D).
+            SatisBelgesiDurumProjection.OtoriterDurumlariAta(
+                belge,
+                TicariBelgeDurumu.Taslak,
+                TicariBelgeMuhasebeDurumu.Bekliyor,
+                SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
+
+            _satisBelgesiRepository.Update(belge);
+            await SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(cancellationToken);
+            if (belge.CariKartId.HasValue)
+            {
+                await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return Mapper.Map<SatisBelgesiDto>(belge);
         }
-
-        // İade satırlarının kaynak bağlantısı HER ZAMAN yeniden doğrulanır - satırlar bu istekte
-        // GÖNDERİLMEMİŞ olsa (dokunulmadan taşınsa) bile, IadeEdilenBelgeId bu istekle DEĞİŞMİŞ
-        // olabilir (bkz. ApplyBelgeUpdatesAsync); bu durumda mevcut (değişmemiş) satırların
-        // KaynakSatirId'lerinin YENİ IadeEdilenBelgeId'ye ait olup olmadığı buradan geçerken
-        // yakalanır (bkz. görev 4b) - normal SatisFaturasi/AlisFaturasi için bu çağrı no-op'tur.
-        await ValidateIadeSatirlariAsync(belge, kilitliKumulatifKontrol: false, cancellationToken);
-
-        HesaplaBelgeToplamlari(belge);
-
-        // OTORİTER durum ataması - UpdateAsync'in GEÇERLİ giriş kombinasyonlarının (TicariDurum=
-        // Taslak YA DA MuhasebeDurumu=Reddedildi - bkz. BelgeGuncellenebilirMi) HER İKİSİ de bu
-        // metodun sonunda AYNI (Taslak, Bekliyor, ...) hedef kombinasyonuna ulaşır - bu yüzden
-        // koşulsuz TEK bir atama yeterlidir. FaturalamaDurumu, ApplyBelgeUpdatesAsync'in olası
-        // şekilde değiştirmiş olabileceği NİHAİ BelgeTipi ile hesaplanır (bkz. görev D).
-        SatisBelgesiDurumProjection.OtoriterDurumlariAta(
-            belge,
-            TicariBelgeDurumu.Taslak,
-            TicariBelgeMuhasebeDurumu.Bekliyor,
-            SatisBelgesiDurumProjection.ProjeBaslangicFaturalamaDurumu(belge.BelgeTipi));
-
-        _satisBelgesiRepository.Update(belge);
-        await SaveChangesTranslatingKarsiTarafFaturaNoConflictAsync(cancellationToken);
-        if (belge.CariKartId.HasValue)
+        catch
         {
-            await _db.Entry(belge).Reference(x => x.CariKart).LoadAsync(cancellationToken);
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
         }
-
-        return Mapper.Map<SatisBelgesiDto>(belge);
     }
 
     /// <summary>
@@ -655,32 +663,40 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
-        var belge = await Repository.FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted,
-            q => q.Include(x => x.Satirlar))
-            ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
-
-        await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "silme", cancellationToken);
-
-        // OTORİTER: yalnızca GERÇEK taslak kombinasyonu silinebilir (bkz. BelgeSilinebilirMi / C.2).
-        if (!BelgeSilinebilirMi(belge))
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            throw new BaseException(
-                $"'{belge.Durum}' durumundaki bir satış belgesi silinemez. " +
-                "Sadece Taslak durumundaki belgeler silinebilir.",
-                errorCode: 400);
-        }
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(
+                _db, id, q => q.Include(x => x.Satirlar), cancellationToken);
 
-        // Soft-delete: satırları da sil
-        foreach (var satir in belge.Satirlar.Where(s => !s.IsDeleted))
+            await ThrowIfMuhasebeFisiIslemiEngellerAsync(belge, "silme", cancellationToken);
+
+            // OTORİTER: yalnızca GERÇEK taslak kombinasyonu silinebilir (bkz. BelgeSilinebilirMi / C.2).
+            if (!BelgeSilinebilirMi(belge))
+            {
+                throw new BaseException(
+                    $"'{belge.Durum}' durumundaki bir satış belgesi silinemez. " +
+                    "Sadece Taslak durumundaki belgeler silinebilir.",
+                    errorCode: 400);
+            }
+
+            // Soft-delete: satırları da sil
+            foreach (var satir in belge.Satirlar.Where(s => !s.IsDeleted))
+            {
+                satir.IsDeleted = true;
+            }
+
+            belge.IsDeleted = true;
+
+            _satisBelgesiRepository.Update(belge);
+            await Repository.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
         {
-            satir.IsDeleted = true;
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
         }
-
-        belge.IsDeleted = true;
-
-        _satisBelgesiRepository.Update(belge);
-        await Repository.SaveChangesAsync(cancellationToken);
     }
 
     // ──────────────────────────────────────────────
@@ -849,12 +865,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             // FaturaKesAsync isteği, ikisi de sırayla bu satırı bekler; ikincisi birincinin
             // commit ettiği (artık FaturaKesildi olan) durumu görür ve aşağıdaki idempotent
             // dalından döner - ikinci bir numara TÜKETİLMEZ.
-            var belge = await _db.SatisBelgeleri
-                .FromSqlInterpolated($@"
-SELECT * FROM [muhasebe].[SatisBelgeleri] WITH (UPDLOCK, ROWLOCK)
-WHERE [Id] = {id} AND [IsDeleted] = 0")
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? throw new BaseException($"Satış belgesi bulunamadı. (Id: {id})", errorCode: 404);
+            var belge = await SatisBelgesiLockluOkumaHelper.OkuVeKilitleAsync(_db, id, cancellationToken: cancellationToken);
 
             if (!belge.BelgeTipi.OtomatikResmiNumaraUretilebilirMi())
             {

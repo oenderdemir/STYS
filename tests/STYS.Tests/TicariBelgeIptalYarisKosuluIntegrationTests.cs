@@ -10,6 +10,7 @@ using STYS.Muhasebe.CariHareketler.Services;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariKartlar.Mapping;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Mapping;
 using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
@@ -17,6 +18,7 @@ using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeFisleri.Mapping;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Mapping;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.StokHareketleri.Entities;
@@ -91,6 +93,7 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
 
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         await dbContext.MuhasebeHesapBakiyeleri.Where(x => x.TesisId == _tesisId).ExecuteDeleteAsync();
+        await dbContext.KurumFaturaNumaraSayaclari.Where(x => x.KurumId == _kurumId).ExecuteDeleteAsync();
 
         // TahsilatOdemeBelgeleri.KapatilacakCariHareketId -> CariHareketler Restrict FK ile bağlı -
         // bu yüzden cari hareketlerden (SatisBelgesiMuhasebeTestSupport.CleanupAsync içinde
@@ -226,6 +229,67 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
         }
     }
 
+    private async Task<(int IadeBelgesiId, int AsilSatirId)> SeedSatisIadeBelgesiAsync()
+    {
+        await using var setupCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(setupCtx);
+
+        var asilCreated = await service.CreateAsync(YeniHizmetBelgesiRequest());
+        await service.MuhasebeOnayinaGonderAsync(asilCreated.Id!.Value, CancellationToken.None);
+        await service.MuhasebeOnaylaAsync(asilCreated.Id.Value, CancellationToken.None);
+        if (!await setupCtx.KurumFaturaNumaraSayaclari.AnyAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == "YAR"))
+        {
+            setupCtx.KurumFaturaNumaraSayaclari.Add(new KurumFaturaNumaraSayaci
+            {
+                KurumId = _kurumId,
+                MaliYil = 2026,
+                SeriKodu = "YAR",
+                SonNumara = 0,
+                AktifMi = true
+            });
+            await setupCtx.SaveChangesAsync();
+        }
+        await service.FaturaKesAsync(asilCreated.Id.Value, new FaturaKesRequest { SeriKodu = "YAR" }, CancellationToken.None);
+
+        var asil = await setupCtx.SatisBelgeleri
+            .AsNoTracking()
+            .Include(x => x.Satirlar)
+            .SingleAsync(x => x.Id == asilCreated.Id.Value);
+        var asilSatirId = asil.Satirlar.Single().Id;
+
+        var iadeCreated = await service.CreateAsync(new CreateSatisBelgesiRequest
+        {
+            BelgeNo = $"BLG-IAD-{_uniqueSuffix}-{Guid.NewGuid():N}"[..40],
+            BelgeTipi = SatisBelgesiTipi.SatisIadeFaturasi,
+            TesisId = _tesisId,
+            CariKartId = _musteriKartId,
+            BelgeTarihi = new DateTime(2026, 3, 12),
+            KarsiTarafFaturaNo = $"MUS-{Guid.NewGuid():N}"[..20],
+            IadeEdilenBelgeId = asil.Id,
+            Satirlar =
+            [
+                new CreateSatisBelgesiSatiriRequest
+                {
+                    SiraNo = 1,
+                    Aciklama = "Iade",
+                    Miktar = 1,
+                    BirimFiyat = 1000m,
+                    KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+                    KdvOrani = 20m,
+                    KaynakSatirId = asilSatirId.ToString()
+                }
+            ]
+        });
+
+        return (iadeCreated.Id!.Value, asilSatirId);
+    }
+
+    private static UpdateSatisBelgesiRequest CreateIadeReferansiKaldirmaRequest()
+        => new()
+        {
+            IadeEdilenBelgeReferansiKaldir = true
+        };
+
     // ─────────────────────────────────────────────────────────────
     // 1: Operasyonel iptal ile MuhasebeOnaylaAsync GERÇEKTEN eşzamanlı yarışır - yalnızca biri
     // başarılı olur, karışık/otoriter-olmayan bir durum asla oluşmaz
@@ -315,6 +379,138 @@ public class TicariBelgeIptalYarisKosuluIntegrationTests : IAsyncLifetime
             await Assert.ThrowsAsync<BaseException>(
                 () => fisService.MuhasebeFisiOlusturAsync(created.Id!.Value, CancellationToken.None));
         }
+    }
+
+    [IntegrationFact]
+    public async Task SatisIadeBelgesiGuncellemeVeOnayaGonderme_EszamanliCalisirsa_YalnizcaBiriBasarili()
+    {
+        var (iadeBelgesiId, _) = await SeedSatisIadeBelgesiAsync();
+
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var interceptorA = new SatisBelgesiSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new SatisBelgesiSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
+        await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
+        var satisServiceA = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx1);
+        var satisServiceB = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx2);
+
+        var taskA = Task.Run(() => SafeCallAsync(() => satisServiceA.UpdateAsync(iadeBelgesiId, CreateIadeReferansiKaldirmaRequest(), CancellationToken.None)));
+        var taskB = Task.Run(() => SafeCallAsync(() => satisServiceB.MuhasebeOnayinaGonderAsync(iadeBelgesiId, CancellationToken.None)));
+
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(10));
+        if (!ikisiDeHazir)
+        {
+            gate.Release(2);
+            Assert.Fail("Ön-koşul ihlali: iki taraf da beklenen sürede kilitli SELECT'e ulaşmadı.");
+        }
+        gate.Release(2);
+
+        var (aBasarili, aHata) = await taskA;
+        var (bBasarili, bHata) = await taskB;
+
+        Assert.True(aBasarili ^ bBasarili, $"Tam olarak biri başarılı olmalı. A={aBasarili} ({aHata}), B={bBasarili} ({bHata})");
+
+        await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var belgeDb = await verifyCtx.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == iadeBelgesiId);
+
+        if (aBasarili)
+        {
+            Assert.False(bBasarili);
+            Assert.Contains("iade edilen belge referansı zorunludur", bHata, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(belgeDb.IadeEdilenBelgeId);
+            Assert.Equal(TicariBelgeDurumu.Taslak, belgeDb.TicariDurum);
+            Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, belgeDb.MuhasebeDurumu);
+            Assert.False(belgeDb.IsDeleted);
+        }
+        else
+        {
+            Assert.False(aBasarili);
+            Assert.Contains("Muhasebe Onayında durumundaki belgeler", aHata, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(belgeDb.IadeEdilenBelgeId);
+            Assert.Equal(TicariBelgeDurumu.Hazir, belgeDb.TicariDurum);
+            Assert.Equal(TicariBelgeMuhasebeDurumu.Onayda, belgeDb.MuhasebeDurumu);
+            Assert.False(belgeDb.IsDeleted);
+        }
+    }
+
+    [IntegrationFact]
+    public async Task TaslakBelgeSilmeVeOnayaGonderme_EszamanliCalisirsa_YalnizcaBiriBasarili()
+    {
+        await using var setupCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var service = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(setupCtx);
+        var created = await service.CreateAsync(YeniHizmetBelgesiRequest());
+
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var interceptorA = new SatisBelgesiSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new SatisBelgesiSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
+        await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
+        var satisServiceA = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx1);
+        var satisServiceB = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx2);
+
+        var taskA = Task.Run(() => SafeCallAsync(() => satisServiceA.DeleteAsync(created.Id!.Value, CancellationToken.None)));
+        var taskB = Task.Run(() => SafeCallAsync(() => satisServiceB.MuhasebeOnayinaGonderAsync(created.Id!.Value, CancellationToken.None)));
+
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(10));
+        if (!ikisiDeHazir)
+        {
+            gate.Release(2);
+            Assert.Fail("Ön-koşul ihlali: iki taraf da beklenen sürede kilitli SELECT'e ulaşmadı.");
+        }
+        gate.Release(2);
+
+        var (aBasarili, aHata) = await taskA;
+        var (bBasarili, bHata) = await taskB;
+
+        Assert.True(aBasarili ^ bBasarili, $"Tam olarak biri başarılı olmalı. A={aBasarili} ({aHata}), B={bBasarili} ({bHata})");
+
+        await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var belgeDb = await verifyCtx.SatisBelgeleri.IgnoreQueryFilters().FirstAsync(x => x.Id == created.Id);
+
+        if (aBasarili)
+        {
+            Assert.False(bBasarili);
+            Assert.Contains("silinmiş", bHata, StringComparison.OrdinalIgnoreCase);
+            Assert.True(belgeDb.IsDeleted);
+        }
+        else
+        {
+            Assert.False(aBasarili);
+            Assert.Contains("güncellenemez", aHata, StringComparison.OrdinalIgnoreCase);
+            Assert.False(belgeDb.IsDeleted);
+            Assert.Equal(TicariBelgeDurumu.Hazir, belgeDb.TicariDurum);
+            Assert.Equal(TicariBelgeMuhasebeDurumu.Onayda, belgeDb.MuhasebeDurumu);
+        }
+    }
+
+    [IntegrationFact]
+    public async Task BaskaDbContextBelgeyiDegistirdiktenSonra_TrackedBelgeIleMuhasebeOnayaGondermeEskiVeriyiKullanamaz()
+    {
+        var (iadeBelgesiId, _) = await SeedSatisIadeBelgesiAsync();
+
+        await using var ctx1 = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var tracked = await ctx1.SatisBelgeleri.Include(x => x.Satirlar).SingleAsync(x => x.Id == iadeBelgesiId);
+        Assert.NotNull(tracked.IadeEdilenBelgeId);
+
+        await using (var ctx2 = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            var service2 = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx2);
+            await service2.UpdateAsync(iadeBelgesiId, CreateIadeReferansiKaldirmaRequest(), CancellationToken.None);
+        }
+
+        var service1 = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(ctx1);
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service1.MuhasebeOnayinaGonderAsync(iadeBelgesiId, CancellationToken.None));
+        Assert.Contains("iade edilen belge referansı zorunludur", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        var belgeDb = await ctx1.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == iadeBelgesiId);
+        Assert.Null(belgeDb.IadeEdilenBelgeId);
+        Assert.Equal(TicariBelgeDurumu.Taslak, belgeDb.TicariDurum);
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Bekliyor, belgeDb.MuhasebeDurumu);
+        Assert.False(belgeDb.IsDeleted);
     }
 
     // ─────────────────────────────────────────────────────────────

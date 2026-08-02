@@ -9,11 +9,13 @@ Not: Bu analizde yalnız resmî GİB kaynakları kullanıldı. Erişim tarihi 20
 - GİB e-Belge ana sayfa: https://ebelge.gib.gov.tr/anasayfa.html
 - GİB e-Fatura mevzuat ve teknik mimari: https://ebelge.gib.gov.tr/efaturamevzuat.html
 - e-Fatura Uygulaması Özel Entegrasyon Kılavuzu: https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/e-Fatura_Uygulamasi_Ozel_Entegrasyon_Kilavuzu_v1.14.pdf
+- e-Fatura Paketi: https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/e-FaturaPaketi.zip
 - e-Fatura Uygulaması Saklama Kılavuzu: https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/e-FaturaUygulamasiSaklamaKilavuzu.pdf
 - e-Arşiv Teknik Kılavuzu 1.18: https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/e-Arsiv_Teknik_Kilavuzu_V.1.18.pdf
+- e-Arşiv Fatura Paketi: https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/earsiv_paket_v1.1_8.zip
 - 27.07.2026 duyurusundaki güncel UBL-TR paketi: https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/UBLTR_1.2.1_Kilavuzlar.zip
 
-GİB ana sayfasındaki 27.07.2026 duyurusuna göre UBL-TR (Kod Listeleri) Kılavuzu güncellenmiş ve değişikliklerin 14.09.2026 itibarıyla devreye alınacağı ilan edilmiştir. Bu nedenle kod listeleri ve paket seçimi için tek otorite güncel GİB duyurusudur.
+GİB ana sayfasındaki 27.07.2026 duyurusuna göre güncellemeler 14.09.2026 tarihinde devreye alınacaktır. 13.09.2026 sonuna kadar o tarihte yürürlükte olan önceki paket / kod listesi seti kullanılmalı, 14.09.2026 itibarıyla duyuruda yayımlanan yeni paketler kullanılmalıdır. Paket seçimi issuance tarihi ve effective-date registry üzerinden yapılmalıdır.
 
 ## 1) Mevcut durum
 
@@ -84,6 +86,8 @@ Kod tabanındaki gözlem şu şekilde:
 - Önerilen ad `EBelgeKaydi`dır; `EBelgeBelge` yerine daha açıktır.
 - `EBelgeKaydi`, `SatisBelgesiId` üzerinden `SatisBelgesi`’ne bire bir bağlı olmalıdır.
 - `EBelgeKaydi` yalnız issuance, snapshot, render, artefakt ve delivery yaşam döngüsünün otoritesi olmalıdır.
+- `EBelgeKaydi` ayrıca e-Fatura / e-Arşiv kararının, snapshot şema sürümünün ve canonical hash’in otoritesidir.
+- `SatisBelgesi.EBelgeUuid` alanı varsa onun kaderi nettir: Faz 1 geçişinde legacy uyumluluk için yalnız okunur tutulur, writable otorite `EBelgeKaydi.EBelgeUuid` olur. İki tabloda bağımsız writable UUID bırakılmaz; gerekirse migration ile mevcut değerler `EBelgeKaydi`’na backfill edilir ve sonra `SatisBelgesi` tarafı read-only compatibility alanına düşürülür.
 
 ### Otorite tablosu
 
@@ -92,9 +96,11 @@ Kod tabanındaki gözlem şu şekilde:
 | Belge tipi | `SatisBelgesi` | Ticari sınıf burada kalır. |
 | Kurum / tesis / cari ilişkisi | `SatisBelgesi` | Ticari bağın kökü burada kalır. |
 | Tutarlar ve satır hesapları | `SatisBelgesi` + `SatisBelgesiSatiri` | Muhasebesel iş kuralı burada otoriterdir. |
-| Issuance anı snapshot | `EBelgeKaydi` + `EBelgeSnapshot` | Immutable çıktıdır. |
-| Resmî numara | `EBelgeKaydi` | Giden belgelerde üretilir. |
-| `EBelgeUuid` | `EBelgeKaydi` | UUID otoritesi burada olur. |
+| Issuance anı snapshot | `EBelgeKaydi` + `EBelgeSnapshot` | Immutable çıktıdır; değiştirilebilir kaynak değildir. |
+| Resmî numara | `SatisBelgesi` | Faz 1’de tek otorite buradadır; snapshot’a kopyalanabilir ama snapshot otoriter değildir. |
+| e-Fatura / e-Arşiv kararı | `EBelgeKaydi` | İssuance kararı burada otoriterdir. |
+| `EBelgeUuid` | `EBelgeKaydi` | UUID otoritesi burada olur; `SatisBelgesi` tarafı legacy uyumluluk dışında writable kalmaz. |
+| Snapshot şema sürümü / canonical hash | `EBelgeKaydi` | Snapshot bütünlüğü ve sürümleme burada otoriterdir. |
 | UBL / PDF artefaktları | `EBelgeKaydi` + `EBelgeArtefakt` | Hash, yol, sürüm burada tutulur. |
 | Delivery / retry state | `EBelgeKaydi` + `EBelgeDeliveryAttempt` | Entegratör ve worker state burada olur. |
 | `TicariBelgeFaturalamaDurumu` | Projection | `EBelgeKaydi` üzerinden üretilir. |
@@ -110,25 +116,29 @@ Mevcut durumun doğru kaydı:
 
 Yeni model için öneri:
 
-- `EBelgeKaydi.SatisBelgesiId` zorunlu ve benzersiz olmalıdır.
-- `EBelgeUuid` null değilse benzersiz olmalıdır.
+- `EBelgeKaydi.SatisBelgesiId` zorunlu ve benzersiz olmalıdır; unique indeks IsDeleted filtresi olmadan tanımlanmalıdır.
+- `EBelgeKaydi.EBelgeUuid` null olmayan kayıtlar arasında benzersiz olmalıdır; unique indeks IsDeleted filtresi olmadan tanımlanmalıdır.
+- böylece soft-delete edilmiş kaydın `SatisBelgesiId` veya UUID’si yeniden kullanılamaz.
 - `BelgeVersiyonu` ile snapshot / artefakt tekillikleri açıkça tanımlanmalıdır.
-- kesilmiş veya iptal edilmiş e-belge kayıtları soft-delete edilerek kimliklerin yeniden kullanımına izin verilmemelidir.
+- Faz 1’de `BelgeVersiyonu = 1` olmalıdır; idempotent retry yeni versiyon oluşturmaz.
+- canonical hash global unique yapılmamalıdır; aynı içerikli farklı belgeler bulunabilir.
+- kesilmiş veya iptal edilmiş e-belge kayıtları soft-delete edilse bile kimliklerin yeniden kullanımına izin verilmemelidir.
 - uygulama seviyesindeki idempotency, DB unique constraint’lerinin yerine geçmez; sadece onları tamamlar.
+- `SatisBelgesi` tarafındaki `KurumId + ResmiFaturaNo` unique indeksinden IsDeleted filtresinin kaldırılması önerilir; ancak bu geçişten önce tarihsel mükerrer kayıt kontrolü ve düzeltme planı yapılmalıdır.
 
 ## 4) Transaction sonrası güvenilir yürütme
 
-Önerilen yürütme zinciri:
+Faz 1 için atomik sıra:
 
-1. `FaturaKesAsync` içinde kilitli belge oku.
-2. resmî numara gerekiyorsa aynı transaction içinde ata.
-3. immutable snapshot oluştur.
-4. `EBelgeKaydi` satırını atomik oluştur.
-5. gerekiyorsa transactional outbox kaydını atomik oluştur.
-6. transaction commit olsun.
-7. worker, UBL/PDF render ve entegratör çağrısını transaction dışında yürütsün.
+1. satış belgesini transaction içinde kilitli ve güncel oku.
+2. giden belge, muhasebe durumu ve idempotency kurallarını doğrula.
+3. mevcut sayaçtan `ResmiFaturaNo` üret.
+4. `SatisBelgesi` üzerinde `ResmiFaturaNo`, `FaturaKesimTarihi` ve `Kesildi` durumunu ata.
+5. aynı transaction içinde `EBelgeKaydi` ve immutable `EBelgeSnapshot` oluştur.
+6. tek `SaveChanges` / commit ile tamamla.
+7. hata halinde sayaç dahil her şeyi rollback yap.
 
-Bu modelde UBL/PDF üretimi ve entegratör çağrısı DB transaction’ının dışında kalır. Transaction commit’i ile worker’ın başlaması arasındaki kayıp pencere transactional outbox ile kapatılır.
+Faz 1’de UBL / PDF üretimi ve entegratör çağrısı DB transaction’ının dışında tutulur; bu adımlar sonraki fazların konusudur. Aynı çağrı tekrarlandığında ikinci numara, UUID, `EBelgeKaydi` veya snapshot oluşturulmaz.
 
 ### Worker ve retry davranışı
 
@@ -211,6 +221,24 @@ Eksik olup `EBelgeSnapshot` içinde saklanması gerekenler:
 
 ## 6) Durum makinesi
 
+`SatisBelgesi` üzerindeki kesim öncesi durumlar:
+
+`Taslak -> Hazir -> KesimBekliyor`
+
+`FaturaKesAsync` sırasında:
+
+`KesimBekliyor -> Kesildi`
+
+ve aynı anda `EBelgeKaydi` + snapshot oluşturulur.
+
+`EBelgeKaydi`, Faz 1’de doğrudan `SnapshotHazir` benzeri bir başlangıç durumuyla oluşmalıdır. `Taslak / Hazir / KesimBekliyor` durumları henüz var olmayan `EBelgeKaydi` altında gösterilmemelidir.
+
+Faz 2 sonrasındaki e-belge durumu örneği:
+
+`SnapshotHazir -> RenderBekliyor -> ArtefaktHazir -> GonderimBekliyor -> Gonderiliyor -> Gonderildi / Hata -> IptalEdildi`
+
+Faz 1’de mevcut `SatisBelgesiDurumProjection` ve otoriter `FaturalamaDurumu` yapısı değiştirilmemelidir. İleride projection yapılacaksa bunun `SatisBelgesi + opsiyonel EBelgeKaydi` üzerinden üretileceği ayrı karar olarak not edilmelidir.
+
 Önerilen ana akış:
 
 `Taslak -> Hazir -> KesimBekliyor -> Kesildi -> Entegratorde -> Alindi / Hata -> Gonderildi`
@@ -261,6 +289,7 @@ Yalnız şu kapsam:
 - immutable `EBelgeSnapshot`
 - `SatisBelgesiId` ile bire bir bağlantı
 - kesin DB tekillikleri
+- migration
 - `FaturaKesAsync` içinde atomik ve idempotent snapshot oluşturma
 
 Faz 1 dışında tutulacaklar:
@@ -277,20 +306,38 @@ Dar hedefli test önerileri:
 - aynı belgenin snapshot’ının canlı master data değişikliklerinden etkilenmediğini doğrula
 - resmî numara ve UUID tekilliğini doğrula
 
-### Faz 2
+### Faz 2A
 
 Yalnız:
 
 - transactional outbox
 - worker claim / lease
+
+Dar hedefli test önerileri:
+
+- aynı outbox işinin tek worker tarafından claim edildiğini doğrula
+- retry sonrası aynı işin ikinci kez sahiplenilmediğini doğrula
+
+### Faz 2B
+
+Yalnız:
+
 - UBL / PDF render
 - artefakt saklama
+
+Dar hedefli test önerileri:
+
+- aynı snapshot’tan üretilen artefakt hash’inin sabit kaldığını doğrula
+- storage miss ve DB miss toparlama senaryolarını doğrula
+
+### Faz 2C
+
+Yalnız:
+
 - delivery retry ve hata kaydı
 
 Dar hedefli test önerileri:
 
-- aynı işin ikinci UUID veya ikinci resmî numara üretmediğini doğrula
-- storage miss ve DB miss toparlama senaryolarını doğrula
 - retry sonrası aynı deterministic key ile devam edildiğini doğrula
 
 ### Faz 3
@@ -320,8 +367,10 @@ Varsayım üretilmemesi gereken noktalar:
 
 Karar:
 
-- 14.09.2026 öncesi, resmî GİB duyurusundaki güncel paket ve kod listeleri uygulanmalıdır.
-- 14.09.2026 sonrası için yeni paket / kod listesi ancak güncel GİB yayınları doğrulandıktan sonra devreye alınmalıdır.
+- 13.09.2026 sonuna kadar o tarihte yürürlükte olan önceki paket / kod listesi seti kullanılmalıdır.
+- 14.09.2026 itibarıyla duyuruda yayımlanan yeni paketler kullanılmalıdır.
+- paket seçimi issuance tarihi ve effective-date registry üzerinden yapılmalıdır.
+- eski paket bağlantısı veya içeriği resmî kaynaktan doğrulanamıyorsa tahmin üretilmemelidir; bu durum saklanması gereken sürümlü artefakt / checksum kararı olarak işaretlenmelidir.
 - entegratör seçilmeden profil ve provider yanıt kodları hakkında varsayım yapılmamalıdır.
 
 ## 11) Kritik karar: immutable snapshot
@@ -359,4 +408,3 @@ Mevcut STYS modeli belge yönü, resmî numara akışı ve satır vergi alanlar�
 3. transactional outbox ile güvenilir handoff
 4. UBL / PDF / entegratör / e-posta fazlarının ayrılması
 5. entegratör bağımsız servis sınırı
-

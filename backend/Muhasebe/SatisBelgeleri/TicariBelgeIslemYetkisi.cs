@@ -57,6 +57,29 @@ public static class TicariBelgeIslemYetkisi
            && muhasebeDurumu == TicariBelgeMuhasebeDurumu.Onayda;
 
     /// <summary>
+    /// Belgenin ARTIK bir mali etki doğurup doğurmadığını belirler: bağlı bir muhasebe fişi
+    /// (MuhasebeFisId) VARSA, YA DA muhasebe onayı verilmişse (MuhasebeDurumu=Onaylandi) — henüz
+    /// fiş oluşturulmamış olsa bile — belge mali açıdan "gerçekleşmiş" sayılır. Bu tek kaynak,
+    /// operasyon sınırının (bkz. görev 2 - ui/ticari-belgeler) mali etkisi doğmuş bir belgeyi
+    /// ASLA iptal edememesini garanti eder; muhasebe tarafı (SatisBelgesiService.IptalEtAsync +
+    /// bağlı MuhasebeFisiIptalEtAsync ters kayıt akışı) bu belgeleri YİNE DE iptal edebilir - bu
+    /// metot yalnızca OPERASYON sınırı için kullanılır, muhasebe tarafının kendi iptal kuralı
+    /// (bkz. IptalEdilebilirMi) DEĞİŞTİRİLMEZ.
+    /// </summary>
+    public static bool MaliEtkisiOlusmusMu(TicariBelgeMuhasebeDurumu muhasebeDurumu, int? muhasebeFisId)
+        => muhasebeFisId.HasValue || muhasebeDurumu == TicariBelgeMuhasebeDurumu.Onaylandi;
+
+    /// <summary>
+    /// Operasyon sınırı (ui/ticari-belgeler) için iptal edilebilirlik: temel IptalEdilebilirMi
+    /// kuralına EK olarak, mali etkisi doğmuş (bkz. MaliEtkisiOlusmusMu) bir belge operasyon
+    /// ekranından ASLA iptal edilemez - bu belgeler yalnızca Muhasebe Satış/Alış Belgeleri
+    /// ekranından (MuhasebeSatisBelgeleriYonetimi.Manage) iptal edilebilir.
+    /// </summary>
+    public static bool OperasyonelIptalEdilebilirMi(
+        TicariBelgeDurumu ticariDurum, TicariBelgeMuhasebeDurumu muhasebeDurumu, TicariBelgeFaturalamaDurumu faturalamaDurumu, int? muhasebeFisId)
+        => IptalEdilebilirMi(ticariDurum, faturalamaDurumu) && !MaliEtkisiOlusmusMu(muhasebeDurumu, muhasebeFisId);
+
+    /// <summary>
     /// Muhasebe fişi YALNIZCA MuhasebeDurumu=Onaylandi VE henüz bağlı bir MuhasebeFisId yokken
     /// oluşturulabilir. Belge tipi bir İZİN LİSTESİYLE (allowlist) doğrulanır — YALNIZCA
     /// SatisFaturasi, AlisFaturasi, SatisIadeFaturasi ve AlisIadeFaturasi desteklenir.

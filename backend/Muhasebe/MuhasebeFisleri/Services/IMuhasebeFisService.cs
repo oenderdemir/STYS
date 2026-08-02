@@ -37,6 +37,18 @@ public interface IMuhasebeFisService : IBaseRdbmsService<MuhasebeFisDto, Muhaseb
     /// </summary>
     Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniGeriAlAsync(
         int tersKayitFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Satış/alış belgesi fişlerinin (KaynakModul=SatisBelgesi) iptal/ters-kayıt işlemine özel,
+    /// dar bir metot - PosValorTransferFisiniIptalEtAsync ile AYNI desen. KaynakModul kontrolü
+    /// metot içinde SABİTTİR (parametre olarak alınmaz) - genel IptalEtAsync bu KaynakModul için
+    /// 409 döner, yalnızca bu metot SatisBelgesiService.IptalEtAsync tarafından çağrılır; dışarı
+    /// açık bir HTTP endpoint'i yoktur. Ambient transaction'a katılır (kendi transaction'ını
+    /// açmaz). Orijinal fiş zaten Iptal ise IptalEdilenFisId ilişkisiyle mevcut ters kaydı kilitli
+    /// şekilde bulur (idempotent); bulamazsa veri tutarsızlığı olarak BaseException(500) fırlatır.
+    /// </summary>
+    Task<MuhasebeFisIptalSonucDto> SatisBelgesiFisiIptalEtAsync(
+        int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default);
     Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);

@@ -98,6 +98,21 @@ public class TicariBelgeService : ITicariBelgeService
     public async Task IptalEtAsync(int id, CancellationToken cancellationToken = default)
     {
         await EnsureBelgeErisimKapsamindaAsync(id, cancellationToken);
+
+        // Mali etkisi doğmuş (bağlı bir muhasebe fişi olan VE/VEYA muhasebece onaylanmış) bir
+        // belge operasyon ekranından ASLA iptal edilemez (bkz. görev 2) - aksi halde fiş ters
+        // kayda alınırken kaynak belgenin cari/stok hareketleri ve durumları güncellenmeden
+        // kalabiliyordu. Bu belgeler yalnızca Muhasebe Satış/Alış Belgeleri ekranından
+        // (MuhasebeSatisBelgeleriYonetimi.Manage) iptal edilebilir.
+        var belge = await _satisBelgesiService.GetByIdAsync(id, cancellationToken);
+        if (TicariBelgeIslemYetkisi.MaliEtkisiOlusmusMu(belge.MuhasebeDurumu, belge.MuhasebeFisId))
+        {
+            throw new BaseException(
+                "Bu belge muhasebece onaylanmış ve/veya bağlı bir muhasebe fişine sahip; operasyon ekranından iptal edilemez. " +
+                "İlgili işlem yalnızca Muhasebe Satış/Alış Belgeleri ekranından yapılabilir.",
+                403);
+        }
+
         await _satisBelgesiService.IptalEtAsync(id, cancellationToken);
     }
 
@@ -136,14 +151,14 @@ public class TicariBelgeService : ITicariBelgeService
     private TicariBelgeDto ToDto(SatisBelgesiDto belge)
     {
         var dto = _mapper.Map<TicariBelgeDto>(belge);
-        UygulaIslemYetkileri(dto);
+        UygulaIslemYetkileri(dto, belge.MuhasebeFisId);
         return dto;
     }
 
     private TicariBelgeDetayDto ToDetayDto(SatisBelgesiDto belge)
     {
         var dto = _mapper.Map<TicariBelgeDetayDto>(belge);
-        UygulaIslemYetkileri(dto);
+        UygulaIslemYetkileri(dto, belge.MuhasebeFisId);
         return dto;
     }
 
@@ -153,15 +168,19 @@ public class TicariBelgeService : ITicariBelgeService
     /// görev C): üç otoriter alan SatisBelgesiDurumProjection.ProjeLegacyDurum tarafından GEÇERLİ
     /// bulunmadan (tanımsız/çelişkili kombinasyon) hiçbir işlem yeteneği hesaplanmaz - açık
     /// InvalidOperationException fırlatılır, yanıltıcı bir varsayılana (ör. tümü false) DÜŞÜLMEZ.
+    ///
+    /// <paramref name="muhasebeFisId"/>, kaynak SatisBelgesiDto'dan (TicariBelgeDto'nun KENDİSİ
+    /// bu alanı BİLİNÇLİ OLARAK dışarı vermez, bkz. TicariBelgeDto XML doc'u) YALNIZCA
+    /// OperasyonelIptalEdilebilirMi hesaplaması için ödünç alınır - dto'ya YAZILMAZ.
     /// </summary>
-    private static void UygulaIslemYetkileri(TicariBelgeDto dto)
+    private static void UygulaIslemYetkileri(TicariBelgeDto dto, int? muhasebeFisId)
     {
         SatisBelgesiDurumProjection.ProjeLegacyDurum(dto.TicariDurum, dto.MuhasebeDurumu, dto.FaturalamaDurumu);
 
         dto.GuncellenebilirMi = TicariBelgeIslemYetkisi.GuncellenebilirMi(dto.TicariDurum, dto.MuhasebeDurumu);
         dto.SilinebilirMi = TicariBelgeIslemYetkisi.SilinebilirMi(dto.TicariDurum, dto.MuhasebeDurumu, dto.FaturalamaDurumu);
         dto.MuhasebeOnayinaGonderilebilirMi = TicariBelgeIslemYetkisi.MuhasebeOnayinaGonderilebilirMi(dto.TicariDurum, dto.MuhasebeDurumu);
-        dto.IptalEdilebilirMi = TicariBelgeIslemYetkisi.IptalEdilebilirMi(dto.TicariDurum, dto.FaturalamaDurumu);
+        dto.IptalEdilebilirMi = TicariBelgeIslemYetkisi.OperasyonelIptalEdilebilirMi(dto.TicariDurum, dto.MuhasebeDurumu, dto.FaturalamaDurumu, muhasebeFisId);
         dto.OperasyonelDurumAciklamasi = TicariBelgeIslemYetkisi.OperasyonelDurumAciklamasi(dto.TicariDurum, dto.MuhasebeDurumu, dto.FaturalamaDurumu);
     }
 }

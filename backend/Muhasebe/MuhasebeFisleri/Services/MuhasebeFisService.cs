@@ -549,6 +549,140 @@ WHERE [IptalEdilenFisId] = {orijinalFis.Id} AND [IsDeleted] = 0")
     }
 
     /// <summary>
+    /// Satış/alış belgesi fişlerine (KaynakModul=SatisBelgesi) özel, dar bir iptal/ters-kayit
+    /// metodu (bkz. IMuhasebeFisService, görev 1). KaynakModul kontrolü burada SABİTTİR; genel
+    /// IptalEtAsync bu KaynakModul için ayrıca 409 döner - böylece bir SatisBelgesi fişi ASLA
+    /// genel fiş iptali ile (kaynak belgenin cari/stok hareketleri ve otoriter durumları
+    /// güncellenmeden) iptal edilemez. Ambient transaction'a katılır (kendi transaction'ını
+    /// açmaz) - çağıranın (SatisBelgesiService.IptalEtAsync) transaction'ı içinde çalışır.
+    /// </summary>
+    public async Task<MuhasebeFisIptalSonucDto> SatisBelgesiFisiIptalEtAsync(
+        int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default)
+    {
+        var orijinalFis = await _dbContext.MuhasebeFisler
+            .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[MuhasebeFisler] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = {muhasebeFisId} AND [IsDeleted] = 0")
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Fiş bulunamadı.", 404);
+
+        if (orijinalFis.KaynakModul != MuhasebeKaynakModulleri.SatisBelgesi
+            || orijinalFis.KaynakId != beklenenKaynakId
+            || orijinalFis.TesisId != beklenenTesisId)
+        {
+            throw new BaseException("Fiş bilgileri beklenenle eşleşmiyor, iptal reddedildi.", 400);
+        }
+
+        if (orijinalFis.Durum == MuhasebeFisDurumlari.TersKayit)
+        {
+            throw new BaseException("Bu fiş bir ters kayıt fişidir, doğrudan iptal/ters kayıt işlemine konu edilemez.", 400);
+        }
+
+        if (orijinalFis.Durum == MuhasebeFisDurumlari.Iptal)
+        {
+            var mevcutTersKayit = await _dbContext.MuhasebeFisler
+                .FromSqlInterpolated($@"
+SELECT * FROM [muhasebe].[MuhasebeFisler] WITH (UPDLOCK, ROWLOCK)
+WHERE [IptalEdilenFisId] = {orijinalFis.Id} AND [IsDeleted] = 0")
+                .FirstOrDefaultAsync(cancellationToken);
+
+            // Bulunan satirin GERCEKTEN gecerli bir ters kayit oldugunu dogrula - yalnizca var
+            // oldugu icin gecerli sayilmaz: Durum=TersKayit ve TesisId eslesmesi kesin sarttir.
+            if (mevcutTersKayit is null
+                || mevcutTersKayit.Durum != MuhasebeFisDurumlari.TersKayit
+                || mevcutTersKayit.TesisId != orijinalFis.TesisId)
+            {
+                throw new BaseException(
+                    $"Fiş {orijinalFis.Id} 'İptal' durumunda ancak buna ait geçerli bir ters kayıt fişi bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun.", 500);
+            }
+
+            return new MuhasebeFisIptalSonucDto
+            {
+                OrijinalFisId = orijinalFis.Id,
+                TersKayitFisId = mevcutTersKayit.Id,
+                ZatenTersKayitliMi = true
+            };
+        }
+
+        if (orijinalFis.Durum != MuhasebeFisDurumlari.Onayli)
+        {
+            throw new BaseException($"Fiş beklenmeyen bir durumda (Durum: {orijinalFis.Durum}), ters kayıt oluşturulamaz.", 400);
+        }
+
+        if (!orijinalFis.YevmiyeNo.HasValue)
+        {
+            throw new BaseException("Fişin yevmiye numarası bulunamadı.", 400);
+        }
+
+        await ValidateOpenPeriodAsync(orijinalFis.TesisId, orijinalFis.FisTarihi, orijinalFis.MaliYil, orijinalFis.Donem, cancellationToken);
+
+        var aktifSatirlar = orijinalFis.Satirlar.Where(s => !s.IsDeleted).ToList();
+        if (aktifSatirlar.Count < 2)
+        {
+            throw new BaseException("İptal edilecek fiş en az iki satır içermelidir.", 400);
+        }
+
+        var tersFis = new MuhasebeFis
+        {
+            TesisId = orijinalFis.TesisId,
+            MaliYil = orijinalFis.MaliYil,
+            Donem = orijinalFis.Donem,
+            FisNo = "TERS-" + orijinalFis.FisNo,
+            FisTarihi = orijinalFis.FisTarihi,
+            FisTipi = MuhasebeFisTipleri.Duzeltme,
+            KaynakModul = orijinalFis.KaynakModul,
+            KaynakId = orijinalFis.KaynakId,
+            Durum = MuhasebeFisDurumlari.TersKayit,
+            IptalEdilenFisId = orijinalFis.Id,
+            Aciklama = aciklama,
+            ToplamBorc = orijinalFis.ToplamAlacak,
+            ToplamAlacak = orijinalFis.ToplamBorc,
+            Satirlar = aktifSatirlar.Select(s => new MuhasebeFisSatir
+            {
+                MuhasebeHesapPlaniId = s.MuhasebeHesapPlaniId,
+                SiraNo = s.SiraNo,
+                Borc = s.Alacak,
+                Alacak = s.Borc,
+                ParaBirimi = s.ParaBirimi,
+                Kur = s.Kur,
+                CariKartId = s.CariKartId,
+                TasinirKartId = s.TasinirKartId,
+                DepoId = s.DepoId,
+                KasaBankaHesapId = s.KasaBankaHesapId,
+                Aciklama = "Ters kayıt: " + (s.Aciklama ?? ""),
+            }).ToList(),
+        };
+
+        try
+        {
+            var yevmiyeNo = await YevmiyeNoUretAsync(tersFis.TesisId, tersFis.MaliYil, cancellationToken);
+            tersFis.YevmiyeNo = yevmiyeNo;
+
+            await _dbContext.MuhasebeFisler.AddAsync(tersFis, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConflict(ex))
+        {
+            throw new BaseException("Bu fiş zaten ters kayıtla iptal edilmiş.", 409);
+        }
+
+        orijinalFis.Durum = MuhasebeFisDurumlari.Iptal;
+        orijinalFis.TersKayitFisId = tersFis.Id;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _muhasebeHesapBakiyeGuncellemeService.FisBakiyeleriniIsleAsync(tersFis, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new MuhasebeFisIptalSonucDto
+        {
+            OrijinalFisId = orijinalFis.Id,
+            TersKayitFisId = tersFis.Id,
+            ZatenTersKayitliMi = false
+        };
+    }
+
+    /// <summary>
     /// PosValorTransferFisiniIptalEtAsync ile olusturulmus bir ters kayit fisini geri alir (bkz.
     /// IMuhasebeFisService). Orijinal transfer fisi VE ters kayit fisi degistirilmez/silinmez;
     /// bunun yerine ters kaydin Borc/Alacak'ini TEKRAR ters ceviren, orijinal transferle AYNI net
@@ -695,9 +829,25 @@ WHERE [Id] = {tersKayitFis.TersKayitFisId.Value} AND [IsDeleted] = 0")
                 409);
         }
 
+        // SatisBelgesi kaynaklı fişler (satış/alış belgeleri) KENDİ otoriter durum makinesine
+        // (TicariDurum/MuhasebeDurumu/FaturalamaDurumu) ve cari/stok hareketlerine sahiptir - bu
+        // fiş genel IptalEtAsync ile DOĞRUDAN iptal edilirse, fiş muhasebe açısından doğru
+        // şekilde ters kayıtla kapanır AMA kaynak belgenin cari/stok hareketleri ve üç otoriter
+        // durumu GÜNCELLENMEZ (bu güncelleme yalnızca SatisBelgesiService.IptalEtAsync ->
+        // SatisBelgesiFisiIptalEtAsync zincirinde yapılır) - sonuçta belge, parası zaten geri
+        // alınmış bir fişe sahip olmasına rağmen hâlâ "onaylanmış/mali etkisi var" görünmeye
+        // devam eder. Bu yüzden bu KaynakModul için genel iptal KESİN olarak reddedilir; doğru
+        // yol Muhasebe Satış/Alış Belgeleri ekranındaki belge iptal işlemidir (bkz. görev 1).
+        if (fis.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi)
+        {
+            throw new BaseException(
+                "Bu fiş bir satış/alış belgesi fişidir; genel fiş iptali ile iptal edilemez. " +
+                "Lütfen Muhasebe Satış/Alış Belgeleri ekranından ilgili belgenin iptal işlemini kullanın.",
+                409);
+        }
+
         ValidateFisDurumuAsync(fis);
         await ValidateYetkiAsync(fis, cancellationToken);
-        await ValidateKaynakBelgeCariHareketEngelleriAsync(fis, cancellationToken);
     }
 
     private static void ValidateFisDurumuAsync(MuhasebeFis fis)
@@ -735,51 +885,6 @@ WHERE [Id] = {tersKayitFis.TersKayitFisId.Value} AND [IsDeleted] = 0")
         {
             throw new BaseException("Bu fiş için yetkiniz bulunmuyor.", 403);
         }
-    }
-
-    private async Task ValidateKaynakBelgeCariHareketEngelleriAsync(MuhasebeFis fis, CancellationToken cancellationToken)
-    {
-        if (fis.KaynakModul != MuhasebeKaynakModulleri.SatisBelgesi || !fis.KaynakId.HasValue)
-        {
-            return;
-        }
-
-        var satisBelgesi = await _dbContext.SatisBelgeleri
-            .Include(x => x.CariKart)
-            .FirstOrDefaultAsync(x => x.Id == fis.KaynakId.Value && !x.IsDeleted, cancellationToken);
-
-        if (satisBelgesi is null)
-        {
-            throw new BaseException("Kaynak satış belgesi bulunamadı veya silinmiş.", 400);
-        }
-
-        if (satisBelgesi.MuhasebeFisId != fis.Id)
-        {
-            throw new BaseException("Kaynak satış belgesi ile fiş referansı uyuşmuyor.", 400);
-        }
-
-        var aktifCariHareketler = await _dbContext.CariHareketler
-            .Where(x =>
-                !x.IsDeleted
-                && x.Durum == CariHareketDurumlari.Aktif
-                && x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi
-                && x.KaynakId == satisBelgesi.Id)
-            .ToListAsync(cancellationToken);
-
-        var kapatilmisHareketVar = aktifCariHareketler.Any(x =>
-        {
-            var toplam = x.BorcTutari > 0m ? x.BorcTutari : x.AlacakTutari;
-            return x.KapandiMi
-                   || x.KapananTutar > 0m
-                   || x.KalanTutar + 0.01m < toplam;
-        });
-
-        if (kapatilmisHareketVar)
-        {
-            throw new BaseException("Bu belgeye ait cari hareket kapatılmış/kısmi kapatılmış. Önce tahsilat/ödeme kapaması geri alınmalıdır.", 400);
-        }
-
-        // TODO: Stok hareketlerine bağlı downstream işlem modeli eklendiğinde burada ek iptal güvenlik kontrolü uygulanacak.
     }
 
     public async Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default)

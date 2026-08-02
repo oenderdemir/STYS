@@ -15,8 +15,10 @@ using STYS.Muhasebe.MuhasebeDonemleri.Mapping;
 using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Mapping;
 using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
@@ -90,6 +92,7 @@ public static class SatisBelgesiMuhasebeTestSupport
         {
             cfg.AddProfile<SatisBelgesiProfile>();
             cfg.AddProfile<MuhasebeDonemProfile>();
+            cfg.AddProfile<MuhasebeFisProfile>();
         }, NullLoggerFactory.Instance);
         return config.CreateMapper();
     }
@@ -119,6 +122,43 @@ public static class SatisBelgesiMuhasebeTestSupport
             new FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
             new NoOpDomainOperationLogger());
+    }
+
+    /// <summary>
+    /// Gerçek SatisBelgesiService - GERÇEK bir IMuhasebeFisService ile birlikte kurulur (bkz.
+    /// görev: iptal/ters kayıt akışı). IptalEtAsync, bağlı bir muhasebe fişi varsa
+    /// SatisBelgesiFisiIptalEtAsync üzerinden GERÇEK ters kayıt/bakiye güncelleme akışını
+    /// çalıştırır - bu yüzden yalnızca-SatisBelgesiService fabrikasının aksine (IMuhasebeFisService
+    /// null!), burada tam bir MuhasebeFisService (gerçek repository + gerçek
+    /// MuhasebeHesapBakiyeGuncellemeService) kurulur.
+    /// </summary>
+    public static (ISatisBelgesiService SatisBelgesiService, IMuhasebeFisService MuhasebeFisService) CreateSatisBelgesiServiceWithMuhasebeFisIptal(
+        StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        var satisBelgesiRepository = new SatisBelgesiRepository(dbContext, mapper);
+        var muhasebeFisRepository = new MuhasebeFisRepository(dbContext, mapper);
+
+        var muhasebeFisService = new MuhasebeFisService(
+            muhasebeFisRepository,
+            mapper,
+            dbContext,
+            new FakeMuhasebeDonemService(),
+            new MuhasebeHesapBakiyeGuncellemeService(dbContext),
+            new FakeUserAccessScopeService(),
+            new NoOpDomainOperationLogger());
+
+        var satisBelgesiService = new SatisBelgesiService(
+            satisBelgesiRepository,
+            dbContext,
+            mapper,
+            muhasebeFisRepository,
+            muhasebeFisService,
+            new FakeUserAccessScopeService(),
+            NullLogger<SatisBelgesiService>.Instance,
+            new NoOpDomainOperationLogger());
+
+        return (satisBelgesiService, muhasebeFisService);
     }
 
     /// <param name="tevkifatKarsiligiHesapPlaniId">

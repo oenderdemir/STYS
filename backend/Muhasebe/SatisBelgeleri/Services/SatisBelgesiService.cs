@@ -1298,17 +1298,17 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
     private async Task ValidateTicariBelgeIptalAsync(SatisBelgesi belge, CancellationToken cancellationToken)
     {
-        // OTORİTER (bkz. görev A/C.7): TicariDurum=IptalEdildi zaten iptal edilmiş demektir.
-        if (belge.TicariDurum == TicariBelgeDurumu.IptalEdildi)
+        // OTORİTER giriş kontrolü — TicariBelgeIslemYetkisi.IptalEdilebilirMi TEK merkezi
+        // kaynaktır; UI (SatisBelgesiDto.IptalEdilebilirMi) ve bu endpoint AYNI kuralı kullanır,
+        // farklı karar üretemez (bkz. görev 3). Mevcut izin kapsamı GENİŞLETİLMEZ, yalnızca karar
+        // kaynağı değişir; iki ayrı hata mesajı (zaten iptal / fatura kesilmiş) korunur.
+        if (!TicariBelgeIslemYetkisi.IptalEdilebilirMi(belge.TicariDurum, belge.FaturalamaDurumu))
         {
-            throw new BaseException("Belge zaten iptal edilmiş.", 400);
-        }
+            if (belge.TicariDurum == TicariBelgeDurumu.IptalEdildi)
+            {
+                throw new BaseException("Belge zaten iptal edilmiş.", 400);
+            }
 
-        // OTORİTER: FaturalamaDurumu=Kesildi/MusteriyeGonderildi olan belgeler iptal edilemez -
-        // mevcut izin kapsamı GENİŞLETİLMEZ, yalnızca karar kaynağı değişir.
-        if (belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.Kesildi ||
-            belge.FaturalamaDurumu == TicariBelgeFaturalamaDurumu.MusteriyeGonderildi)
-        {
             throw new BaseException(
                 $"'{belge.Durum}' durumundaki bir belge iptal edilemez. " +
                 "Fatura kesilmiş veya müşteriye gönderilmiş belgeler iptal edilemez.",
@@ -1327,30 +1327,36 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         var muhasebeFisId = belge.MuhasebeFisId
             ?? throw new BaseException("Bağlı muhasebe fişi bulunamadı.", 404);
 
+        // AsNoTracking - bu yalnızca bir ÖN kontrol okumasıdır; aşağıdaki
+        // SatisBelgesiFisiIptalEtAsync fişi KENDİ (WITH UPDLOCK, ROWLOCK) sorgusuyla yeniden
+        // okur. Burada tracked bir örnek bırakılırsa, EF'in identity map'i o sorgunun sonucunu
+        // bu (artık bayat olabilecek) izlenen örnekle DEĞİŞTİRMEZ.
         var fis = await _db.MuhasebeFisler
-            .FirstOrDefaultAsync(x => x.Id == muhasebeFisId && !x.IsDeleted, cancellationToken);
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == muhasebeFisId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Bağlı muhasebe fişi bulunamadı.", 404);
 
-        if (fis is null)
-        {
-            throw new BaseException("Bağlı muhasebe fişi bulunamadı.", 404);
-        }
-
-        if (fis.Durum == MuhasebeFisDurumlari.Iptal)
-        {
-            return;
-        }
-
-        if (fis.Durum == MuhasebeFisDurumlari.TersKayit)
-        {
-            throw new BaseException("Ters kayıt fişi üzerinde iptal/ters kayıt yapılamaz.", 400);
-        }
-
-        if (fis.Durum != MuhasebeFisDurumlari.Onayli)
+        if (fis.Durum == MuhasebeFisDurumlari.Taslak)
         {
             throw new BaseException("Bağlı taslak muhasebe fişi önce silinmelidir.", 400);
         }
 
-        await _muhasebeFisService.IptalEtAsync(fis.Id, cancellationToken: cancellationToken);
+        if (!belge.TesisId.HasValue)
+        {
+            throw new BaseException("Satış belgesinde tesis bilgisi bulunamadı.", 400);
+        }
+
+        // Durum=Onaylı/İptal/TersKayit ayrımı, ters kayıt oluşturma VE idempotent tekrar-çağrı
+        // mantığı ARTIK TEK merkezi kaynaktan (SatisBelgesiFisiIptalEtAsync) gelir - burada
+        // AYRICA yeniden üretilmez (bkz. görev 1). Bu, aynı zamanda genel MuhasebeFisService.
+        // IptalEtAsync'in KaynakModul=SatisBelgesi için 409 döndüğü tek noktalı kuralla TUTARLI
+        // olan, SatisBelgesi fişlerini iptal etmenin TEK sanctioned yoludur.
+        await _muhasebeFisService.SatisBelgesiFisiIptalEtAsync(
+            muhasebeFisId,
+            beklenenKaynakId: belge.Id,
+            beklenenTesisId: belge.TesisId.Value,
+            aciklama: $"Satış belgesi iptali: {belge.BelgeNo}",
+            cancellationToken: cancellationToken);
     }
 
     private async Task IptalEtCariHareketleriAsync(SatisBelgesi belge, CancellationToken cancellationToken)

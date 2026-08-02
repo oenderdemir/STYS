@@ -256,4 +256,36 @@ public class TicariBelgeSatirTipiTransactionDogrulamasiIntegrationTests : IAsync
 
         await SatisBelgesiMuhasebeTestSupport.AssertHicMuhasebeKaydiOlusmadiAsync(dbContext, onaylanmis.Id!.Value);
     }
+
+    [IntegrationFact]
+    public async Task DbyeDogrudanEksikBirakilmisDepoIdliUrunSatiri_Muhasebelestirilemez()
+    {
+        var request = YeniAlisRequest(
+        [
+            new CreateSatisBelgesiSatiriRequest
+            {
+                SiraNo = 1, Aciklama = "Basta gecerli urun", SatirTipi = SatisBelgesiSatirTipi.Urun,
+                TasinirKartId = _tasinirKartId, DepoId = _depoId,
+                Miktar = 2, BirimFiyat = 100m, KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli, KdvOrani = 20m
+            }
+        ]);
+
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+        var onaylanmis = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisService, request);
+
+        // Servis katmanını BAYPAS EDEREK, doğrudan SQL/EF ile depo referansı SİLİNİR - SatirTipi
+        // hâlâ Urun'dur ve taşınır kart hâlâ atanmıştır ama artık DEPO EKSİKTİR. Bu da yazma-anı
+        // doğrulamasını atlatmış bir tutarsızlığı simüle eder.
+        await dbContext.SatisBelgesiSatirlari
+            .Where(x => x.SatisBelgesiId == onaylanmis.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DepoId, (int?)null));
+
+        var fisService = SatisBelgesiMuhasebeTestSupport.CreateMuhasebeFisService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(
+            () => fisService.MuhasebeFisiOlusturAsync(onaylanmis.Id!.Value, CancellationToken.None));
+        Assert.Contains("depo seçimi zorunludur", ex.Message);
+
+        await SatisBelgesiMuhasebeTestSupport.AssertHicMuhasebeKaydiOlusmadiAsync(dbContext, onaylanmis.Id!.Value);
+    }
 }

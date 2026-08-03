@@ -8,7 +8,7 @@ namespace STYS.Tests;
 
 public class EBelgeOutboxMesajIslemeServiceTests
 {
-    private static readonly Guid TestToken = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid TestToken = Guid.Parse("aabbccdd-eeff-aabb-ccdd-eeffaabbccdd");
 
     [Fact]
     public async Task GecerliClaimVeBasariliHandlerIleCompleteBirKezCagrilir()
@@ -75,11 +75,16 @@ public class EBelgeOutboxMesajIslemeServiceTests
     public async Task BuyukHarfliGecerliTokenCompleteOnceNormalizeEdilir()
     {
         var sut = CreateSut(new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili()));
-        var claim = CreateClaim(kilitToken: TestToken.ToString("D").ToUpperInvariant());
+        var beklenenKanonikToken = TestToken.ToString("D");
+        var buyukHarfliToken = beklenenKanonikToken.ToUpperInvariant();
+
+        Assert.NotEqual(beklenenKanonikToken, buyukHarfliToken);
+
+        var claim = CreateClaim(kilitToken: buyukHarfliToken);
 
         await sut.Service.IsleAsync(claim);
 
-        Assert.Equal(TestToken.ToString("D"), sut.Transition.LastCompleteKilitToken);
+        Assert.Equal(beklenenKanonikToken, sut.Transition.LastCompleteKilitToken);
     }
 
     [Fact]
@@ -88,11 +93,16 @@ public class EBelgeOutboxMesajIslemeServiceTests
         var sut = CreateSut(
             new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarisiz(EBelgeOutboxHataSinifi.Gecici, "E1", "mesaj")),
             policy: new FakePolicy(EBelgeOutboxRetryKarari.Terminal()));
-        var claim = CreateClaim(kilitToken: TestToken.ToString("D").ToUpperInvariant());
+        var beklenenKanonikToken = TestToken.ToString("D");
+        var buyukHarfliToken = beklenenKanonikToken.ToUpperInvariant();
+
+        Assert.NotEqual(beklenenKanonikToken, buyukHarfliToken);
+
+        var claim = CreateClaim(kilitToken: buyukHarfliToken);
 
         await sut.Service.IsleAsync(claim);
 
-        Assert.Equal(TestToken.ToString("D"), sut.Transition.LastFailKilitToken);
+        Assert.Equal(beklenenKanonikToken, sut.Transition.LastFailKilitToken);
     }
 
     [Fact]
@@ -108,7 +118,9 @@ public class EBelgeOutboxMesajIslemeServiceTests
     {
         var sut = CreateSut(new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili()));
 
-        await Assert.ThrowsAsync<BaseException>(() => sut.Service.IsleAsync(null!));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => sut.Service.IsleAsync(null!));
+
+        Assert.Equal(400, ex.ErrorCode);
 
         Assert.Equal(0, sut.Handler.CallCount);
         Assert.Equal(0, sut.Policy.CallCount);

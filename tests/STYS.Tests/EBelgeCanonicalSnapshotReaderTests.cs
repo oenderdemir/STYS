@@ -70,12 +70,18 @@ public class EBelgeCanonicalSnapshotReaderTests
         var reader = new EBelgeCanonicalSnapshotReader();
 
         var snapshot = reader.Oku(fixture.Talep);
+        var originalSatirlar = snapshot.Satirlar.ToArray();
+        var liste = Assert.IsAssignableFrom<IList<EBelgeCanonicalSatirV1>>(snapshot.Satirlar);
 
         Assert.Equal(fixture.ExpectedSnapshot.ToplamMatrah, snapshot.ToplamMatrah);
         Assert.Equal(fixture.ExpectedSnapshot.ToplamKdv, snapshot.ToplamKdv);
         Assert.Equal(fixture.ExpectedSnapshot.GenelToplam, snapshot.GenelToplam);
         Assert.Equal(fixture.ExpectedSnapshot.Satirlar.Select(x => x.SiraNo), snapshot.Satirlar.Select(x => x.SiraNo));
         Assert.Equal(fixture.ExpectedSnapshot.Satirlar.Select(x => x.Aciklama), snapshot.Satirlar.Select(x => x.Aciklama));
+        Assert.Throws<NotSupportedException>(() => liste.Add(originalSatirlar[0]));
+        Assert.Throws<NotSupportedException>(() => liste.RemoveAt(0));
+        Assert.Equal(originalSatirlar.Length, snapshot.Satirlar.Count);
+        Assert.Equal(originalSatirlar, snapshot.Satirlar);
     }
 
     [Fact]
@@ -129,13 +135,20 @@ public class EBelgeCanonicalSnapshotReaderTests
     {
         var fixture = CreateFixture();
         var reader = new EBelgeCanonicalSnapshotReader();
-        var talep = fixture.Talep with { CanonicalJson = "{" };
+        var gecersizJson = "{";
+        var talep = fixture.Talep with
+        {
+            CanonicalJson = gecersizJson,
+            CanonicalSha256 = ComputeSha256(gecersizJson)
+        };
 
         var ex = Assert.Throws<EBelgeCanonicalSnapshotException>(() => reader.Oku(talep));
 
         Assert.Equal(EBelgeCanonicalSnapshotException.HttpStatusCode, ex.ErrorCode);
+        Assert.Equal(EBelgeCanonicalSnapshotException.SafeErrorCode, ex.HataKodu);
         Assert.Equal(EBelgeCanonicalSnapshotException.SafeMessage, ex.Message);
         Assert.DoesNotContain("{", ex.Message);
+        Assert.DoesNotContain("JsonException", ex.Message);
     }
 
     [Fact]

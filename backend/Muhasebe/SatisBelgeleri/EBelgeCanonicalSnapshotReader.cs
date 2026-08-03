@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.ObjectModel;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
@@ -20,6 +21,8 @@ public sealed class EBelgeCanonicalSnapshotException : BaseException
     public const int HttpStatusCode = 422;
     public const string SafeErrorCode = "EBELGE_CANONICAL_SNAPSHOT_INVALID";
     public const string SafeMessage = "Canonical snapshot doğrulanamadı.";
+
+    public string HataKodu { get; } = SafeErrorCode;
 
     public EBelgeCanonicalSnapshotException()
         : base(SafeMessage, HttpStatusCode)
@@ -82,7 +85,8 @@ public sealed class EBelgeCanonicalSnapshotReader : IEBelgeCanonicalSnapshotRead
 
         return snapshot with
         {
-            CanonicalSha256 = NormalizeHash(talep.CanonicalSha256)
+            CanonicalSha256 = NormalizeHash(talep.CanonicalSha256),
+            Satirlar = new ReadOnlyCollection<EBelgeCanonicalSatirV1>(snapshot.Satirlar.ToList())
         };
     }
 

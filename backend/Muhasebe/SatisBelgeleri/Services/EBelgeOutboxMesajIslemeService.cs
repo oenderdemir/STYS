@@ -113,7 +113,14 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
         IEBelgeOutboxLeaseTransitionService transitionService,
         ILogger<EBelgeOutboxMesajIslemeService> logger)
     {
-        _handlers = handlers
+        var handlerList = handlers.ToList();
+        var tanimsizHandler = handlerList.FirstOrDefault(x => !Enum.IsDefined(typeof(EBelgeOutboxIsTuru), x.IsTuru));
+        if (tanimsizHandler is not null)
+        {
+            throw new InvalidOperationException($"Tanımsız iş türünü desteklediğini bildiren handler reddedildi: {tanimsizHandler.IsTuru}.");
+        }
+
+        _handlers = handlerList
             .GroupBy(x => x.IsTuru)
             .ToDictionary(x => x.Key, x => SelectUniqueHandler(x.Key, x.ToList()));
         _retryPolicy = retryPolicy;
@@ -125,11 +132,11 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
         EBelgeOutboxClaimLeaseResultDto claim,
         CancellationToken cancellationToken = default)
     {
-        ValidateClaim(claim);
+        var normalizedToken = ValidateClaimAndGetNormalizedToken(claim);
 
         if (!_handlers.TryGetValue(claim.IsTuru, out var handler))
         {
-            return await HandleDesteklenmeyenIsTuruAsync(claim, cancellationToken);
+            return await HandleDesteklenmeyenIsTuruAsync(claim, normalizedToken, cancellationToken);
         }
 
         var baglam = new EBelgeOutboxIslemBaglami(
@@ -139,41 +146,10 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
             claim.IsTuru,
             claim.DenemeSayisi);
 
+        EBelgeOutboxHandlerSonucu handlerSonucu;
         try
         {
-            var handlerSonucu = await handler.HandleAsync(baglam, cancellationToken);
-
-            if (handlerSonucu.BasariliMi)
-            {
-                var completeEdildi = await _transitionService.TryCompleteAsync(
-                    claim.OutboxMesajiId,
-                    claim.KurumId,
-                    claim.KilitToken,
-                    cancellationToken);
-
-                return completeEdildi
-                    ? EBelgeOutboxIslemeSonucu.Tamamlandi()
-                    : EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
-            }
-
-            var retryKarari = _retryPolicy.Hesapla(claim.DenemeSayisi, handlerSonucu.HataSinifi!.Value);
-            var failEdildi = await _transitionService.TryFailAsync(
-                claim.OutboxMesajiId,
-                claim.KurumId,
-                claim.KilitToken,
-                handlerSonucu.HataKodu!,
-                handlerSonucu.HataMesaji!,
-                retryKarari.YenidenDenenecekMi ? retryKarari.RetryGecikmesi : null,
-                cancellationToken);
-
-            if (!failEdildi)
-            {
-                return EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
-            }
-
-            return retryKarari.YenidenDenenecekMi
-                ? EBelgeOutboxIslemeSonucu.RetryPlanlandi(retryKarari.RetryGecikmesi!.Value)
-                : EBelgeOutboxIslemeSonucu.TerminalHata();
+            handlerSonucu = await handler.HandleAsync(baglam, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -181,36 +157,34 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Beklenmeyen e-belge outbox hatası. Güvenli geçici sınıflandırma uygulanacak.");
-            var retryKarari = _retryPolicy.Hesapla(claim.DenemeSayisi, EBelgeOutboxHataSinifi.Gecici);
-            var failEdildi = await _transitionService.TryFailAsync(
+            return await HandleBeklenmeyenHandlerExceptionAsync(claim, normalizedToken, cancellationToken, ex);
+        }
+
+        if (handlerSonucu.BasariliMi)
+        {
+            var completeEdildi = await _transitionService.TryCompleteAsync(
                 claim.OutboxMesajiId,
                 claim.KurumId,
-                claim.KilitToken,
-                BeklenmeyenHataKodu,
-                BeklenmeyenHataMesaji,
-                retryKarari.YenidenDenenecekMi ? retryKarari.RetryGecikmesi : null,
+                normalizedToken,
                 cancellationToken);
 
-            if (!failEdildi)
-            {
-                return EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
-            }
-
-            return retryKarari.YenidenDenenecekMi
-                ? EBelgeOutboxIslemeSonucu.RetryPlanlandi(retryKarari.RetryGecikmesi!.Value)
-                : EBelgeOutboxIslemeSonucu.TerminalHata();
+            return completeEdildi
+                ? EBelgeOutboxIslemeSonucu.Tamamlandi()
+                : EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
         }
+
+        return await HandleBasarisizHandlerSonucuAsync(claim, normalizedToken, handlerSonucu, cancellationToken);
     }
 
     private async Task<EBelgeOutboxIslemeSonucu> HandleDesteklenmeyenIsTuruAsync(
         EBelgeOutboxClaimLeaseResultDto claim,
+        string normalizedToken,
         CancellationToken cancellationToken)
     {
         var failEdildi = await _transitionService.TryFailAsync(
             claim.OutboxMesajiId,
             claim.KurumId,
-            claim.KilitToken,
+            normalizedToken,
             DesteklenmeyenIsTuruHataKodu,
             DesteklenmeyenIsTuruHataMesaji,
             null,
@@ -219,6 +193,59 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
         return failEdildi
             ? EBelgeOutboxIslemeSonucu.TerminalHata()
             : EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+    }
+
+    private async Task<EBelgeOutboxIslemeSonucu> HandleBasarisizHandlerSonucuAsync(
+        EBelgeOutboxClaimLeaseResultDto claim,
+        string normalizedToken,
+        EBelgeOutboxHandlerSonucu handlerSonucu,
+        CancellationToken cancellationToken)
+    {
+        var retryKarari = _retryPolicy.Hesapla(claim.DenemeSayisi, handlerSonucu.HataSinifi!.Value);
+        var failEdildi = await _transitionService.TryFailAsync(
+            claim.OutboxMesajiId,
+            claim.KurumId,
+            normalizedToken,
+            handlerSonucu.HataKodu!,
+            handlerSonucu.HataMesaji!,
+            retryKarari.YenidenDenenecekMi ? retryKarari.RetryGecikmesi : null,
+            cancellationToken);
+
+        if (!failEdildi)
+        {
+            return EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+        }
+
+        return retryKarari.YenidenDenenecekMi
+            ? EBelgeOutboxIslemeSonucu.RetryPlanlandi(retryKarari.RetryGecikmesi!.Value)
+            : EBelgeOutboxIslemeSonucu.TerminalHata();
+    }
+
+    private async Task<EBelgeOutboxIslemeSonucu> HandleBeklenmeyenHandlerExceptionAsync(
+        EBelgeOutboxClaimLeaseResultDto claim,
+        string normalizedToken,
+        CancellationToken cancellationToken,
+        Exception ex)
+    {
+        _logger.LogWarning(ex, "Beklenmeyen e-belge outbox hatası. Güvenli geçici sınıflandırma uygulanacak.");
+        var retryKarari = _retryPolicy.Hesapla(claim.DenemeSayisi, EBelgeOutboxHataSinifi.Gecici);
+        var failEdildi = await _transitionService.TryFailAsync(
+            claim.OutboxMesajiId,
+            claim.KurumId,
+            normalizedToken,
+            BeklenmeyenHataKodu,
+            BeklenmeyenHataMesaji,
+            retryKarari.YenidenDenenecekMi ? retryKarari.RetryGecikmesi : null,
+            cancellationToken);
+
+        if (!failEdildi)
+        {
+            return EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+        }
+
+        return retryKarari.YenidenDenenecekMi
+            ? EBelgeOutboxIslemeSonucu.RetryPlanlandi(retryKarari.RetryGecikmesi!.Value)
+            : EBelgeOutboxIslemeSonucu.TerminalHata();
     }
 
     private static IEBelgeOutboxIsTuruHandler SelectUniqueHandler(EBelgeOutboxIsTuru isTuru, IReadOnlyList<IEBelgeOutboxIsTuruHandler> handlers)
@@ -236,7 +263,7 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
         throw new InvalidOperationException($"{isTuru} için birden fazla handler tanımlı.");
     }
 
-    private static void ValidateClaim(EBelgeOutboxClaimLeaseResultDto claim)
+    private static string ValidateClaimAndGetNormalizedToken(EBelgeOutboxClaimLeaseResultDto claim)
     {
         if (claim is null)
         {
@@ -268,6 +295,6 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
             throw new BaseException("Claim durumu Isleniyor olmalıdır.", 400);
         }
 
-        EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateKilitToken(claim.KilitToken);
+        return EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateKilitToken(claim.KilitToken);
     }
 }

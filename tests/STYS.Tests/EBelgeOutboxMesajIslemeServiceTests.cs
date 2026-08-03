@@ -28,6 +28,95 @@ public class EBelgeOutboxMesajIslemeServiceTests
     }
 
     [Fact]
+    public async Task TryCompleteAsyncExceptionUretirseExceptionYayilirFailVePolicyCagrilmaz()
+    {
+        var sut = CreateSut(
+            new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili()),
+            transition: new FakeTransitionService(completeException: new InvalidOperationException("complete-hata")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Service.IsleAsync(CreateClaim()));
+
+        Assert.Equal(1, sut.Handler.CallCount);
+        Assert.Equal(1, sut.Transition.CompleteCallCount);
+        Assert.Equal(0, sut.Transition.FailCallCount);
+        Assert.Equal(0, sut.Policy.CallCount);
+    }
+
+    [Fact]
+    public async Task NormalFailAkisindaTryFailAsyncExceptionUretirseExceptionYayilirVeFailYalnizBirKezCagrilir()
+    {
+        var sut = CreateSut(
+            new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarisiz(EBelgeOutboxHataSinifi.Gecici, "E1", "mesaj")),
+            transition: new FakeTransitionService(failException: new InvalidOperationException("fail-hata")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Service.IsleAsync(CreateClaim(denemeSayisi: 1)));
+
+        Assert.Equal(1, sut.Handler.CallCount);
+        Assert.Equal(1, sut.Policy.CallCount);
+        Assert.Equal(1, sut.Transition.FailCallCount);
+    }
+
+    [Fact]
+    public async Task RetryPolicyExceptionUretirseExceptionYayilirPolicyYalnizBirKezCagrilirVeTransitionCagrilmaz()
+    {
+        var sut = CreateSut(
+            new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarisiz(EBelgeOutboxHataSinifi.Gecici, "E1", "mesaj")),
+            policy: new FakePolicy(EBelgeOutboxRetryKarari.Retry(TimeSpan.FromMinutes(1)), new InvalidOperationException("policy-hata")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.Service.IsleAsync(CreateClaim(denemeSayisi: 1)));
+
+        Assert.Equal(1, sut.Handler.CallCount);
+        Assert.Equal(1, sut.Policy.CallCount);
+        Assert.Equal(0, sut.Transition.FailCallCount);
+        Assert.Equal(0, sut.Transition.CompleteCallCount);
+    }
+
+    [Fact]
+    public async Task BuyukHarfliGecerliTokenCompleteOnceNormalizeEdilir()
+    {
+        var sut = CreateSut(new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili()));
+        var claim = CreateClaim(kilitToken: TestToken.ToString("D").ToUpperInvariant());
+
+        await sut.Service.IsleAsync(claim);
+
+        Assert.Equal(TestToken.ToString("D"), sut.Transition.LastCompleteKilitToken);
+    }
+
+    [Fact]
+    public async Task BuyukHarfliGecerliTokenFailOnceNormalizeEdilir()
+    {
+        var sut = CreateSut(
+            new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarisiz(EBelgeOutboxHataSinifi.Gecici, "E1", "mesaj")),
+            policy: new FakePolicy(EBelgeOutboxRetryKarari.Terminal()));
+        var claim = CreateClaim(kilitToken: TestToken.ToString("D").ToUpperInvariant());
+
+        await sut.Service.IsleAsync(claim);
+
+        Assert.Equal(TestToken.ToString("D"), sut.Transition.LastFailKilitToken);
+    }
+
+    [Fact]
+    public void TanimsizEnumDegeriniDesteklediginiBildirenHandlerReddedilir()
+    {
+        var handler = new FakeHandler((EBelgeOutboxIsTuru)999, _ => EBelgeOutboxHandlerSonucu.Basarili());
+
+        Assert.Throws<InvalidOperationException>(() => CreateService(new[] { handler }));
+    }
+
+    [Fact]
+    public async Task NullClaimBaseExceptionIleReddedilirVeHiçbirBagimlilikCagrilmaz()
+    {
+        var sut = CreateSut(new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili()));
+
+        await Assert.ThrowsAsync<BaseException>(() => sut.Service.IsleAsync(null!));
+
+        Assert.Equal(0, sut.Handler.CallCount);
+        Assert.Equal(0, sut.Policy.CallCount);
+        Assert.Equal(0, sut.Transition.CompleteCallCount);
+        Assert.Equal(0, sut.Transition.FailCallCount);
+    }
+
+    [Fact]
     public async Task CompleteTrueIseSonucTamamlandiOlur()
     {
         var sut = CreateSut(new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili()));
@@ -414,11 +503,12 @@ public class EBelgeOutboxMesajIslemeServiceTests
     private static (EBelgeOutboxMesajIslemeService Service, FakeTransitionService Transition, FakePolicy Policy, FakeHandler Handler) CreateSut(
         FakeHandler handler,
         FakePolicy? policy = null,
+        FakeTransitionService? transition = null,
         bool completeResult = true,
         bool failResult = true)
     {
         policy ??= new FakePolicy(EBelgeOutboxRetryKarari.Retry(TimeSpan.FromMinutes(1)));
-        var transition = new FakeTransitionService(completeResult, failResult);
+        transition ??= new FakeTransitionService(completeResult, failResult);
         var service = CreateService(new[] { handler }, policy, transition);
         return (service, transition, policy, handler);
     }
@@ -497,10 +587,12 @@ public class EBelgeOutboxMesajIslemeServiceTests
     private sealed class FakePolicy : IEBelgeOutboxRetryPolicy
     {
         private readonly EBelgeOutboxRetryKarari _result;
+        private readonly Exception? _exception;
 
-        public FakePolicy(EBelgeOutboxRetryKarari result)
+        public FakePolicy(EBelgeOutboxRetryKarari result, Exception? exception = null)
         {
             _result = result;
+            _exception = exception;
         }
 
         public int CallCount { get; private set; }
@@ -514,6 +606,10 @@ public class EBelgeOutboxMesajIslemeServiceTests
             CallCount++;
             LastDenemeSayisi = denemeSayisi;
             LastHataSinifi = hataSinifi;
+            if (_exception is not null)
+            {
+                throw _exception;
+            }
             return _result;
         }
     }
@@ -522,11 +618,19 @@ public class EBelgeOutboxMesajIslemeServiceTests
     {
         private readonly bool _completeResult;
         private readonly bool _failResult;
+        private readonly Exception? _completeException;
+        private readonly Exception? _failException;
 
-        public FakeTransitionService(bool completeResult = true, bool failResult = true)
+        public FakeTransitionService(
+            bool completeResult = true,
+            bool failResult = true,
+            Exception? completeException = null,
+            Exception? failException = null)
         {
             _completeResult = completeResult;
             _failResult = failResult;
+            _completeException = completeException;
+            _failException = failException;
         }
 
         public int CompleteCallCount { get; private set; }
@@ -559,6 +663,10 @@ public class EBelgeOutboxMesajIslemeServiceTests
             LastCompleteOutboxMesajiId = outboxMesajiId;
             LastCompleteKurumId = kurumId;
             LastCompleteKilitToken = kilitToken;
+            if (_completeException is not null)
+            {
+                throw _completeException;
+            }
             return Task.FromResult(_completeResult);
         }
 
@@ -571,6 +679,10 @@ public class EBelgeOutboxMesajIslemeServiceTests
             LastFailHataKodu = sonHataKodu;
             LastFailHataMesaji = sonHataMesaji;
             LastFailRetryDelay = retryDelay;
+            if (_failException is not null)
+            {
+                throw _failException;
+            }
             return Task.FromResult(_failResult);
         }
 

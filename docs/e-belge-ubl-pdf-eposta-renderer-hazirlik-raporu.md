@@ -1,37 +1,34 @@
-# E-Belge UBL/PDF/E-Posta Renderer Hazırlık Raporu (Faz 2B.5 — Üçüncü Düzeltme)
+# E-Belge UBL/PDF/E-Posta Renderer Hazırlık Raporu (Faz 2B.5 — Dördüncü Düzeltme)
 
-Bu rapor, `2002536` sürümünün mimari ve sözleşmesel eksikler nedeniyle kabul edilmemesi üzerine
-güncellenmiştir. Resmî UBL-TR1.2.1 paketi, e-Arşiv raporu/faturası ayrımı, UserList, `Adet → C62`,
-standart KDV kodu ve dar satış faturası kapsamına ilişkin doğrulanmış araştırmalar kabul edilmiş
-sayılmakta ve tekrar edilmemektedir. Bu turda yalnızca aşağıdaki başlıklar düzeltilmiştir:
-renderer sözleşmesi, V1/V2 reader geriye uyumluluğu, eşleme matrisinin atomikliği, indirim/parasal
-toplam eşlemesi, imza sınırı, determinizm sözleşmesi, 14.09.2026 yürürlük kararı ve kesim öncesi
-kapı sözleşmesi.
+Bu rapor, `c71e519` sürümündeki uygulanabilirlik hatalarının düzeltilmesi için güncellenmiştir.
+Aşağıdaki konular kabul edilmiş sayılmakta ve yeniden araştırılmamaktadır: 14.09.2026 öncesi
+canlıya alınmama kararı, yalnız yeni GİB kural setinin desteklenmesi, renderer'ın tek iş girdisinin
+typed `EBelgeCanonicalSnapshotV2` olması, V1 reader ve V1 snapshot biçiminin korunması, satır
+indiriminin `InvoiceLine/AllowanceCharge` altında olması, unsigned renderer ile kriptografik
+imzalama fazının ayrılması, `Kurum`'un hukuki satıcı kaynağı olması, `Adet → C62` için entity alanı
+eklenmemesi ve `InvoiceTypeCode=SATIS` değerinin deterministik üretilmesi.
+
+Bu turda düzeltilenler: kesim tarihi kontrolünün uygulanabilirliği, mali hesaplama ve yuvarlama
+sözleşmesi, typed V1/V2 tasarımının derlenebilirliği, rule-set artifact bütünlüğü, byte çıktısının
+değişmezliği, eşleme matrisinin atomikliği ve HTTP 400/422/503 ayrımı.
 
 ## Kesin ürün kararı: devreye alma tarihi
 
 Fatura işlemleri **14.09.2026 tarihinden önce hiçbir ortamda canlı kullanıma alınmayacaktır.**
-Canlıya geçiş, 14.09.2026'da yürürlüğe giren yeni GİB paketleri ve kuralları yürürlüğe girdikten
-sonra yapılacaktır. Bu karar bu raporun tamamına uygulanmıştır:
 
-- 14.09.2026 öncesinde geçerli **eski GİB paketleri için renderer desteği geliştirilmeyecektir.**
-- Eski ve yeni rule-set arasında **tarih bazlı seçim yapılmayacaktır**; tarih bazlı rule-set
-  registry önerisi bu rapordan kaldırılmıştır.
-- Eski paketlerin bulunması veya hash'lerinin çıkarılması bu faz için gerekli değildir ve açık
-  konu olarak bırakılmamıştır.
-- Renderer **yalnız 14.09.2026'da yürürlüğe giren yeni GİB kural setini** destekleyecektir.
-- Belge tarihi veya fatura kesim tarihi 14.09.2026'dan önce olan belgeler, **resmî numara
-  verilmeden** kesim öncesi kapıda reddedilecektir (§9).
-- Özellik, canlıya geçiş tarihine kadar konfigürasyon/feature flag ile **kapalı** tutulacaktır.
-- Runtime sırasında GİB sitesinden **paket indirilmeyecektir**; paket build/deployment artifact'ı
-  olarak sabitlenecektir.
+- 14.09.2026 öncesi eski GİB paketleri için renderer desteği geliştirilmeyecektir.
+- Eski ve yeni rule-set arasında tarih bazlı seçim yapılmayacaktır.
+- Renderer yalnız `GIB-UBL-TR-1.2.1/2026-09-14` kural setini destekleyecektir.
+- Belge tarihi veya planlanan kesim tarihi 14.09.2026'dan önce olan belgeler, resmî numara
+  verilmeden kesim öncesi kapıda reddedilecektir (§9).
+- Özellik, canlıya geçiş tarihine kadar feature flag ile kapalı tutulacaktır.
+- Runtime'da GİB sitesinden paket indirilmeyecektir.
 
 ## 1. İncelenen GİB kaynakları ve sürümleri
 
-Renderer'ın destekleyeceği **tek** kural seti, 27.07.2026 tarihinde yayımlanan ve 14.09.2026
-tarihinde yürürlüğe giren settir. Bu setin kimliği ve sabitlenecek dosyaları:
-
 **Rule-set kimliği:** `GIB-UBL-TR-1.2.1/2026-09-14`
+
+Kaynak paketlerin bütünlük değerleri:
 
 | Paket | Boyut (byte) | SHA-256 |
 | --- | --- | --- |
@@ -40,60 +37,166 @@ tarihinde yürürlüğe giren settir. Bu setin kimliği ve sabitlenecek dosyalar
 | `UBLTR_1.2.1_Kilavuzlar.zip` | 5868477 | `0f7c720da5d9f0e9d25ef929f03d1ecd04871bda924ecb1a6b71b5e8fba0710a` |
 | `earsiv_paket_v1.1_8.zip` | 18701 | `07a00ddaf98a2b3ec1ef9beb8a90d19133b211045f25d2e67279bd509be9f75f` |
 
-Rule-set içinde renderer tarafından fiilen kullanılacak dosyalar:
+### Liste 1 — Renderer runtime/build artifact'ları
 
-- `UBL-TR1.2.1_Paketi.zip` → `xsdrt/maindoc/UBL-Invoice-2.1.xsd`,
-  `xsdrt/common/UBL-CommonAggregateComponents-2.1.xsd`,
-  `xsdrt/common/UBL-CommonBasicComponents-2.1.xsd`,
-  `xsdrt/common/UBL-CommonExtensionComponents-2.1.xsd` ve bunların transitive import'ları
-- `e-FaturaPaketi.zip` → `schematron/UBL-TR_Main_Schematron.xml`,
-  `schematron/UBL-TR_Common_Schematron.xml`, `schematron/UBL-TR_Codelist.xml`
-- `earsiv_paket_v1.1_8.zip` → yalnız e-Arşiv **raporlama** akışı için (`eArsiv.xsd`); tekil e-Arşiv
-  faturası UBL-TR'dir ve bu paketin fatura ile ilgisi yoktur
+Bunlar renderer'ın XSD ve schematron doğrulamasında **fiilen kullandığı** dosyalardır.
+`UBL-Invoice-2.1.xsd`'nin `schemaLocation` kapanışı izlenerek çıkarılmıştır; kapanışa girmeyen
+hiçbir dosya listeye alınmamıştır (`UBL-CoreComponentParameters-2.1.xsd` ve `maindoc` altındaki
+`CreditNote`/`DespatchAdvice`/`ApplicationResponse`/`ReceiptAdvice` şemaları kapanışta **yoktur**).
 
-**Sabitleme kuralı:** Bu dosyalar uygulama repository'sine/deployment artifact'ına gömülecek,
-build sırasında SHA-256 değerleri doğrulanacak ve runtime'da GİB sitesine hiçbir çağrı
-yapılmayacaktır. Rule-set, renderer implementasyonuna immutable teknik konfigürasyon olarak
-enjekte edilir; canlı internet veya veritabanından okunmaz.
+Kaynak: `UBL-TR1.2.1_Paketi.zip`
+
+| Göreli yol | SHA-256 |
+| --- | --- |
+| `xsdrt/maindoc/UBL-Invoice-2.1.xsd` | `b68a25ae3d99435f4e4a39809939183dc8b5d687aeebf2d023f4d4c2a436749e` |
+| `xsdrt/common/UBL-CommonAggregateComponents-2.1.xsd` | `186085d67e0daf5bbe78427259ee3df15b3043bd6676b50b0652d264e10bed91` |
+| `xsdrt/common/UBL-CommonBasicComponents-2.1.xsd` | `9e7eb96aaba1bf2092c52d3ccb8c881a710cc48111c568e3eae29746dd6b1cab` |
+| `xsdrt/common/UBL-CommonExtensionComponents-2.1.xsd` | `1829b0a0dd61589edf59f400cd299e59edd42a6b33360026956f52aed4f83a74` |
+| `xsdrt/common/UBL-ExtensionContentDataType-2.1.xsd` | `fcee77a11870208e6377ea6311b9f2a050bca24bdad8606ea02d71e9f9e72f8d` |
+| `xsdrt/common/UBL-CommonSignatureComponents-2.1.xsd` | `4fa9e2370100040fe14c43e135ef77e2eb66b21cb8dbfc2ffb8d82ae991fe92e` |
+| `xsdrt/common/UBL-SignatureAggregateComponents-2.1.xsd` | `9234c2ca48dbfa9a22a786112bb075c5922a305170920eaab1e3c04fa0b7344b` |
+| `xsdrt/common/UBL-SignatureBasicComponents-2.1.xsd` | `0fbe2d7afff0c1e11164b8ec83e13f18801021c3c87e390a9d76f9cf862f6a64` |
+| `xsdrt/common/UBL-QualifiedDataTypes-2.1.xsd` | `7dcb156e610239c97ae70940cf4653b88e48c3595bf5f56a2204a32e2893e6cf` |
+| `xsdrt/common/UBL-UnqualifiedDataTypes-2.1.xsd` | `09052d406b4293e2a5f9c2bfee6df10ad4d8d5f0b36e24a6349d7f7936d89eb6` |
+| `xsdrt/common/CCTS_CCT_SchemaModule-2.1.xsd` | `dd546e4809df86b6445589f69f0d6c9df162840ae386574ddfc1da7638103e15` |
+| `xsdrt/common/UBL-xmldsig-core-schema-2.1.xsd` | `101909c9f06456d61ddcc4fb982f1d40dc357b439f393b1a2eb46e42acd60809` |
+| `xsdrt/common/UBL-XAdESv132-2.1.xsd` | `a4f726bcf8cc3f7d9ffa4dab99e005535a8e8b60dced1e5d94578d2e05afa96e` |
+| `xsdrt/common/UBL-XAdESv141-2.1.xsd` | `3f9d50cd07e6ee9b81adfe198e43bed5ee945995511c13a41b4f07667d619625` |
+
+Kaynak: `e-FaturaPaketi.zip`
+
+| Göreli yol | SHA-256 |
+| --- | --- |
+| `schematron/UBL-TR_Main_Schematron.xml` | `a0a2794374108a3ebd4e472c748629d5e398ea9f63e67d3330fc1673999a4dab` |
+| `schematron/UBL-TR_Common_Schematron.xml` | `44daa43d9c13bbf02c55db104c7199138779d329ab74d2c4b2ed751742dea8a4` |
+| `schematron/UBL-TR_Codelist.xml` | `60aa2e531c21f99b522a2b72872f07bedebc57e00b0a1a6816a74dcd50100292` |
+
+### Liste 2 — Yalnız araştırma ve referans kaynakları
+
+Bunlar renderer runtime bağımlılığı **değildir**, uygulama artifact'ına gömülmez:
+
+- `UBLTR_1.2.1_Kilavuzlar.zip` içeriğinin tamamı (`UBL-TR Kod Listeleri - V 1.43.pdf`,
+  senaryo ve belge kılavuzları, `Degisim Tablosu.txt`)
+- `UBL-TR1.2.1_Paketi.zip` içindeki `xml/` örnek belgeleri ve `*.xslt` görüntüleme dosyaları
+- `UserList_(Kullanici_Listeleri)_Kilavuzu_V.1.0.pdf`
+- `e-Arsiv_Teknik_Kilavuzu_V.1.18.pdf`
+
+### Liste 3 — Sonraki e-Arşiv raporlama fazına ait paketler
+
+`earsiv_paket_v1.1_8.zip` ve içindeki `eArsiv.xsd`, `eArsivVeri.xsd`, `faturaOzet.xsd`,
+`EArsivWs.wsdl`, `earsiv_schematron.xsl` dosyaları **tekil fatura renderer'ında kullanılmaz**;
+bunlar periyodik e-Arşiv raporlama akışına aittir ve renderer rule-set'inden çıkarılmıştır.
+Sonraki e-Arşiv raporlama fazında ayrıca ele alınacaktır.
+
+### Artifact saklama biçimi
+
+**Seçilen model: çıkarılmış dosyalar + manifest.** ZIP gömme modeli seçilmemiştir.
+
+- Liste 1'deki 17 dosya, uygulama repository'sine çıkarılmış hâlde gömülür.
+- Bir manifest dosyası, her dosyanın tam göreli yolunu ve SHA-256 değerini taşır (yukarıdaki iki
+  tablo manifestin içeriğidir).
+- Build sırasında her dosyanın SHA-256 değeri manifest ile karşılaştırılır; uyuşmazlıkta build
+  başarısız olur.
+- Runtime'da ZIP açma işlemi yapılmaz, GİB sitesine çağrı yapılmaz.
+- Gerekçe: renderer'a 3 ZIP'ten yalnız 17 dosya gerekmektedir; ZIP gömme modeli 5.8 MB'lık
+  kılavuz PDF'lerini ve kullanılmayan şemaları da taşırdı, ayrıca dosya bazında doğrulanabilirlik
+  ve git üzerinde diff'lenebilirlik sağlamazdı.
+
+İki model karıştırılmaz: ZIP dosyaları uygulama artifact'ına dahil edilmez.
 
 ## 2. Repository'deki mevcut durum
 
 Ticari otorite `SatisBelgesi`, immutable snapshot `EBelgeSnapshot`, kanonik okuyucu
 `EBelgeCanonicalSnapshotReader`, kesim akışı `SatisBelgesiService.FaturaKesAsync`.
 
-**Kesim öncesi kapı zaten mevcuttur — yeni bir kavram değildir.** Önceki raporlar bunu sıfırdan
-eklenecek bir bileşen gibi sunmuştu; bu yanlıştır. `SatisBelgesiService.FaturaKesAsync` içinde
-`EnsureUblHazirlikKaynaklari(belge, tesis.Kurum)` çağrısı `SatisBelgesiService.cs:1116`
-satırındadır ve tam olarak doğru noktadadır:
+### Kesim öncesi kapı zaten mevcuttur
 
-- **Öncesinde** (satır 872-1114): belge kilitli okunmuş, tesis ve kurum otoriter olarak okunmuş,
-  muhasebe fişi doğrulanmıştır.
-- **Sonrasında** (satır 1141+): sayaç `UPDLOCK` ile kilitlenir (1141), sıra numarası artırılır
+`EnsureUblHazirlikKaynaklari(belge, tesis.Kurum)` çağrısı `SatisBelgesiService.cs:1116`
+satırındadır ve doğru noktadadır:
+
+- **Öncesinde** (872-1114): belge kilitli okunmuş, tesis ve kurum otoriter okunmuş, muhasebe fişi
+  doğrulanmıştır.
+- **Sonrasında** (1141+): sayaç `UPDLOCK` ile kilitlenir (1141), sıra numarası artırılır
   (1168-1169), resmî numara yazılır (1174), kesim tarihi atanır (1175-1176), otoriter durumlar
   değiştirilir (1177-1181), `EBelgeKaydi` oluşturulur (1188), snapshot üretilir (1198), outbox
   mesajı eklenir (1209).
 
-`EnsureUblHazirlikKaynaklari` (satır 1275-1311) bugün şunları doğrulamaktadır: `Kurum.VergiNo`
-dolu, `Kurum.VergiDairesi` dolu, `Kurum.Adres` dolu, `ParaBirimi == "TRY"`, `Kur == 1`. Yani dar
-kapsamın para birimi ve kur kısıtı **zaten yürürlüktedir**. Faz 2B.4.1'de yapılacak iş, bu mevcut
-metodu genişletmektir; yeni bir kapı inşa etmek değildir.
+Metot bugün (1275-1311) şunları doğrular: `Kurum.VergiNo` dolu, `Kurum.VergiDairesi` dolu,
+`Kurum.Adres` dolu, `ParaBirimi == "TRY"`, `Kur == 1`. Faz 2B.4.1'de yapılacak iş bu metodu
+genişletmektir; yeni kapı inşa etmek değildir.
 
-**Düzeltilmesi gereken sıralama hatası:** `ResolveEBelgeKanali(cariKart)` çağrısı bugün satır
-1186'dadır — yani sayaç artırıldıktan, resmî numara verildikten ve belge durumu değiştirildikten
-**sonra**. Kapının kanal bazlı kontrol yapabilmesi için (`ProfileID` kaynağı, e-Arşiv/e-Fatura
-ayrımı) kanal çözümlemesi sayaç kilidinden **önceye**, `EnsureUblHazirlikKaynaklari` ile aynı
-bloğa taşınmalıdır. Aksi halde kanalı desteklenmeyen bir belge önce resmî numara tüketir, sonra
-reddedilir.
+### Düzeltilmesi gereken sıralama sorunları
 
-Diğer ilgili gözlemler:
+1. **`ResolveEBelgeKanali(cariKart)` bugün satır 1186'dadır** — sayaç artırıldıktan, resmî numara
+   verildikten ve belge durumu değiştirildikten sonra. Kapının kanal bazlı kontrol yapabilmesi
+   için sayaç kilidinden **önceye** taşınmalıdır.
+2. **`FaturaKesimTarihi` bugün satır 1175-1176'da atanır** — yani kapıdan ve resmî numara
+   üretiminden sonra. Bu nedenle kapı, henüz oluşmamış `belge.FaturaKesimTarihi` alanını
+   kontrol **edemez**. Çözüm §9'daki kesim anı sözleşmesidir.
+3. **Repository'de `TimeProvider` hiç kullanılmamaktadır** (`backend/` altında sıfır eşleşme).
+   Kesim anı sözleşmesi için `TimeProvider` yeni bir bağımlılıktır ve DI'a kaydedilmesi
+   gerekir.
 
-- `EBelgeUuid`, kesim anında `Guid.NewGuid()` ile üretilip snapshot'a dondurulur (satır 1193);
-  renderer UUID üretmez.
-- `FaturaKesimTarihi`, kesim anında `DateTime.UtcNow` ile dondurulur (satır 1175); renderer
-  güncel saat okumaz.
-- `SatisBelgesiSatiri.Birim` alanı serbest metindir ve varsayılan değeri literal `"Adet"`tir
-  (`SatisBelgesiSatiri.cs:27`).
-- `Kurum.Adres` tek `string?` alanıdır; `Il`, `Ilce`, `Ulke`, `PostaKodu` alanları **yoktur**
+### Otoriter mali hesaplama davranışı (mevcut kod)
+
+Merkezî yuvarlama noktası `SatisBelgesiTutarHesaplayici.Yuvarla`
+(`SatisBelgesiTutarHesaplayici.cs:20-21`):
+
+```csharp
+Math.Round(deger, 2, MidpointRounding.AwayFromZero)
+```
+
+Satır hesaplaması `SatisBelgesiService.CreateSatirFromRequest` (2670-2751) içindedir ve sırası:
+
+1. `brutMatrah = Miktar × BirimFiyat` (yuvarlanmaz)
+2. `indirimOrani`: `request.IndirimOrani > 0` ise doğrudan; değilse
+   `ResolveLineRate(IndirimTutari, brutMatrah)` = `Math.Round(tutar × 100 / taban, 4, AwayFromZero)`
+3. `indirimTutari = ResolveRateBasedAmount(brutMatrah, indirimOrani, request.IndirimTutari)`:
+   oran > 0 ise `Math.Round(brutMatrah × oran / 100, 2, AwayFromZero)`, değilse
+   `Yuvarla(Math.Max(0, tutar))`
+4. `indirimTutari > brutMatrah` ise HTTP 400
+5. `matrah = Yuvarla(brutMatrah − indirimTutari)` — **KDV'den önce 2 basamağa yuvarlanır**
+6. `kdvTutari = Yuvarla(matrah × kdvOrani / 100)` — **satır bazında, yuvarlanmış matrahtan**
+7. `satirToplami = Yuvarla(matrah + kdv − tevkifat + otv + oiv + konaklama)`
+
+Belge toplamları `HesaplaBelgeToplamlari` (2753-2758) içinde, **zaten yuvarlanmış satır
+değerlerinin düz toplamıdır**; ikinci bir üst düzey yuvarlama uygulanmaz:
+
+```csharp
+belge.ToplamMatrah = ...Sum(s => s.Matrah);
+belge.ToplamKdv    = ...Sum(s => s.KdvTutari);
+belge.GenelToplam  = ...Sum(s => s.SatirToplami);
+```
+
+Decimal ölçekleri (`StysAppDbContext.cs:2975-3024`):
+
+| Alan | Ölçek |
+| --- | --- |
+| `Miktar` | `decimal(18,2)` |
+| `BirimFiyat` | `decimal(18,2)` |
+| `IndirimOrani` | `decimal(5,2)` |
+| `IndirimTutari` | `decimal(18,2)` |
+| `Matrah` | `decimal(18,2)` |
+| `KdvOrani` | `decimal(18,4)` |
+| `KdvTutari` | `decimal(18,2)` |
+
+Toplam tutarlılığı doğrulayan bir kontrol **zaten vardır**: `ValidateBelgeOnayaGonderilebilir`
+(`SatisBelgesiService.cs:1700`, kontroller 1796-1815) `ToplamMatrah`, `ToplamKdv` ve
+`GenelToplam` değerlerini satır toplamlarıyla karşılaştırır ve uyuşmazlıkta HTTP 400 verir.
+
+**Boşluk:** Bu kontrol onaya gönderme yolundaki büyük bir private metodun içindedir; yeniden
+kullanılabilir bir bileşen değildir ve kesim öncesi kapıdan çağrılamaz. Ayrıca satır bazındaki
+türetme (`Matrah` ve `KdvTutari`'nin girdilerden yeniden hesaplanması) yalnız satır **oluşturma**
+anında uygulanır, saklanmış değerlere karşı hiç yeniden doğrulanmaz. Bu nedenle Faz 2B.4.1'de
+**merkezî ve yeniden kullanılabilir bir mali doğrulayıcı çıkarılması** zorunlu bir hazırlık
+maddesidir (§8).
+
+### Diğer gözlemler
+
+- `EBelgeUuid`, kesim anında `Guid.NewGuid()` ile üretilip snapshot'a dondurulur (1193).
+- `SatisBelgesiSatiri.Birim` serbest metindir, varsayılanı `"Adet"`tir
+  (`SatisBelgesiSatiri.cs:27`); kolon `nvarchar(32)`, zorunludur.
+- `Kurum.Adres` tek `string?` alanıdır; `Il`, `Ilce`, `Ulke`, `PostaKodu` alanları yoktur
   (`Kurum.cs:24`). `Kurum.VergiDairesi` de `string?`tir (`Kurum.cs:21`).
 
 ## 3. Snapshot → UBL eşleme matrisi
@@ -113,211 +216,262 @@ Diğer ilgili gözlemler:
 | `cbc:LineCountNumeric` | Satır listesi | Zorunlu | Satır sayısı | Deterministik eşlenebilir |
 | `cac:Signature` | `Kurum.VergiNo` + yapısal adres | Zorunlu | `SignatureCheck` | Otoriter kaynak eksik |
 | Supplier `cac:PartyIdentification` | `Kurum.VergiNo` | Zorunlu | `schemeID=VKN`, 10 hane | Doğrudan kullanılabilir |
-| Customer `cac:PartyIdentification` | `Alici.MusteriVergiNo` veya `Alici.MusteriTcKimlikNo` | Zorunlu | `schemeID=VKN`/`TCKN` | Doğrudan kullanılabilir |
+| Customer `cac:PartyIdentification` (kurumsal) | `Alici.MusteriVergiNo` | Zorunlu | `schemeID=VKN`, 10 hane | Doğrudan kullanılabilir |
+| Customer `cac:PartyIdentification` (gerçek kişi) | `Alici.MusteriTcKimlikNo` | Zorunlu | `schemeID=TCKN`, 11 hane | Doğrudan kullanılabilir |
 | Supplier `cac:PartyName` | `Kurum.KurumUnvani` | Zorunlu | — | Doğrudan kullanılabilir |
-| Customer `cac:PartyName` | `Alici.MusteriUnvan` | Zorunlu | — | Doğrudan kullanılabilir |
+| Customer `cac:PartyName` (kurumsal) | `Alici.MusteriUnvan` | Zorunlu | — | Doğrudan kullanılabilir |
+| Customer `cac:PartyName` (gerçek kişi) | — | Üretilmez | — | Deterministik eşlenebilir |
 | Supplier `cac:PostalAddress` | V2 yapısal adres | Zorunlu | `AddressType` | Otoriter kaynak eksik |
 | Customer `cac:PostalAddress` | V2 yapısal adres | Zorunlu | `AddressType` | Otoriter kaynak eksik |
 | Supplier `cac:PartyTaxScheme` | `Kurum.VergiDairesi` | Opsiyonel | — | Doğrudan kullanılabilir |
 | Customer `cac:PartyTaxScheme` | `Alici.MusteriVergiDairesi` | Opsiyonel | — | Doğrudan kullanılabilir |
-| `cac:Person/cbc:FirstName` | V2 `MusteriAd` | Zorunlu | — | Otoriter kaynak eksik |
-| `cac:Person/cbc:FamilyName` | V2 `MusteriSoyad` | Zorunlu | — | Otoriter kaynak eksik |
-| Belge düzeyi `cac:AllowanceCharge` | — | Opsiyonel | — | İlk sürümde destek dışı bırakılmalı |
+| `cac:Person/cbc:FirstName` (gerçek kişi) | V2 `MusteriAd` | Zorunlu | — | Otoriter kaynak eksik |
+| `cac:Person/cbc:FamilyName` (gerçek kişi) | V2 `MusteriSoyad` | Zorunlu | — | Otoriter kaynak eksik |
+| Belge düzeyi `cac:AllowanceCharge` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
 | `cac:InvoiceLine/cac:AllowanceCharge` | `Satir.IndirimTutari` | Opsiyonel | `ChargeIndicator=false` | Deterministik eşlenebilir |
-| `cac:TaxTotal/cbc:TaxAmount` | `ToplamKdv` | Zorunlu | — | Deterministik eşlenebilir |
-| `cac:TaxSubtotal/cbc:TaxableAmount` | Orana göre gruplanmış matrah | Opsiyonel | — | Deterministik eşlenebilir |
-| `cac:TaxSubtotal/cbc:TaxAmount` | Orana göre gruplanmış KDV | Zorunlu | — | Deterministik eşlenebilir |
+| Satır `AllowanceCharge/cbc:Amount` | `Satir.IndirimTutari` | Zorunlu | 2 basamak | Doğrudan kullanılabilir |
+| Satır `AllowanceCharge/cbc:BaseAmount` | `Miktar × BirimFiyat` | Opsiyonel | `Yuvarla`, 2 basamak | Deterministik eşlenebilir |
+| Satır `AllowanceCharge/cbc:MultiplierFactorNumeric` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
+| `cac:TaxTotal/cbc:TaxAmount` | `ToplamKdv` | Zorunlu | — | Doğrudan kullanılabilir |
+| `cac:TaxSubtotal/cbc:TaxableAmount` | Orana göre gruplanmış matrah toplamı | Opsiyonel | — | Deterministik eşlenebilir |
+| `cac:TaxSubtotal/cbc:TaxAmount` | Orana göre gruplanmış KDV toplamı | Zorunlu | — | Deterministik eşlenebilir |
 | `cac:TaxCategory/cbc:Percent` | `Satir.KdvOrani` | Opsiyonel | — | Doğrudan kullanılabilir |
 | `cac:TaxScheme/cbc:TaxTypeCode` | Renderer sabiti | Opsiyonel | `0015` | Deterministik eşlenebilir |
-| `cac:LegalMonetaryTotal/cbc:LineExtensionAmount` | `ToplamMatrah` | Zorunlu | — | Deterministik eşlenebilir |
-| `cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount` | `ToplamMatrah` | Zorunlu | — | Deterministik eşlenebilir |
-| `cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount` | `GenelToplam` | Zorunlu | — | Deterministik eşlenebilir |
-| `cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount` | — | Opsiyonel | — | İlk sürümde destek dışı bırakılmalı |
-| `cac:LegalMonetaryTotal/cbc:ChargeTotalAmount` | — | Opsiyonel | — | İlk sürümde destek dışı bırakılmalı |
-| `cac:LegalMonetaryTotal/cbc:PayableAmount` | `GenelToplam` | Zorunlu | — | Deterministik eşlenebilir |
+| `cac:LegalMonetaryTotal/cbc:LineExtensionAmount` | `ToplamMatrah` | Zorunlu | — | Doğrudan kullanılabilir |
+| `cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount` | `ToplamMatrah` | Zorunlu | — | Doğrudan kullanılabilir |
+| `cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount` | `GenelToplam` | Zorunlu | — | Doğrudan kullanılabilir |
+| `cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
+| `cac:LegalMonetaryTotal/cbc:ChargeTotalAmount` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
+| `cac:LegalMonetaryTotal/cbc:PayableAmount` | `GenelToplam` | Zorunlu | — | Doğrudan kullanılabilir |
 | `cac:InvoiceLine/cbc:ID` | `Satir.SiraNo` | Zorunlu | — | Deterministik eşlenebilir |
 | `cac:InvoiceLine/cbc:InvoicedQuantity` | `Satir.Miktar` | Zorunlu | — | Doğrudan kullanılabilir |
 | `cbc:InvoicedQuantity/@unitCode` | V2 `BirimKodu` | Zorunlu | `C62` | Deterministik eşlenebilir |
 | `cac:InvoiceLine/cbc:LineExtensionAmount` | `Satir.Matrah` | Zorunlu | — | Doğrudan kullanılabilir |
-| `cac:InvoiceLine/cac:TaxTotal` | `Satir.KdvTutari` | Opsiyonel | — | Deterministik eşlenebilir |
+| `cac:InvoiceLine/cac:TaxTotal/cbc:TaxAmount` | `Satir.KdvTutari` | Zorunlu | — | Doğrudan kullanılabilir |
 | `cac:Price/cbc:PriceAmount` | `Satir.BirimFiyat` | Zorunlu | — | Doğrudan kullanılabilir |
 | `cac:Item/cbc:Name` | `Satir.Aciklama` | Zorunlu | — | Doğrudan kullanılabilir |
-| Parasal alanların `@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
-| XSLT `cac:AdditionalDocumentReference` | — | Opsiyonel | — | İlk sürümde destek dışı bırakılmalı |
-| İmza `cac:AdditionalDocumentReference` | — | Opsiyonel | — | İlk sürümde destek dışı bırakılmalı |
-| Karekod `cac:AdditionalDocumentReference` | — | Opsiyonel | — | İlk sürümde destek dışı bırakılmalı |
+| Satır `AllowanceCharge/Amount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| Satır `AllowanceCharge/BaseAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| Belge `TaxTotal/TaxAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| Belge `TaxSubtotal/TaxableAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| Belge `TaxSubtotal/TaxAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| `LegalMonetaryTotal/LineExtensionAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| `LegalMonetaryTotal/TaxExclusiveAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| `LegalMonetaryTotal/TaxInclusiveAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| `LegalMonetaryTotal/PayableAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| `InvoiceLine/LineExtensionAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| Satır `TaxTotal/TaxAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| `Price/PriceAmount/@currencyID` | `Odeme.ParaBirimi` | Zorunlu | `TRY` | Deterministik eşlenebilir |
+| XSLT `cac:AdditionalDocumentReference` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
+| İmza `cac:AdditionalDocumentReference` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
+| Karekod `cac:AdditionalDocumentReference` | — | Üretilmez | — | İlk sürümde destek dışı bırakılmalı |
 
 Tablo notları:
 
 - **Renderer sabitleri** (`UBLVersionID`, `CustomizationID`, `CopyIndicator`, `TaxTypeCode`,
   `currencyID`) snapshot'ta hazır veri değildir; rule-set'ten veya dar kapsam kuralından
-  deterministik olarak üretilir. Bu nedenle "Doğrudan kullanılabilir" değil, "Deterministik
-  eşlenebilir" işaretlenmiştir.
-- `ProfileID` durumu, ilk dalgada hangi kanalın destekleneceği kararına bağlıdır (§8). e-Arşiv
-  kanalında `EARSIVFATURA` deterministik türetilir; e-Fatura kanalı ilk dalgaya girerse belge
-  düzeyi `EFaturaSenaryosu` alanı gerekir ve bu alan bugün yoktur.
-- `IssueDate`/`IssueTime`, bugünkü `FaturaKesimTarihi` (UTC) alanından **doğrudan
-  türetilmemelidir** — UTC→yerel dönüşüm işletim sistemi zaman dilimi veritabanına bağımlılık
-  yaratır ve determinizm sözleşmesini bozar (§6). V2, kesim anında çözülmüş yerel (TRT) tarih ve
-  saat değerlerini ayrı alanlar olarak dondurmalıdır; renderer yalnız biçimlendirme yapar.
-- `cac:Signature` XSD'de zorunludur (`UBL-Invoice-2.1.xsd:35`, `minOccurs` yok) ve içinde
-  `cac:SignatoryParty/cac:PostalAddress` taşır; bu nedenle yapısal adres eksikliğine bağımlıdır
-  (§5).
-- `AllowanceTotalAmount` ve `ChargeTotalAmount`, UBL semantiğinde **belge düzeyi**
-  indirim/artırım toplamlarıdır. Dar kapsamda belge düzeyi indirim bulunmadığı ve satır indirimi
-  satır `LineExtensionAmount` içinde netleştirildiği için bu iki eleman hiç üretilmez (§4).
+  deterministik üretilir.
+- **Alıcı tipi ayrımı:** VKN/kurumsal alıcıda `MusteriUnvan` ve `cac:PartyName` zorunludur;
+  TCKN/gerçek kişi alıcıda `cac:PartyName` hiç üretilmez, bunun yerine `cac:Person/cbc:FirstName`
+  ve `cbc:FamilyName` zorunludur. Gerçek kişi alıcı için `MusteriUnvan` zorunlu değildir.
+- `ProfileID` durumu, ilk dalgada hangi kanalın destekleneceği kararına bağlıdır (§10).
+- `IssueDate`/`IssueTime`, V2'de kesim anında çözülmüş TRT değerlerinden gelir; renderer saat
+  dilimi dönüşümü yapmaz (§6, §9).
+- `MultiplierFactorNumeric` ilk sürümde üretilmez; gerekçesi §5'tedir.
 
 ## 4. Otoriter kaynak eksikleri
 
 - Belge düzeyi `ProfileID` kaynağı (kanal kararına bağlı, §8).
-- Yapısal adres alanları: `Kurum.Adres` ve `Alici.MusteriAdres` tek serbest metindir. GİB'in
-  değiştirilmiş `AddressType` tipinde (`UBL-CommonAggregateComponents-2.1.xsd:699-715`) eleman
-  sırası `ID → Postbox → Room → StreetName → BlockName → BuildingName → BuildingNumber →
-  CitySubdivisionName → CityName → PostalZone → Region → District → Country` şeklindedir;
-  `CitySubdivisionName` (ilçe), `CityName` (il) ve `Country` **zorunludur**, `PostalZone`
-  opsiyoneldir. **`AddressLine` elemanı bu tipte hiç yoktur** — dolayısıyla "tek serbest metni
-  `AddressLine/Line` içine koymak" seçeneği teknik olarak mümkün değildir. `cac:Country` içinde
-  `cbc:Name` zorunlu, `cbc:IdentificationCode` opsiyoneldir
-  (`UBL-CommonAggregateComponents-2.1.xsd:1222`).
+- Yapısal adres alanları: `AddressType` eleman sırası
+  (`UBL-CommonAggregateComponents-2.1.xsd:699-715`) `ID → Postbox → Room → StreetName →
+  BlockName → BuildingName → BuildingNumber → CitySubdivisionName → CityName → PostalZone →
+  Region → District → Country` şeklindedir; `CitySubdivisionName` (ilçe), `CityName` (il) ve
+  `Country` zorunludur. **`AddressLine` elemanı bu tipte yoktur** — tek serbest metni
+  `AddressLine/Line` içine koyma seçeneği teknik olarak mümkün değildir. `cac:Country` içinde
+  `cbc:Name` zorunlu, `cbc:IdentificationCode` opsiyoneldir.
 - Gerçek kişi alıcılar için ayrı `Ad`/`Soyad`: `PersonType` içinde `cbc:FirstName` ve
-  `cbc:FamilyName` **her ikisi de zorunludur** (`UBL-CommonAggregateComponents-2.1.xsd:2239-2250`).
-  `MusteriAdSoyad` tek string'i tahminle bölünemez.
-- Yerel (TRT) fatura tarihi ve saati: bugünkü `FaturaKesimTarihi` UTC'dir; determinizm için
-  çözülmüş yerel değerler gerekir.
+  `cbc:FamilyName` zorunludur (`UBL-CommonAggregateComponents-2.1.xsd:2239-2250`).
+- Çözülmüş TRT fatura tarihi ve saati (§9).
+- Merkezî, yeniden kullanılabilir mali doğrulayıcı (§2, §5).
 
-Ülke bilgisi, `ParaBirimi = TRY` değerinden **türetilmeyecektir**; para birimi ile adres ülkesi
-farklı kavramlardır. İlk kapsam yalnız Türkiye içi adresleri destekleyecektir ve bu, kapıda açık
-bir destek kuralıdır (§9).
+Ülke bilgisi `ParaBirimi = TRY` değerinden türetilmez. İlk kapsam yalnız Türkiye içi adresleri
+destekler ve bu, kapıda açık bir destek kuralıdır (§9).
 
 ## 5. İlk renderer için destek matrisi
 
 | Belge tipi | İlk renderer kapsamı | Gerekçe |
 | --- | --- | --- |
-| `SatisFaturasi` | Evet | Dar kapsamın tek senaryosu; `InvoiceTypeCode=SATIS` deterministik üretilir |
+| `SatisFaturasi` | Evet | Dar kapsamın tek senaryosu |
 | `AlisIadeFaturasi` | Hayır | `InvoiceTypeCode=IADE` gerektirir; profil kısıtı ve schematron/örnek çelişkisi çözülmemiştir |
 | `IadeFaturasi` | Hayır | Aynı gerekçe |
 | `SatisIadeFaturasi` | Hayır | Gelen belge |
 | `AlisFaturasi` | Hayır | Gelen belge |
 | `Proforma`, `FaturaTaslagi` | Hayır | Resmî e-belge değil |
 
-Dar kapsam kesin olarak: `SatisBelgesiTipi.SatisFaturasi`, `ParaBirimi=TRY`, `Kur=1`, tüm satırlar
-`KdvUygulamaTipi.Kdvli`, yalnız standart KDV (`TaxTypeCode=0015`), tevkifat yok, istisna yok, ÖTV
-yok, ÖİV yok, konaklama vergisi yok, iade yok, özel matrah yok, ihracat yok, yalnız Türkiye içi
-adres, yalnız `Adet` birimi.
+Dar kapsam: `SatisBelgesiTipi.SatisFaturasi`, `ParaBirimi=TRY`, `Kur=1`, tüm satırlar
+`KdvUygulamaTipi.Kdvli`, yalnız standart KDV (`TaxTypeCode=0015`), tevkifat/istisna/ÖTV/ÖİV/
+konaklama vergisi/iade/özel matrah/ihracat yok, yalnız Türkiye içi adres, yalnız `Adet` birimi.
 
-### İndirim ve parasal toplam eşlemesi
+### İndirim eşlemesi
 
-`Satir.IndirimTutari`, belge düzeyi `Invoice/AllowanceCharge` olarak eşlenmez. Doğru konum
-`cac:InvoiceLine/cac:AllowanceCharge`'dır. `AllowanceChargeType` eleman sırası
-(`UBL-CommonAggregateComponents-2.1.xsd:726-736`):
+`AllowanceChargeType` eleman sırası (`UBL-CommonAggregateComponents-2.1.xsd:726-736`):
 `ChargeIndicator → AllowanceChargeReason → MultiplierFactorNumeric → SequenceNumeric → Amount →
-BaseAmount → PerUnitAmount`. Bunlardan `ChargeIndicator` ve `Amount` zorunludur.
+BaseAmount → PerUnitAmount`. `ChargeIndicator` ve `Amount` zorunludur.
 
 Dar kapsam eşlemesi:
 
-- `cbc:ChargeIndicator` = `false` (indirim, artırım değil)
-- `cbc:MultiplierFactorNumeric` = `Satir.IndirimOrani / 100` — yalnız `IndirimOrani > 0` ise üretilir
+- `cbc:ChargeIndicator` = `false`
 - `cbc:Amount` = `Satir.IndirimTutari`
-- `cbc:BaseAmount` = `Satir.Miktar × Satir.BirimFiyat` (indirim öncesi brüt tutar)
-- `Satir.IndirimTutari = 0` ise `cac:AllowanceCharge` elemanı **hiç üretilmez**
-- Belge düzeyi indirim bulunmadığı için root `cac:AllowanceCharge` **hiç üretilmez**
+- `cbc:BaseAmount` = `Yuvarla(Satir.Miktar × Satir.BirimFiyat)`
+- `cbc:MultiplierFactorNumeric` = **üretilmez**
+- `Satir.IndirimTutari = 0` ise `cac:AllowanceCharge` hiç üretilmez
+- Belge düzeyi `cac:AllowanceCharge` hiç üretilmez
 
-`cac:InvoiceLine/cbc:LineExtensionAmount`, UBL semantiğinde satır indirimi **düşülmüş** net
-tutardır; `Satir.Matrah` alanına karşılık gelir. Brüt tutar yalnız `BaseAmount` içinde görünür.
+**`MultiplierFactorNumeric`'in üretilmeme gerekçesi:** `IndirimOrani` kolonu `decimal(5,2)`
+(2 basamak) iken, oran girilmediğinde `ResolveLineRate` bu oranı 4 basamakta türetir
+(`SatisBelgesiService.cs:2667`). Türetilmiş oran veritabanına yazılırken 2 basamağa indirgenir;
+bu nedenle saklanmış `IndirimOrani` değeri, saklanmış `IndirimTutari` değerini
+`brutMatrah × oran / 100` ile her zaman yeniden üretemez. Bu iki alanı aynı XML'e yazmak,
+kendi içinde tutarsız resmî belge üretme riski taşır. `Amount` otoriter değerdir; oran alanı
+opsiyonel olduğundan hiç üretilmemesi en dar ve en güvenli seçimdir.
 
-Standart KDV'li dar kapsam için parasal eşleme:
+`BaseAmount − Amount == LineExtensionAmount` özdeşliği korunur: `IndirimTutari` tam 2 basamaklı
+olduğundan `Yuvarla(brütMatrah) − IndirimTutari == Yuvarla(brütMatrah − IndirimTutari) == Matrah`
+eşitliği decimal aritmetiğinde sağlanır.
 
-| Kavram | UBL hedefi | Hesap |
-| --- | --- | --- |
-| Satır matrahı | `InvoiceLine/LineExtensionAmount` | `Satir.Matrah` |
-| KDV oranı | `InvoiceLine/TaxTotal/TaxSubtotal/TaxCategory/Percent` | `Satir.KdvOrani` |
-| Satır KDV tutarı | `InvoiceLine/TaxTotal/TaxAmount` | `Satir.KdvTutari` |
-| Gruplanmış alt toplam | `TaxTotal/TaxSubtotal` | KDV oranına göre gruplanır, oran artan sırada |
-| Toplam matrah | `LegalMonetaryTotal/LineExtensionAmount` | `ToplamMatrah` |
-| Toplam KDV | `TaxTotal/TaxAmount` | `ToplamKdv` |
-| Vergi hariç toplam | `LegalMonetaryTotal/TaxExclusiveAmount` | `ToplamMatrah` |
-| Vergi dahil toplam | `LegalMonetaryTotal/TaxInclusiveAmount` | `GenelToplam` |
-| Ödenecek toplam | `LegalMonetaryTotal/PayableAmount` | `GenelToplam` |
+### Mali hesaplama ve yuvarlama sözleşmesi
 
-Belge düzeyi `TaxSubtotal` grupları, KDV oranına göre gruplanır ve **oran değerine göre artan
-sırada** yazılır; bu, determinizm sözleşmesinin bir parçasıdır (§6).
+Renderer ve kesim öncesi kapı, §2'de tespit edilen **mevcut otoriter davranışı** kullanır; yeni
+ve bağımsız bir hesap mantığı tanımlanmaz. Sözleşme:
 
-**Renderer snapshot toplamlarını sessizce değiştirmez.** Davranış sırası:
+| Konu | Kural |
+| --- | --- |
+| `Miktar` ölçeği | `decimal(18,2)` |
+| `BirimFiyat` ölçeği | `decimal(18,2)` |
+| `IndirimTutari` ölçeği | `decimal(18,2)` |
+| `Matrah` ölçeği | `decimal(18,2)` |
+| `KdvOrani` ölçeği | `decimal(18,4)` |
+| `KdvTutari` ölçeği | `decimal(18,2)` |
+| Yuvarlama modu | `MidpointRounding.AwayFromZero` |
+| Parasal yuvarlama basamağı | 2 |
+| Matrahın yuvarlanma anı | KDV hesaplanmadan **önce**: `matrah = Yuvarla(brütMatrah − indirimTutari)` |
+| KDV yuvarlama düzeyi | **Satır bazında**: `kdvTutari = Yuvarla(matrah × kdvOrani / 100)` |
+| Belge toplamları | Yuvarlanmış satır değerlerinin **düz toplamı**; ikinci üst düzey yuvarlama yok |
+| `TaxSubtotal` toplamları | Oran grubundaki **satır bazında yuvarlanmış** değerlerin toplamı |
+| Karşılaştırma tabanı | Saklanmış (yuvarlanmış) canonical değerler |
 
-1. Snapshot satırları ve toplamları aynı deterministik mali kurallarla doğrulanır:
-   `Σ Satir.Matrah == ToplamMatrah`, `Σ Satir.KdvTutari == ToplamKdv`,
-   `ToplamMatrah + ToplamKdv == GenelToplam` ve her satır için
-   `Miktar × BirimFiyat − IndirimTutari == Matrah`.
-2. Uyuşmazlık varsa XML **üretilmez**.
-3. Kalıcı `EBELGE_UBL_MONETARY_TOTAL_MISMATCH` hatası üretilir (HTTP 422).
-4. Uyuşmaz değer renderer tarafından **düzeltilmez**, yuvarlanmaz.
-5. Doğrulama başarılıysa canonical snapshot değerleri XML'e **olduğu gibi** yazılır.
+**Kritik kural — gruplanmış `TaxSubtotal`:** Grup `TaxAmount` değeri, o orana ait satırların
+`Satir.KdvTutari` değerlerinin toplamıdır. Grup `TaxableAmount × oran / 100` ile **yeniden
+hesaplanmaz**; satır bazında yuvarlama zaten uygulandığı için yeniden hesaplama kuruş farkı
+üretebilir ve belge toplamıyla tutarsızlaşır. Aynı şekilde grup `TaxableAmount`, o orana ait
+`Satir.Matrah` değerlerinin toplamıdır.
 
-Kesim öncesi kapı, aynı mali doğrulayıcıyı (aynı kod yolunu) kullanır; iki ayrı hesap mantığı
-zamanla farklılaşamaz.
+Doğrulanan invariantlar (hepsi saklanmış canonical değerler üzerinden):
+
+1. `Yuvarla(Miktar × BirimFiyat) − IndirimTutari == Matrah`
+2. `IndirimTutari <= Yuvarla(Miktar × BirimFiyat)`
+3. `Yuvarla(Matrah × KdvOrani / 100) == KdvTutari`
+4. `Σ Satir.Matrah == ToplamMatrah`
+5. `Σ Satir.KdvTutari == ToplamKdv`
+6. `Σ Satir.SatirToplami == GenelToplam`
+7. `ToplamMatrah + ToplamKdv == GenelToplam` (dar kapsamda tevkifat/ÖTV/ÖİV/konaklama sıfır
+   olduğu için `SatirToplami = Matrah + KdvTutari`)
+8. Her `TaxSubtotal` grubu için: `grup TaxAmount == Σ (o orandaki Satir.KdvTutari)`
+
+**"Yuvarlama yapmamak" ile "canonical mali kurala göre doğrulamak" farkı:** Renderer, snapshot'tan
+okuduğu tutarları **değiştirmez, yeniden yuvarlamaz ve düzeltmez**; XML'e yazdığı her parasal
+değer snapshot'taki canonical değerin birebir kendisidir. Renderer'ın yuvarlama fonksiyonunu
+kullanması yalnızca **doğrulama** amaçlıdır: yukarıdaki invariantların sağlanıp sağlanmadığını
+sınamak için beklenen değeri hesaplar ve saklanmış değerle karşılaştırır. Sonuç uyuşmuyorsa XML
+üretmez; uyuşuyorsa saklanmış değeri yazar. Hiçbir durumda hesapladığı değeri saklanmış değerin
+yerine yazmaz.
+
+Uyuşmazlık davranışı:
+
+1. XML üretilmez.
+2. `EBELGE_UBL_MONETARY_TOTAL_MISMATCH` hatası üretilir (HTTP 422).
+3. Uyuşmaz değer düzeltilmez, yuvarlanmaz.
+4. Kesim öncesi kapı **aynı doğrulayıcıyı** (aynı kod yolunu) kullanır; iki ayrı hesap mantığı
+   zamanla farklılaşamaz.
 
 ### İmza sınırı
 
-Aşağıdaki kavramlar birbirinden ayrıdır:
+1. **Deterministik unsigned UBL XML renderer** (Faz 2B.5): bu fazın çıktısı.
+2. **`cac:Signature` iş/referans metadata'sı**: XSD'de zorunludur; imzalayanın VKN'sini
+   (`cbc:ID schemeID="VKN_TCKN"`) ve `cac:SignatoryParty` altında `PartyIdentification` ile
+   `PostalAddress` bilgisini taşır. Kriptografik imzanın kendisi değildir; unsigned XML de bu
+   elemanı içermek zorundadır. Gerekli alanlar: `Kurum.VergiNo` ve kurumun yapısal adresi.
+3. **`ext:UBLExtensions` içindeki XAdES/mali mühür içeriği**: kriptografik imza burada taşınır;
+   unsigned renderer bu bloğu yer tutucu olarak üretmez.
+4. **Sonraki kriptografik imzalama fazı**: ayrı uygulama fazıdır.
+5. **İmzalama sonrası nihai artifact**: gönderime hazır belgedir.
 
-1. **Deterministik unsigned UBL XML renderer** (Faz 2B.5): bu fazın çıktısı. XSD ve schematron'a
-   uygun, ancak kriptografik imza taşımayan XML.
-2. **`cac:Signature` iş/referans metadata'sı**: XSD'de zorunlu bir elemandır; imzalayanın
-   VKN'sini (`cbc:ID schemeID="VKN_TCKN"`), `cac:SignatoryParty` altında `PartyIdentification` ve
-   `PostalAddress` bilgisini taşır. Bu **kriptografik imzanın kendisi değildir**; unsigned XML de
-   bu elemanı içermek zorundadır. Gerekli snapshot alanları: `Kurum.VergiNo` ve kurumun yapısal
-   adresi (§4'teki eksikliğe bağımlıdır).
-3. **`ext:UBLExtensions` içindeki XAdES/mali mühür içeriği**: kriptografik imza burada taşınır.
-   Unsigned renderer bu bloğu **boş/yer tutucu olarak üretmez**; imzalama fazı ekler.
-4. **Sonraki kriptografik imzalama fazı**: ayrı bir uygulama fazıdır, bu hazırlık fazının ve Faz
-   2B.5'in kapsamı dışındadır.
-5. **İmzalama sonrası nihai artifact**: gönderime hazır e-Fatura/e-Arşiv belgesidir.
-
-**Faz 2B.5 çıktısı gönderime hazır nihai e-Fatura değildir.** Hash ayrımı:
-
-- `UnsignedUblSha256`: renderer çıktısının tam UTF-8 byte dizisi üzerinden hesaplanır; determinizm
-  testlerinin dayanağıdır.
-- `SignedUblSha256`: imzalama fazından sonra, imzalanmış byte dizisi üzerinden **yeniden**
-  hesaplanır. İmzalama byte'ları değiştirdiği için bu iki değer birbirinin yerine kullanılamaz ve
-  aynı alanda saklanamaz.
+**Faz 2B.5 çıktısı gönderime hazır nihai e-Fatura değildir.** `UnsignedUblSha256` renderer
+çıktısının byte dizisi üzerinden; `SignedUblSha256` imzalama sonrası byte dizisi üzerinden
+**yeniden** hesaplanır. İki değer aynı alanda saklanamaz.
 
 ## 6. Snapshot V1/V2 kararı
 
-Mevcut `IEBelgeCanonicalSnapshotReader.Oku(...)` imzası **`EBelgeCanonicalSnapshotV1`
-döndürmeye devam eder**. Önceki raporun bu imzanın dönüş tipini bir union'a çevirme önerisi
-geri alınmıştır: dönüş tipini değiştirmek interface'i korumak değil, kırıcı değişiklik yapmaktır.
+Mevcut `IEBelgeCanonicalSnapshotReader` **değiştirilmez** ve yalnız V1 döndürmeye devam eder:
 
-En küçük güvenli tasarım:
+```csharp
+public interface IEBelgeCanonicalSnapshotReader
+{
+    EBelgeCanonicalSnapshotV1 Oku(EBelgeCanonicalSnapshotOkumaTalebi talep);
+}
+```
 
-- Mevcut `EBelgeCanonicalSnapshotReader` ve `EBelgeCanonicalSnapshotV1` record'u **aynen korunur**;
-  alan seti, JSON şekli ve hash doğrulaması değiştirilmez.
-- Ayrı ve typed bir `IEBelgeCanonicalSnapshotV2Reader` eklenir:
-  `EBelgeCanonicalSnapshotV2 Oku(EBelgeCanonicalSnapshotOkumaTalebi talep)`.
-- Sürümü okuyup doğru typed reader'a yönlendiren ayrı bir dispatcher bulunur; dispatcher
-  `SnapshotSchemaVersion` değerine bakar ve desteklenmeyen sürümde açık hata üretir.
-- Renderer **yalnız** `IEBelgeCanonicalSnapshotV2Reader` çıktısı olan `EBelgeCanonicalSnapshotV2`
-  değerini tüketir; V1 kabul etmez.
-- `object` ve `dynamic` kullanılmaz.
-- V1 kayıtlar backfill veya migration ile dönüştürülmez.
-- V1 snapshot için render isteği gelirse kalıcı `EBELGE_UBL_RENDER_SNAPSHOT_VERSION_UNSUPPORTED`
-  hatası, **HTTP 422** ile üretilir. Bu hata tekrar denemeyle çözülmez; outbox tarafında kalıcı
-  hata olarak işaretlenir.
+Yeni ve bağımsız typed V2 reader eklenir:
 
-`EBelgeCanonicalSnapshotV2` içinde V1'e ek olarak bulunacak alanlar (dar kapsam için gerekli
-olanlar, fazlası değil):
+```csharp
+public interface IEBelgeCanonicalSnapshotV2Reader
+{
+    EBelgeCanonicalSnapshotV2 Oku(EBelgeCanonicalSnapshotOkumaTalebi talep);
+}
+```
 
-- `ProfileID` (nihai değer, kesim anında çözülmüş)
-- `InvoiceTypeCode` (dar kapsamda `SATIS`)
-- `FaturaTarihiTrt`, `FaturaSaatiTrt` (çözülmüş yerel değerler)
+Kurallar:
+
+- V2 reader, payload deserialize edilmeden **önce** `talep.SnapshotSchemaVersion` değerini
+  doğrular. Değer `"2"` değilse `EBELGE_UBL_RENDER_SNAPSHOT_VERSION_UNSUPPORTED` (HTTP 422)
+  üretir ve deserialize denemez.
+- Renderer/orchestrator **doğrudan** `IEBelgeCanonicalSnapshotV2Reader` kullanır.
+- Renderer yolu için **ortak V1/V2 dispatcher eklenmez**; ortak dönüş tipi, base type veya union
+  gerekmez.
+- `object`, `dynamic` ve V1 interface'inin dönüş tipini değiştiren union kullanılmaz.
+- V1 JSON/hash doğrulaması değiştirilmez; V1 kayıtlar backfill veya migration ile
+  dönüştürülmez.
+
+Başka tüketiciler yalnız sürüm tespitine ihtiyaç duyarsa, payload'ı deserialize etmeyen ayrı bir
+okuyucu eklenebilir:
+
+```csharp
+public interface IEBelgeCanonicalSnapshotVersionReader
+{
+    EBelgeCanonicalSnapshotSurumu Oku(EBelgeCanonicalSnapshotOkumaTalebi talep);
+}
+
+public enum EBelgeCanonicalSnapshotSurumu
+{
+    V1 = 1,
+    V2 = 2
+}
+```
+
+Bu okuyucu yalnız sürüm numarası/enum döndürür; snapshot içeriği döndürmez ve renderer yolunda
+kullanılmaz.
+
+`EBelgeCanonicalSnapshotV2` içinde V1'e ek alanlar (yalnız dar kapsam için gerekli olanlar):
+
+- `ProfileID`, `InvoiceTypeCode`
+- `FaturaTarihiTrt`, `FaturaSaatiTrt`
 - Satıcı yapısal adres: `Ilce`, `Il`, `UlkeAdi`, `UlkeKodu`, opsiyonel `PostaKodu`, `SokakAdi`,
   `BinaNo`
 - Alıcı yapısal adres: aynı alanlar
-- `MusteriAd`, `MusteriSoyad` (gerçek kişi alıcılarda)
-- Satır düzeyinde `BirimKodu` (dar kapsamda `C62`)
+- `MusteriAd`, `MusteriSoyad`
+- Satır düzeyinde `BirimKodu`
 
 ## 7. Önerilen renderer sözleşmesi
-
-Renderer'ın **tek iş girdisi** doğrulanmış typed V2 snapshot'tır:
 
 ```csharp
 public interface IEBelgeUblRenderer
@@ -326,12 +480,12 @@ public interface IEBelgeUblRenderer
 }
 ```
 
-Renderer'a **ayrıca parametre olarak verilmeyecekler**: belge tipi, issue/issuance tarihi, tenant
+Renderer'a ayrıca parametre olarak **verilmeyecekler**: belge tipi, issue/issuance tarihi, tenant
 veya kurum bağlamı, taraf bilgileri, kanal, `ProfileID`, `InvoiceTypeCode`, birim kodu. Bunların
-tamamı `EBelgeCanonicalSnapshotV2` içinde bulunur.
+tamamı `EBelgeCanonicalSnapshotV2` içindedir.
 
-GİB kural seti **iş girdisi değildir**; implementasyona immutable teknik konfigürasyon olarak
-enjekte edilir:
+GİB kural seti iş girdisi değildir; implementasyona immutable teknik konfigürasyon olarak enjekte
+edilir:
 
 ```csharp
 public sealed class EBelgeUblRenderer : IEBelgeUblRenderer
@@ -340,20 +494,22 @@ public sealed class EBelgeUblRenderer : IEBelgeUblRenderer
 }
 
 public sealed record GibKuralSeti(
-    string KuralSetiKimligi,          // "GIB-UBL-TR-1.2.1/2026-09-14"
-    string UblVersionId,              // "2.1"
-    string CustomizationId,           // "TR1.2"
-    IReadOnlyDictionary<string, string> PaketSha256);
+    string KuralSetiKimligi,   // "GIB-UBL-TR-1.2.1/2026-09-14"
+    string UblVersionId,       // "2.1"
+    string CustomizationId,    // "TR1.2"
+    ImmutableArray<GibKuralSetiDosyasi> Manifest);
+
+public sealed record GibKuralSetiDosyasi(string GoreliYol, string Sha256);
 ```
 
-`GibKuralSeti`, build/deployment artifact'ından yüklenir; canlı internet veya veritabanından
-okunmaz. Bu projede yalnız `GIB-UBL-TR-1.2.1/2026-09-14` desteklenir; tarih bazlı seçim yoktur.
+Renderer V1 snapshot kabul etmez; `EBelgeCanonicalSnapshotV1` tipini hiçbir aşırı yüklemede almaz.
+Renderer'a `DbContext` veya `TimeProvider` enjekte edilmez.
 
-Çıktı:
+### Çıktı ve byte değişmezliği
 
 ```csharp
 public sealed record EBelgeUblRenderSonucu(
-    ReadOnlyMemory<byte> UnsignedUblUtf8,   // dışarıdan değiştirilemez
+    ImmutableArray<byte> UnsignedUblUtf8,
     string UnsignedUblSha256,
     string KullanilanProfileId,
     string KullanilanInvoiceTypeCode,
@@ -361,125 +517,155 @@ public sealed record EBelgeUblRenderSonucu(
     string RendererSurumu);
 ```
 
-Renderer V1 snapshot kabul etmez; `IEBelgeCanonicalSnapshotV1` tipini hiçbir aşırı yüklemede
-almaz.
+**Seçilen model: `ImmutableArray<byte>`.** `ReadOnlyMemory<byte>` seçilmemiştir; bu tip yalnız
+okuma görünümü sağlar, altındaki dizinin başka bir referans üzerinden değiştirilmesini engellemez.
+`ImmutableArray<byte>` iç diziyi hiçbir zaman dışarı vermez ve indeksleyici üzerinden yazma
+sağlamaz.
+
+Sözleşme:
+
+- SHA-256, artifact içinde saklanan **tam byte dizisi** üzerinden **bir kez** hesaplanır.
+- Hash'in hesaplandığı byte dizisi ile saklanan/döndürülen byte dizisi aynı dizidir; farklı
+  olamaz.
+- Çağıran, dönen değer üzerinde değişiklik yapamaz; yaptığı hiçbir işlem saklanan artifact'ı veya
+  hash'i etkilemez.
 
 ### Determinizm sözleşmesi
 
 | Konu | Politika | Test beklentisi |
 | --- | --- | --- |
-| Aynı typed V2 snapshot → aynı XML | Renderer saf fonksiyondur; girdi dışı hiçbir durum okunmaz | Aynı snapshot ile 100 kez çağrı, byte dizileri birebir eşit |
-| UTF-8 ve BOM | UTF-8, BOM üretilmez | Çıktının ilk 3 byte'ı `EF BB BF` değil |
+| Aynı typed V2 snapshot → aynı XML | Renderer saf fonksiyondur; girdi dışı durum okunmaz | Aynı snapshot ile 100 çağrı, byte dizileri birebir eşit |
+| UTF-8 ve BOM | UTF-8, BOM üretilmez | İlk 3 byte `EF BB BF` değil |
 | XML declaration | `<?xml version="1.0" encoding="UTF-8"?>` sabit, tek satır | Golden-file byte karşılaştırması |
-| Indentation | Girinti üretilmez; tüm belge tek satır | Çıktıda `\t` ve satır başı boşluk bulunmaz |
-| Newline | Yalnız `\n`; `\r` hiç üretilmez | Çıktıda `0x0D` byte'ı bulunmaz |
+| Indentation | Girinti üretilmez; belge tek satır | Çıktıda `\t` ve satır başı boşluk yok |
+| Newline | Yalnız `\n`; `\r` üretilmez | Çıktıda `0x0D` byte'ı yok |
 | Namespace prefixleri | Sabit tablo: `cac`, `cbc`, `ext`, `ds`, `xades`, `xsi` | Golden-file + prefiks sırası testi |
 | Element sırası | `UBL-Invoice-2.1.xsd` sequence sırası; `TaxSubtotal` grupları KDV oranına göre artan | Sıra-duyarlı golden-file testi |
 | Attribute yazım sırası | Her elemanda sabit, kaynak sırasından bağımsız | Attribute sırası regresyon testi |
-| Kültür | Tüm biçimlendirme `CultureInfo.InvariantCulture` | `tr-TR`, `de-DE`, `en-US` ile aynı çıktı |
-| Decimal biçimi | Sabit ondalık ayıraç `.`; parasal alanlar 2 basamak, oran alanları 2 basamak; trailing zero korunur | `1.5m`, `1.50m`, `1.500m` girdileri aynı lexical çıktıyı verir |
-| `IssueDate` biçimi | `yyyy-MM-dd`, V2'deki çözülmüş TRT değerinden | Golden-file |
-| `IssueTime` biçimi | `HH:mm:ss`, offset yazılmaz, V2'deki çözülmüş TRT değerinden | Golden-file |
-| OS/kültür/yerel saat dilimi bağımsızlığı | Renderer `TimeZoneInfo` çağırmaz; dönüşüm kesim anında yapılmıştır | UTC, `Europe/Istanbul`, `America/New_York` altında aynı hash |
-| Güncel saat yasağı | `DateTime.Now`/`UtcNow` çağrılmaz | Statik analiz kuralı + saat ileri alınarak aynı çıktı testi |
+| Kültür | `CultureInfo.InvariantCulture` | `tr-TR`, `de-DE`, `en-US` ile aynı çıktı |
+| Decimal biçimi | Sabit ayıraç `.`; parasal alanlar 2 basamak, `Percent` 2 basamak; trailing zero korunur | `1.5m`, `1.50m`, `1.500m` aynı lexical çıktı |
+| `IssueDate` biçimi | `yyyy-MM-dd`, V2 `FaturaTarihiTrt` değerinden | Golden-file |
+| `IssueTime` biçimi | `HH:mm:ss`, offset yazılmaz, V2 `FaturaSaatiTrt` değerinden | Golden-file |
+| OS/kültür/saat dilimi bağımsızlığı | Renderer `TimeZoneInfo` çağırmaz; dönüşüm kesim anında yapılmıştır | UTC, `Europe/Istanbul`, `America/New_York` altında aynı hash |
+| Güncel saat yasağı | `DateTime.Now`/`UtcNow`/`TimeProvider` çağrılmaz | Statik analiz + saat ileri alınarak aynı çıktı |
 | Rastgele UUID yasağı | `Guid.NewGuid()` çağrılmaz; UUID snapshot'tan gelir | Statik analiz kuralı |
 | Veritabanı/canlı entity okuma yasağı | Renderer'a `DbContext` enjekte edilmez | Constructor bağımlılık testi |
-| SHA-256 | Çıktının tam UTF-8 byte dizisi üzerinden | Byte dizisi sabitken hash sabit |
-| Renderer sürümü | Sonuçta `RendererSurumu` olarak döner | Sürüm alanının dolu olduğu testi |
-| Rule-set kimliği | Sonuçta `KuralSetiKimligi` olarak döner | `GIB-UBL-TR-1.2.1/2026-09-14` değeri testi |
-| Değiştirilemez byte çıktısı | `ReadOnlyMemory<byte>` döner; iç buffer dışarı sızdırılmaz veya defensive copy yapılır | Çağıranın çıktıyı değiştirememesi testi |
-| Farklı culture/timezone'da aynı hash | Yukarıdakilerin bileşimi | Matris testi: 3 culture × 3 timezone = 9 kombinasyon, tek hash |
+| SHA-256 | Saklanan tam byte dizisi üzerinden bir kez | Byte dizisi sabitken hash sabit |
+| Renderer sürümü | Sonuçta `RendererSurumu` döner | Alanın dolu olduğu testi |
+| Rule-set kimliği | Sonuçta `KuralSetiKimligi` döner | `GIB-UBL-TR-1.2.1/2026-09-14` testi |
+| Değiştirilemez byte çıktısı | `ImmutableArray<byte>`; iç dizi dışarı verilmez | Çağıranın çıktıyı ve hash'i değiştirememesi testi |
+| Farklı culture/timezone'da aynı hash | Yukarıdakilerin bileşimi | 3 culture × 3 timezone = 9 kombinasyon, tek hash |
 
-Bu turda test yazılmamıştır; yukarıdaki beklentiler Faz 2B.5 promptuna girecek test listesidir.
+Bu turda test yazılmamıştır; yukarıdakiler Faz 2B.5 promptuna girecek test listesidir.
 
 ## 8. Sonraki uygulama fazlarının sırası
 
-**Faz 2B.4.1 — minimal hazırlık (yalnız dar renderer için gerekli olan):**
+**Faz 2B.4.1 — minimal hazırlık:**
 
-1. `EnsureUblHazirlikKaynaklari` genişletilir ve kanal çözümlemesi sayaç kilidinden öncesine
-   taşınır (§9).
-2. Yapısal adres alanları: `Kurum` ve alıcı adres kaynağına `Ilce`, `Il`, `UlkeAdi`/`UlkeKodu`
-   eklenir.
-3. Gerçek kişi alıcılar için ayrı `Ad`/`Soyad` alanları eklenir.
-4. `EBelgeCanonicalSnapshotV2` + `IEBelgeCanonicalSnapshotV2Reader` + dispatcher eklenir.
-5. Feature flag/konfigürasyon anahtarı eklenir ve kapalı başlatılır.
+1. Kesim anı sözleşmesi: `TimeProvider` enjeksiyonu, `planlananKesimZamaniUtc` ve merkezî
+   TRT dönüşümü (§9).
+2. `EnsureUblHazirlikKaynaklari` genişletilir; `ResolveEBelgeKanali` sayaç kilidinden öncesine
+   taşınır.
+3. **Merkezî mali doğrulayıcı çıkarılır**: `ValidateBelgeOnayaGonderilebilir` içindeki toplam
+   tutarlılık kontrolleri ve `CreateSatirFromRequest` içindeki satır türetme kuralları, hem kesim
+   öncesi kapının hem renderer'ın çağırabileceği tek bir bileşene taşınır. Mevcut yuvarlama
+   davranışı (`Yuvarla` = 2 basamak, `AwayFromZero`) **değiştirilmez**.
+4. Yapısal adres alanları: satıcı ve alıcı için `Ilce`, `Il`, `UlkeAdi`/`UlkeKodu`.
+5. Gerçek kişi alıcılar için ayrı `Ad`/`Soyad` alanları.
+6. `EBelgeCanonicalSnapshotV2` + `IEBelgeCanonicalSnapshotV2Reader`.
+7. Feature flag/konfigürasyon anahtarı, kapalı başlatılır.
+8. Rule-set manifest dosyaları ve build-time SHA-256 doğrulaması.
 
 **Faz 2B.5 — deterministic unsigned UBL renderer:**
 
-6. `IEBelgeUblRenderer` ve dar kapsam implementasyonu.
-7. Determinizm test paketi (§7 tablosu).
-8. XSD + schematron doğrulaması (sabitlenmiş rule-set ile).
+9. `IEBelgeUblRenderer` ve dar kapsam implementasyonu.
+10. Determinizm test paketi (§7).
+11. XSD + schematron doğrulaması (sabitlenmiş rule-set ile).
 
 **Sonraki fazlar:** kriptografik imzalama, PDF renderer, artifact storage abstraction, e-posta
-gönderim provider'ı.
+gönderim provider'ı, e-Arşiv raporlama.
 
 Tevkifat, ÖTV, ÖİV, konaklama vergisi, iade, özel matrah ve ihracat alanları bu sıraya
-**eklenmemiştir**; destek dışı oldukları için model değişikliği gerektirmezler.
+eklenmemiştir.
 
 ### Birim kodu: entity alanı mı, yalnız V2 alanı mı
 
 | Seçenek | Kapsam | Değerlendirme |
 | --- | --- | --- |
-| A: `SatisBelgesiSatiri`'ne genel amaçlı `BirimKodu` alanı | Entity değişikliği + migration + tüm birim değerleri için eşleme tablosu | Dar kapsam yalnız `Adet` kabul edeceği için gereksiz geniştir; eşleme tablosu bugün doğrulanamayan birimleri de zorunlu kılar |
-| B: Yalnız V2 snapshot'ta `BirimKodu` | Entity değişikliği yok, migration yok | Kapı yalnız `Birim == "Adet"` kabul eder; V2'ye sabit `C62` yazılır |
+| A: `SatisBelgesiSatiri`'ne genel amaçlı `BirimKodu` | Entity + migration + tüm birimler için eşleme tablosu | Dar kapsam yalnız `Adet` kabul edeceği için gereksiz geniştir |
+| B: Yalnız V2 snapshot'ta `BirimKodu` | Entity değişikliği ve migration yok | Kapı yalnız `Birim == "Adet"` kabul eder; V2'ye sabit `C62` yazılır |
 
-**Seçilen: B.** Entity'ye genel amaçlı `BirimKodu` eklemek zorunlu değildir. Kesim öncesi kapı
-yalnız desteklenen canonical `"Adet"` değerini kabul eder, V2 snapshot'a nihai `BirimKodu=C62`
-yazılır, diğer tüm birimler destek dışı kalır. Genel amaçlı birim kodu modeli, ikinci bir birim
-desteklendiği fazda eklenir.
+**Seçilen: B.** Genel amaçlı birim kodu modeli, ikinci bir birim desteklendiği fazda eklenir.
 
 ### `InvoiceTypeCode` ve `ProfileID`
 
-- `InvoiceTypeCode` için **entity alanı eklenmez.** Dar kapsamda `SATIS` deterministik üretilir ve
-  V2 snapshot'a yazılır.
+- `InvoiceTypeCode` için entity alanı eklenmez; dar kapsamda `SATIS` deterministik üretilip V2'ye
+  yazılır.
 - `ProfileID`: e-Arşiv kanalında `EARSIVFATURA` deterministik üretilir ve entity alanı gerekmez.
-  e-Fatura kanalı ilk sürümde desteklenecekse belge düzeyi `EFaturaSenaryosu` alanı **gerekir**;
-  ilk sürüm yalnız e-Arşiv olacaksa bu alan hazırlık fazına **eklenmemelidir**.
-- Bu nedenle **hazırlık listesi, ilk dalgada desteklenecek kanal kesinleşmeden tamamen
-  kesinleşmez.** Kanal kararı §10'daki ilk sorudur.
+  e-Fatura kanalı ilk sürümde desteklenecekse belge düzeyi `EFaturaSenaryosu` alanı gerekir.
+- **Kanal kararı verilmeden `EFaturaSenaryosu` hakkında varsayım yapılmamıştır**; hazırlık listesi
+  bu karar verilene kadar tamamen kesinleşmez (§10, madde 1).
 
 ### Satıcı hukuki tarafı
 
-`cac:AccountingSupplierParty` kaynağı **`Kurum`** olmalıdır. `Tesis.Adres`, kurumun hukuki
-adresinin yerine kullanılmamalıdır; bu, hukuki taraf adresi ile fiili hizmet adresini karıştırır.
-`Kurum.Adres` bugün `string?` olduğu ve boş olabildiği için kapı bunu zorunlu kılmalıdır (mevcut
-`EnsureUblHazirlikKaynaklari` bunu zaten kontrol etmektedir). Tesis bilgisi gerekirse daha sonra
-operasyonel/ek lokasyon (`cac:Delivery`) olarak ayrı bir fazda ele alınabilir.
+`cac:AccountingSupplierParty` kaynağı `Kurum`'dur. `Tesis.Adres`, kurumun hukuki adresinin yerine
+kullanılmaz. Tesis bilgisi gerekirse sonraki bir fazda operasyonel/ek lokasyon (`cac:Delivery`)
+olarak ele alınabilir.
 
 ## 9. Faz 2B.4.1 ve Faz 2B.5 promptlarına girecek kesin kararlar
 
-- Renderer'ın tek iş girdisi `EBelgeCanonicalSnapshotV2`'dir; belge tipi, tarih, tenant, kanal,
-  `ProfileID`, `InvoiceTypeCode`, birim kodu ayrıca parametre olarak verilmez.
-- GİB kural seti immutable teknik konfigürasyondur, build artifact'ında sabittir, runtime'da
-  indirilmez; kimliği `GIB-UBL-TR-1.2.1/2026-09-14`'tür ve tarih bazlı seçim yoktur.
-- V1 reader ve V1 record aynen korunur; ayrı typed V2 reader ve dispatcher eklenir; renderer V1
-  kabul etmez.
-- Satır indirimi `InvoiceLine/AllowanceCharge` altına yazılır; belge düzeyi `AllowanceCharge`,
-  `AllowanceTotalAmount` ve `ChargeTotalAmount` üretilmez.
-- Renderer snapshot toplamlarını değiştirmez; uyuşmazlıkta XML üretmez ve
+- Renderer'ın tek iş girdisi `EBelgeCanonicalSnapshotV2`'dir.
+- GİB kural seti immutable teknik konfigürasyondur; çıkarılmış dosya + manifest modeliyle build
+  artifact'ında sabittir, runtime'da indirilmez.
+- V1 reader ve V1 record aynen korunur; ayrı typed V2 reader eklenir; renderer yolunda dispatcher
+  yoktur.
+- Satır indirimi `InvoiceLine/AllowanceCharge` altına yazılır; `MultiplierFactorNumeric`, belge
+  düzeyi `AllowanceCharge`, `AllowanceTotalAmount` ve `ChargeTotalAmount` üretilmez.
+- Mevcut yuvarlama davranışı değiştirilmez; merkezî mali doğrulayıcı bu davranışı kullanır.
+- Renderer tutarları değiştirmez; uyuşmazlıkta XML üretmez ve
   `EBELGE_UBL_MONETARY_TOTAL_MISMATCH` (422) verir.
-- Faz 2B.5 çıktısı unsigned XML'dir ve gönderime hazır nihai e-Fatura değildir; imzalama ayrı
-  fazdır ve artifact hash'i imzalamadan sonra yeniden hesaplanır.
-- Birim için entity alanı eklenmez; kapı yalnız `Adet` kabul eder, V2'ye `C62` yazılır.
-- `InvoiceTypeCode` için entity alanı eklenmez; dar kapsamda `SATIS` üretilip V2'ye yazılır.
-- `EFaturaSenaryosu` alanı yalnızca ilk dalga e-Fatura kanalını içeriyorsa eklenir.
-- Özellik, 14.09.2026 canlıya geçişine kadar feature flag ile kapalı tutulur.
+- Faz 2B.5 çıktısı unsigned XML'dir; imzalama ayrı fazdır ve hash imzalamadan sonra yeniden
+  hesaplanır.
+- Birim ve `InvoiceTypeCode` için entity alanı eklenmez.
+- `EFaturaSenaryosu` yalnızca ilk dalga e-Fatura kanalını içeriyorsa eklenir.
+- Özellik, canlıya geçişe kadar feature flag ile kapalı tutulur.
+
+### Kesim anı sözleşmesi
+
+Mevcut kodda `FaturaKesimTarihi` kapıdan ve resmî numara üretiminden sonra atandığı için kapı bu
+alanı kontrol edemez (§2). Sözleşme:
+
+1. `FaturaKesAsync` içinde **tek bir kesim anı**, sayaç kilitlenmeden önce, enjekte edilen
+   `TimeProvider` üzerinden alınır.
+2. Bu değer `planlananKesimZamaniUtc` olarak tutulur.
+3. Türkiye yerel tarih ve saati, merkezî ve açıkça tanımlanmış bir dönüşümle bu değerden **bir
+   kez** üretilir: `planlananKesimTarihiTrt`, `planlananKesimSaatiTrt`.
+4. Kesim öncesi kapı şu koşulları kontrol eder:
+   - `BelgeTarihi >= 2026-09-14`
+   - `planlananKesimTarihiTrt >= 2026-09-14`
+5. Kapı başarılı olduktan sonra **aynı** `planlananKesimZamaniUtc` değeri şu alanlar için
+   kullanılır: `FaturaKesimTarihi`, V2 `FaturaTarihiTrt`, V2 `FaturaSaatiTrt`.
+6. Akış içinde ikinci kez `DateTime.UtcNow`, `DateTime.Now` veya `TimeProvider.GetUtcNow()`
+   çağrılmaz.
+7. Renderer saat dilimi dönüşümü yapmaz; V2'deki çözülmüş TRT değerlerini biçimlendirir.
+
+Sınır testleri: `13.09.2026 23:59:59` (red), `14.09.2026 00:00:00` (kabul) ve UTC/TRT gün
+değişiminin farklı sonuç verdiği anlar (ör. `13.09.2026 21:30 UTC` = `14.09.2026 00:30 TRT`).
 
 ### Kesim öncesi kapı sözleşmesi
 
-Kapı, mevcut `EnsureUblHazirlikKaynaklari` (`SatisBelgesiService.cs:1116`) genişletilerek
-oluşturulur ve **aynı noktada** çalışır. Kanal çözümlemesi (`ResolveEBelgeKanali`) bu noktaya
-taşınır. Kapı şunları doğrular:
+Kapı, mevcut `EnsureUblHazirlikKaynaklari` (`SatisBelgesiService.cs:1116`) genişletilerek aynı
+noktada çalışır ve şunları doğrular:
 
-1. Sistemin canlı kullanım için etkinleştirilmiş olması (feature flag açık)
-2. Belge tarihinin ve fatura kesim tarihinin 14.09.2026'dan önce olmaması
+1. Sistemin canlı kullanım için etkinleştirilmiş olması
+2. `BelgeTarihi` ve `planlananKesimTarihiTrt` değerlerinin 14.09.2026'dan önce olmaması
 3. Yalnız `GIB-UBL-TR-1.2.1/2026-09-14` rule-setinin kullanılıyor olması
-4. Desteklenen kanal (kanal kararına göre e-Arşiv ve/veya e-Fatura)
+4. Desteklenen kanal
 5. Belge tipinin `SatisFaturasi` olması
 6. `ParaBirimi == "TRY"` ve `Kur == 1`
 7. `ProfileID` kaynağının çözülebilir olması
 8. `InvoiceTypeCode` değerinin `SATIS` olarak üretilebilmesi
-9. Kurumsal veya gerçek kişi alıcı kimliğinin tam olarak birinin bulunması
+9. Kurumsal veya gerçek kişi alıcı kimliğinden tam olarak birinin bulunması
 10. Satıcı ve alıcı için zorunlu adres alanlarının (ilçe, il, ülke) dolu olması
 11. Gerçek kişi alıcıda ad ve soyadın ayrı ayrı dolu olması
 12. Kurumsal alıcıda unvanın dolu olması
@@ -487,37 +673,45 @@ taşınır. Kapı şunları doğrular:
 14. Tüm satırların `KdvUygulamaTipi.Kdvli` olması
 15. Hiçbir satırda tevkifat, istisna, ÖTV, ÖİV veya konaklama vergisi alanının dolu olmaması
 16. Tüm satırlarda `Birim == "Adet"` olması
-17. Satır ve belge toplamlarının §5'teki mali doğrulayıcıya göre tutarlı olması
+17. Satır ve belge toplamlarının §5'teki merkezî mali doğrulayıcıya göre tutarlı olması
 18. En az bir geçerli (silinmemiş) satır bulunması
 
 Kapı; sayaç artırılmadan, resmî numara verilmeden, belge durumu değiştirilmeden, `EBelgeKaydi`
-oluşturulmadan, snapshot oluşturulmadan ve outbox oluşturulmadan çalışır. Bugünkü kod bu sıralamayı
-zaten sağlamaktadır (§2); yalnız kanal çözümlemesinin öne alınması gerekir.
+oluşturulmadan, snapshot oluşturulmadan ve outbox oluşturulmadan çalışır.
 
 ### Hata kodları
 
 | Hata kodu | HTTP | Durum |
 | --- | --- | --- |
-| `EBELGE_UBL_FEATURE_DISABLED` | 503 | Özellik henüz etkinleştirilmemiş |
-| `EBELGE_INVOICE_DATE_BEFORE_GO_LIVE` | 400 | Fatura/belge tarihi 14.09.2026'dan önce |
-| `EBELGE_UBL_SCOPE_UNSUPPORTED` | 400 | Destek dışı belge tipi, kanal, vergi, birim veya para birimi |
-| `EBELGE_UBL_AUTHORITATIVE_FIELD_MISSING` | 400 | Eksik otoriter metadata (adres, ad/soyad, unvan, VKN/TCKN) |
-| `EBELGE_UBL_MONETARY_TOTAL_MISMATCH` | 422 | Satır/belge toplamları tutarsız |
-| `EBELGE_UBL_RENDER_SNAPSHOT_VERSION_UNSUPPORTED` | 422 | V1 snapshot ile render isteği |
+| `EBELGE_UBL_FEATURE_DISABLED` | 503 | Özellik/hizmet operasyonel olarak kapalı |
+| `EBELGE_INVOICE_DATE_BEFORE_GO_LIVE` | 400 | Belge tarihi veya planlanan kesim tarihi 14.09.2026'dan önce |
+| `EBELGE_UBL_SCOPE_UNSUPPORTED` | 400 | Desteklenmeyen belge tipi, kanal, vergi, birim veya para birimi |
+| `EBELGE_UBL_AUTHORITATIVE_FIELD_MISSING` | 400 | Eksik zorunlu alan (adres, ad/soyad, unvan, VKN/TCKN) |
+| `EBELGE_UBL_MONETARY_TOTAL_MISMATCH` | 422 | Satır/belge tutarları mali invariantları ihlal ediyor |
+| `EBELGE_UBL_RENDER_SNAPSHOT_VERSION_UNSUPPORTED` | 422 | V2 olmayan snapshot ile render isteği |
 
-**400 ile 422 ayrımı:** HTTP 400, çağıranın belgeyi düzelterek yeniden gönderebileceği kapsam ve
-eksik veri hatalarıdır. HTTP 422, belge yapısal olarak geçerli ve kapsam içi olmasına rağmen
-semantik/tutarlılık invariantının ihlal edildiği, yeniden göndermekle çözülmeyen durumlardır;
-mevcut `EBelgeCanonicalSnapshotException` da bu nedenle 422 kullanmaktadır. `EBELGE_UBL_FEATURE_DISABLED`
-bilinçli olarak 503'tür — belge veya istek hatalı değildir, hizmet henüz açılmamıştır.
+Ayrım:
+
+- **400** — desteklenmeyen kapsam, eksik zorunlu alan veya geçersiz istek koşulu.
+- **422** — sözdizimsel olarak işlenebilir içeriğin mali/semantik invariantları ihlal etmesi.
+- **503** — özelliğin veya hizmetin operasyonel olarak kapalı olması.
+
+`EBELGE_UBL_MONETARY_TOTAL_MISMATCH`, belge değerleri düzeltilip yeni bir kesim isteği yapılarak
+çözülebilir; bu nedenle "yeniden göndermekle çözülmez" nitelemesi bu hata için geçerli **değildir**
+ve genel 422 tanımı olarak kullanılmamıştır.
+
+`EBELGE_UBL_RENDER_SNAPSHOT_VERSION_UNSUPPORTED` ise mevcut immutable V1 kaydının yeniden
+denenmesiyle düzelmez; V1 snapshot tanım gereği değiştirilemez ve backfill edilmez. Bu nedenle
+outbox açısından **kalıcı** hatadır ve yeniden deneme kuyruğuna alınmaz.
 
 ## 10. Açık kalan ve ürün sahibinin cevaplaması gereken sorular
 
 1. **İlk dalgada hangi kanal desteklenecek — yalnız e-Arşiv mi, e-Fatura da dahil mi?** Bu karar
-   verilmeden `EFaturaSenaryosu` alanının gerekip gerekmediği ve dolayısıyla Faz 2B.4.1 hazırlık
-   listesi tamamen kesinleşmez.
+   verilmeden `EFaturaSenaryosu` alanının gerekip gerekmediği belirlenemez ve Faz 2B.4.1 hazırlık
+   listesi tamamen kesinleşmez. Bu, Faz 2B.4.1'e başlamadan önce çözülmesi gereken **engeldir**;
+   bu rapor bu konuda hiçbir varsayım yapmamaktadır.
 2. Kurum ve cari kart adreslerinin ilçe/il/ülke bilgisi mevcut veri tabanında var mı, yoksa veri
-   girişi/veri temizliği gerekecek mi?
+   girişi/temizliği gerekecek mi?
 3. Gerçek kişi müşterilerin ad ve soyad bilgisi ayrı alanlarda toplanabiliyor mu, yoksa mevcut
    `MusteriAdSoyad` verisi için tek seferlik manuel ayrıştırma mı gerekecek?
 4. Feature flag'in açılma kararı hangi ortamda ve kim tarafından verilecek; test ortamında
@@ -530,17 +724,18 @@ bilinçli olarak 503'tür — belge veya istek hatalı değildir, hizmet henüz 
 
 **Renderer öncesinde ek hazırlık fazı gerekir.**
 
-Hazırlık fazı (Faz 2B.4.1) yalnız dar renderer için gerekli entity, snapshot V2, reader ve kesim
-öncesi kapı değişiklikleriyle sınırlıdır:
+Faz 2B.4.1 yalnız dar renderer için gerekli entity, snapshot V2, reader ve kesim öncesi kapı
+değişiklikleriyle sınırlıdır:
 
-1. `EnsureUblHazirlikKaynaklari` genişletilmesi ve kanal çözümlemesinin sayaç kilidinden öncesine
-   taşınması.
-2. Yapısal adres alanları (ilçe, il, ülke) — satıcı ve alıcı için.
-3. Gerçek kişi alıcılar için ayrı `Ad`/`Soyad` alanları.
-4. `EBelgeCanonicalSnapshotV2`, `IEBelgeCanonicalSnapshotV2Reader` ve dispatcher; V1 aynen
-   korunur.
-5. Feature flag ve 14.09.2026 tarih sınırı.
+1. Kesim anı sözleşmesi (`TimeProvider`, `planlananKesimZamaniUtc`, merkezî TRT dönüşümü).
+2. `EnsureUblHazirlikKaynaklari` genişletilmesi ve `ResolveEBelgeKanali`'nin öne alınması.
+3. Merkezî mali doğrulayıcının çıkarılması (mevcut yuvarlama davranışı değiştirilmeden).
+4. Yapısal adres alanları (ilçe, il, ülke) — satıcı ve alıcı için.
+5. Gerçek kişi alıcılar için ayrı `Ad`/`Soyad` alanları.
+6. `EBelgeCanonicalSnapshotV2` ve `IEBelgeCanonicalSnapshotV2Reader`; V1 aynen korunur.
+7. Feature flag ve 14.09.2026 tarih sınırı.
+8. Rule-set manifesti ve build-time SHA-256 doğrulaması.
 
 Birim kodu için entity alanı, `InvoiceTypeCode` için entity alanı ve destek dışı senaryoların
 (tevkifat, ÖTV, ÖİV, konaklama vergisi, iade, özel matrah, ihracat) alanları bu hazırlık fazına
-**dahil değildir**.
+dahil değildir.

@@ -11,9 +11,6 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
 public class EBelgeOutboxClaimLeaseService : IEBelgeOutboxClaimLeaseService
 {
-    private const int MinLeaseSeconds = 1;
-    private const int MaxLeaseSeconds = 24 * 60 * 60;
-
     private readonly StysAppDbContext _dbContext;
 
     public EBelgeOutboxClaimLeaseService(
@@ -24,9 +21,7 @@ public class EBelgeOutboxClaimLeaseService : IEBelgeOutboxClaimLeaseService
 
     public async Task<EBelgeOutboxClaimLeaseResultDto?> TryClaimNextAsync(TimeSpan leaseDuration, CancellationToken cancellationToken = default)
     {
-        ValidateLeaseDuration(leaseDuration);
-
-        var leaseSeconds = checked((int)leaseDuration.TotalSeconds);
+        var leaseSeconds = EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateLeaseSeconds(leaseDuration);
         var kilitToken = Guid.NewGuid().ToString("D");
 
         var connection = _dbContext.Database.GetDbConnection();
@@ -133,24 +128,4 @@ OUTPUT
         }
     }
 
-    private static void ValidateLeaseDuration(TimeSpan leaseDuration)
-    {
-        if (leaseDuration <= TimeSpan.Zero)
-        {
-            throw new BaseException("Lease süresi pozitif olmalıdır.", 400);
-        }
-
-        if (leaseDuration.Ticks % TimeSpan.TicksPerSecond != 0)
-        {
-            throw new BaseException("Lease süresi tam saniye cinsinden olmalıdır.", 400);
-        }
-
-        var leaseSeconds = leaseDuration.TotalSeconds;
-        if (leaseSeconds < MinLeaseSeconds || leaseSeconds > MaxLeaseSeconds)
-        {
-            throw new BaseException(
-                $"Lease süresi {MinLeaseSeconds} ile {MaxLeaseSeconds} saniye arasında olmalıdır.",
-                400);
-        }
-    }
 }

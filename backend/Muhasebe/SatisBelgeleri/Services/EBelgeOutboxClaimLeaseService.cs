@@ -48,6 +48,7 @@ public class EBelgeOutboxClaimLeaseService : IEBelgeOutboxClaimLeaseService
 
             command.CommandText = """
 DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
+DECLARE @EnEskiTarih DATETIME2(7) = CONVERT(DATETIME2(7), '0001-01-01T00:00:00', 126);
 
 ;WITH Adaylar AS
 (
@@ -63,7 +64,12 @@ DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
         outbox.[KilitToken],
         outbox.[IslemBaslamaZamaniUtc],
         outbox.[UpdatedAt],
-        outbox.[UpdatedBy]
+        outbox.[UpdatedBy],
+        CASE
+            WHEN outbox.[Durum] = 1 THEN COALESCE(outbox.[SonrakiDenemeZamaniUtc], outbox.[CreatedAt], @EnEskiTarih)
+            WHEN outbox.[Durum] = 4 THEN outbox.[SonrakiDenemeZamaniUtc]
+            WHEN outbox.[Durum] = 2 THEN outbox.[KilitBitisZamaniUtc]
+        END AS UygunlukZamaniUtc
     FROM [muhasebe].[EBelgeOutboxMesajlari] AS outbox WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE outbox.[IsDeleted] = 0
       AND (
@@ -71,18 +77,7 @@ DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
          OR (outbox.[Durum] = 4 AND outbox.[SonrakiDenemeZamaniUtc] IS NOT NULL AND outbox.[SonrakiDenemeZamaniUtc] <= @NowUtc)
          OR (outbox.[Durum] = 2 AND outbox.[KilitBitisZamaniUtc] IS NOT NULL AND outbox.[KilitBitisZamaniUtc] <= @NowUtc)
       )
-    ORDER BY
-        CASE
-            WHEN outbox.[Durum] = 1 THEN 0
-            WHEN outbox.[Durum] = 4 THEN 1
-            WHEN outbox.[Durum] = 2 THEN 2
-        END,
-        CASE
-            WHEN outbox.[Durum] = 1 THEN COALESCE(outbox.[SonrakiDenemeZamaniUtc], @NowUtc)
-            WHEN outbox.[Durum] = 4 THEN outbox.[SonrakiDenemeZamaniUtc]
-            WHEN outbox.[Durum] = 2 THEN outbox.[KilitBitisZamaniUtc]
-        END,
-        outbox.[Id]
+    ORDER BY UygunlukZamaniUtc, outbox.[Id]
 )
 UPDATE Adaylar
 SET [Durum] = 2,

@@ -204,6 +204,17 @@ public class EBelgeOutboxClaimLeaseIntegrationTests : IAsyncLifetime
             .SingleAsync(x => x.EBelgeKaydi.SatisBelgesiId == satisBelgesiId);
     }
 
+    private static async Task<int> GetOutboxMesajiIdAsync(int satisBelgesiId)
+    {
+        await using var verifyCtx = CreateDbContext();
+        return await verifyCtx.EBelgeOutboxMesajlari
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.EBelgeKaydi.SatisBelgesiId == satisBelgesiId)
+            .Select(x => x.Id)
+            .SingleAsync();
+    }
+
     private static async Task<int> GetEBelgeKaydiIdAsync(int satisBelgesiId)
     {
         await using var verifyCtx = CreateDbContext();
@@ -300,7 +311,7 @@ public class EBelgeOutboxClaimLeaseIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task AktifLeaseTasimayanIsleniyorKaydiTekrarClaimEdilmez()
+    public async Task AktifLeaseTasiyanIsleniyorKaydiTekrarClaimEdilmez()
     {
         var cut = await CreateAndCutOutgoingInvoiceAsync();
 
@@ -322,6 +333,117 @@ public class EBelgeOutboxClaimLeaseIntegrationTests : IAsyncLifetime
         Assert.Equal(2, outbox.DenemeSayisi);
         Assert.False(string.IsNullOrWhiteSpace(outbox.KilitToken));
         Assert.True(outbox.KilitBitisZamaniUtc.HasValue);
+    }
+
+    [IntegrationFact]
+    public async Task UygunlukZamaniSiralamasiDurumdanBagimsizCalisir()
+    {
+        var bekliyorCut = await CreateAndCutOutgoingInvoiceAsync();
+        var hataCut = await CreateAndCutOutgoingInvoiceAsync();
+        var isleniyorCut = await CreateAndCutOutgoingInvoiceAsync();
+
+        var bekliyorOutboxId = await GetOutboxMesajiIdAsync(bekliyorCut.Id!.Value);
+        var hataOutboxId = await GetOutboxMesajiIdAsync(hataCut.Id!.Value);
+        var isleniyorOutboxId = await GetOutboxMesajiIdAsync(isleniyorCut.Id!.Value);
+
+        var now = DateTime.UtcNow;
+        var isleniyorZamani = now.AddMinutes(-30);
+        var hataZamani = now.AddMinutes(-20);
+        var bekliyorZamani = now.AddMinutes(-10);
+
+        await UpdateOutboxAsync(isleniyorCut.Id.Value, outbox =>
+        {
+            outbox.Durum = EBelgeOutboxDurumu.Isleniyor;
+            outbox.DenemeSayisi = 2;
+            outbox.KilitToken = Guid.NewGuid().ToString("D");
+            outbox.IslemBaslamaZamaniUtc = now.AddMinutes(-45);
+            outbox.KilitBitisZamaniUtc = isleniyorZamani;
+            outbox.SonrakiDenemeZamaniUtc = null;
+        });
+
+        await UpdateOutboxAsync(hataCut.Id.Value, outbox =>
+        {
+            outbox.Durum = EBelgeOutboxDurumu.Hata;
+            outbox.DenemeSayisi = 3;
+            outbox.SonrakiDenemeZamaniUtc = hataZamani;
+            outbox.KilitToken = null;
+            outbox.KilitBitisZamaniUtc = null;
+            outbox.IslemBaslamaZamaniUtc = null;
+        });
+
+        await UpdateOutboxAsync(bekliyorCut.Id.Value, outbox =>
+        {
+            outbox.Durum = EBelgeOutboxDurumu.Bekliyor;
+            outbox.DenemeSayisi = 0;
+            outbox.SonrakiDenemeZamaniUtc = bekliyorZamani;
+            outbox.KilitToken = null;
+            outbox.KilitBitisZamaniUtc = null;
+            outbox.IslemBaslamaZamaniUtc = null;
+        });
+
+        var first = await ClaimNextAsync();
+        var second = await ClaimNextAsync();
+        var third = await ClaimNextAsync();
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotNull(third);
+
+        Assert.Equal(isleniyorOutboxId, first!.OutboxMesajiId);
+        Assert.Equal(hataOutboxId, second!.OutboxMesajiId);
+        Assert.Equal(bekliyorOutboxId, third!.OutboxMesajiId);
+
+        var firstOutbox = await GetOutboxAsync(isleniyorCut.Id.Value);
+        var secondOutbox = await GetOutboxAsync(hataCut.Id.Value);
+        var thirdOutbox = await GetOutboxAsync(bekliyorCut.Id.Value);
+
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, firstOutbox.Durum);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, secondOutbox.Durum);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, thirdOutbox.Durum);
+    }
+
+    [IntegrationFact]
+    public async Task EsitUygunlukZamanindaKucukIdOnceClaimEdilir()
+    {
+        var ilkCut = await CreateAndCutOutgoingInvoiceAsync();
+        var ikinciCut = await CreateAndCutOutgoingInvoiceAsync();
+
+        var ilkOutboxId = await GetOutboxMesajiIdAsync(ilkCut.Id!.Value);
+        var ikinciOutboxId = await GetOutboxMesajiIdAsync(ikinciCut.Id!.Value);
+
+        var esitZaman = DateTime.UtcNow.AddMinutes(-25);
+
+        await UpdateOutboxAsync(ilkCut.Id.Value, outbox =>
+        {
+            outbox.Durum = EBelgeOutboxDurumu.Bekliyor;
+            outbox.DenemeSayisi = 0;
+            outbox.SonrakiDenemeZamaniUtc = esitZaman;
+            outbox.KilitToken = null;
+            outbox.KilitBitisZamaniUtc = null;
+            outbox.IslemBaslamaZamaniUtc = null;
+        });
+
+        await UpdateOutboxAsync(ikinciCut.Id.Value, outbox =>
+        {
+            outbox.Durum = EBelgeOutboxDurumu.Hata;
+            outbox.DenemeSayisi = 4;
+            outbox.SonrakiDenemeZamaniUtc = esitZaman;
+            outbox.KilitToken = null;
+            outbox.KilitBitisZamaniUtc = null;
+            outbox.IslemBaslamaZamaniUtc = null;
+        });
+
+        var first = await ClaimNextAsync();
+        var second = await ClaimNextAsync();
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+
+        var beklenenIlkId = Math.Min(ilkOutboxId, ikinciOutboxId);
+        var beklenenIkinciId = Math.Max(ilkOutboxId, ikinciOutboxId);
+
+        Assert.Equal(beklenenIlkId, first!.OutboxMesajiId);
+        Assert.Equal(beklenenIkinciId, second!.OutboxMesajiId);
     }
 
     [IntegrationFact]

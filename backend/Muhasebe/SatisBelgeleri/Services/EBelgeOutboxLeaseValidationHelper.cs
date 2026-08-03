@@ -20,7 +20,7 @@ internal static class EBelgeOutboxLeaseValidationHelper
             throw new BaseException("Lease süresi tam saniye cinsinden olmalıdır.", 400);
         }
 
-        var leaseSeconds = checked((int)leaseDuration.TotalSeconds);
+        var leaseSeconds = leaseDuration.Ticks / TimeSpan.TicksPerSecond;
         if (leaseSeconds < MinLeaseSeconds || leaseSeconds > MaxClaimLeaseSeconds)
         {
             throw new BaseException(
@@ -28,7 +28,7 @@ internal static class EBelgeOutboxLeaseValidationHelper
                 400);
         }
 
-        return leaseSeconds;
+        return checked((int)leaseSeconds);
     }
 
     internal static int? NormalizeAndValidateRetryDelaySeconds(TimeSpan? retryDelay)
@@ -48,7 +48,7 @@ internal static class EBelgeOutboxLeaseValidationHelper
             throw new BaseException("Retry gecikmesi tam saniye cinsinden olmalıdır.", 400);
         }
 
-        var retryDelaySeconds = checked((int)retryDelay.Value.TotalSeconds);
+        var retryDelaySeconds = retryDelay.Value.Ticks / TimeSpan.TicksPerSecond;
         if (retryDelaySeconds < MinLeaseSeconds || retryDelaySeconds > MaxRetryDelaySeconds)
         {
             throw new BaseException(
@@ -56,7 +56,7 @@ internal static class EBelgeOutboxLeaseValidationHelper
                 400);
         }
 
-        return retryDelaySeconds;
+        return checked((int)retryDelaySeconds);
     }
 
     internal static string NormalizeAndValidateKilitToken(string kilitToken)

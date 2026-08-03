@@ -557,23 +557,80 @@ public class EBelgeOutboxLeaseTransitionIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task GecersizGirdilerReddedilir()
+    public async Task SoftDeleteEdilmisKayitUzerindeCompleteFailRenewCalismaz()
+    {
+        var context = await ClaimAndGetContextAsync();
+        await UpdateOutboxAsync(context.OutboxMesajiId, outbox => outbox.IsDeleted = true);
+
+        var baseline = await GetOutboxAsync(context.OutboxMesajiId);
+        Assert.True(baseline.IsDeleted);
+
+        var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
+
+        Assert.False(await transition.TryCompleteAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, CancellationToken.None));
+        await AssertOutboxStateUnchangedAsync(context.OutboxMesajiId, baseline);
+
+        Assert.False(await transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.FromSeconds(RetryDelaySeconds), CancellationToken.None));
+        await AssertOutboxStateUnchangedAsync(context.OutboxMesajiId, baseline);
+
+        Assert.False(await transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, TimeSpan.FromSeconds(RenewLeaseSeconds), CancellationToken.None));
+        await AssertOutboxStateUnchangedAsync(context.OutboxMesajiId, baseline);
+    }
+
+    [IntegrationFact]
+    public async Task GecersizCompleteTokenDegerleriReddedilir()
     {
         var context = await ClaimAndGetContextAsync();
         var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
 
         await Assert.ThrowsAsync<BaseException>(() => transition.TryCompleteAsync(context.OutboxMesajiId, context.KurumId, "", CancellationToken.None));
         await Assert.ThrowsAsync<BaseException>(() => transition.TryCompleteAsync(context.OutboxMesajiId, context.KurumId, "not-a-guid", CancellationToken.None));
+    }
+
+    [IntegrationFact]
+    public async Task GecersizRetrySureleriReddedilir()
+    {
+        var context = await ClaimAndGetContextAsync();
+        var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
+        var overIntMax = TimeSpan.FromTicks(((long)int.MaxValue + 1L) * TimeSpan.TicksPerSecond);
+
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.Zero, CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.FromSeconds(-1), CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.FromMilliseconds(500), CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.FromDays(30).Add(TimeSpan.FromSeconds(1)), CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", overIntMax, CancellationToken.None));
         await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "", "mesaj", null, CancellationToken.None));
         await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, new string('A', 101), "mesaj", null, CancellationToken.None));
         await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "", null, CancellationToken.None));
         await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", new string('B', 2001), null, CancellationToken.None));
-        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.Zero, CancellationToken.None));
-        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.FromMilliseconds(500), CancellationToken.None));
-        await Assert.ThrowsAsync<BaseException>(() => transition.TryFailAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, "E1", "mesaj", TimeSpan.FromDays(31), CancellationToken.None));
+    }
+
+    [IntegrationFact]
+    public async Task GecersizRenewSureleriReddedilir()
+    {
+        var context = await ClaimAndGetContextAsync();
+        var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
+        var overIntMax = TimeSpan.FromTicks(((long)int.MaxValue + 1L) * TimeSpan.TicksPerSecond);
+
         await Assert.ThrowsAsync<BaseException>(() => transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, TimeSpan.Zero, CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, TimeSpan.FromSeconds(-1), CancellationToken.None));
         await Assert.ThrowsAsync<BaseException>(() => transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, TimeSpan.FromMilliseconds(500), CancellationToken.None));
-        await Assert.ThrowsAsync<BaseException>(() => transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, TimeSpan.FromDays(2).Add(TimeSpan.FromMilliseconds(500)), CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, TimeSpan.FromDays(1).Add(TimeSpan.FromSeconds(1)), CancellationToken.None));
+        await Assert.ThrowsAsync<BaseException>(() => transition.TryRenewAsync(context.OutboxMesajiId, context.KurumId, context.KilitToken, overIntMax, CancellationToken.None));
+    }
+
+    private async Task AssertOutboxStateUnchangedAsync(int outboxMesajiId, EBelgeOutboxMesaji expected)
+    {
+        var actual = await GetOutboxAsync(outboxMesajiId);
+        Assert.Equal(expected.Durum, actual.Durum);
+        Assert.Equal(expected.KilitToken, actual.KilitToken);
+        Assert.Equal(expected.KilitBitisZamaniUtc, actual.KilitBitisZamaniUtc);
+        Assert.Equal(expected.DenemeSayisi, actual.DenemeSayisi);
+        Assert.Equal(expected.SonrakiDenemeZamaniUtc, actual.SonrakiDenemeZamaniUtc);
+        Assert.Equal(expected.SonHataKodu, actual.SonHataKodu);
+        Assert.Equal(expected.SonHataMesaji, actual.SonHataMesaji);
+        Assert.Equal(expected.TamamlanmaZamaniUtc, actual.TamamlanmaZamaniUtc);
+        Assert.Equal(expected.IsDeleted, actual.IsDeleted);
     }
 
     private sealed record ClaimedOutboxContext(

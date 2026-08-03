@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.ObjectModel;
@@ -110,7 +108,7 @@ public sealed class EBelgeCanonicalSnapshotReader : IEBelgeCanonicalSnapshotRead
 
     private static void ValidateHash(string canonicalSha256)
     {
-        if (!IsValidHexHash(canonicalSha256))
+        if (!EBelgeCanonicalSnapshotHashUtility.IsValidHexHash(canonicalSha256))
         {
             throw new EBelgeCanonicalSnapshotException();
         }
@@ -118,8 +116,7 @@ public sealed class EBelgeCanonicalSnapshotReader : IEBelgeCanonicalSnapshotRead
 
     private static void ValidateHashMatchesJson(string canonicalJson, string canonicalSha256)
     {
-        var actualHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalJson)));
-        if (!string.Equals(actualHash, canonicalSha256, StringComparison.OrdinalIgnoreCase))
+        if (!EBelgeCanonicalSnapshotHashUtility.MatchesUtf8(canonicalJson, canonicalSha256))
         {
             throw new EBelgeCanonicalSnapshotException();
         }
@@ -158,16 +155,8 @@ public sealed class EBelgeCanonicalSnapshotReader : IEBelgeCanonicalSnapshotRead
         }
     }
 
-    private static bool IsValidHexHash(string canonicalSha256)
-        => canonicalSha256.Length == 64 && canonicalSha256.All(IsHexChar);
-
-    private static bool IsHexChar(char c)
-        => (c >= '0' && c <= '9')
-           || (c >= 'a' && c <= 'f')
-           || (c >= 'A' && c <= 'F');
-
     private static string NormalizeHash(string canonicalSha256)
-        => canonicalSha256.ToUpperInvariant();
+        => EBelgeCanonicalSnapshotHashUtility.NormalizeHash(canonicalSha256);
 }
 
 public sealed record class EBelgeCanonicalSnapshotV1

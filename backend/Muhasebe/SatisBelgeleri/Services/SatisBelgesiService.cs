@@ -4,6 +4,7 @@ using AutoMapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using STYS.AccessScope;
 using TOD.Platform.AspNetCore.Logging;
 using STYS.Infrastructure.EntityFramework;
@@ -36,6 +37,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ILogger<SatisBelgesiService> _logger;
     private readonly IDomainOperationLogger _domainLogger;
+    private readonly TimeProvider _timeProvider;
+    private readonly EBelgeUblOptions _eBelgeUblOptions;
+
+    /// <summary>
+    /// Bkz. docs/e-belge-ubl-pdf-eposta-renderer-hazirlik-raporu.md - "Kesin ürün kararı:
+    /// devreye alma tarihi". EBelgeUblOptions.Enabled açıkken bu tarihten (Türkiye yerel)
+    /// önceki belge tarihi veya planlanan kesim tarihiyle fatura kesilemez.
+    /// </summary>
+    private static readonly DateTime GoLiveTarihiTrt = new(2026, 9, 14, 0, 0, 0, DateTimeKind.Unspecified);
 
     /// <summary>Satış belgesi satırlarında desteklenen KDV uygulama tipleri.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -87,7 +97,9 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         IMuhasebeFisService muhasebeFisService,
         IUserAccessScopeService userAccessScopeService,
         ILogger<SatisBelgesiService> logger,
-        IDomainOperationLogger domainLogger)
+        IDomainOperationLogger domainLogger,
+        TimeProvider? timeProvider = null,
+        IOptions<EBelgeUblOptions>? eBelgeUblOptions = null)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
@@ -97,6 +109,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         _userAccessScopeService = userAccessScopeService;
         _logger = logger;
         _domainLogger = domainLogger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _eBelgeUblOptions = eBelgeUblOptions?.Value ?? new EBelgeUblOptions();
     }
 
     // ── Satirları include eden yardımcı ──
@@ -1115,6 +1129,12 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             EnsureUblHazirlikKaynaklari(belge, tesis.Kurum);
 
+            // Kesim anı sözleşmesi: TimeProvider'dan TEK bir saat alınır ve akış boyunca
+            // (kapı kontrolü + FaturaKesimTarihi + snapshot) bu değer yeniden kullanılır -
+            // ikinci kez UtcNow/Now çağrılmaz (bkz. görev sonuç raporu, "Kesim anı sözleşmesi").
+            var planlananKesimZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime;
+            EnsureCutoverTarihGecerli(belge, planlananKesimZamaniUtc);
+
             // AlisIadeFaturasi için: numara üretilmeden ÖNCE iade edilen asıl AlisFaturasi'nin
             // (ve bağlı muhasebe fişinin) HÂLÂ geçerli olduğu yeniden doğrulanır - aynı merkezi
             // yardımcı (ValidateVeGetIadeEdilenBelgeAsync) kullanılır. Doğrulama başarısızsa bu
@@ -1172,7 +1192,7 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             var resmiFaturaNo = $"{seriKodu}{maliYil:0000}{siraNo:000000000}";
 
             belge.ResmiFaturaNo = resmiFaturaNo;
-            var faturaKesimZamaniUtc = DateTime.UtcNow;
+            var faturaKesimZamaniUtc = planlananKesimZamaniUtc;
             belge.FaturaKesimTarihi = faturaKesimZamaniUtc;
             SatisBelgesiDurumProjection.OtoriterDurumlariAta(
                 belge,
@@ -1270,6 +1290,29 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         throw new BaseException(
             "Cari kart için e-Fatura ya da e-Arşiv kanalı seçilemedi; her iki mükellefiyet bayrağı da kapalı.",
             errorCode: 400);
+    }
+
+    /// <summary>
+    /// 14.09.2026 Türkiye yerel tarihinden önce belge/kesim tarihiyle fatura kesilmesini
+    /// engeller. Yalnız <see cref="EBelgeUblOptions.Enabled"/> açıkken çalışır - kapalıyken
+    /// (canlıya alınmadan önceki varsayılan durum) bu faz öncesi mevcut davranış hiç
+    /// değişmez. planlananKesimZamaniUtc, çağıran tarafından TEK bir TimeProvider
+    /// okumasından üretilmiş olmalıdır (bkz. FaturaKesAsync).
+    /// </summary>
+    private void EnsureCutoverTarihGecerli(SatisBelgesi belge, DateTime planlananKesimZamaniUtc)
+    {
+        if (!_eBelgeUblOptions.Enabled)
+        {
+            return;
+        }
+
+        var planlananKesimTarihiTrt = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(planlananKesimZamaniUtc).Date;
+        var belgeTarihi = belge.BelgeTarihi.Date;
+
+        if (belgeTarihi < GoLiveTarihiTrt || planlananKesimTarihiTrt < GoLiveTarihiTrt)
+        {
+            throw new EBelgeInvoiceDateBeforeGoLiveException(belgeTarihi, planlananKesimTarihiTrt, GoLiveTarihiTrt);
+        }
     }
 
     private static void EnsureUblHazirlikKaynaklari(SatisBelgesi belge, Kurum kurum)
@@ -1792,28 +1835,38 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
             }
         }
 
-        // 10. Satır toplamları = Belge toplamları (tutarlılık)
-        var hesaplananMatrah = aktifSatirlar.Sum(s => s.Matrah);
-        var hesaplananKdv = aktifSatirlar.Sum(s => s.KdvTutari);
-        var hesaplananGenelToplam = aktifSatirlar.Sum(s => s.SatirToplami);
+        // 10. Satır toplamları = Belge toplamları (tutarlılık) - ortak, tek hesaplama/
+        // doğrulama noktası kullanılır (bkz. SatisBelgesiTutarHesaplayici.DogrulaBelgeToplamlari);
+        // bu formül renderer/snapshot tarafında da (ileride) AYNEN kullanılacaktır.
+        var belgeToplamUyusmazliklari = SatisBelgesiTutarHesaplayici.DogrulaBelgeToplamlari(
+            aktifSatirlar.Select(s => new SatisBelgesiTutarHesaplayici.SatirTutarKatkisi(s.Matrah, s.KdvTutari, s.SatirToplami)),
+            belge.ToplamMatrah,
+            belge.ToplamKdv,
+            belge.GenelToplam);
 
-        if (belge.ToplamMatrah != hesaplananMatrah)
-            throw new BaseException(
-                $"Belge toplam matrahı ({belge.ToplamMatrah}) satır toplamlarıyla ({hesaplananMatrah}) uyuşmuyor. " +
-                "Belgeyi güncelleyip tekrar deneyin.",
-                errorCode: 400);
+        foreach (var uyusmazlik in belgeToplamUyusmazliklari)
+        {
+            switch (uyusmazlik.Alan)
+            {
+                case "ToplamMatrah":
+                    throw new BaseException(
+                        $"Belge toplam matrahı ({uyusmazlik.MevcutDeger}) satır toplamlarıyla ({uyusmazlik.HesaplananDeger}) uyuşmuyor. " +
+                        "Belgeyi güncelleyip tekrar deneyin.",
+                        errorCode: 400);
 
-        if (belge.ToplamKdv != hesaplananKdv)
-            throw new BaseException(
-                $"Belge toplam KDV'si ({belge.ToplamKdv}) satır KDV toplamlarıyla ({hesaplananKdv}) uyuşmuyor. " +
-                "Belgeyi güncelleyip tekrar deneyin.",
-                errorCode: 400);
+                case "ToplamKdv":
+                    throw new BaseException(
+                        $"Belge toplam KDV'si ({uyusmazlik.MevcutDeger}) satır KDV toplamlarıyla ({uyusmazlik.HesaplananDeger}) uyuşmuyor. " +
+                        "Belgeyi güncelleyip tekrar deneyin.",
+                        errorCode: 400);
 
-        if (belge.GenelToplam != hesaplananGenelToplam)
-            throw new BaseException(
-                $"Belge genel toplamı ({belge.GenelToplam}) satır genel toplamlarıyla ({hesaplananGenelToplam}) uyuşmuyor. " +
-                "Belgeyi güncelleyip tekrar deneyin.",
-                errorCode: 400);
+                case "GenelToplam":
+                    throw new BaseException(
+                        $"Belge genel toplamı ({uyusmazlik.MevcutDeger}) satır genel toplamlarıyla ({uyusmazlik.HesaplananDeger}) uyuşmuyor. " +
+                        "Belgeyi güncelleyip tekrar deneyin.",
+                        errorCode: 400);
+            }
+        }
 
         // 11. Kaynak duplicate kontrolü (sadece manuel olmayan belgeler için)
         if (belge.KaynakId is not null)
@@ -2683,13 +2736,13 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         // decimal(18,2)) 4 ondalık basamağa kadar üretebilir; KDV/ÖTV/ÖİV/konaklama vergisi
         // hesaplamaları ve SatirToplami'nin, veritabanına yazılacak (2 ondalık) Matrah ile
         // TUTARLI kalması için matrah burada, kullanılmadan önce yuvarlanır.
-        var matrah = SatisBelgesiTutarHesaplayici.Yuvarla(brutMatrah - indirimTutari);
+        var matrah = SatisBelgesiTutarHesaplayici.HesaplaMatrah(brutMatrah, indirimTutari);
         var kdvOrani = request.KdvOrani;
 
         // İstisna / kapsam dışı → KDV hesaplanmaz
         var kdvTutari = KdvHesaplanmayanTipler.Contains(request.KdvUygulamaTipi)
             ? 0m
-            : SatisBelgesiTutarHesaplayici.Yuvarla(matrah * kdvOrani / 100m);
+            : SatisBelgesiTutarHesaplayici.HesaplaKdvTutari(matrah, kdvOrani);
 
         var tevkifatTutari = 0m;
         if (request.KdvUygulamaTipi == (int)KdvUygulamaTipi.Tevkifatli && request.TevkifatPay.HasValue && request.TevkifatPayda.HasValue && request.TevkifatPayda.Value > 0)

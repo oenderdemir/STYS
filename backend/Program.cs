@@ -27,6 +27,7 @@ using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.DevTools.Services;
 using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.KdvRaporlari.Services;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Mapping;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Muhasebe.SatisBelgeleri.Services.MuhasebeFisStratejileri;
@@ -115,6 +116,8 @@ builder.Services.Configure<KurumLogoStorageOptions>(
     builder.Configuration.GetSection(KurumLogoStorageOptions.SectionName));
 builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOptions.SectionName));
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
+builder.Services.Configure<EBelgeUblOptions>(builder.Configuration.GetSection(EBelgeUblOptions.SectionName));
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PavoOptions>>().Value;

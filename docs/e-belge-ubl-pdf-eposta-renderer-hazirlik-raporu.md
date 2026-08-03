@@ -739,3 +739,166 @@ değişiklikleriyle sınırlıdır:
 Birim kodu için entity alanı, `InvoiceTypeCode` için entity alanı ve destek dışı senaryoların
 (tevkifat, ÖTV, ÖİV, konaklama vergisi, iade, özel matrah, ihracat) alanları bu hazırlık fazına
 dahil değildir.
+
+---
+
+## Faz 2B.4.1 Uygulama Özeti
+
+Bu bölüm, yukarıdaki raporun §8'inde listelenen Faz 2B.4.1 hazırlık maddelerinden **bu turda
+gerçekten uygulananları** belgeler. Bu turda UBL XML renderer, PDF, e-posta, XSD/Schematron
+doğrulaması veya sağlayıcı entegrasyonu geliştirilmedi — yalnız renderer öncesi ortak ve test
+edilebilir altyapı hazırlandı.
+
+### Değiştirilen ve eklenen dosyalar
+
+**Yeni dosyalar:**
+
+- `backend/Muhasebe/SatisBelgeleri/EBelgeUblOptions.cs` — feature flag (`Enabled`, varsayılan `false`).
+- `backend/Muhasebe/SatisBelgeleri/TurkeyTimeZoneHelper.cs` — UTC→Türkiye yerel dönüşümü; `Europe/Istanbul` / `Turkey Standard Time` ikisini de dener.
+- `backend/Muhasebe/SatisBelgeleri/EBelgeInvoiceDateBeforeGoLiveException.cs` — `EBELGE_INVOICE_DATE_BEFORE_GO_LIVE` (HTTP 400).
+- `backend/Muhasebe/SatisBelgeleri/EBelgeCanonicalSnapshotHashUtility.cs` — V1 ve V2 okuyucularının paylaştığı TEK hash doğrulama yardımcısı.
+- `backend/Muhasebe/SatisBelgeleri/EBelgeCanonicalSnapshotV2.cs` — `EBelgeCanonicalSnapshotV2` record ailesi + `IEBelgeCanonicalSnapshotV1Reader`/`IEBelgeCanonicalSnapshotV2Reader` ve implementasyonları.
+- `tests/STYS.Tests/TurkeyTimeZoneHelperTests.cs`, `SatisBelgesiTutarHesaplayiciTests.cs`, `EBelgeCanonicalSnapshotV1V2ReaderTests.cs`, `EBelgeCutoverGateIntegrationTests.cs`.
+
+**Değiştirilen dosyalar:**
+
+- `backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs` — `TimeProvider`/`IOptions<EBelgeUblOptions>` opsiyonel constructor parametreleri (varsayılan `TimeProvider.System` / `Enabled=false` — mevcut çağıranlar değişmeden derlenir); `EnsureCutoverTarihGecerli` kapısı; kesim anı tek-okuma sözleşmesi; `CreateSatirFromRequest` ve `ValidateBelgeOnayaGonderilebilir`'in ortak hesaplayıcıyı kullanacak şekilde refactor edilmesi.
+- `backend/Muhasebe/SatisBelgeleri/SatisBelgesiTutarHesaplayici.cs` — `HesaplaMatrah`, `HesaplaKdvTutari`, `DogrulaBelgeToplamlari` eklendi; mevcut `Yuvarla`/`HesaplaSatirToplami` değişmedi.
+- `backend/Muhasebe/SatisBelgeleri/EBelgeCanonicalSnapshotReader.cs` — hash doğrulama private metotları `EBelgeCanonicalSnapshotHashUtility`'ye delege edildi (davranış birebir korundu); kullanılmayan `using`'ler kaldırıldı.
+- `backend/Program.cs` — `EBelgeUblOptions` config bağlama + `TimeProvider.System` DI kaydı.
+- `backend/appsettings.json` — `"EBelgeUbl": { "Enabled": false }`.
+
+### TimeProvider'ın DI kaydı
+
+`Program.cs`: `builder.Services.AddSingleton(TimeProvider.System);` ve
+`builder.Services.Configure<EBelgeUblOptions>(builder.Configuration.GetSection(EBelgeUblOptions.SectionName));`.
+`SatisBelgesiService` constructor'ında her iki bağımlılık da **opsiyonel** parametre olarak eklendi
+(`TimeProvider? timeProvider = null`, `IOptions<EBelgeUblOptions>? eBelgeUblOptions = null`) ve
+`null` ise sırasıyla `TimeProvider.System` / `Enabled=false`'a düşer. Bu tasarım kasıtlıdır: mevcut
+8 test dosyasındaki `new SatisBelgesiService(...)` çağrı yerleri **hiçbiri değiştirilmeden**
+derlenmeye devam eder; yalnız bu fazın kendi testleri gerçek zamanı kontrol etmek için bu
+parametreleri açıkça sağlar.
+
+### Tarih kapısının akıştaki kesin konumu
+
+`FaturaKesAsync` içinde, otoriter kurum/tesis okuması ve `EnsureUblHazirlikKaynaklari` çağrısından
+hemen sonra, **sayaç `UPDLOCK` ile kilitlenmeden önce**:
+
+```csharp
+var planlananKesimZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime;
+EnsureCutoverTarihGecerli(belge, planlananKesimZamaniUtc);
+```
+
+`EnsureCutoverTarihGecerli`, `_eBelgeUblOptions.Enabled == false` iken hiçbir şey yapmadan döner
+(bu fazdan önceki davranış aynen sürer). `Enabled == true` iken `TurkeyTimeZoneHelper` ile TRT'ye
+çevrilmiş kesim tarihini ve `belge.BelgeTarihi`'ni 14.09.2026 ile karşılaştırır; ikisinden biri
+öncesindeyse `EBelgeInvoiceDateBeforeGoLiveException` (HTTP 400) fırlatır — bu noktada sayaç henüz
+hiç sorgulanmamıştır. Akışın ilerisinde (`belge.FaturaKesimTarihi` ataması ve
+`EBelgeSnapshotFactory.CreateSnapshot` çağrısı), daha önce `DateTime.UtcNow` ile ikinci kez zaman
+okuyan satır kaldırılıp **aynı** `planlananKesimZamaniUtc` değerini yeniden kullanacak şekilde
+değiştirildi — akış boyunca `TimeProvider` tam olarak **bir kez** okunur.
+
+Mevcut kodda `ResolveEBelgeKanali` çağrısının hâlâ sayaç kilidinden **sonra** (satır ~1206)
+çalıştığı — önceki raporun tespit ettiği sıralama sorunu — bu turda **düzeltilmedi**; kapsam
+yalnız tarih kontrolüyle sınırlı tutuldu. Bu, Faz 2B.4.2 için açık bir madde olarak aşağıda
+listelenmiştir.
+
+### Mali hesaplama bileşeninin sorumluluğu
+
+`SatisBelgesiTutarHesaplayici` (var olan dosya, genişletildi) artık üç yeni üye taşıyor:
+
+- `HesaplaMatrah(brutMatrah, indirimTutari)` — KDV'den önce 2 basamağa yuvarlar.
+- `HesaplaKdvTutari(matrah, kdvOrani)` — zaten yuvarlanmış matrah üzerinden hesaplar, sonucu 2 basamağa yuvarlar.
+- `DogrulaBelgeToplamlari(satirlar, toplamMatrah, toplamKdv, genelToplam)` — saklanmış belge
+  toplamlarını, satırların (`SatirTutarKatkisi`) düz toplamıyla karşılaştırır; hiçbir değeri
+  değiştirmez, yalnız `BelgeToplamUyusmazligi` listesi döner (boşsa tutarlı demektir).
+
+Bu üç metot, hem satır oluşturma anında (`CreateSatirFromRequest`) hem doğrulama anında
+(`ValidateBelgeOnayaGonderilebilir`) **aynı formülün** kullanılmasını sağlar; ileride renderer/
+snapshot üretimi de aynı bileşeni çağıracaktır (bkz. Faz 2B.4.2).
+
+### Mevcut doğrulamadan taşınan kodlar
+
+`ValidateBelgeOnayaGonderilebilir` içindeki (10. madde) satır toplamı = belge toplamı
+karşılaştırması — üç ayrı `if (belge.ToplamX != hesaplananX) throw ...` bloğu — kaldırılıp
+`SatisBelgesiTutarHesaplayici.DogrulaBelgeToplamlari` çağrısına ve dönen uyuşmazlık listesi
+üzerinde `switch` ile aynı üç hata mesajının üretilmesine dönüştürüldü. Karşılaştırma operatörü
+(`!=`, tam decimal eşitliği) ve hata mesajı metinleri **birebir** korundu; davranış değişmedi
+(bkz. `EBelgeSnapshotUblHazirlikIntegrationTests` regresyon testleri, aşağıda).
+
+`CreateSatirFromRequest` içinde matrah ve KDV satırları (`SatisBelgesiTutarHesaplayici.Yuvarla(...)`
+doğrudan çağrıları) yeni `HesaplaMatrah`/`HesaplaKdvTutari` metotlarına yönlendirildi — formül
+birebir aynı (`Yuvarla(brutMatrah - indirimTutari)` ve `Yuvarla(matrah * kdvOrani / 100m)`),
+yalnız tek yerde tanımlı hale geldi.
+
+### Eklenen hedefli testler
+
+| Dosya | Kapsam |
+| --- | --- |
+| `TurkeyTimeZoneHelperTests.cs` | Sabit UTC+3 dönüşümü, UTC gün sonu/başı gün değişimi, Unspecified/Local kind davranışı, yaz/kış ofsetinin sabit kaldığı. |
+| `SatisBelgesiTutarHesaplayiciTests.cs` | Midpoint (`0.005`→`0.01` vb.) AwayFromZero, matrahın KDV'den önce yuvarlanması, satır bazlı KDV toplamının toplu matrahtan yeniden hesaplanan değerden **kasıtlı olarak farklı** çıktığı somut senaryo (10.03+10.04 @ %18), çok satırlı belge toplamı doğrulaması, uyuşmazlık raporlama. |
+| `EBelgeCanonicalSnapshotV1V2ReaderTests.cs` | V1 reader V1 payload okur; V2 reader V2 payload okur; V1 payload V2 reader'a verilince (zorunlu V2 alanları eksik olduğu için deserialize hatası ile) reddedilir; V2 payload V1 reader'a verilince (`UnmappedMemberHandling.Disallow` nedeniyle) reddedilir; geçersiz hash; yanlış `SnapshotSchemaVersion`. |
+| `EBelgeCutoverGateIntegrationTests.cs` | Gerçek SQL Server'a karşı, gerçek `FaturaKesAsync`: 13.09.2026 23:59:59.999 TRT reddedilir; 14.09.2026 00:00:00 TRT kabul edilir; UTC tarihi hâlâ 13.09 iken TRT karşılığı 14.09 olan an kabul edilir (gün değişimi doğru değerlendirilir); reddedilen işlemde resmî numara/`FaturaKesimTarihi`/`EBelgeKaydi` **hiç oluşmaz** ve sayaç değişmez; başarılı işlemde `FaturaKesimTarihi`'nin `FakeTimeProvider`'ın verdiği anla **birebir** eşit olduğu; `Enabled=false` iken go-live öncesi tarihte kesimin serbest kaldığı (geriye dönük uyumluluk). |
+
+Testlerde gerçek sistem saati kullanılmadı; `EBelgeCutoverGateIntegrationTests` içinde
+`TimeProvider`'dan türeyen özel bir `FakeTimeProvider` (sabit `DateTimeOffset` döndürür)
+kullanıldı.
+
+### Çalıştırılan test komutları ve sonuçları
+
+Gerçek SQL Server (`stys-mssql` docker container, `localhost:14333`) bu ortamda çalışır durumda
+bulunduğundan entegrasyon testleri **atlanmadan** çalıştırıldı:
+
+```
+STYS_INTEGRATION_TEST_CONNECTION_STRING="Server=localhost,14333;Database=STYSDB;User Id=sa;Password=Strong!Pass1;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True" \
+dotnet test tests/STYS.Tests/STYS.Tests.csproj -c Debug --no-build \
+  --filter "FullyQualifiedName~TurkeyTimeZoneHelperTests|FullyQualifiedName~SatisBelgesiTutarHesaplayiciTests|FullyQualifiedName~EBelgeCanonicalSnapshotV1V2ReaderTests|FullyQualifiedName~EBelgeCanonicalSnapshotReaderTests|FullyQualifiedName~EBelgeCutoverGateIntegrationTests|FullyQualifiedName~EBelgeSnapshotUblHazirlikIntegrationTests"
+```
+
+Sonuç: **Passed! Failed: 0, Passed: 54, Skipped: 0, Total: 54.**
+
+Kapsanan sınıflar: `TurkeyTimeZoneHelperTests` (6), `SatisBelgesiTutarHesaplayiciTests` (8),
+`EBelgeCanonicalSnapshotV1V2ReaderTests` (6), `EBelgeCanonicalSnapshotReaderTests` (14, önceden
+var olan V1 reader regresyon testleri — hash yardımcısı çıkarma sonrası bozulmadı),
+`EBelgeCutoverGateIntegrationTests` (7, yeni), `EBelgeSnapshotUblHazirlikIntegrationTests` (9,
+önceden var olan kesim akışı regresyon testleri — `EnsureUblHazirlikKaynaklari`/toplam doğrulama
+refactor'u sonrası bozulmadı).
+
+**Bulgu (kapsam dışı, düzeltilmedi):** Aynı `--filter` dışında, ilgisiz iki entegrasyon testi
+(`SatisBelgesiMuhasebeDengeIntegrationTests.SatisIadeFaturasi_GercekIadeStratejisiyleFisOlusurVeDengeliKalir`
+ve
+`SatisBelgesiEkVergiEngelIntegrationTests.SatisIadeFaturasi_KonaklamaVergisiIcerenBelge_MuhasebeFisiEngellenirVeHicbirKayitOlusmaz`)
+`ResolveEBelgeKanali`'nin "her iki mükellefiyet bayrağı da kapalı" hatasıyla başarısız oluyor. Bu
+turun değişiklikleriyle ilgisi olup olmadığını doğrulamak için `git worktree` ile temel commit
+(`02c910e`, bu turun çalışma tabanı) ayrı bir klasöre çıkarılıp AYNI iki test AYNI ortamda tekrar
+çalıştırıldı — **aynı iki test aynı hatayla, bu turun hiçbir değişikliği olmadan da başarısız
+oluyor.** Bu, bu turdan önce var olan, ilgisiz bir test-verisi kusurudur (muhtemelen paylaşılan
+`CariKart` test fixture'ının `EFaturaMukellefiMi`/`EArsivKapsamindaMi` bayraklarını hiç
+ayarlamaması); bu turun "hedefli testleri" bunlar değildir ve iş talimatı gereği ("geniş çaplı
+refactor yapma") bu turda düzeltilmemiştir. Ayrı bir düzeltme fazında ele alınmalıdır.
+
+### Açık kalan ürün kararları
+
+- İlk dalgada hangi kanalın (e-Arşiv/e-Fatura) destekleneceği — bu rapor kararı henüz vermedi;
+  `EBelgeUblOptions.Enabled` yalnız tarih kapısını açar, kanal/`ProfileID`/`EFaturaSenaryosu`
+  konusunda hiçbir varsayım yapılmadı.
+- `ResolveEBelgeKanali`'nin sayaç kilidinden sonra çalışması — kesin karar §2'de belirtildiği gibi
+  hâlâ düzeltilmedi; kanal kararı verilmeden bu taşımanın nereye (hangi koşullarla) yapılacağı da
+  netleşmeyecektir.
+- `SatisBelgesiMuhasebeDengeIntegrationTests`/`SatisBelgesiEkVergiEngelIntegrationTests`'teki
+  ön-var-olan test verisi kusuru ayrı bir fazda düzeltilmeli.
+- Feature flag'in ortam bazlı açılma stratejisi (hangi ortamda kim açacak) ürün sahibi kararı
+  gerektiriyor.
+
+### Faz 2B.4.2 için önerilen sonraki adım
+
+1. `ResolveEBelgeKanali`'yi sayaç kilidinden önceye taşımak ve kesim öncesi kapının kanal
+   kontrolünü eklemek (bu, ilk dalga kanal kararına bağlıdır).
+2. `EBelgeSnapshotFactory`'yi genişletip gerçekten `EBelgeCanonicalSnapshotV2` üreten bir yol
+   eklemek — bu faz yalnız V2'nin şemasını ve typed reader'ını hazırladı, hiçbir üretim kod yolu
+   henüz V2 yazmıyor.
+3. Yapısal adres alanlarını (`Ilce`, `Il`, `UlkeAdi`/`UlkeKodu`) `Kurum` ve alıcı kaynaklarına
+   eklemek ve kesim öncesi kapıya zorunluluk kontrolü olarak bağlamak.
+4. Gerçek kişi alıcılar için ayrı `Ad`/`Soyad` alanlarını eklemek.
+5. Kesim öncesi kapının §9'daki 18 maddelik tam sözleşmesini (bu turda yalnız tarih/madde 1-2
+   uygulandı) `EnsureUblHazirlikKaynaklari`'ye kademeli olarak eklemek.

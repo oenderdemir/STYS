@@ -936,6 +936,28 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                         errorCode: 500);
                 }
 
+                var mevcutOutboxMesaji = await _db.EBelgeOutboxMesajlari
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(
+                        x => x.EBelgeKaydiId == mevcutEBelgeKaydi.Id
+                             && x.KurumId == belge.KurumId
+                             && x.IsTuru == EBelgeOutboxIsTuru.ArtefaktOlustur,
+                        cancellationToken);
+
+                if (mevcutOutboxMesaji is null)
+                {
+                    throw new BaseException(
+                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeOutboxMesaji bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        errorCode: 500);
+                }
+
+                if (mevcutOutboxMesaji.IsDeleted)
+                {
+                    throw new BaseException(
+                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeOutboxMesaji soft-delete edilmiş; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        errorCode: 500);
+                }
+
                 if (!string.IsNullOrWhiteSpace(belge.EBelgeUuid)
                     && !string.Equals(belge.EBelgeUuid, mevcutEBelgeKaydi.EBelgeUuid, StringComparison.Ordinal))
                 {
@@ -1178,6 +1200,17 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
 
             eBelgeKaydi.Snapshot = snapshot;
             _db.EBelgeKayitlari.Add(eBelgeKaydi);
+
+            var outboxMesaji = new EBelgeOutboxMesaji
+            {
+                KurumId = belge.KurumId,
+                EBelgeKaydi = eBelgeKaydi,
+                IsTuru = EBelgeOutboxIsTuru.ArtefaktOlustur,
+                Durum = EBelgeOutboxDurumu.Bekliyor,
+                DenemeSayisi = 0
+            };
+
+            eBelgeKaydi.OutboxMesajlari.Add(outboxMesaji);
 
             try
             {

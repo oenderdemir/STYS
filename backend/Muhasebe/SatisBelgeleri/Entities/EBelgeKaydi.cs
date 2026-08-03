@@ -17,4 +17,6 @@ public class EBelgeKaydi : BaseEntity<int>, ITenantEntity
     public EBelgeKaydiDurumu Durum { get; set; } = EBelgeKaydiDurumu.SnapshotHazir;
 
     public EBelgeSnapshot? Snapshot { get; set; }
+
+    public ICollection<EBelgeOutboxMesaji> OutboxMesajlari { get; set; } = new List<EBelgeOutboxMesaji>();
 }

@@ -188,6 +188,7 @@ public class StysAppDbContext : DbContext
     public DbSet<SatisBelgesiSatiri> SatisBelgesiSatirlari => Set<SatisBelgesiSatiri>();
     public DbSet<EBelgeKaydi> EBelgeKayitlari => Set<EBelgeKaydi>();
     public DbSet<EBelgeSnapshot> EBelgeSnapshots => Set<EBelgeSnapshot>();
+    public DbSet<EBelgeOutboxMesaji> EBelgeOutboxMesajlari => Set<EBelgeOutboxMesaji>();
     public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
@@ -2867,6 +2868,56 @@ public class StysAppDbContext : DbContext
                 .HasForeignKey<EBelgeSnapshot>(x => new { x.EBelgeKaydiId, x.KurumId })
                 .HasPrincipalKey<EBelgeKaydi>(x => new { x.Id, x.KurumId })
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EBelgeOutboxMesaji>(entity =>
+        {
+            entity.ToTable("EBelgeOutboxMesajlari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_EBelgeOutboxMesajlari_IsTuru",
+                    "[IsTuru] IN (1)");
+
+                t.HasCheckConstraint(
+                    "CK_EBelgeOutboxMesajlari_Durum",
+                    "[Durum] IN (1, 2, 3, 4)");
+
+                t.HasCheckConstraint(
+                    "CK_EBelgeOutboxMesajlari_DenemeSayisi",
+                    "[DenemeSayisi] >= 0");
+            });
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.EBelgeKaydiId)
+                .IsRequired();
+
+            entity.Property(x => x.IsTuru)
+                .IsRequired();
+
+            entity.Property(x => x.Durum)
+                .IsRequired();
+
+            entity.Property(x => x.DenemeSayisi)
+                .IsRequired();
+
+            entity.Property(x => x.SonHataKodu)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.SonHataMesaji)
+                .HasMaxLength(2000);
+
+            entity.HasIndex(x => new { x.EBelgeKaydiId, x.IsTuru })
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.Durum, x.SonrakiDenemeZamaniUtc, x.KilitBitisZamaniUtc });
+
+            entity.HasOne(x => x.EBelgeKaydi)
+                .WithMany(x => x.OutboxMesajlari)
+                .HasForeignKey(x => new { x.EBelgeKaydiId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<KurumFaturaNumaraSayaci>(entity =>

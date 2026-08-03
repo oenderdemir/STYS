@@ -348,6 +348,11 @@ public static class SatisBelgesiMuhasebeTestSupport
                 .Where(x => eBelgeKaydiIds.Contains(x.EBelgeKaydiId))
                 .ExecuteDeleteAsync();
 
+            await dbContext.EBelgeOutboxMesajlari
+                .IgnoreQueryFilters()
+                .Where(x => eBelgeKaydiIds.Contains(x.EBelgeKaydiId))
+                .ExecuteDeleteAsync();
+
             await dbContext.EBelgeKayitlari
                 .IgnoreQueryFilters()
                 .Where(x => eBelgeKaydiIds.Contains(x.Id))

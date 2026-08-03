@@ -245,6 +245,12 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.VergiNo)
                 .HasMaxLength(32);
 
+            entity.Property(x => x.VergiDairesi)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.Adres)
+                .HasMaxLength(512);
+
             entity.Property(x => x.Telefon)
                 .HasMaxLength(32);
 
@@ -2731,6 +2737,16 @@ public class StysAppDbContext : DbContext
 
             entity.Property(x => x.EBelgeUuid)
                 .HasMaxLength(100);
+
+            entity.Property(x => x.ParaBirimi)
+                .HasMaxLength(3)
+                .IsRequired()
+                .HasDefaultValue("TRY");
+
+            entity.Property(x => x.Kur)
+                .HasPrecision(18, 6)
+                .IsRequired()
+                .HasDefaultValue(1m);
 
             entity.HasIndex(x => x.CariKartId)
                 .HasFilter("[IsDeleted] = 0 AND [CariKartId] IS NOT NULL");

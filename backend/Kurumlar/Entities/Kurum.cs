@@ -17,6 +17,12 @@ public class Kurum : BaseEntity<int>
     [MaxLength(32)]
     public string? VergiNo { get; set; }
 
+    [MaxLength(128)]
+    public string? VergiDairesi { get; set; }
+
+    [MaxLength(512)]
+    public string? Adres { get; set; }
+
     [MaxLength(32)]
     public string? Telefon { get; set; }
 

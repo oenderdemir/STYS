@@ -51,6 +51,12 @@ public class SatisBelgesi : BaseEntity<int>, ITenantEntity
     public DateTime BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }
 
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MaxLength(3)]
+    public string ParaBirimi { get; set; } = "TRY";
+
+    public decimal Kur { get; set; } = 1m;
+
     public string? MusteriUnvan { get; set; }
     public string? MusteriAdSoyad { get; set; }
     public string? MusteriVergiNo { get; set; }

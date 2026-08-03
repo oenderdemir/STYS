@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
 using TOD.Platform.AspNetCore.Logging;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Kurumlar.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
@@ -396,6 +397,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             CariKartId = request.CariKartId,
             BelgeTarihi = request.BelgeTarihi,
             VadeTarihi = request.VadeTarihi,
+            ParaBirimi = "TRY",
+            Kur = 1m,
             MusteriUnvan = request.MusteriUnvan,
             MusteriAdSoyad = request.MusteriAdSoyad,
             MusteriVergiNo = request.MusteriVergiNo,
@@ -1092,6 +1095,26 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                     errorCode: 500);
             }
 
+            var tesis = await _db.Tesisler
+                .AsNoTracking()
+                .Include(x => x.Kurum)
+                .FirstOrDefaultAsync(x => x.Id == belge.TesisId.Value, cancellationToken)
+                ?? throw new BaseException("Belgenin tesis bilgisi bulunamadı; e-belge oluşturulamaz.", errorCode: 400);
+
+            if (tesis.Kurum is null)
+            {
+                throw new BaseException("Belgenin düzenleyen kurum bilgisi bulunamadı; e-belge oluşturulamaz.", errorCode: 400);
+            }
+
+            if (tesis.KurumId != belge.KurumId)
+            {
+                throw new BaseException(
+                    "Belgenin tesis ve kurum bilgileri tutarsız; e-belge oluşturulamaz.",
+                    errorCode: 500);
+            }
+
+            EnsureUblHazirlikKaynaklari(belge, tesis.Kurum);
+
             // AlisIadeFaturasi için: numara üretilmeden ÖNCE iade edilen asıl AlisFaturasi'nin
             // (ve bağlı muhasebe fişinin) HÂLÂ geçerli olduğu yeniden doğrulanır - aynı merkezi
             // yardımcı (ValidateVeGetIadeEdilenBelgeAsync) kullanılır. Doğrulama başarısızsa bu
@@ -1161,24 +1184,6 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 ?? throw new BaseException("E-belge kanalını belirlemek için cari kart bilgisi bulunamadı.", errorCode: 400);
 
             var eBelgeKanali = ResolveEBelgeKanali(cariKart);
-
-            var tesis = await _db.Tesisler
-                .AsNoTracking()
-                .Include(x => x.Kurum)
-                .FirstOrDefaultAsync(x => x.Id == belge.TesisId.Value, cancellationToken)
-                ?? throw new BaseException("Belgenin tesis bilgisi bulunamadı; e-belge oluşturulamaz.", errorCode: 400);
-
-            if (tesis.Kurum is null)
-            {
-                throw new BaseException("Belgenin düzenleyen kurum bilgisi bulunamadı; e-belge oluşturulamaz.", errorCode: 400);
-            }
-
-            if (tesis.KurumId != belge.KurumId)
-            {
-                throw new BaseException(
-                    "Belgenin tesis ve kurum bilgileri tutarsız; e-belge oluşturulamaz.",
-                    errorCode: 500);
-            }
 
             var eBelgeKaydi = new EBelgeKaydi
             {
@@ -1265,6 +1270,44 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         throw new BaseException(
             "Cari kart için e-Fatura ya da e-Arşiv kanalı seçilemedi; her iki mükellefiyet bayrağı da kapalı.",
             errorCode: 400);
+    }
+
+    private static void EnsureUblHazirlikKaynaklari(SatisBelgesi belge, Kurum kurum)
+    {
+        if (string.IsNullOrWhiteSpace(kurum.VergiNo))
+        {
+            throw new BaseException(
+                "Belgenin düzenleyen kurumunda vergi numarası bulunmalıdır.",
+                errorCode: 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(kurum.VergiDairesi))
+        {
+            throw new BaseException(
+                "Belgenin düzenleyen kurumunda vergi dairesi bulunmalıdır.",
+                errorCode: 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(kurum.Adres))
+        {
+            throw new BaseException(
+                "Belgenin düzenleyen kurumunda hukuki adres bulunmalıdır.",
+                errorCode: 400);
+        }
+
+        if (!string.Equals(belge.ParaBirimi, "TRY", StringComparison.Ordinal))
+        {
+            throw new BaseException(
+                "E-belge yalnız TRY para birimiyle kesilebilir.",
+                errorCode: 400);
+        }
+
+        if (belge.Kur != 1m)
+        {
+            throw new BaseException(
+                "E-belge yalnız kur 1 ile kesilebilir.",
+                errorCode: 400);
+        }
     }
 
     private static bool IsUniqueConflict(DbUpdateException ex)

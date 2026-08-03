@@ -28,6 +28,8 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public string? CariKartVergiNoTckn { get; set; }
     public DateTime BelgeTarihi { get; set; }
     public DateTime? VadeTarihi { get; set; }
+    public string ParaBirimi { get; set; } = "TRY";
+    public decimal Kur { get; set; } = 1m;
     public string? MusteriUnvan { get; set; }
     public string? MusteriAdSoyad { get; set; }
     public string? MusteriVergiNo { get; set; }

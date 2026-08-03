@@ -52,8 +52,8 @@ internal static class EBelgeSnapshotFactory
                 kurum.Id,
                 kurum.Ad,
                 kurum.VergiNo,
-                null,
-                null,
+                kurum.VergiDairesi,
+                kurum.Adres,
                 kurum.Telefon ?? string.Empty,
                 kurum.Eposta),
             new EBelgeCanonicalTesisSection(
@@ -84,8 +84,8 @@ internal static class EBelgeSnapshotFactory
                 belge.IadeEdilenBelge?.EBelgeKaydi?.EBelgeUuid ?? belge.IadeEdilenBelge?.EBelgeUuid,
                 belge.IadeEdilenBelge?.BelgeTarihi),
             new EBelgeCanonicalOdemeSection(
-                null,
-                null,
+                belge.ParaBirimi,
+                belge.Kur,
                 null,
                 belge.VadeTarihi),
             belge.ToplamMatrah,

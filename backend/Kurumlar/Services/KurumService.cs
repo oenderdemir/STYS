@@ -119,6 +119,8 @@ public class KurumService : BaseRdbmsService<KurumDto, Kurum, int>, IKurumServic
         dto.Kod = dto.Kod.Trim();
         dto.Ad = dto.Ad.Trim();
         dto.VergiNo = NormalizeOptional(dto.VergiNo);
+        dto.VergiDairesi = NormalizeOptional(dto.VergiDairesi);
+        dto.Adres = NormalizeOptional(dto.Adres);
         dto.Telefon = NormalizeOptional(dto.Telefon);
         dto.Eposta = NormalizeOptional(dto.Eposta);
     }

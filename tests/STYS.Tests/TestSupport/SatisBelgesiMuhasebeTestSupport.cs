@@ -215,7 +215,15 @@ public static class SatisBelgesiMuhasebeTestSupport
 
     public static async Task<(Kurum kurum, Il il, Tesis tesis)> SeedKurumIlTesisAsync(StysAppDbContext dbContext, string uniqueSuffix)
     {
-        var kurum = new Kurum { Kod = uniqueSuffix, Ad = "Test Kurum " + uniqueSuffix, AktifMi = true };
+        var kurum = new Kurum
+        {
+            Kod = uniqueSuffix,
+            Ad = "Test Kurum " + uniqueSuffix,
+            VergiNo = "1111111111",
+            VergiDairesi = "Test Vergi Dairesi " + uniqueSuffix,
+            Adres = "Test Kurum Adres " + uniqueSuffix,
+            AktifMi = true
+        };
         dbContext.Kurumlar.Add(kurum);
         var il = new Il { Ad = "Test Il " + uniqueSuffix, AktifMi = true };
         dbContext.Iller.Add(il);

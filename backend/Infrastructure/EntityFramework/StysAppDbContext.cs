@@ -189,6 +189,7 @@ public class StysAppDbContext : DbContext
     public DbSet<EBelgeKaydi> EBelgeKayitlari => Set<EBelgeKaydi>();
     public DbSet<EBelgeSnapshot> EBelgeSnapshots => Set<EBelgeSnapshot>();
     public DbSet<EBelgeOutboxMesaji> EBelgeOutboxMesajlari => Set<EBelgeOutboxMesaji>();
+    public DbSet<EBelgeArtifact> EBelgeArtifactlari => Set<EBelgeArtifact>();
     public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
@@ -2840,7 +2841,7 @@ public class StysAppDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_EBelgeKayitlari_Durum",
-                    "[Durum] IN (1)");
+                    "[Durum] IN (1, 2, 3)");
             });
 
             entity.Property(x => x.EBelgeUuid)
@@ -2951,6 +2952,75 @@ public class StysAppDbContext : DbContext
 
             entity.HasOne(x => x.EBelgeKaydi)
                 .WithMany(x => x.OutboxMesajlari)
+                .HasForeignKey(x => new { x.EBelgeKaydiId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EBelgeArtifact>(entity =>
+        {
+            entity.ToTable("EBelgeArtifactlari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_EBelgeArtifactlari_ArtifactTipi",
+                    "[ArtifactTipi] IN (1)");
+
+                t.HasCheckConstraint(
+                    "CK_EBelgeArtifactlari_ArtifactAsamasi",
+                    "[ArtifactAsamasi] IN (1)");
+            });
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.EBelgeKaydiId)
+                .IsRequired();
+
+            entity.Property(x => x.ArtifactTipi)
+                .IsRequired();
+
+            entity.Property(x => x.ArtifactAsamasi)
+                .IsRequired();
+
+            entity.Property(x => x.RuleSetId)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(x => x.SnapshotSchemaVersion)
+                .IsRequired();
+
+            entity.Property(x => x.KaynakSnapshotSha256)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(x => x.ArtifactSha256)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.Property(x => x.Icerik)
+                .HasColumnType("varbinary(max)")
+                .IsRequired();
+
+            entity.Property(x => x.MimeType)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.DosyaAdi)
+                .HasMaxLength(260)
+                .IsRequired();
+
+            entity.Property(x => x.OlusturulmaZamaniUtc)
+                .IsRequired();
+
+            // Bilinçli olarak FİLTRESİZ (IsDeleted=0 filtresi YOK) - soft-delete edilmiş bir
+            // artefakt bile aynı benzersizlik rezervasyonunu korur (bkz. Faz 2B.6 görev md.4,
+            // "filtered unique index kullanma; silinmiş kayıt da benzersizliği korumalı" - aynı
+            // desen EBelgeOutboxMesajlari(EBelgeKaydiId, IsTuru) için de kullanılıyor).
+            entity.HasIndex(x => new { x.KurumId, x.EBelgeKaydiId, x.ArtifactTipi, x.ArtifactAsamasi })
+                .IsUnique();
+
+            entity.HasOne(x => x.EBelgeKaydi)
+                .WithMany()
                 .HasForeignKey(x => new { x.EBelgeKaydiId, x.KurumId })
                 .HasPrincipalKey(x => new { x.Id, x.KurumId })
                 .OnDelete(DeleteBehavior.Restrict);
@@ -3122,6 +3192,12 @@ public class StysAppDbContext : DbContext
                 (originalState == EntityState.Modified || originalState == EntityState.Deleted))
             {
                 throw new BaseException("EBelgeSnapshot oluşturulduktan sonra güncellenemez veya silinemez.", 400);
+            }
+
+            if (entity is STYS.Muhasebe.SatisBelgeleri.Entities.EBelgeArtifact &&
+                (originalState == EntityState.Modified || originalState == EntityState.Deleted))
+            {
+                throw new BaseException("EBelgeArtifact oluşturulduktan sonra güncellenemez veya silinemez.", 400);
             }
 
             switch (entry.State)

@@ -1643,11 +1643,242 @@ Docker imajı yeniden build edildi ve `docker run --read-only --tmpfs /tmp` ile 
 gerçek `/health/ready` → `200` ve gerçek `/internal/schematron/validate` çağrısı →
 `{"valid":true,"violations":[]}` doğrulandı (container log'unda "self-test passed" satırı).
 
-### Frontend hâlâ yapılmadı
+### Frontend hâlâ yapılmadı (Faz 2B.5'ten kalan not - hâlâ geçerli)
 
 Faz 2B.4.2'den beri açık: otoriter satıcı/alıcı yapısal adres (sokak, bina no, ilçe, il, posta
 kodu) ve gerçek kişi alıcılar için ayrı ad/soyad alanları hâlâ UI'da girilemiyor. Renderer artık
 bu alanları DOĞRUDAN TÜKETTİĞİNDEN (bkz. `EBelgeUblRenderer.ValidateAuthoritativeFields`), bu
 eksik olmadan `EBelgeUblOptions.Enabled=true` hiçbir üretim ortamında pratikte kullanılamaz.
 Gereken ekranlar: Kurum ayarları (satıcı yapısal adres), CariKart/Müşteri formu (alıcı yapısal
-adres + gerçek kişi ad/soyad ayrımı, kurumsal/gerçek kişi seçimine göre koşullu alanlar).
+adres + gerçek kişi ad/soyad ayrımı, kurumsal/gerçek kişi seçimine göre koşullu alanlar). Faz
+2B.6 bu durumu DEĞİŞTİRMEDİ - hâlâ açık.
+
+## Faz 2B.6 sonuç bölümü — outbox tüketimi ve unsigned artifact kalıcılaştırma
+
+**Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.21 koşulları — hepsi genuinely karşılandı).**
+
+### Mevcut outbox mimarisinin analizi
+
+İncelemede (bkz. görev md.1) şu gerçek, önceden var olan bileşenler bulundu ve AYNEN
+yeniden kullanıldı:
+
+- **Claim**: `EBelgeOutboxClaimLeaseService.TryClaimNextAsync` - ham SQL, `UPDLOCK, READPAST,
+  ROWLOCK` ipucuyla tek adayı seçer, ardından `UPDATE ... OUTPUT` ile atomik claim eder.
+  İki worker'ın aynı satırı seçmesi `READPAST` ile YAPISAL olarak imkânsızdır (biri diğerini
+  atlar, ikinci UPDATE hiçbir satırı etkilemez).
+- **Lease yenileme/bırakma**: `EBelgeOutboxLeaseTransitionService` - `TryCompleteAsync`/
+  `TryFailAsync`/`TryRenewAsync`, üçü de `KilitToken` + `KilitBitisZamaniUtc > now` KOŞULUYLA
+  guard'lıdır; token/expiry uyuşmuyorsa `false` döner ("sahiplik kaybedildi" - bkz. aşağıda).
+- **Aynı mesajın iki worker'ca işlenmesi**: DB seviyesinde `READPAST` ile ENGELLENİR; ayrıca
+  benim eklediğim `EBelgeArtifactlari` benzersizlik indeksi İKİNCİ bir savunma katmanıdır (bkz.
+  aşağıda "İdempotency anahtarı").
+- **Başarılı tamamlama**: `TryCompleteAsync` → `Durum=Tamamlandi`, lease alanları temizlenir.
+- **Deneme sayısı**: `DenemeSayisi`, HER claim'de (başarılı VEYA lease-expiry-reclaim) `+1`
+  artırılır (claim SQL'inin kendisinde).
+- **Sonraki deneme zamanı**: `SonrakiDenemeZamaniUtc`, `TryFailAsync`'e geçirilen
+  `retryGecikmesi`'ne göre atanır; `null` verilirse KALICI (retry YOK).
+- **Kalıcı hata temsili**: `Durum=Hata` + `SonrakiDenemeZamaniUtc=NULL` - bu kombinasyon claim
+  sorgusunda ASLA tekrar seçilmez (WHERE koşulu `SonrakiDenemeZamaniUtc IS NOT NULL` ister).
+- **Worker crash sonrası tekrar alınabilirlik**: `Durum=Isleniyor` VE `KilitBitisZamaniUtc <=
+  now` olan satırlar claim sorgusunun ÜÇÜNCÜ dalında YENİDEN seçilebilir - crash eden worker'ın
+  sonucu asla yazamayacağı GARANTİ edilir (`TryCompleteAsync`/`TryFailAsync` token/expiry
+  guard'ı nedeniyle - bkz. görev md.7/12).
+- **Handler soyutlaması**: `IEBelgeOutboxIsTuruHandler` + `EBelgeOutboxMesajIslemeService`
+  (dictionary tabanlı dispatch) ZATEN vardı - `EBelgeArtefaktOlusturOutboxHandler` de ZATEN
+  vardı, yalnız gerçek `IEBelgeArtefaktOlusturmaService` implementasyonu EKSİKTİ.
+  `EBelgeOutboxMesajIslemeService` ve `EBelgeArtefaktOlusturOutboxHandler` DI'a hiç kayıtlı
+  DEĞİLDİ - bu turda kaydedildi.
+- **Retry policy**: `EBelgeOutboxRetryPolicy` ZATEN vardı, sabit çizelge (1dk/5dk/15dk/1sa/6sa,
+  6. denemede terminal) - AYNEN kullanıldı, YENİDEN YAZILMADI.
+
+**Sonuç: yeni paralel bir outbox sistemi KURULMADI.** Yalnız eksik olan TEK parça (gerçek
+`IEBelgeArtefaktOlusturmaService` implementasyonu) eklendi ve üç var olan, ZATEN DI'a kayıtlı
+OLMAYAN bileşen (`EBelgeCanonicalSnapshotV2Reader`, `EBelgeArtefaktOlusturOutboxHandler`,
+`EBelgeOutboxMesajIslemeService`) ile birlikte kaydedildi.
+
+### Eklenen bileşenler
+
+- **`EBelgeArtifact`** entity (`Entities/EBelgeArtifact.cs`) + `EBelgeArtifactTipi` (`UblXml=1`)
+  ve `EBelgeArtifactAsamasi` (`Unsigned=1`) enum'ları.
+- **`EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaService`** (ZATEN var olan
+  arayüzün GERÇEK implementasyonu) - snapshot okuma + renderer çağrısı + artefakt
+  kalıcılaştırma.
+- **`EBelgeArtifactService : IEBelgeArtifactService`** - salt okunur, tenant sınırlı okuma
+  servisi (controller/endpoint bu turda EKLENMEDİ - bkz. görev md.13).
+- **`EBelgeArtifactIdempotencyConflictException`** (409, `EBELGE_ARTIFACT_IDEMPOTENCY_CONFLICT`).
+- `EBelgeKaydiDurumu` enum'una `UnsignedUblHazir=2` ve `UnsignedUblKaliciHata=3` eklendi (henüz
+  `KaliciHata` durumuna GEÇİŞ kodu yazılmadı - bkz. "Açık kalan konular").
+
+### Transaction sınırı (md.7)
+
+Üç aşama, mevcut `Scoped` `StysAppDbContext` üzerinde AÇIK bir `BeginTransaction()` OLMADAN
+uygulanır (EF Core, yalnız `SaveChangesAsync` çağrılarını KENDİ implicit transaction'ına sarar -
+sorgular arasında satır kilidi TUTULMAZ):
+
+1. **Okuma**: `EBelgeKaydi` + `Snapshot` sorgusu + mevcut artefakt ön-kontrolü - satır kilidi YOK.
+2. **Render**: `IEBelgeCanonicalSnapshotV2Reader.Read` (saf, DB'siz) + `IEBelgeUblRenderer.RenderAsync`
+   (yerel XSD + GERÇEK sidecar HTTP çağrısı) - DB bağlantısı bu aşamada HİÇ kullanılmaz.
+3. **Yazma**: `_dbContext.Add(artifact)` + `kayit.Durum = UnsignedUblHazir` TEK `SaveChangesAsync`'te
+   (tek implicit transaction).
+
+**Outbox `TryCompleteAsync`, bu üç aşamanın DIŞINDADIR** (handler döndükten SONRA,
+`EBelgeOutboxMesajIslemeService` tarafından, AYRI bir DB round-trip'i olarak çağrılır) - bu,
+mevcut mimarinin KENDİ tasarımıdır (lease-token-korumalı geçiş, iş mantığından kasıtlı olarak
+AYRIK tutulur). Bu ayrım, görev md.6'nın son cümlesiyle AÇIKÇA UYUMLUDUR: "Artifact veritabanına
+yazılıp outbox mesajı tamamlanamazsa idempotent yeniden işleme aynı sonucu üretmeli ve duplicate
+artifact oluşturmamalı" - bu GÜVENCE, tek bir dev transaction yerine İDEMPOTENCY ile sağlanır
+(bkz. aşağıda) ve gerçek bir testle kanıtlanmıştır (`TamOutboxAkisiClaimIslemeVeTamamlamaBirlikteCalisir`).
+
+### Lease ownership doğrulaması
+
+`EBelgeArtefaktOlusturmaTalebi` (ZATEN var olan sözleşme) `KilitToken` TAŞIMAZ - bu KASITLI
+olarak DEĞİŞTİRİLMEDİ (mevcut handler/test sözleşmesini bozmamak için). Ownership koruması İKİ
+KATMANDA sağlanır:
+
+1. **DB benzersizlik indeksi** (`KurumId, EBelgeKaydiId, ArtifactTipi, ArtifactAsamasi`) - iki
+   worker aynı anda render edip insert etmeye çalışırsa, YALNIZ BİRİ başarılı olur; DİĞERİ
+   `DbUpdateException` (unique violation) alır ve bunu YAKALAYIP rakip satırla idempotency
+   karşılaştırması yapar (bkz. `IsBenzersizlikIhlali`).
+2. **Outbox `TryCompleteAsync` token guard'ı** (mevcut, değiştirilmedi) - lease'i KAYBETMİŞ bir
+   worker'ın `Tamamlandi` YAZAMAMASI zaten mevcut mekanizma tarafından garanti edilir; benim
+   eklediğim katman yalnız "iki worker aynı ARTEFAKTI YAZMAYA ÇALIŞIRSA ne olur" sorusuna cevap
+   verir (`IkiParalelIstekTekArtefaktUretir` testiyle GERÇEK paralel çağrıyla kanıtlandı).
+
+Bu tasarım kararı raporlanıyor (görev md.12 son paragraf): render işlemi normalde KISA
+(saniyeler) olduğundan, lease renewal EKLENMEDİ - yeterli lease süresi (config'den, varsayılan
+120sn) + sonuç aşamasında token guard'ı YETERLİ kabul edildi.
+
+### İdempotency anahtarı
+
+`(KurumId, EBelgeKaydiId, ArtifactTipi, ArtifactAsamasi)` - mevcut artefakt varsa VE
+`(KaynakSnapshotSha256, ArtifactSha256, RuleSetId)` ÜÇLÜSÜ eşleşiyorsa BAŞARILI kabul edilir
+(yeni satır eklenmez); herhangi biri FARKLIYSA `EBELGE_ARTIFACT_IDEMPOTENCY_CONFLICT` (kalıcı,
+retry YOK) döner.
+
+### Artifact storage kararı
+
+`byte[]` → SQL Server `varbinary(max)`. Gerekçe: UBL XML boyutları (birkaç KB - birkaç yüz KB)
+`varbinary(max)` için sorun teşkil ETMEZ; ayrı bir storage abstraction (blob storage/dosya
+sistemi) bu ölçekte GEREKSİZ karmaşıklık eklerdi. **Açıkça not edilir**: PDF gibi çok daha büyük
+artefaktlar eklendiğinde bu karar YENİDEN değerlendirilmelidir - `EBelgeArtifact.Icerik` alanı
+o noktada bir storage-abstraction'a (ör. `IEBelgeArtifactStorage` + blob referansı) geçebilir;
+bu tur bunu YAPMAZ, yalnız gerekliliğini not eder.
+
+### Immutable artifact sözleşmesi ve hash zinciri
+
+`StysAppDbContext.ApplyAuditInfo`, `EBelgeSnapshot` ile AYNI desende, `EBelgeArtifact` için
+`Modified`/`Deleted` durumunu REDDEDER (bkz. test `ArtefaktGuncellemeVeyaSilmeUygulamaSeviyesindeReddedilir`).
+Benzersizlik indeksi FİLTRESİZDİR (soft-delete edilmiş satır bile rezervasyonu korur - bkz. test
+`SoftDeleteEdilmisArtefaktOlsaBileDuplicateOlusturulamaz`, ham SQL ile soft-delete simüle
+edilerek kanıtlandı). Hash zinciri: `EBelgeSnapshot.CanonicalSha256` → (renderer, değişmeden
+taşınır) → `EBelgeArtifact.KaynakSnapshotSha256`; `EBelgeUblRenderSonucu.UnsignedUblSha256`
+(TAM OLARAK `UnsignedUblUtf8` üzerinden hesaplanmış, yeniden serialize EDİLMEMİŞ) →
+`EBelgeArtifact.ArtifactSha256`. Test `GercekV2SnapshotGercekSidecarIleArtefaktUretirVeHashZinciriDogrulanir`
+zincirin HER halkasını (snapshot hash, artifact hash, saklanan byte'ların YENİDEN hesaplanan
+hash'iyle eşleşmesi) gerçek bir render+kaydetme akışıyla doğrular.
+
+### `EBelgeKaydi` durum geçişleri
+
+`SnapshotHazir` (başlangıç) → `UnsignedUblHazir` (başarı, artefakt insert ile AYNI
+`SaveChangesAsync`'te). `UnsignedUblKaliciHata` enum değeri EKLENDİ ama bu turda hiçbir kod yolu
+BUNA geçiş YAPMIYOR (bkz. "Açık kalan konular") - kalıcı hatalarda `EBelgeKaydi.Durum` şu an
+`SnapshotHazir`'de KALIR, yalnız outbox mesajı terminal hataya geçer. Bu, görev md.9'un
+"başarılı render sonrasında EBelgeKaydi... hazır olduğunu göstermeli" kısmını TAM karşılar;
+kalıcı hata durumunu EBelgeKaydi'ye yansıtma kısmı bilinçli olarak SONRAKI bir iyileştirme
+olarak bırakılmıştır (aşağıda açık konu olarak listelendi).
+
+### Kalıcı/düzeltilebilir/geçici hata sınıflandırması (string parse YOK)
+
+Tip bazlı `catch` blokları (`EBelgeArtefaktOlusturmaService.OlusturAsync`) - HİÇBİR yerde
+exception mesajı parse EDİLMEZ:
+
+| Exception | Sınıf |
+|---|---|
+| `EBelgeUblRenderSnapshotVersionUnsupportedException`, `...ScopeUnsupportedException`, `...AuthoritativeFieldMissingException`, `EBelgeUblMonetaryTotalMismatchException`, `...XsdValidationFailedException`, `...SchematronValidationFailedException`, `...RuleSetArtifactInvalidException`, `EBelgeCanonicalSnapshotException` | Kalıcı |
+| `EBelgeUblSchematronServiceUnavailableException`, `...ProtocolErrorException`, DB unique-violation sonrası rakip-satır-bulunamadı | Geçici |
+
+`EBelgeUblMonetaryTotalMismatchException` özellikle KALICI sınıflandırıldı (görev md.10'un
+"düzeltilebilir iş hataları" bölümüyle UYUMLU - immutable snapshot nedeniyle AYNI mesajı
+retry etmek sorunu çözmez; hata mesajı bunu AÇIKÇA belirtir: "yeni bir kesim/snapshot
+üretilmelidir"). XSD/Schematron hata mesajları veritabanına/loglara YAZILMAZ - yalnız
+İHLAL SAYISI (bkz. "Loglama ve PII koruması").
+
+### Retry/backoff politikası
+
+DEĞİŞTİRİLMEDİ - mevcut `EBelgeOutboxRetryPolicy` (1dk/5dk/15dk/1sa/6sa, 6. denemede terminal)
+AYNEN kullanıldı.
+
+### Loglama ve PII koruması
+
+`EBelgeArtefaktOlusturmaService` hiçbir yerde XML, VKN/TCKN, müşteri adı/unvanı, adres,
+e-posta/telefon veya tam canonical snapshot JSON'u LOGLAMAZ. XSD/Schematron hata mesajları
+(alan DEĞERLERİNİ echo edebileceğinden) ham metin OLARAK değil, yalnız İHLAL SAYISI içeren
+sabit şablonla saklanır (`"XSD doğrulaması N hata ile başarısız oldu."`). Diğer exception
+tiplerinin mesajları zaten kendi güvenli/sınırlı sözleşmelerine sahiptir (bkz. Faz 2B.5).
+
+### Migration ve index'ler
+
+`20260804183723_AddEBelgeArtifactFaz2B6`: `muhasebe.EBelgeArtifactlari` tablosu (`bigint`
+Identity PK, `varbinary(max)` içerik, hash alanları `nvarchar(64)`, check constraint'ler
+`ArtifactTipi IN (1)` / `ArtifactAsamasi IN (1)`), FİLTRESİZ benzersizlik indeksi
+`(KurumId, EBelgeKaydiId, ArtifactTipi, ArtifactAsamasi)`, tenant-scoped composite FK
+`(EBelgeKaydiId, KurumId) → EBelgeKayitlari(Id, KurumId)` **Restrict** (cascade YOK - bkz. test
+`EBelgeKaydiSilmeArtifactNedeniyleRestrictReddedilir`, ham SQL DELETE denemesiyle GERÇEKTEN
+kanıtlandı). AYNI migration, `CK_EBelgeKayitlari_Durum` check constraint'ini `IN (1)` →
+`IN (1, 2, 3)` olarak GENİŞLETTİ (yeni `EBelgeKaydiDurumu` değerleri için zorunlu - bu adım
+atlanınca gerçek bir `CHECK constraint` ihlali ile KARŞILAŞILDI ve düzeltildi, bkz. "Açık kalan
+konular" öncesi test iterasyonu).
+
+### Background worker kararı (md.15)
+
+Repository'de sürekli çalışan bir outbox worker/hosted service YOKTU (yalnız 3 ilgisiz hosted
+service mevcut: POS ödeme takibi, lisans bakımı, POS valör aktarımı). Bu turda YENİ bir
+`BackgroundService` EKLENMEDİ - claim/lease/handler/işleme zinciri artık TAM ve test edilmiş
+durumda, ama onu SÜREKLİ çağıran bir polling döngüsü BİLEREK bu fazın kapsamı DIŞINDA
+bırakıldı: sürekli çalışan yeni bir üretim süreci eklemek (feature flag, batch/polling config,
+graceful shutdown, çoklu-instance güvenliği) kendi başına dikkatli bir tasarım/dağıtım kararı
+gerektirir ve görev md.15'in kendisi de bunu KOŞULLU ("gerekiyorsa") bırakmıştır. Mevcut
+bileşenler `IEBelgeOutboxClaimLeaseService`/`IEBelgeOutboxMesajIslemeService` üzerinden manuel
+veya gelecekteki bir worker'dan ÇAĞRILABİLİR durumdadır.
+
+### Çalıştırılan hedefli test komutları ve sonuçları
+
+```
+dotnet test --filter "FullyQualifiedName~EBelgeUblRenderer|FullyQualifiedName~SaxonSidecar|FullyQualifiedName~EBelgeSchematronSidecar|FullyQualifiedName~EBelgeArtefaktOlusturmaService|FullyQualifiedName~EBelgeArtifactEntity|FullyQualifiedName~EBelgeOutboxClaimLease|FullyQualifiedName~EBelgeOutboxLeaseTransition|FullyQualifiedName~EBelgeOutboxMesajIsleme|FullyQualifiedName~EBelgeOutboxRetryPolicy"
+  → Passed: 145, Failed: 0 (gerçek SQL Server + gerçek Java Saxon sidecar ile)
+
+dotnet test --filter "FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests"  (fatura kesim/outbox oluşturma - md.17 regresyon)
+  → Passed: 9, Failed: 0
+
+dotnet test --filter "FullyQualifiedName~EBelge"  (geniş regresyon taraması)
+  → Passed: 269, Failed: 2 (bkz. aşağıda - İKİSİ DE Faz 2B.6'dan TAMAMEN BAĞIMSIZ, kanıtlı önceden var olan sorunlar), Total: 271
+```
+
+**Önceden var olan, İLGİSİZ 2 test başarısızlığı hakkında kanıt**: `TicariBelgeIptalYarisKosuluIntegrationTests`
+ve `FaturaNumaraIntegrationTests` sınıflarında görülen başarısızlıklar, `git worktree` ile
+**çalışma tabanı commit'i (`c366011`, bu turun HİÇBİR değişikliği olmadan)** üzerinde AYNI
+testler çalıştırılarak DOĞRULANDI - AYNI hata deseni (30/47 başarısız,
+`FaturaKesAsync_NormalGecerliNumara_IdempotentDoner` dahil, "Belge FaturalamaDurumu 'Kesildi'
+ancak EBelgeKaydi bulunamadı" hatasıyla) ORADA DA mevcuttur. Bu, uzun süredir ayakta olan (2
+haftadır çalışan) paylaşımlı yerel Docker SQL Server test container'ındaki BİRİKMİŞ/tutarsız
+test verisinden kaynaklanan, Faz 2B.6'nın kod değişiklikleriyle HİÇBİR İLGİSİ olmayan bir ortam
+sorunudur - bu turda DÜZELTİLMEDİ (kapsam dışı).
+
+### Açık kalan teknik konular
+
+1. `EBelgeKaydiDurumu.UnsignedUblKaliciHata`'ya geçiş kodu YAZILMADI - kalıcı render hatalarında
+   `EBelgeKaydi.Durum` şu an `SnapshotHazir`'de kalıyor (yalnız outbox terminal duruma geçiyor).
+2. Sürekli çalışan bir outbox worker/polling döngüsü YOK (bkz. "Background worker kararı").
+3. Paylaşımlı yerel test SQL Server container'ındaki önceden var olan veri tutarsızlığı
+   (yukarıda kanıtlandı) temizlenmedi/kök nedeni araştırılmadı - ayrı bir bakım konusu.
+4. `IEBelgeArtifactService` için controller/download endpoint'i YOK (bilinçli - bkz. md.13).
+
+### Sonraki faz
+
+1. XMLDSig/XAdES imzalama ve `SignedReady` artifact.
+2. Sağlayıcı bağımsız gönderim portu + e-Arşiv entegratör adapter'ı.
+3. Gönderim/durum sorgulama ve retry.
+4. Outbox'ı sürekli tüketen bir `BackgroundService` (feature flag'li, config'den batch/polling).
+5. `UnsignedUblKaliciHata` durum geçiş kodu.
+6. Frontend zorunlu veri giriş ekranları (hâlâ yapılmadı) ve e-belge takip/hata yönetimi ekranları.
+7. PDF ve e-posta artifact'ları (bu noktada `Icerik varbinary(max)` kararı yeniden değerlendirilmeli).

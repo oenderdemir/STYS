@@ -218,6 +218,11 @@ builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTasl
 builder.Services.AddScoped<IEBelgeOutboxClaimLeaseService, EBelgeOutboxClaimLeaseService>();
 builder.Services.AddScoped<IEBelgeOutboxLeaseTransitionService, EBelgeOutboxLeaseTransitionService>();
 builder.Services.AddScoped<IEBelgeOutboxRetryPolicy, EBelgeOutboxRetryPolicy>();
+builder.Services.AddSingleton<IEBelgeCanonicalSnapshotV2Reader, EBelgeCanonicalSnapshotV2Reader>();
+builder.Services.AddScoped<IEBelgeArtefaktOlusturmaService, EBelgeArtefaktOlusturmaService>();
+builder.Services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeArtefaktOlusturOutboxHandler>();
+builder.Services.AddScoped<IEBelgeOutboxMesajIslemeService, EBelgeOutboxMesajIslemeService>();
+builder.Services.AddScoped<IEBelgeArtifactService, EBelgeArtifactService>();
 builder.Services.AddScoped<ITicariBelgeService, TicariBelgeService>();
 builder.Services.AddScoped<ITicariBelgeLookupService, TicariBelgeLookupService>();
 builder.Services.AddScoped<IRezervasyonSatisBelgesiService, RezervasyonSatisBelgesiService>();

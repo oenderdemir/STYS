@@ -80,6 +80,10 @@ public class SatisBelgesiMuhasebeDengeIntegrationTests : IAsyncLifetime
         _tevkifatKarsiligiHesapId = tevkifatKarsiligiHesap.Id;
 
         var musteri = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "MUS", CariKartTipleri.Musteri, tesis.Id, musteriHesap.Id);
+        // Bu testin amacı e-belge kanalı değil, muhasebe fişi dengesidir - ama FaturaKesAsync
+        // artık kanalı sayaç kilidinden ÖNCE çözüyor (bkz. Faz 2B.4.2); mükellefiyet bayrağı
+        // ayarlanmazsa kesim "her iki mükellefiyet bayrağı da kapalı" hatasıyla reddedilir.
+        musteri.EArsivKapsamindaMi = true;
         var tedarikci = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "TED", CariKartTipleri.Tedarikci, tesis.Id, tedarikciHesap.Id);
         tedarikci.VergiNoTckn = "1111111111";
         dbContext.CariKartlar.AddRange(musteri, tedarikci);

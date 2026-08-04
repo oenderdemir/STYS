@@ -143,6 +143,10 @@ public class SatisBelgesiEkVergiEngelIntegrationTests
             dbContext.MuhasebeHesapPlanlari.AddRange(gelirHesap, kdvHesap, musteriHesap);
             await dbContext.SaveChangesAsync();
             var musteriKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(uniqueSuffix, "MUS", CariKartTipleri.Musteri, tesisId, musteriHesap.Id);
+            // Bu testin amacı ek vergi engeli, e-belge kanalı değil - ama FaturaKesAsync artık
+            // kanalı sayaç kilidinden ÖNCE çözüyor (bkz. Faz 2B.4.2); mükellefiyet bayrağı
+            // ayarlanmazsa kesim "her iki mükellefiyet bayrağı da kapalı" hatasıyla reddedilir.
+            musteriKart.EArsivKapsamindaMi = true;
             dbContext.CariKartlar.Add(musteriKart);
             await dbContext.SaveChangesAsync();
             dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
@@ -339,6 +343,28 @@ public class SatisBelgesiEkVergiEngelIntegrationTests
             await dbContext.CariHareketler
                 .Where(x => x.KaynakModul == MuhasebeKaynakModulleri.SatisBelgesi && x.KaynakId != null && belgeIds.Contains(x.KaynakId.Value))
                 .ExecuteDeleteAsync();
+
+            // Faz 2B.4.2 öncesi bu belgeler için FaturaKesAsync hep kanal hatasıyla (e-belge
+            // mükellefiyet bayrağı kapalı) erken reddediliyordu; EBelgeKaydi hiç oluşmuyordu.
+            // Kanal artık başarıyla çözüldüğü (bkz. musteriKart.EArsivKapsamindaMi = true) için
+            // gerçek bir EBelgeKaydi/Snapshot/Outbox zinciri oluşabiliyor - SatisBelgeleri
+            // silinmeden ÖNCE bu FK'li satırlar temizlenmelidir (aksi halde
+            // FK_EBelgeKayitlari_SatisBelgeleri_SatisBelgesiId_KurumId ihlali oluşur).
+            var eBelgeKaydiIds = await dbContext.EBelgeKayitlari
+                .IgnoreQueryFilters()
+                .Where(x => belgeIds.Contains(x.SatisBelgesiId))
+                .Select(x => x.Id)
+                .ToListAsync();
+            if (eBelgeKaydiIds.Count > 0)
+            {
+                await dbContext.EBelgeOutboxMesajlari.IgnoreQueryFilters()
+                    .Where(x => eBelgeKaydiIds.Contains(x.EBelgeKaydiId)).ExecuteDeleteAsync();
+                await dbContext.EBelgeSnapshots.IgnoreQueryFilters()
+                    .Where(x => eBelgeKaydiIds.Contains(x.EBelgeKaydiId)).ExecuteDeleteAsync();
+                await dbContext.EBelgeKayitlari.IgnoreQueryFilters()
+                    .Where(x => eBelgeKaydiIds.Contains(x.Id)).ExecuteDeleteAsync();
+            }
+
             await dbContext.SatisBelgeleri.Where(x => belgeIds.Contains(x.Id))
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.IadeEdilenBelgeId, (int?)null));
             await dbContext.SatisBelgeleri.Where(x => belgeIds.Contains(x.Id)).ExecuteDeleteAsync();

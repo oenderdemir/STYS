@@ -902,3 +902,186 @@ refactor yapma") bu turda düzeltilmemiştir. Ayrı bir düzeltme fazında ele a
 4. Gerçek kişi alıcılar için ayrı `Ad`/`Soyad` alanlarını eklemek.
 5. Kesim öncesi kapının §9'daki 18 maddelik tam sözleşmesini (bu turda yalnız tarih/madde 1-2
    uygulandı) `EnsureUblHazirlikKaynaklari`'ye kademeli olarak eklemek.
+
+---
+
+## Faz 2B.4.2 Sonuç Bölümü
+
+Bu bölüm, Faz 2B.4.1'in yukarıda listelenen beş açık maddesinin uygulanmasını belgeler. **Kesin
+kapsam kararı:** ilk dalgada yalnız **e-Arşiv** faturası desteklenir; e-Fatura kanalı bu fazda
+reddedilir. UBL XML, PDF, elektronik imza, XSD/Schematron doğrulaması ve dış sağlayıcı
+entegrasyonu bu turda da geliştirilmedi.
+
+### Değiştirilen ve eklenen dosyalar
+
+**Yeni dosyalar:**
+
+- `backend/Muhasebe/SatisBelgeleri/EBelgeUblGoLive.cs` — paylaşılan `Trt` sabiti (14.09.2026); artık hem `EnsureCutoverTarihGecerli` hem `IEBelgeUblPreCutValidator` AYNI sabiti kullanıyor.
+- `backend/Muhasebe/SatisBelgeleri/EBelgeUblPreCutExceptions.cs` — `EBelgeUblFeatureDisabledException` (503), `EBelgeUblScopeUnsupportedException` (400), `EBelgeUblAuthoritativeFieldMissingException` (400), `EBelgeUblMonetaryTotalMismatchException` (422).
+- `backend/Muhasebe/SatisBelgeleri/EBelgeUblPreCutValidator.cs` — `IEBelgeUblPreCutValidator`/`EBelgeUblPreCutValidator`, `EBelgeUblPreCutContext`/`EBelgeUblPreCutSatirContext` (saf, EF'siz veri taşıyıcılar).
+- `backend/Muhasebe/SatisBelgeleri/EBelgeCanonicalPayload.cs` — immutable byte/hash sözleşmesi.
+- `backend/Infrastructure/EntityFramework/Migrations/20260803203013_AddEBelgeUblFaz2B42StructuredFields.cs` — 8 yeni nullable kolon.
+- `tests/STYS.Tests/EBelgeUblPreCutValidatorTests.cs`, `EBelgeCanonicalPayloadTests.cs`, `EBelgeUblPreCutIntegrationTests.cs`.
+
+**Değiştirilen dosyalar:**
+
+- `backend/Kurumlar/Entities/Kurum.cs`, `Dto/{KurumDto,CreateKurumRequest,UpdateKurumRequest}.cs` — `Ilce`, `Il`.
+- `backend/Muhasebe/CariKartlar/Entities/CariKart.cs`, `Dtos/CariKartDtos.cs` — `Ad`, `Soyad`.
+- `backend/Muhasebe/SatisBelgeleri/Entities/SatisBelgesi.cs`, `Dtos/SatisBelgesiDtos.cs` — `MusteriAd`, `MusteriSoyad`, `MusteriIlce`, `MusteriIl`.
+- `backend/Infrastructure/EntityFramework/StysAppDbContext.cs` — üç entity için `HasMaxLength(128)` Fluent konfigürasyonu.
+- `backend/Muhasebe/SatisBelgeleri/Services/SatisBelgesiService.cs` — kanal çözümlemesinin taşınması, kesim öncesi kapı çağrısı, yeni Musteri* alanların `CreateAsync`/`ApplyBelgeUpdatesAsync`/`ApplyCariSnapshot*` içinde akışı, `IEBelgeUblPreCutValidator` bağımlılığı.
+- `backend/Muhasebe/SatisBelgeleri/EBelgeCanonicalSnapshotV2.cs` — `CanonicalJsonOptions` artık `internal` (factory ile paylaşılıyor).
+- `backend/Muhasebe/SatisBelgeleri/EBelgeSnapshotFactory.cs` — `CreateSnapshotV2` eklendi; `CreateSnapshot` (V1) değişmedi.
+- `backend/Program.cs` — `IEBelgeUblPreCutValidator` DI kaydı.
+- `tests/STYS.Tests/EBelgeCutoverGateIntegrationTests.cs`, `SatisBelgesiEkVergiEngelIntegrationTests.cs`, `SatisBelgesiMuhasebeDengeIntegrationTests.cs` — fixture düzeltmeleri (aşağıda).
+
+### Kanal kararının uygulanması
+
+`ResolveEBelgeKanali(cariKart)` çağrısı, sayaç sorgusundan/kilidinden/artırımından, resmî numara
+üretiminden ve belge durum değişikliklerinden **önceye** taşındı — artık `cariKart` da aynı
+noktada (`belge.CariKart ?? throw ...`) çözülüyor. Mevcut kanal çözümleme kuralları
+(`EFaturaMukellefiMi` → `EFatura`, `EArsivKapsamindaMi` → `EArsiv`, ikisi de kapalıysa hata)
+**değiştirilmedi**. Kanalın e-Arşiv olup olmadığı artık ayrıca, yalnızca
+`EBelgeUblOptions.Enabled` açıkken çalışan `IEBelgeUblPreCutValidator` içinde kontrol ediliyor —
+e-Fatura kanalı `EBELGE_UBL_SCOPE_UNSUPPORTED` (400) ile, resmî numara verilmeden reddediliyor.
+
+### Kesim öncesi kapının akıştaki kesin yeri
+
+`FaturaKesAsync` içinde sıra: kurum/tesis otoriter okuması → `EnsureUblHazirlikKaynaklari`
+(unconditional) → kesim anı TEK okuması (`planlananKesimZamaniUtc`) + TRT dönüşümü → **kanal
+çözümlemesi** → `EnsureCutoverTarihGecerli` (Faz 2B.4.1, unconditional/no-op) → **yalnız
+`EBelgeUblOptions.Enabled` açıkken**: aktif satırlar toplanır, `IEBelgeUblPreCutValidator.Validate`
+çağrılır → (geçerse) `AlisIadeFaturasi` iade kontrolü → sayaç `UPDLOCK` → resmî numara → V1/V2
+snapshot dallanması. Kapı, sayaç sorgusundan kesinlikle önce çalışır; herhangi bir kural ihlalinde
+sayaç hiç sorgulanmaz, `ResmiFaturaNo`/`FaturaKesimTarihi` atanmaz, `EBelgeKaydi` oluşmaz.
+
+### Eklenen/yeniden kullanılan validator bileşenleri
+
+`IEBelgeUblPreCutValidator.Validate(EBelgeUblPreCutContext)` — saf, EF'siz bir context alır,
+hiçbir entity değiştirmez. 18 kural + otoriter alıcı/satıcı kimlik ve yapısal adres kontrolleri
+sırayla uygulanır; ilk ihlalde ilgili tipe özgü exception fırlatılır (§'deki 5 hata sınıfı).
+Mali tutarlılık kontrolü (kural 18), Faz 2B.4.1'de eklenen
+`SatisBelgesiTutarHesaplayici.DogrulaBelgeToplamlari`'yı **yeniden kullanır** — yeni bir hesap
+mantığı icat edilmedi.
+
+### Entity ve migration değişiklikleri
+
+Mevcut ilişkiler incelendi: `CariKart` zaten `Il`/`Ilce` (free-text) taşıyordu — bu, `SatisBelgesi`
+snapshot alanlarına (`MusteriIlce`/`MusteriIl`) `ApplyCariSnapshot` üzerinden **aynı desenle**
+taşındı, yeni bir CariKart kolonu gerekmedi. `Tesis.IlId` (Il lookup FK) ve boşta duran `Country`
+entity'si (hiçbir yerde FK ile bağlı değil) **kasıtlı olarak yeniden kullanılmadı** — Kurum'un
+yasal adresi Tesis'in operasyonel il kaydından farklı bir kavramdır ve bu dar kapsam yalnız
+Türkiye içi adresi desteklediği için `UlkeAdi`/`UlkeKodu` yeni bir kolon olmadan renderer sabiti
+(`"Türkiye"`/`"TR"`) olarak üretildi. Gerçekten eksik olan, minimal migration'a yansıyan alanlar:
+`Kurum.{Ilce,Il}`, `CariKart.{Ad,Soyad}`, `SatisBelgesi.{MusteriAd,MusteriSoyad,MusteriIlce,MusteriIl}`
+— sekizi de nullable, `HasMaxLength(128)`. `PostaKodu`/`SokakAdi`/`BinaNo` (V2 şemasında opsiyonel)
+için kolon eklenmedi; kapı bunları zorunlu kılmıyor, factory `null` yazıyor.
+
+**Frontend'e bu turda dokunulmadı** — bkz. "Açık kalan konular".
+
+### V2 snapshot üretim akışı
+
+`EBelgeSnapshotFactory.CreateSnapshotV2(eBelgeKaydi, belge, kurum, tesis, cariKart,
+planlananKesimZamaniUtc)`, PUBLIC `EBelgeCanonicalSnapshotV2` tipini (V1'in kendi private record
+kopyası DEĞİL) doğrudan doldurur ve `EBelgeCanonicalSnapshotV2Reader.CanonicalJsonOptions` (artık
+`internal`, iki sınıf arasında paylaşılıyor) ile serialize eder — böylece üretilen payload, aynı
+okuyucunun kendi canonical round-trip denetiminden geçeceği garanti edilir.
+`ProfileID="EARSIVFATURA"`/`InvoiceTypeCode="SATIS"`/`BirimKodu="C62"` kapı zaten kanal/belge
+tipi/birim kurallarını doğruladıktan SONRA sabit üretilir — yeniden karar/hesaplama yapılmaz.
+`FaturaTarihiTrt`/`FaturaSaatiTrt`, `FaturaKesAsync`'te zaten alınmış TEK
+`planlananKesimZamaniUtc` değerinden `TurkeyTimeZoneHelper` ile (saf, deterministik) türetilir —
+factory kendi zaman okuması yapmaz. `FaturaKesAsync`, `_eBelgeUblOptions.Enabled` durumuna göre
+`CreateSnapshotV2`/`CreateSnapshot` arasında dallanır; V1 üretim yolu hiç değişmedi.
+
+### Exact byte ve hash üretim sözleşmesi
+
+`EBelgeCanonicalPayload.FromUtf8Bytes(byte[])`: `JsonSerializer.SerializeToUtf8Bytes` ile ÜRETİLEN
+byte dizisi `ImmutableArray.Create` ile (kopyalanarak, aliaslanmadan) saklanır; SHA-256 bu saklanan
+diziden **bir kez** hesaplanır; `ToUtf8String()` JSON'u tekrar serialize ETMEZ, yalnız saklanan
+AYNI diziyi string'e çevirir. `CreateSnapshotV2` bu tipi kullanır; `EBelgeSnapshot.CanonicalJson`
+(DB'de string) ve `CanonicalSha256`, ikisi de bu tek payload'dan türer. Testler:
+`EBelgeCanonicalPayloadTests` — hash saklanan tam byte dizisi üzerinden mi (evet), kaynak diziyi
+sonradan mutasyona uğratmak saklanan payload'ı etkiliyor mu (hayır, `ImmutableArray.Create` kopya
+üretir). `EBelgeUblPreCutIntegrationTests.EArsivKanaliKabulEdilirVeV2SnapshotDogruUretilir`,
+gerçek DB'ye yazılmış `EBelgeSnapshot.CanonicalJson`/`CanonicalSha256`'nın birbirleriyle ve yeniden
+hesaplanan hash'le eşleştiğini ve `EBelgeCanonicalSnapshotV2Reader`'ın bu payload'ı sorunsuz
+okuduğunu doğrular.
+
+### Düzeltilen fixture'lar
+
+- `SatisBelgesiMuhasebeDengeIntegrationTests`, `SatisBelgesiEkVergiEngelIntegrationTests`: paylaşılan
+  `BuildCariKart` yardımcısı `EFaturaMukellefiMi`/`EArsivKapsamindaMi` ayarlamıyordu; kanal artık
+  sayaç kilidinden önce çözüldüğü için bu testler "her iki mükellefiyet bayrağı da kapalı"
+  hatasıyla başarısız oluyordu (Faz 2B.4.1 raporunda "önceden var olan, ilgisiz" olarak
+  işaretlenmişti — kök neden şimdi tam olarak budur: kanal HİÇ çözülmüyordu, bu yüzden testin
+  amacıyla ilgisiz görünüyordu). Düzeltme: ilgili `CariKart`'a `EArsivKapsamindaMi = true` eklendi.
+  Bu düzeltme AÇIĞA ÇIKARDIĞI ikincil bir gap: `SatisBelgesiEkVergiEngelIntegrationTests`'in kendi
+  `CleanupKurumAsync`'i, artık gerçekten oluşan `EBelgeKaydi`/`EBelgeSnapshot`/`EBelgeOutboxMesaji`
+  zincirini `SatisBelgeleri` silinmeden önce temizlemiyordu (önceden kanal hatası yüzünden bu
+  zincir hiç oluşmuyordu) — `FK_EBelgeKayitlari_SatisBelgeleri_...` ihlaliyle başarısız oluyordu;
+  bu da düzeltildi (silme sırası: Outbox → Snapshot → Kaydı → Belge).
+- `EBelgeCutoverGateIntegrationTests`: Faz 2B.4.1'de eklenen "başarılı kesim" senaryoları artık
+  Faz 2B.4.2'nin yeni zorunlu alanlarına (Kurum/Alıcı yapısal adres) çarpıyordu; `Kurum.Ilce/Il`
+  ve `musteriKart.Ilce/Il` seed'e eklendi. Ayrıca `CreateSatisBelgesiRequest.MusteriUnvan` gibi
+  alanların, `CariKartId` set edildiğinde `ApplyCariSnapshotToCreateRequest` tarafından HER ZAMAN
+  ezildiği (istemcinin gönderdiği değerin dikkate alınmadığı) keşfedildi — bu, önceki raporun
+  "Musteri* alanları request'te veriliyor" varsayımının hatalı olduğunu gösterdi; düzeltme
+  gerçek kaynağa (`CariKart.Ad`/`Soyad`/`Ilce`/`Il`) taşındı.
+
+### Çalıştırılan hedefli test komutları ve sonuçları
+
+```
+STYS_INTEGRATION_TEST_CONNECTION_STRING="Server=localhost,14333;Database=STYSDB;User Id=sa;Password=Strong!Pass1;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True" \
+dotnet test tests/STYS.Tests/STYS.Tests.csproj -c Debug --no-build \
+  --filter "FullyQualifiedName~EBelgeUblPreCutValidatorTests|FullyQualifiedName~EBelgeCanonicalPayloadTests|FullyQualifiedName~EBelgeUblPreCutIntegrationTests|FullyQualifiedName~EBelgeCutoverGateIntegrationTests|FullyQualifiedName~SatisBelgesiTutarHesaplayiciTests|FullyQualifiedName~TurkeyTimeZoneHelperTests|FullyQualifiedName~EBelgeCanonicalSnapshotReaderTests|FullyQualifiedName~EBelgeCanonicalSnapshotV1V2ReaderTests|FullyQualifiedName~EBelgeSnapshotUblHazirlikIntegrationTests|FullyQualifiedName~SatisBelgesiMuhasebeDengeIntegrationTests|FullyQualifiedName~SatisBelgesiEkVergiEngelIntegrationTests|FullyQualifiedName~SatisBelgesiHesaplamaTests"
+```
+
+**Sonuç: Passed! Failed: 0, Passed: 134, Skipped: 0, Total: 134.**
+
+Yeni eklenen 35 test (`EBelgeUblPreCutValidatorTests` 22, `EBelgeCanonicalPayloadTests` 3,
+`EBelgeUblPreCutIntegrationTests` 10) dahil; Faz 2B.4.1'in ve önceki fazların tüm regresyon
+testleri (V1 reader, V1/V2 reader, cutover kapısı, mali hesaplayıcı, timezone, iki düzeltilen
+fixture) bozulmadan geçti.
+
+**Ek regresyon taraması (kapsam dışı bulgu):** `CariKartDto`/`KurumDto` gibi paylaşılan DTO'lara
+dokunulduğu için bunları kullanan testler de (`RezervasyonOdemeMuhasebeIntegrationTests`,
+`TenantSecurityTests`, `TicariBelgeLookupServiceIadeAdaylariIntegrationTests`,
+`TicariBelgeLookupServiceTests`) ayrıca çalıştırıldı. 8 test (`TicariBelgeLookupServiceIadeAdaylariIntegrationTests`
+içinde) `KurumFaturaNumaraSayaclari.SeriKodu` sütununda "String or binary data would be truncated"
+hatasıyla başarısız oluyor. Bu turun değişiklikleriyle ilgisi olup olmadığı `git worktree` ile
+temel commit'te (`e2781b4`) doğrulandı — **aynı 8 test aynı hatayla, bu turun hiçbir değişikliği
+olmadan da başarısız oluyor.** Bu turdan önce var olan, tamamen ilgisiz bir kusur (muhasebe
+fişi/sayaç şeması ile ilgili, e-belge/CariKart alan eklemeleriyle bağlantısız); bu turun hedefli
+testleri bunlar değildir ve düzeltilmedi.
+
+### Açık kalan konular
+
+- **Frontend güncellenmedi.** `Kurum`/`CariKart`/`SatisBelgesi` formlarında yeni alanlar
+  (`Ilce`/`Il`/`Ad`/`Soyad`) için input yok; bu alanlar API'de var ama üretimde kimse
+  doldurmayacaktır — `EBelgeUblOptions.Enabled=true` yapıldığında bu veriler girilmeden hiçbir
+  e-Arşiv kesimi geçemez. Ayrı bir (küçük, mekanik) frontend fazı gerekiyor.
+  `RezervasyonCariKartHizliOlusturRequestDto` gibi ayrı/minimal DTO'lar bu turda hiç değişmedi ve
+  etkilenmedi (yeni alanlar hepsi nullable/opsiyonel).
+- `ResolveEBelgeKanali` artık kesin olarak sayaç kilidinden önce çalışıyor (bu fazın hedefi
+  tamamlandı).
+- `TicariBelgeLookupServiceIadeAdaylariIntegrationTests`'teki 8 testin ön-var-olan, ilgisiz sayaç
+  şeması kusuru ayrı bir fazda incelenmeli.
+- Tevkifat/ÖTV/ÖİV/konaklama vergisi için muhasebe hesap eşlemeleri seed edilmediğinden, bu turda
+  o senaryoların kesim öncesi kapı reddi INTEGRATION seviyesinde satırın doğrudan veritabanında
+  (fiş oluşturma adımından sonra) mutasyona uğratılmasıyla test edildi; gerçek uçtan uca (fiş dahil)
+  bu senaryolar için hesap eşlemesi seed'i ayrı bir iyileştirme olabilir.
+- ÖTV/ÖİV içeren satırlar için ayrı integration testi eklenmedi (yalnız konaklama vergisi ile
+  temsil edildi); üçü de validator seviyesinde birebir aynı kod yolunu (satır bazlı tutar != 0
+  kontrolü) kullandığından unit testler (`OtvIcerenSatirReddedilir`, `OivIcerenSatirReddedilir`)
+  yeterli kabul edildi.
+
+### Faz 2B.5 renderer'a geçiş için hazır olup olmadığı
+
+**Kısmen hazır.** Backend tarafında kesim öncesi doğrulama tamamlandı ve gerçek, immutable,
+byte-doğrulanmış V2 snapshot üretimi çalışıyor — bir renderer artık `EBelgeCanonicalSnapshotV2`
+okuyup XML üretebilir. Ancak renderer'a geçmeden önce şu iki konu çözülmeli: (1) frontend
+güncellenmeden `EBelgeUblOptions.Enabled=true` hiçbir ortamda pratikte kullanılabilir olmayacak
+(her e-Arşiv kesimi otoriter alan eksikliğiyle reddedilecek); (2) kesim öncesi kapının §9'daki
+tam listesi bu iki fazda (2B.4.1 tarih, 2B.4.2 kanal+kapsam+adres+mali) tamamlandı, geriye yalnız
+XSD/Schematron doğrulaması ve gerçek XML serileştirmesi kaldı — bunlar açıkça Faz 2B.5'in
+kapsamıdır ve bu turda hiç geliştirilmedi.

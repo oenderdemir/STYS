@@ -32,10 +32,14 @@ public class SatisBelgesiDto : BaseRdbmsDto<int>
     public decimal Kur { get; set; } = 1m;
     public string? MusteriUnvan { get; set; }
     public string? MusteriAdSoyad { get; set; }
+    public string? MusteriAd { get; set; }
+    public string? MusteriSoyad { get; set; }
     public string? MusteriVergiNo { get; set; }
     public string? MusteriTcKimlikNo { get; set; }
     public string? MusteriVergiDairesi { get; set; }
     public string? MusteriAdres { get; set; }
+    public string? MusteriIlce { get; set; }
+    public string? MusteriIl { get; set; }
     public string? MusteriEposta { get; set; }
     public string? MusteriTelefon { get; set; }
     public bool KurumsalMi { get; set; }
@@ -122,10 +126,14 @@ public class CreateSatisBelgesiRequest
     public DateTime? VadeTarihi { get; set; }
     public string? MusteriUnvan { get; set; }
     public string? MusteriAdSoyad { get; set; }
+    public string? MusteriAd { get; set; }
+    public string? MusteriSoyad { get; set; }
     public string? MusteriVergiNo { get; set; }
     public string? MusteriTcKimlikNo { get; set; }
     public string? MusteriVergiDairesi { get; set; }
     public string? MusteriAdres { get; set; }
+    public string? MusteriIlce { get; set; }
+    public string? MusteriIl { get; set; }
     public string? MusteriEposta { get; set; }
     public string? MusteriTelefon { get; set; }
     public bool KurumsalMi { get; set; }
@@ -174,10 +182,14 @@ public class UpdateSatisBelgesiRequest
     public DateTime? VadeTarihi { get; set; }
     public string? MusteriUnvan { get; set; }
     public string? MusteriAdSoyad { get; set; }
+    public string? MusteriAd { get; set; }
+    public string? MusteriSoyad { get; set; }
     public string? MusteriVergiNo { get; set; }
     public string? MusteriTcKimlikNo { get; set; }
     public string? MusteriVergiDairesi { get; set; }
     public string? MusteriAdres { get; set; }
+    public string? MusteriIlce { get; set; }
+    public string? MusteriIl { get; set; }
     public string? MusteriEposta { get; set; }
     public string? MusteriTelefon { get; set; }
     public bool? KurumsalMi { get; set; }

@@ -199,6 +199,7 @@ builder.Services.AddScoped<IKdvOzetRaporService, KdvOzetRaporService>();
 builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazirlikKontrolService>();
 builder.Services.AddScoped<IKdvRaporService, KdvRaporService>();
 builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
+builder.Services.AddSingleton<IEBelgeUblPreCutValidator, EBelgeUblPreCutValidator>();
 builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTaslakOlusturmaService>();
 builder.Services.AddScoped<IEBelgeOutboxClaimLeaseService, EBelgeOutboxClaimLeaseService>();
 builder.Services.AddScoped<IEBelgeOutboxLeaseTransitionService, EBelgeOutboxLeaseTransitionService>();

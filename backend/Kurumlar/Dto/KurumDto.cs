@@ -14,6 +14,10 @@ public class KurumDto : BaseRdbmsDto<int>
 
     public string? Adres { get; set; }
 
+    public string? Ilce { get; set; }
+
+    public string? Il { get; set; }
+
     public string? Telefon { get; set; }
 
     public string? Eposta { get; set; }

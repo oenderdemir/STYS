@@ -32,6 +32,14 @@ public class CariKart : BaseEntity<int>
     [MaxLength(256)]
     public string UnvanAdSoyad { get; set; } = string.Empty;
 
+    /// <summary>Gerçek kişi (bireysel) cariler için ayrı ad — UBL Person/FirstName kaynağı. UnvanAdSoyad'dan tahminle bölünmez; kurumsal cariler için anlamsızdır.</summary>
+    [MaxLength(128)]
+    public string? Ad { get; set; }
+
+    /// <summary>Gerçek kişi (bireysel) cariler için ayrı soyad — UBL Person/FamilyName kaynağı. UnvanAdSoyad'dan tahminle bölünmez; kurumsal cariler için anlamsızdır.</summary>
+    [MaxLength(128)]
+    public string? Soyad { get; set; }
+
     [MaxLength(32)]
     public string? VergiNoTckn { get; set; }
 

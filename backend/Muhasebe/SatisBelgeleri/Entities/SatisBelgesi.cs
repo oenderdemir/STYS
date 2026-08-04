@@ -59,10 +59,24 @@ public class SatisBelgesi : BaseEntity<int>, ITenantEntity
 
     public string? MusteriUnvan { get; set; }
     public string? MusteriAdSoyad { get; set; }
+
+    /// <summary>Gerçek kişi alıcılarda UBL Person/FirstName kaynağı — MusteriAdSoyad'dan tahminle bölünmez; kesim anında CariKart.Ad'den dondurulur.</summary>
+    public string? MusteriAd { get; set; }
+
+    /// <summary>Gerçek kişi alıcılarda UBL Person/FamilyName kaynağı — MusteriAdSoyad'dan tahminle bölünmez; kesim anında CariKart.Soyad'den dondurulur.</summary>
+    public string? MusteriSoyad { get; set; }
+
     public string? MusteriVergiNo { get; set; }
     public string? MusteriTcKimlikNo { get; set; }
     public string? MusteriVergiDairesi { get; set; }
     public string? MusteriAdres { get; set; }
+
+    /// <summary>UBL PostalAddress yapısal ilçe — kesim anında CariKart.Ilce'den dondurulur; adres metninden çıkarılmaz.</summary>
+    public string? MusteriIlce { get; set; }
+
+    /// <summary>UBL PostalAddress yapısal il — kesim anında CariKart.Il'den dondurulur; adres metninden çıkarılmaz.</summary>
+    public string? MusteriIl { get; set; }
+
     public string? MusteriEposta { get; set; }
     public string? MusteriTelefon { get; set; }
 

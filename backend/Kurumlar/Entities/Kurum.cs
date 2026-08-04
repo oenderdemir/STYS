@@ -23,6 +23,14 @@ public class Kurum : BaseEntity<int>
     [MaxLength(512)]
     public string? Adres { get; set; }
 
+    /// <summary>UBL PostalAddress için yapısal ilçe adı (bkz. EBelgeCanonicalKurumV2.Ilce). Serbest metin Adres'ten türetilmez.</summary>
+    [MaxLength(128)]
+    public string? Ilce { get; set; }
+
+    /// <summary>UBL PostalAddress için yapısal il adı (bkz. EBelgeCanonicalKurumV2.Il). Serbest metin Adres'ten türetilmez.</summary>
+    [MaxLength(128)]
+    public string? Il { get; set; }
+
     [MaxLength(32)]
     public string? Telefon { get; set; }
 

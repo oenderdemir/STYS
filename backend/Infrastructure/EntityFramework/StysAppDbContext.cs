@@ -251,6 +251,12 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Adres)
                 .HasMaxLength(512);
 
+            entity.Property(x => x.Ilce)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.Il)
+                .HasMaxLength(128);
+
             entity.Property(x => x.Telefon)
                 .HasMaxLength(32);
 
@@ -1611,6 +1617,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.CariKodu).HasMaxLength(64).IsRequired();
             entity.Property(x => x.AnaMuhasebeHesapKodu).HasMaxLength(64);
             entity.Property(x => x.UnvanAdSoyad).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(128);
+            entity.Property(x => x.Soyad).HasMaxLength(128);
             entity.Property(x => x.VergiNoTckn).HasMaxLength(32);
             entity.Property(x => x.VergiDairesi).HasMaxLength(128);
             entity.Property(x => x.Telefon).HasMaxLength(32);
@@ -2708,6 +2716,12 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.MusteriAdSoyad)
                 .HasMaxLength(250);
 
+            entity.Property(x => x.MusteriAd)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.MusteriSoyad)
+                .HasMaxLength(128);
+
             entity.Property(x => x.MusteriVergiNo)
                 .HasMaxLength(20);
 
@@ -2719,6 +2733,12 @@ public class StysAppDbContext : DbContext
 
             entity.Property(x => x.MusteriAdres)
                 .HasMaxLength(500);
+
+            entity.Property(x => x.MusteriIlce)
+                .HasMaxLength(128);
+
+            entity.Property(x => x.MusteriIl)
+                .HasMaxLength(128);
 
             entity.Property(x => x.MusteriEposta)
                 .HasMaxLength(150);

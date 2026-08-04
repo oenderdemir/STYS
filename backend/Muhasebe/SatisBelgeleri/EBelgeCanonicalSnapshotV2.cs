@@ -256,7 +256,12 @@ public sealed class EBelgeCanonicalSnapshotV2Reader : IEBelgeCanonicalSnapshotV2
 {
     public const string SupportedSnapshotSchemaVersion = "2";
 
-    private static readonly JsonSerializerOptions CanonicalJsonOptions = new()
+    /// <summary>
+    /// EBelgeSnapshotFactory.CreateSnapshotV2 tarafından da kullanılır - üretici ve okuyucu AYNI
+    /// seçenekleri paylaşmazsa, üreticinin ürettiği payload okuyucunun kendi canonical round-trip
+    /// denetiminde reddedilir. Bu yüzden internal olarak paylaşılır, ikinci bir kopya oluşturulmaz.
+    /// </summary>
+    internal static readonly JsonSerializerOptions CanonicalJsonOptions = new()
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,

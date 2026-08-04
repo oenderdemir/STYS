@@ -12,6 +12,10 @@ public class UpdateKurumRequest
 
     public string? Adres { get; set; }
 
+    public string? Ilce { get; set; }
+
+    public string? Il { get; set; }
+
     public string? Telefon { get; set; }
 
     public string? Eposta { get; set; }

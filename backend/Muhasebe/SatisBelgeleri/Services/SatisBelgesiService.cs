@@ -40,12 +40,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private readonly TimeProvider _timeProvider;
     private readonly EBelgeUblOptions _eBelgeUblOptions;
 
-    /// <summary>
-    /// Bkz. docs/e-belge-ubl-pdf-eposta-renderer-hazirlik-raporu.md - "Kesin ürün kararı:
-    /// devreye alma tarihi". EBelgeUblOptions.Enabled açıkken bu tarihten (Türkiye yerel)
-    /// önceki belge tarihi veya planlanan kesim tarihiyle fatura kesilemez.
-    /// </summary>
-    private static readonly DateTime GoLiveTarihiTrt = new(2026, 9, 14, 0, 0, 0, DateTimeKind.Unspecified);
+    private readonly IEBelgeUblPreCutValidator _ublPreCutValidator;
 
     /// <summary>Satış belgesi satırlarında desteklenen KDV uygulama tipleri.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -99,7 +94,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         ILogger<SatisBelgesiService> logger,
         IDomainOperationLogger domainLogger,
         TimeProvider? timeProvider = null,
-        IOptions<EBelgeUblOptions>? eBelgeUblOptions = null)
+        IOptions<EBelgeUblOptions>? eBelgeUblOptions = null,
+        IEBelgeUblPreCutValidator? ublPreCutValidator = null)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
@@ -110,6 +106,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         _logger = logger;
         _domainLogger = domainLogger;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _ublPreCutValidator = ublPreCutValidator ?? new EBelgeUblPreCutValidator();
         _eBelgeUblOptions = eBelgeUblOptions?.Value ?? new EBelgeUblOptions();
     }
 
@@ -415,10 +412,14 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             Kur = 1m,
             MusteriUnvan = request.MusteriUnvan,
             MusteriAdSoyad = request.MusteriAdSoyad,
+            MusteriAd = request.MusteriAd,
+            MusteriSoyad = request.MusteriSoyad,
             MusteriVergiNo = request.MusteriVergiNo,
             MusteriTcKimlikNo = request.MusteriTcKimlikNo,
             MusteriVergiDairesi = request.MusteriVergiDairesi,
             MusteriAdres = request.MusteriAdres,
+            MusteriIlce = request.MusteriIlce,
+            MusteriIl = request.MusteriIl,
             MusteriEposta = request.MusteriEposta,
             MusteriTelefon = request.MusteriTelefon,
             KurumsalMi = request.KurumsalMi,
@@ -1133,7 +1134,32 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             // (kapı kontrolü + FaturaKesimTarihi + snapshot) bu değer yeniden kullanılır -
             // ikinci kez UtcNow/Now çağrılmaz (bkz. görev sonuç raporu, "Kesim anı sözleşmesi").
             var planlananKesimZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime;
+            var planlananKesimTarihiTrt = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(planlananKesimZamaniUtc);
+
+            // Kanal HER ZAMAN burada, sayaç sorgusundan/kilidinden/artırımından, resmî numara
+            // üretiminden ve belge durum değişikliklerinden ÖNCE çözülür - hem V1 hem V2 yolu
+            // için gereklidir (bkz. görev sonuç raporu, Faz 2B.4.2 "Kanalı sayaç kilidinden önce
+            // çöz"). Mevcut ResolveEBelgeKanali kuralları DEĞİŞMEDEN kullanılır; yalnız çağrı
+            // noktası taşındı.
+            var cariKart = belge.CariKart
+                ?? throw new BaseException("E-belge kanalını belirlemek için cari kart bilgisi bulunamadı.", errorCode: 400);
+
+            var eBelgeKanali = ResolveEBelgeKanali(cariKart);
+
             EnsureCutoverTarihGecerli(belge, planlananKesimZamaniUtc);
+
+            var aktifSatirlar = belge.Satirlar.Where(x => !x.IsDeleted).ToList();
+
+            // Tam kesim öncesi UBL hazırlık kapısı - yalnız EBelgeUblOptions.Enabled açıkken
+            // çalışır (kapalıyken bu fazdan önceki davranış hiç değişmez). Kanal e-Arşiv
+            // değilse (ör. e-Fatura mükellefi) veya dar kapsam dışında kalan herhangi bir alan
+            // varsa, resmî numara verilmeden ATOMİK olarak reddedilir - sayaç henüz hiç
+            // sorgulanmamıştır.
+            if (_eBelgeUblOptions.Enabled)
+            {
+                _ublPreCutValidator.Validate(BuildUblPreCutContext(
+                    belge, aktifSatirlar, tesis.Kurum, cariKart, eBelgeKanali, planlananKesimTarihiTrt));
+            }
 
             // AlisIadeFaturasi için: numara üretilmeden ÖNCE iade edilen asıl AlisFaturasi'nin
             // (ve bağlı muhasebe fişinin) HÂLÂ geçerli olduğu yeniden doğrulanır - aynı merkezi
@@ -1200,11 +1226,6 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 TicariBelgeMuhasebeDurumu.Onaylandi,
                 TicariBelgeFaturalamaDurumu.Kesildi);
 
-            var cariKart = belge.CariKart
-                ?? throw new BaseException("E-belge kanalını belirlemek için cari kart bilgisi bulunamadı.", errorCode: 400);
-
-            var eBelgeKanali = ResolveEBelgeKanali(cariKart);
-
             var eBelgeKaydi = new EBelgeKaydi
             {
                 KurumId = belge.KurumId,
@@ -1215,13 +1236,24 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 Durum = EBelgeKaydiDurumu.SnapshotHazir
             };
 
-            var snapshot = EBelgeSnapshotFactory.CreateSnapshot(
-                eBelgeKaydi,
-                belge,
-                tesis.Kurum,
-                tesis,
-                cariKart,
-                faturaKesimZamaniUtc);
+            // Feature açıkken (ve yukarıdaki kapıdan geçmiş belgeler için) gerçek, typed V2
+            // snapshot üretilir; kapalıyken V1 üretim yolu AYNEN korunur (bkz. görev sonuç
+            // raporu, "V1 üretim yolunu kaldırma veya değiştirme").
+            var snapshot = _eBelgeUblOptions.Enabled
+                ? EBelgeSnapshotFactory.CreateSnapshotV2(
+                    eBelgeKaydi,
+                    belge,
+                    tesis.Kurum,
+                    tesis,
+                    cariKart,
+                    faturaKesimZamaniUtc)
+                : EBelgeSnapshotFactory.CreateSnapshot(
+                    eBelgeKaydi,
+                    belge,
+                    tesis.Kurum,
+                    tesis,
+                    cariKart,
+                    faturaKesimZamaniUtc);
 
             eBelgeKaydi.Snapshot = snapshot;
             _db.EBelgeKayitlari.Add(eBelgeKaydi);
@@ -1309,10 +1341,61 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         var planlananKesimTarihiTrt = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(planlananKesimZamaniUtc).Date;
         var belgeTarihi = belge.BelgeTarihi.Date;
 
-        if (belgeTarihi < GoLiveTarihiTrt || planlananKesimTarihiTrt < GoLiveTarihiTrt)
+        if (belgeTarihi < EBelgeUblGoLive.Trt || planlananKesimTarihiTrt < EBelgeUblGoLive.Trt)
         {
-            throw new EBelgeInvoiceDateBeforeGoLiveException(belgeTarihi, planlananKesimTarihiTrt, GoLiveTarihiTrt);
+            throw new EBelgeInvoiceDateBeforeGoLiveException(belgeTarihi, planlananKesimTarihiTrt, EBelgeUblGoLive.Trt);
         }
+    }
+
+    /// <summary>
+    /// Kesim öncesi UBL kapısına verilecek saf (EF'siz) bağlamı EF entity'lerinden derler.
+    /// Yalnız veri toplar; hiçbir doğrulama/karar burada YAPILMAZ (bkz. IEBelgeUblPreCutValidator).
+    /// </summary>
+    private static EBelgeUblPreCutContext BuildUblPreCutContext(
+        SatisBelgesi belge,
+        IReadOnlyList<SatisBelgesiSatiri> aktifSatirlar,
+        Kurum kurum,
+        CariKart cariKart,
+        EBelgeKanali eBelgeKanali,
+        DateTime planlananKesimTarihiTrt)
+    {
+        return new EBelgeUblPreCutContext(
+            FeatureEnabled: true,
+            BelgeTarihi: belge.BelgeTarihi,
+            PlanlananKesimTarihiTrt: planlananKesimTarihiTrt,
+            EBelgeKanali: eBelgeKanali,
+            BelgeTipi: belge.BelgeTipi,
+            ParaBirimi: belge.ParaBirimi,
+            Kur: belge.Kur,
+            IadeSenaryosuVarMi: belge.IadeEdilenBelgeId.HasValue,
+            AliciKurumsalMi: belge.KurumsalMi,
+            AliciUnvan: belge.MusteriUnvan,
+            AliciVergiNo: belge.MusteriVergiNo,
+            AliciAd: belge.MusteriAd,
+            AliciSoyad: belge.MusteriSoyad,
+            AliciTcKimlikNo: belge.MusteriTcKimlikNo,
+            SaticiIlce: kurum.Ilce,
+            SaticiIl: kurum.Il,
+            AliciIlce: belge.MusteriIlce,
+            AliciIl: belge.MusteriIl,
+            AktifSatirlar: aktifSatirlar
+                .Select(x => new EBelgeUblPreCutSatirContext(
+                    Birim: x.Birim,
+                    KdvUygulamaTipi: x.KdvUygulamaTipi,
+                    KdvIstisnaKodu: x.KdvIstisnaKodu,
+                    TevkifatPay: x.TevkifatPay,
+                    TevkifatPayda: x.TevkifatPayda,
+                    TevkifatTutari: x.TevkifatTutari,
+                    OtvTutari: x.OtvTutari,
+                    OivTutari: x.OivTutari,
+                    KonaklamaVergisiTutari: x.KonaklamaVergisiTutari,
+                    Matrah: x.Matrah,
+                    KdvTutari: x.KdvTutari,
+                    SatirToplami: x.SatirToplami))
+                .ToList(),
+            ToplamMatrah: belge.ToplamMatrah,
+            ToplamKdv: belge.ToplamKdv,
+            GenelToplam: belge.GenelToplam);
     }
 
     private static void EnsureUblHazirlikKaynaklari(SatisBelgesi belge, Kurum kurum)
@@ -2043,10 +2126,14 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
             value => request.KurumsalMi = value,
             value => request.MusteriUnvan = value,
             value => request.MusteriAdSoyad = value,
+            value => request.MusteriAd = value,
+            value => request.MusteriSoyad = value,
             value => request.MusteriVergiNo = value,
             value => request.MusteriTcKimlikNo = value,
             value => request.MusteriVergiDairesi = value,
             value => request.MusteriAdres = value,
+            value => request.MusteriIlce = value,
+            value => request.MusteriIl = value,
             value => request.MusteriEposta = value,
             value => request.MusteriTelefon = value,
             cari);
@@ -2061,10 +2148,14 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
             value => request.KurumsalMi = value,
             value => request.MusteriUnvan = value,
             value => request.MusteriAdSoyad = value,
+            value => request.MusteriAd = value,
+            value => request.MusteriSoyad = value,
             value => request.MusteriVergiNo = value,
             value => request.MusteriTcKimlikNo = value,
             value => request.MusteriVergiDairesi = value,
             value => request.MusteriAdres = value,
+            value => request.MusteriIlce = value,
+            value => request.MusteriIl = value,
             value => request.MusteriEposta = value,
             value => request.MusteriTelefon = value,
             cari);
@@ -2075,10 +2166,14 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         Action<bool> setKurumsalMi,
         Action<string?> setMusteriUnvan,
         Action<string?> setMusteriAdSoyad,
+        Action<string?> setMusteriAd,
+        Action<string?> setMusteriSoyad,
         Action<string?> setMusteriVergiNo,
         Action<string?> setMusteriTcKimlikNo,
         Action<string?> setMusteriVergiDairesi,
         Action<string?> setMusteriAdres,
+        Action<string?> setMusteriIlce,
+        Action<string?> setMusteriIl,
         Action<string?> setMusteriEposta,
         Action<string?> setMusteriTelefon,
         CariKart cari)
@@ -2092,6 +2187,8 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         {
             setMusteriUnvan(cari.UnvanAdSoyad);
             setMusteriAdSoyad(null);
+            setMusteriAd(null);
+            setMusteriSoyad(null);
             setMusteriVergiNo(cari.VergiNoTckn);
             setMusteriTcKimlikNo(null);
         }
@@ -2099,12 +2196,16 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         {
             setMusteriUnvan(null);
             setMusteriAdSoyad(cari.UnvanAdSoyad);
+            setMusteriAd(cari.Ad);
+            setMusteriSoyad(cari.Soyad);
             setMusteriVergiNo(null);
             setMusteriTcKimlikNo(cari.VergiNoTckn);
         }
 
         setMusteriVergiDairesi(cari.VergiDairesi);
         setMusteriAdres(cari.Adres);
+        setMusteriIlce(cari.Ilce);
+        setMusteriIl(cari.Il);
         setMusteriEposta(cari.Eposta);
         setMusteriTelefon(cari.Telefon);
     }
@@ -2849,6 +2950,12 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         if (request.MusteriAdSoyad is not null)
             belge.MusteriAdSoyad = request.MusteriAdSoyad;
 
+        if (request.MusteriAd is not null)
+            belge.MusteriAd = request.MusteriAd;
+
+        if (request.MusteriSoyad is not null)
+            belge.MusteriSoyad = request.MusteriSoyad;
+
         if (request.MusteriVergiNo is not null)
             belge.MusteriVergiNo = request.MusteriVergiNo;
 
@@ -2860,6 +2967,12 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
 
         if (request.MusteriAdres is not null)
             belge.MusteriAdres = request.MusteriAdres;
+
+        if (request.MusteriIlce is not null)
+            belge.MusteriIlce = request.MusteriIlce;
+
+        if (request.MusteriIl is not null)
+            belge.MusteriIl = request.MusteriIl;
 
         if (request.MusteriEposta is not null)
             belge.MusteriEposta = request.MusteriEposta;

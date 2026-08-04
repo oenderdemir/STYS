@@ -53,6 +53,11 @@ public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
         _ilId = il.Id;
         _tesisId = tesis.Id;
 
+        // Faz 2B.4.2 kesim öncesi UBL kapısı, satıcı için yapısal adres (ilçe/il) ister.
+        kurum.Ilce = "Kadıköy";
+        kurum.Il = "İstanbul";
+        await dbContext.SaveChangesAsync();
+
         var musteriHesap = SatisBelgesiMuhasebeTestSupport.BuildHesap(_uniqueSuffix, "MUS", _tesisId);
         var gelirHesap = SatisBelgesiMuhasebeTestSupport.BuildAnaKodHesap(_uniqueSuffix, MuhasebeAnaHesapKodlari.GelirSatis, "GELIR", _tesisId);
         var kdvHesap = SatisBelgesiMuhasebeTestSupport.BuildAnaKodHesap(_uniqueSuffix, MuhasebeAnaHesapKodlari.KDVHesaplanan, "KDV", _tesisId);
@@ -62,6 +67,15 @@ public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
         var musteriKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "MUS", CariKartTipleri.Musteri, _tesisId, musteriHesap.Id);
         musteriKart.EArsivKapsamindaMi = true;
         musteriKart.VergiNoTckn = "1111111111";
+        // CariKartTipleri.Musteri, SatisBelgesiService.ApplyCariSnapshot tarafından "gerçek kişi"
+        // olarak ele alınır (KurumsalMi, request'ten DEĞİL cari.CariTipi'nden türetilir) - bu
+        // yüzden Faz 2B.4.2 kapısının ayrı ad/soyad/TCKN + yapısal adres kontrolleri CariKart
+        // üzerinden karşılanmalıdır; CreateSatisBelgesiRequest'teki Musteri* alanları ApplyCariSnapshot
+        // tarafından ZATEN ezilir.
+        musteriKart.Ad = "Cutover";
+        musteriKart.Soyad = "Musteri " + _uniqueSuffix;
+        musteriKart.Ilce = "Beşiktaş";
+        musteriKart.Il = "İstanbul";
         dbContext.CariKartlar.Add(musteriKart);
         await dbContext.SaveChangesAsync();
         _musteriKartId = musteriKart.Id;
@@ -144,9 +158,9 @@ public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
             TesisId = _tesisId,
             CariKartId = _musteriKartId,
             BelgeTarihi = belgeTarihi,
-            MusteriUnvan = "Cutover Musteri " + _uniqueSuffix,
-            MusteriVergiNo = "1234567890",
-            KurumsalMi = true,
+            // Musteri* alanları burada VERİLMEZ - CariKartId set edildiğinde
+            // ApplyCariSnapshotToCreateRequest bunları musteriKart'tan (Ad/Soyad/Ilce/Il/VergiNoTckn)
+            // ZATEN türetip ezer (bkz. InitializeAsync'teki musteriKart alan atamaları).
             Satirlar =
             [
                 new CreateSatisBelgesiSatiriRequest

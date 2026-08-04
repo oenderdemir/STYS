@@ -200,6 +200,20 @@ builder.Services.AddScoped<IKdvBeyannameHazirlikKontrolService, KdvBeyannameHazi
 builder.Services.AddScoped<IKdvRaporService, KdvRaporService>();
 builder.Services.AddScoped<ISatisBelgesiService, SatisBelgesiService>();
 builder.Services.AddSingleton<IEBelgeUblPreCutValidator, EBelgeUblPreCutValidator>();
+builder.Services.AddSingleton<IEBelgeUblKuralSetiYukleyici>(_ => new EBelgeUblKuralSetiYukleyici(
+    Path.Combine(AppContext.BaseDirectory, "Muhasebe", "SatisBelgeleri", "EBelgeUblKuralSeti")));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IEBelgeUblKuralSetiYukleyici>().Yukle());
+builder.Services.AddSingleton<IEBelgeUblRenderer, EBelgeUblRenderer>();
+builder.Services.AddSingleton<IEBelgeUblXsdValidator, EBelgeUblXsdValidator>();
+builder.Services.AddOptions<EBelgeSchematronSidecarOptions>()
+    .Bind(builder.Configuration.GetSection("EBelgeSchematronSidecar"));
+builder.Services.AddHttpClient<IEBelgeSchematronValidator, SaxonSidecarEBelgeSchematronValidator>((sp, client) =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<EBelgeSchematronSidecarOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+    client.MaxResponseContentBufferSize = EBelgeSchematronSidecarOptions.MaxResponseBytes;
+});
 builder.Services.AddScoped<ISatisBelgesiTaslakOlusturmaService, SatisBelgesiTaslakOlusturmaService>();
 builder.Services.AddScoped<IEBelgeOutboxClaimLeaseService, EBelgeOutboxClaimLeaseService>();
 builder.Services.AddScoped<IEBelgeOutboxLeaseTransitionService, EBelgeOutboxLeaseTransitionService>();

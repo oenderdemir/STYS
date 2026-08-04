@@ -38,6 +38,37 @@ services:
       - stys-internal
     restart: unless-stopped
 
+  schematron-validator:
+    image: "${STYS_SCHEMATRON_IMAGE:-stys/schematron-validator}:${STYS_IMAGE_TAG:-latest}"
+    build:
+      context: sidecar/schematron-validator
+      dockerfile: Dockerfile
+    container_name: stys-schematron-validator
+    # Yalnız internal ağ üzerinden erişilebilir - "ports" KULLANILMAZ, public port YAYINLANMAZ.
+    expose:
+      - "8081"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    networks:
+      - stys-internal
+    restart: unless-stopped
+
   backend:
     image: "${STYS_BACKEND_IMAGE:-stys/backend}:${STYS_IMAGE_TAG:-latest}"
     build:
@@ -89,10 +120,14 @@ services:
       KurumLogoStorage__RootPath: "${STYS_KURUM_LOGO_ROOT_PATH:-Data/Uploads/KurumLogolari}"
       Redis__Configuration: "${STYS_REDIS_CONFIGURATION:-redis:6379}"
       Redis__InstanceName: "${STYS_REDIS_INSTANCE_NAME:-stys:}"
+      EBelgeSchematronSidecar__BaseUrl: "${STYS_SCHEMATRON_SIDECAR_URL:-http://schematron-validator:8081}"
+      EBelgeSchematronSidecar__RequestTimeoutSeconds: "${STYS_SCHEMATRON_SIDECAR_TIMEOUT_SECONDS:-8}"
     depends_on:
       mssql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      schematron-validator:
         condition: service_healthy
     volumes:
       - ${STYS_BACKEND_LOG_HOST_PATH:-./Logs}:${STYS_BACKEND_LOG_CONTAINER_PATH:-/app/Logs}

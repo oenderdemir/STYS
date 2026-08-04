@@ -1,0 +1,17 @@
+{
+  "ruleSetId": "GIB-UBL-TR-1.2.1/2026-09-14",
+  "schematronEntry": "rules/UBL-TR_Main_Schematron.xml",
+  "files": [
+    { "path": "rules/UBL-TR_Main_Schematron.xml", "sha256": "a0a2794374108a3ebd4e472c748629d5e398ea9f63e67d3330fc1673999a4dab" },
+    { "path": "rules/UBL-TR_Common_Schematron.xml", "sha256": "44daa43d9c13bbf02c55db104c7199138779d329ab74d2c4b2ed751742dea8a4" },
+    { "path": "rules/UBL-TR_Codelist.xml", "sha256": "60aa2e531c21f99b522a2b72872f07bedebc57e00b0a1a6816a74dcd50100292" },
+    { "path": "skeleton/iso_dsdl_include.xsl", "sha256": "43ff20a1afd89d8a744d1c0b8df94ac5559ffa6a820d1ffbf508d6431ee4fdd9" },
+    { "path": "skeleton/iso_abstract_expand.xsl", "sha256": "c5267f124abf23eeb6669884e40a98607c055bfaa1f39e73b7d578feceeb6e46" },
+    { "path": "skeleton/iso_svrl_for_xslt1.xsl", "sha256": "81e8c328c57965716ecff9f9e2d25294fcda9deee8a82a2b9828ede770b69fd0" },
+    { "path": "skeleton/iso_schematron_skeleton_for_xslt1.xsl", "sha256": "b5f75949a90b3030ccbebfa3d06375945c93689e39d58cd566b9ac8d507e4254" }
+  ],
+  "dependencies": [
+    { "name": "Saxon-HE", "version": "13.0", "source": "https://repo1.maven.org/maven2/net/sf/saxon/Saxon-HE/13.0/Saxon-HE-13.0.jar", "sha1": "da65e52c768d36eb37e427d8feb6487aabd588fa" },
+    { "name": "xmlresolver", "version": "6.0.23", "source": "https://repo1.maven.org/maven2/org/xmlresolver/xmlresolver/6.0.23/xmlresolver-6.0.23.jar", "sha1": "ad4e965f8662c7c8ca4fe8ab8aaef09a49f25447" }
+  ]
+}

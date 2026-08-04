@@ -1085,3 +1085,465 @@ güncellenmeden `EBelgeUblOptions.Enabled=true` hiçbir ortamda pratikte kullan�
 tam listesi bu iki fazda (2B.4.1 tarih, 2B.4.2 kanal+kapsam+adres+mali) tamamlandı, geriye yalnız
 XSD/Schematron doğrulaması ve gerçek XML serileştirmesi kaldı — bunlar açıkça Faz 2B.5'in
 kapsamıdır ve bu turda hiç geliştirilmedi.
+
+## Faz 2B.5 sonuç bölümü — deterministik, imzasız UBL renderer
+
+**Durum: kısmen tamamlandı, commit/push YAPILMADI.** Aşağıda tamamlanan iş, gerçek (sahte
+olmayan) doğrulama kanıtlarıyla tespit edilen iki teknik engel ve öneri sıralanmıştır.
+
+### Eklenen bileşenler
+
+- `EBelgeUblKuralSeti/` (yeni dizin) — 14 GİB XSD dosyası + 3 GİB schematron dosyası + 4 ISO
+  Schematron "skeleton" XSLT1 dosyası (`iso_dsdl_include.xsl`, `iso_abstract_expand.xsl`,
+  `iso_svrl_for_xslt1.xsl`, `iso_schematron_skeleton_for_xslt1.xsl`) + `manifest.json`
+  (göreli yol + SHA-256 her dosya için). 17 GİB dosyasının SHA-256'sı bu raporun daha önce
+  kaydedilmiş manifest tablosuyla BİREBİR eşleşti (yeniden hesaplanıp doğrulandı, yeniden
+  indirilmedi). 4 ISO skeleton dosyası resmi `Schematron/schematron` GitHub deposundan
+  (`trunk/schematron/code/`) indirildi; bunlar GİB'e değil, ISO Schematron standardının kendi
+  referans implementasyonuna aittir ve XSLT 1.0 uyumludur, dolayısıyla ek bağımlılık olmadan
+  .NET'in yerel `System.Xml.Xsl.XslCompiledTransform`'ıyla çalıştırılabilirler (bkz. aşağıdaki
+  schematron engeli — çalıştırılabilir olmaları GİB kurallarının XSLT1 ile ÇÖZÜLEBİLİR olduğu
+  anlamına gelmiyor).
+- `EBelgeUblKuralSetiYukleyici` / `IEBelgeUblKuralSetiYukleyici` — manifest.json'ı okur, HER
+  dosyanın SHA-256'sını yeniden hesaplayıp manifestteki kayıtlı değerle karşılaştırır; tek dosya
+  eksik veya hash uyuşmazlığı varsa `EBelgeUblKuralSetiManifestException` (kalıcı yapılandırma
+  hatası) fırlatır. İnternet erişimi yoktur.
+- `IEBelgeUblRenderer` / `EBelgeUblRenderer` / `EBelgeUblRenderSonucu` — önerilen sözleşmeye
+  (§7) sadık: girdi yalnız `EBelgeCanonicalSnapshotV2`, DB/HTTP/saat/rastgelelik erişimi yok.
+  Render önce (a) snapshot şema sürümünü, (b) kapsamı (ProfileID/InvoiceTypeCode/ParaBirimi/
+  Kur/BirimKodu/KDV tipi/tevkifat-istisna-ÖTV-ÖİV-konaklama yokluğu/iade yokluğu) BAĞIMSIZ
+  olarak yeniden doğrular, (c) otoriter alan varlığını kontrol eder, (d) toplamları
+  `SatisBelgesiTutarHesaplayici.DogrulaBelgeToplamlari` ile yeniden doğrular — herhangi biri
+  başarısız olursa XML ÜRETİLMEZ. Yalnız bunlardan SONRA XML üretilir; hash tam olarak
+  `XmlBytes` üzerinden hesaplanır ve XML hash'ten SONRA yeniden serialize EDİLMEZ.
+- `EBelgeUblXsdValidator` — pinned XSD setini `System.Xml.Schema.XmlSchemaSet` ile derler;
+  `EBelgeUblSandboxXmlResolver` yalnız kural seti kök dizini altındaki dosyalara izin verir
+  (path traversal ve http(s) tamamen kapalı). Üretilen belgenin (instance XML) kendisi
+  `DtdProcessing.Prohibit` + `XmlResolver = null` ile okunur (DTD/XXE tamamen kapalı). Sabit
+  XSD dosyalarının YÜKLENMESİ için (yalnız burada, hash doğrulanmış vendored dosyalar için)
+  `DtdProcessing.Parse` kullanılır çünkü resmi `UBL-xmldsig-core-schema-2.1.xsd` kopyası W3C'nin
+  orijinal şemasının yalnız İÇ (harici SYSTEM/PUBLIC kimliği OLMAYAN) DOCTYPE alt kümesini
+  taşıyor — bu genel bir DTD/XXE gevşetmesi DEĞİLDİR, XmlResolver yine sandbox'lıdır.
+- `EBelgeUblSchematronValidator` — ISO Schematron skeleton'ın 3 aşamalı derleme hattını
+  (`iso_dsdl_include.xsl` → `iso_abstract_expand.xsl` → `iso_svrl_for_xslt1.xsl`, ki bu da
+  `iso_schematron_skeleton_for_xslt1.xsl`'i include eder) `XslCompiledTransform` ile GERÇEKTEN
+  çalıştırır; `document()` XSLT işlevi yalnız bu derleme hattı için ve yalnız sandbox'lanmış
+  resolver ile açıktır (`XsltSettings(enableDocumentFunction: true, enableScript: false)`).
+  Script çalıştırma her zaman kapalıdır.
+- Rule-set kimliği, XML namespace/prefix kararları (`Invoice`=varsayılan, `cac`, `cbc`, `ext`),
+  eleman sırası (UBL 2.1 XSD sequence'ine sadık), ondalık/tarih/saat biçimlendirme kuralları
+  (invariant culture, `0.00`/`yyyy-MM-dd`/`HH:mm:ss`, bilimsel gösterim yok), satıcı/alıcı
+  eşleme kaynakları (Kurum ≠ Tesis; kurumsal→PartyName+VKN, gerçek kişi→Person+TCKN, otomatik
+  ad/soyad bölme YOK), satır indirimi (yalnız satır düzeyi `AllowanceCharge`,
+  `MultiplierFactorNumeric` HİÇBİR ZAMAN üretilmez, belge düzeyi `AllowanceCharge`/
+  `AllowanceTotalAmount` HİÇBİR ZAMAN üretilmez), KDV gruplama (oran bazında artan sırada,
+  grup tutarları zaten doğrulanmış satır değerlerinin TOPLAMI — yeniden hesaplama YOK) — hepsi
+  önceki turlarda kararlaştırılan sözleşmeye göre `EBelgeUblRenderer.cs` içinde uygulandı ve
+  gerçek `UBL-TR_Main_Schematron.xml`/`UBL-TR_Common_Schematron.xml` dosyaları okunarak (VKN/TCKN
+  şema kuralları, `PartyIdentificationPartyNamePersonCheck`, `PartyVDCheck`, `TaxTypeCheck`,
+  KDV `TaxTypeCode="0015"`, `InvoicedQuantityCheck` gibi somut kurallar) doğrulandı — tahmin
+  değil, gerçek kaynaktan doğrulama.
+- Ödeme bilgisi (`cac:PaymentMeans`): bu fazda üretilmedi — snapshot'ta otoriter/doğrulanmış bir
+  ödeme türü→kod eşlemesi yoktur (§13'te öngörüldüğü gibi açık ürün sorusu olarak bırakıldı).
+- `cac:Signature` (imza referans metadatası, XMLDSig DEĞİL): bu fazda üretilmedi — hangi alt
+  alanların zorunlu olduğu resmi örnek/XSD'den doğrulanmadan tahmin edilmeyecekti (§6); ayrıca
+  aşağıdaki XSD bulgusu, imza sınırının başlı başına bir sonraki fazın konusu olduğunu
+  doğruluyor.
+- `Program.cs`: `IEBelgeUblKuralSetiYukleyici`, yüklenmiş `GibKuralSeti`, `IEBelgeUblRenderer`,
+  `IEBelgeUblXsdValidator`, `IEBelgeUblSchematronValidator` singleton olarak DI'a eklendi.
+  Outbox tüketici sınırına gerçek kablolama (renderer'ı çağıran bir consumer) bu turda
+  YAPILMADI — mevcut projede henüz böyle bir tüketici olmadığından, görev talimatına göre
+  ("consumer yoksa yapay bir background service ekleme") yalnız bileşenler hazırlandı.
+
+### Tespit edilen iki gerçek teknik engel (kanıtlı, tahmin değil)
+
+**1) XSD: `ext:UBLExtensions` yapısal olarak zorunlu ve boş olamaz.** Pinned
+`UBL-Invoice-2.1.xsd`'de `Invoice`'ın İLK alt elemanı `ext:UBLExtensions`'tır ve
+`minOccurs` belirtilmediği için varsayılan olarak ZORUNLUDUR; içeriği
+(`ExtensionContentType/xsd:any minOccurs="1"`) de EN AZ bir eleman gerektirir — boş
+bırakılamaz. Gerçek GİB uygulamalarında bu yuva yalnız nihai `ds:Signature` ile doldurulur.
+Bu fazda elektronik imza YASAK olduğundan (md.6/md.20), bu yuvaya konabilecek meşru, sahte
+olmayan bir içerik YOKTUR. **Kullanıcıya bu bulgu 2026-08-03/04 turunda soruldu ve "kısmi XSD
+doğrulamasını kabul et" seçildi**: renderer `ext:UBLExtensions` OLMADAN XML üretir (imzasız
+olduğunu doğru biçimde yansıtır); tam XSD-set doğrulaması yalnız gelecekteki imzalama fazında,
+bu yuva `ds:Signature` ile doldurulduğunda genuinely geçecektir. Bu, tek ve öngörülebilir
+bulgudur — otomatik testle (`EBelgeUblRendererSmokeTests.GecerliSnapshotXsdDogrulamasindaYalnizBilinenUblExtensionsBoslugunuVerir`)
+kilitlendi: XSD doğrulaması TAM OLARAK bu bulguyu üretir, başka hiçbir yapısal hata YOKTUR —
+yani eşleme/sıralama/namespace/veri tipi düzeyinde renderer XSD'ye UYUMLUDUR.
+
+**2) Schematron: resmi GİB kuralları XPath 2.0 gerektiriyor, .NET'in yerel XSLT motoru yalnız
+XPath/XSLT 1.0 destekliyor.** ISO Schematron skeleton'ın 3+1 aşamalı XSLT1 hattı (tüm 4 dosya
+da genuinely `XslCompiledTransform` ile YÜKLENDİ ve İLK 3 aşama (include çözme, abstract
+genişletme, SVRL derleme) BAŞARIYLA çalıştı — bu, altyapının doğru kurulduğunun kanıtıdır).
+Ancak derlenen NİHAİ doğrulayıcı XSLT'yi yüklerken (4. aşama - üretilen belgeye karşı
+çalıştırma), .NET `XslCompiledTransform.Load` şu hatayla BAŞARISIZ olur:
+
+```
+System.Xml.Xsl.XslLoadException : 'exists()' is an unknown XSLT function.
+```
+
+`exists()` XPath 2.0/XSLT 2.0 işlevidir; `UBL-TR_Common_Schematron.xml` içinde 6 farklı yerde
+(ör. `GeneralWithholdingTaxTotalCheck` kuralında) kullanılır — tek bir yazım hatası değil,
+GİB'in resmi kural setinin XSLT 2.0 processor (Saxon vb.) için yazıldığının yapısal kanıtıdır.
+.NET'in yerleşik `System.Xml.Xsl.XslCompiledTransform`'ı yalnız XSLT/XPath 1.0 uygular ve
+`exists()` gibi ön ad taşımayan (no-namespace) XPath 2.0 işlevlerini genişletme mekanizmasıyla
+(extension object) da EKLEMEK mümkün değildir (.NET XSLT1 extension fonksiyonları yalnız
+namespace-nitelikli çağrılara bağlanabilir). **Bu, mevcut .NET kütüphaneleriyle güvenli/genuine
+biçimde aşılamayan bir teknik engeldir.** Talimata göre: sahte doğrulama yazılMADI, "başarılı"
+kabul edilMEDİ, regex ile schematron taklidi yapılMADI. Bu nedenle **commit/push YAPILMADI**.
+
+Öneri (gelecek faz): gerçek bir XSLT 2.0/XPath 2.0 motoru (ör. Saxon-HE .NET portu/SaxonCS)
+değerlendirilip yeni, açıkça onaylanmış bir NuGet bağımlılığı olarak eklenmeli; bu, bu turun
+kapsamı ve yetkisi dışındadır (yeni dış bağımlılık kararı kullanıcı onayı gerektirir).
+
+### Hedefli testler
+
+Bu turda XSD/schematron altyapısının GERÇEKTEN çalıştığını (ve yalnız yukarıdaki iki bulguyu
+ürettiğini) doğrulayan 2 duman testi eklendi ve koşturuldu (`EBelgeUblRendererSmokeTests`,
+her ikisi de YEŞİL — biri schematron'un tam olarak nerede durduğunu, diğeri XSD'nin tam olarak
+hangi tek bulguyu ürettiğini kilitliyor). Görev md.18'deki 40 senaryonun geri kalanı (byte/hash
+determinizm, alan-değişikliği hassasiyeti, eşleme testleri vb.) bu turda YAZILMADI — schematron
+engeli çözülmeden/kullanıcı onayı alınmadan geniş bir test seti yazmak, henüz kesinleşmemiş bir
+mimari (schematron çözümü ne olacak?) üzerine inşa etmek anlamına gelirdi.
+
+### Commit/push durumu
+
+**Yapılmadı.** md.22 koşulu ("schematron doğrulaması genuinely çalışıp geçmeli") karşılanmadı.
+Tüm değişiklikler yalnız çalışma dizininde duruyor; git'e commit edilmedi.
+
+### Sonraki faz önerisi
+
+1. XPath 2.0 destekleyen bir .NET XSLT/Schematron motoru seçimi kullanıcıyla görüşülmeli
+   (Saxon-HE .NET, veya doğrudan bir ISO Schematron NuGet paketi — ör. websearch'te bulunan
+   `Schematron` / `SchemaTron` / `schxslt-redux` paketleri; hiçbiri bu turda değerlendirilmedi/
+   vetted edilmedi).
+2. Schematron çözümü netleşince: 40 hedefli testin tamamı yazılmalı, imza (`cac:Signature`)
+   alanı resmi örnek/XSD'den doğrulanarak eklenmeli, outbox consumer sınırına gerçek kablolama
+   yapılmalı.
+3. Frontend: otoriter satıcı/alıcı yapısal adres ve gerçek kişi ad/soyad alanları hâlâ
+   girilemiyor (Faz 2B.4.2'den beri açık) — renderer artık bu alanları TÜKETTİĞİ için bu eksik
+   daha da kritik hale geldi.
+
+## XPath 2.0 Schematron motoru — teknik/lisans değerlendirmesi ve POC
+
+**Bu bölüm yalnız değerlendirme amaçlıdır. Faz 2B.5 renderer/validator kodu bu turda
+DEĞİŞTİRİLMEDİ, DB validator'a bağlanmadı, hiçbir dosya commit/push edilmedi.** POC dosyaları
+`poc/schematron-xpath2-poc/` altında, üretim koduna dokunmadan, izole biçimde bırakıldı.
+
+### Araştırılan kütüphaneler
+
+| Aday | Sürüm/tarih | .NET hedefi | Lisans | Durum |
+|---|---|---|---|---|
+| **Saxon-HE (NuGet, .NET native)** | 10.9.0, 2023-02-16 | **.NET Framework 3.5** (yalnız) | MPL-2.0 (ücretsiz, ticari kullanıma uygun) | .NET 8 hedefli STYS'de doğrudan kullanılamaz — Framework 3.5 paketi .NET 8/10 (özellikle Linux) ile uyumlu değil. |
+| **SaxonCS** (Saxonica'nın .NET 8+ native ürünü) | 12.10.0, .NET 8/9/10 hedefli | .NET 8+ | **Proprietary** — lisans anahtarı ZORUNLU, ücretsiz "HE" katmanı YOK | Ücretli ticari lisans olmadan kullanılamaz; satın alma kararı bu turun yetkisi dışında. |
+| **SaxonHE11NetXslt / SaxonHE12NetXslt** (IKVM ile Java Saxon-HE'nin .NET'e çapraz derlenmesi) | 12.9.10, 2025-12-07 | .NET 8/9/10, Win/Linux/macOS | MPL-2.0 (Java Saxon-HE'den miras) | Teknik olarak ücretsiz ve çalışıyor GÖRÜNÜYOR, fakat yayımcının kendisi "deneysel, Saxonica tarafından test/destekli/onaylı DEĞİL, tek kişilik bir deney" olduğunu AÇIKÇA belirtiyor. Üretimde mali/hukuki belge doğrulaması için tek-bakımcılı, resmi olmayan bir paket riskli. |
+| **devlooped/Schematron** (native C# Schematron işlemcisi) | 1.0.0, 2026-04-29 | netstandard2.0/net8.0 | MIT + **"Open Source Maintenance Fee"** (gelir üreten kullanıcılar için ödeme yükümlülüğü) | Lisans BELİRSİZ (MIT görünümlü ama ticari kullanımda ayrı ödeme modeli) — kullanıcı talimatına göre belirsizlikte kütüphane seçilmiş SAYILMAZ. Ayrıca dokümantasyon XPath 2.0 desteğini AÇIKÇA doğrulamıyor (kod örnekleri `System.Xml.XPath` - yani muhtemelen XPath 1.0 - kullanıyor), `exists()` sorununu muhtemelen ÇÖZMÜYOR. |
+| **XmlPrime** | — | — | Tarihsel olarak ticari-only | Bu turda derinlemesine araştırılmadı (zaman kısıtı); SaxonCS ile aynı "ücretli lisans" kategorisinde olduğu biliniyor, ayrı bir teknik/lisans avantajı sunmuyor gibi görünüyor. |
+| **Saxon-HE (Java, orijinal/resmi ürün)** | **13.0**, Maven Central son güncelleme 2026-07-10 | Java 17+ (JDK), .NET DEĞİL — ayrı process/sidecar olarak çağrılır | **MPL-2.0, ücretsiz, ticari kullanıma açık, Saxonica'nın kendi RESMİ ve TAM DESTEKLİ ücretsiz ürünü** (deneysel değil) | En olgun, en az riskli, lisans açısından en net seçenek — ancak .NET process içinde DEĞİL, ayrı bir JVM süreci gerektirir. |
+
+### Lisans kararı
+
+- Saxon-HE (Java, resmi) → **MPL-2.0**. Ticari/kurumsal kullanım için ücretsiz sürüm YETERLİ; ayrı ticari lisans GEREKMEZ. Redistribution kısıtı yok (MPL-2.0 dosya bazlı copyleft, STYS kaynak kodunu MPL'ye tabi KILMAZ — yalnız Saxon'un kendi dosyalarını değiştirirseniz o dosyalar için geçerli olur; STYS bu turda Saxon dosyalarını DEĞİŞTİRMEDİ). Container içinde dağıtılabilir (yalnız bir `.jar` dosyası + JVM). Build agent ve production için AYRI lisans gerekmez — aynı ücretsiz koşullar her ortamda geçerlidir. Lisans dosyası/aktivasyon GEREKMEZ (jar içinde `LicenseException`/`LicenseFeature` sınıfları yalnız PE/EE ücretli özellikleri için — HE seviyesinde devre dışı kalır, aktivasyon istemez; POC'ta jar hiçbir lisans istemi olmadan çalıştı).
+- SaxonCS → üretimde ticari lisans ZORUNLU (ücretsiz HE katmanı yok). **Seçilmedi.**
+- IKVM tabanlı .NET paketleri → lisans (MPL-2.0) kendisi net, ama **bakım/destek durumu belirsiz** (tek bakımcı, resmi olmayan). Üretim mali belge doğrulaması için bu risk kabul edilemez bulundu. **Seçilmedi.**
+- devlooped/Schematron → lisans BELİRSİZ (OSMF yükümlülüğü + XPath 2.0 desteği doğrulanamadı). **Seçilmedi (belirsizlikte seçilmiş sayılmaz kuralı gereği).**
+
+### POC sonucu (gerçek, sahte olmayan kanıt)
+
+`poc/schematron-xpath2-poc/` içinde, Java Saxon-HE 10.9 (Maven Central'dan resmi, değiştirilmemiş
+jar) ile **gerçek** GİB `UBL-TR_Main_Schematron.xml`/`Common_Schematron.xml` + resmi ISO
+Schematron skeleton XSLT1 dosyaları (backend'deki vendored kopyalardan AYNEN kopyalandı,
+değiştirilmedi) kullanılarak 4 aşamalı derleme hattı GERÇEKTEN çalıştırıldı (tam komut geçmişi ve
+çıktılar `poc/schematron-xpath2-poc/SONUC.md`'de):
+
+- **Derlenen nihai validator XSLT'de 12 gerçek `exists(` çağrısı** doğrulandı (grep ile sayıldı).
+- **Senaryo 1 (kurala uygun XML)**: `exists(cac:WithholdingTaxTotal)` tabanlı kural HİÇ
+  tetiklenmedi (beklenen).
+- **Senaryo 2 (bilinçli ihlal — `InvoiceTypeCode=SATIS` iken `cac:WithholdingTaxTotal` eklendi)**:
+  GERÇEK `svrl:failed-assert` üretti, test ifadesinde tam olarak
+  `not(exists(cac:WithholdingTaxTotal)) or cbc:InvoiceTypeCode = 'TEVKIFAT' or ...` metni ve GİB'in
+  kendi Türkçe hata mesajı ("Uyumsuz fatura tipi: 'SATIS'. cac:WithholdingTaxTotal elamanı
+  varken...") yer aldı — taklit/regex DEĞİL, motorun gerçek XPath 2.0 değerlendirmesi.
+- **Determinizm**: aynı girdi iki bağımsız çalıştırmada byte-birebir aynı SVRL çıktısını üretti
+  (`diff` sıfır fark).
+- **Yan bulgu**: derlenen validator XSLT, GİB dosyasının hiç bildirmediği `xs:` (XML Schema)
+  ad alanı önekini kullanıyor (`xs:date(...)` tip dökümleri) — bu, POC çıktısına (GİB kaynağına
+  DEĞİL) tek satırlık standart `xmlns:xs` bildirimi eklenerek çözüldü; gerçek entegrasyonda kalıcı
+  bir çözüm gerekir (bkz. `SONUC.md`).
+- **İkinci yan bulgu**: `UBL-TR_Main_Schematron.xml`'deki `<let name="type" value="efatura"/>`
+  sabit kodlanmış; `EARSIVFATURA` gibi e-Arşiv ProfileID değerleri yalnız `$type='earchive'`
+  iken doğrulanan ayrı bir koda liste giriyor. Bu, e-Arşiv senaryoları için ayrı bir
+  parametreleştirme/giriş noktası kararı gerektiriyor (bu turun kapsamı dışında, ayrı not edildi).
+
+### Güvenlik sonucu
+
+- **DTD/XXE**: gerçek bir XXE payload'ı (`file:///c:/windows/win.ini` sızdırmayı deneyen) hem
+  `-dtd:off` bayrağıyla hem varsayılan ayarla test edildi — **hiçbir sızıntı olmadı**. Üretimde
+  yine de `-dtd:off` (CLI) veya güvenli `SAXParserFactory`/`Configuration` ayarları (API) ile
+  AÇIKÇA kilitlenmelidir (varsayılana güvenilmemeli).
+- **document() / ağ erişimi**: skeleton derleme aşamaları (1-3) `document()` işlevini yalnız YEREL
+  `sch:include` çözümü için kullanır (kaynak GİB/skeleton dosyaları, saldırgan kontrolünde
+  DEĞİLDİR). Üretim entegrasyonunda özel bir `URIResolver` ile bu yalnız sabit kural seti
+  dizinine sandbox'lanmalı (STYS'nin .NET tarafındaki `EBelgeUblSandboxXmlResolver` ile AYNI
+  desen) — bu turda Java API seviyesinde ayrıca implemente edilmedi (CLI POC bunun ötesine
+  geçmedi), gerçek entegrasyon için gerekli bir adım olarak not edildi.
+- **Hata mesajlarında mutlak yol/sızıntı**: POC'ta test edilmedi (zaman kısıtı) — gerçek
+  entegrasyonda XSD/schematron validator'larındaki mevcut .NET deseniyle (güvenli/sınırlı mesaj)
+  aynı disiplin uygulanmalı.
+
+### Performans ve lifecycle sonucu
+
+- CLI üzerinden tek seferlik çalıştırma ~3 saniye — bunun neredeyse tamamı JVM SOĞUK BAŞLATMA
+  maliyeti (her çağrıda yeni bir JVM süreci başlatıldığı için). Bu, JVM'in HER belge için değil,
+  **kalıcı bir süreçte BİR KEZ** başlatılması gerektiğini kanıtlıyor.
+- Paralel iki doğrulama (aynı anda, arka planda) birbirini ETKİLEMEDİ — beklenen sonuçları üretti.
+- **Önerilen lifecycle**: JVM tek seferlik ayağa kalkan KALICI bir süreç (sidecar/servis) olmalı;
+  derlenmiş `XsltExecutable` (Saxon s9api) süreç ömrü boyunca BİR KEZ derlenip singleton olarak
+  tutulmalı (Saxon dokümantasyonuna göre `XsltExecutable` immutable ve thread-safe'tir, ondan
+  paralel `Xslt30Transformer` örnekleri türetilebilir — .NET tarafındaki mevcut
+  `EBelgeUblSchematronValidator`'ın "bir kez derle, singleton olarak paylaş" deseniyle AYNI
+  mimari). .NET tarafı ile JVM sidecar'ı arasında iletişim (stdin/stdout, yerel soket veya minimal
+  HTTP) ayrı bir tasarım kararı gerektirir — bu turda seçilmedi.
+
+### Mimari karar
+
+**Önerilen: Seçenek B — ayrı Java/Saxon sidecar süreci.**
+
+Gerekçe (yalnız teknik kolaylık değil):
+- **Lisans**: Java Saxon-HE, Saxonica'nın kendi RESMİ ücretsiz ürünüdür (MPL-2.0, ticari kullanıma
+  açık, redistribution kısıtı yok) — hiçbir belirsizlik yok. .NET tarafındaki tüm alternatifler ya
+  ücretli (SaxonCS/XmlPrime) ya deneysel/desteksiz (IKVM paketleri) ya da lisansı belirsiz
+  (devlooped/Schematron).
+- **Operasyon**: JVM eklemek Dockerfile'a bir satır (`apt-get install openjdk-17-jre-headless`
+  veya çok-aşamalı build'de resmi bir JRE base image katmanı) kadar basittir; STYS zaten
+  container'da çalışıyor (`backend/Dockerfile` mevcut).
+- **Güvenlik**: Java tarafında da AYNI sandbox deseni (özel `URIResolver`, DTD kapalı,
+  ağ erişimi kapalı) uygulanabilir — POC bunu kısmen doğruladı (XXE testi geçti).
+- **Deployment**: sidecar, ayrı bir container/process olarak veya aynı container içinde JVM +
+  .NET runtime birlikte çalıştırılarak dağıtılabilir; STYS'nin mevcut mimarisini BOZMAZ.
+- **Performans**: kalıcı JVM + singleton derlenmiş stylesheet ile per-doküman maliyeti düşüktür
+  (POC'taki ~3 sn ölçümü JVM başlatma maliyetidir, gerçek per-çağrı maliyeti DEĞİL).
+- **Bakım maliyeti**: Saxonica'nın resmi, aktif bakımlı (2026-07-10'da 13.0 sürümü) ürünüdür —
+  tek kişilik deneysel paketlere kıyasla çok daha düşük risk.
+- **Deterministik çalışma**: POC'ta doğrulandı (iki bağımsız çalıştırma byte-birebir aynı).
+
+Reddedilenler: (A) aynı .NET process içinde kütüphane — lisans/olgunluk sorunu nedeniyle uygun
+aday YOK. (C) doğrulamayı entegratöre bırakmak — STYS'nin kendi kesim-öncesi/render garantisini
+zayıflatır, entegratör hatası geç, pahalı biçimde geri döner (fatura zaten kesilmiş olabilir). (D)
+fazı durdurmak — gereksiz, çünkü B için lisans/teknik yol AÇIK ve POC ile kanıtlandı.
+
+### Üretim kullanımı için gereken onay
+
+1. **Altyapı onayı**: Dockerfile'a JVM (JDK/JRE 17+) eklenmesi — yeni bir çalışma zamanı
+   bağımlılığı, kullanıcı/DevOps onayı gerektirir.
+2. **Mimari onayı**: .NET ↔ JVM sidecar iletişim yöntemi (CLI-per-call mi, kalıcı süreç + IPC mi)
+   — ayrı bir tasarım turu gerektirir.
+3. **Güvenlik onayı**: Java tarafı `URIResolver`/DTD/entity sandbox'ının .NET tarafındaki
+   `EBelgeUblSandboxXmlResolver` ile AYNI disiplinde implemente edilmesi.
+4. `<let name="type" value="efatura"/>` sabit kodlamasının e-Arşiv (`EARSIVFATURA`) senaryosu
+   için nasıl ele alınacağına dair ürün kararı.
+
+### Faz 2B.5'in tamamlanabilmesi için kesin sonraki adım
+
+Kullanıcı yukarıdaki 4 onayı verirse: (1) JVM'i Dockerfile'a ekle, (2) küçük bir Java sidecar
+servisi yaz (yalnız: kural setini bir kez derle, stdin'den/bir dizinden XML al, SVRL/özet sonucu
+stdout'a/dosyaya yaz — mevcut `EBelgeUblSchematronValidator`'ın arayüzünü DEĞİŞTİRMEDEN, yalnız
+implementasyonunu bu sidecar'ı çağıracak şekilde değiştir), (3) 40 hedefli testin tamamını yaz,
+(4) yalnız o zaman commit/push koşulları (md.22) genuinely karşılanmış olur.
+
+### Sonuç formatı
+
+**`APPROVED_CANDIDATE: Saxon-HE (Java) 13.0, JVM sidecar/CLI süreci olarak — MPL-2.0, ücretsiz`**
+
+- **Lisans gereksinimi**: Yok (MPL-2.0, ücretsiz, ticari kullanıma açık, redistribution serbest).
+- **Ek paket/dependency**: JVM (JDK/JRE 17+) — YENİ bir çalışma zamanı bağımlılığı,
+  Dockerfile/deployment değişikliği gerektirir (altyapı onayı gerekli).
+- **Deployment etkisi**: Orta — container'a bir JRE katmanı + Saxon-HE jar eklenmesi; .NET
+  tarafında yalnız `IEBelgeUblSchematronValidator`'ın implementasyonu değişir (arayüz sabit
+  kalabilir), renderer/XSD validator ETKİLENMEZ.
+- **Güvenlik sonucu**: XXE/DTD testi GEÇTİ (gerçek payload ile). `document()`/ağ sandbox'ı
+  üretimde AYRICA implemente edilmeli (POC bunu göstermedi, yalnız gerekliliğini doğruladı).
+- **POC test sonucu**: `exists()` GERÇEKTEN çalıştı (2/9 zorunlu senaryo tam kanıtlandı: kurala
+  uygun geçer + ihlal gerçek failed-assert üretir + determinizm + XXE engellenir + paralel
+  çalışma güvenli; ağ erişimi engelleme ve stylesheet-cache-sonrası-ikinci-çalıştırma senaryoları
+  bu POC'ta AYRICA/açıkça izole test edilmedi, mimari gereklilik olarak not edildi).
+
+## Faz 2B.5 tamamlanma — production-ready Java Saxon-HE 13.0 sidecar
+
+**Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.17 koşulları — hepsi genuinely karşılandı).**
+Bu bölüm, `APPROVED_CANDIDATE: Java Saxon-HE 13.0 / ayrı JVM sidecar` kararının gerçek, çalışan
+bir implementasyona dönüştürüldüğünü belgeler.
+
+### Java Saxon-HE 13.0 kararı ve MPL-2.0 lisans notu
+
+Production sidecar, POC'taki 10.9 yerine **onaylanan 13.0** sürümünü kullanır
+(`net.sf.saxon:Saxon-HE:13.0`, Maven Central, SHA-1 `da65e52c768d36eb37e427d8feb6487aabd588fa`
+— resmi Maven Central checksum dosyasıyla BİREBİR doğrulandı). Ek çalışma zamanı bağımlılığı
+olarak `org.xmlresolver:xmlresolver:6.0.23` gerekir (SHA-1
+`ad4e965f8662c7c8ca4fe8ab8aaef09a49f25447`, aynı şekilde doğrulandı) — Saxon 13.0'ın
+`Configuration` sınıfı bunsuz `NoClassDefFoundError` ile başarısız olur (POC'ta 10.9 bu
+bağımlılığı gerektirmiyordu; bu, sürüm yükseltmesinin gerçek, kanıtlanmış bir yan etkisidir).
+İkisi de MPL-2.0, ücretsiz, ticari kullanıma açık, redistribution kısıtı yok. Sürüm/checksum
+`sidecar/schematron-validator/manifest.json`'da sabitlenmiştir; Dockerfile build aşamasında
+`sha1sum -c` ile YENİDEN doğrulanır (floating "latest" yok, runtime indirme yok).
+
+### Sidecar mimarisi
+
+`sidecar/schematron-validator/` — bağımsız bir Java (JDK 17+) kaynak ağacı, Maven/Gradle
+GEREKTİRMEZ (yalnız `javac`/`java`, minimal ayak izi). Bileşenler:
+
+- `ArtifactManifest` — `manifest.json`'ı okur, HER dosyanın (3 GİB schematron + 4 ISO skeleton
+  XSLT) SHA-256'sını başlangıçta yeniden hesaplayıp doğrular; tek uyuşmazlık TÜM başlatmayı
+  durdurur.
+- `SchematronPipeline` — ISO Schematron skeleton'ın 3 aşamalı derleme hattını Saxon s9api
+  (`Processor`/`XsltCompiler`/`Xslt30Transformer`) ile BİR KEZ, başlangıçta çalıştırır; derlenen
+  `XsltExecutable` süreç ömrü boyunca singleton olarak saklanır (Saxon dokümantasyonuna göre
+  immutable/thread-safe — her istek kendi `Xslt30Transformer`'ını türetir, pool GEREKMEZ).
+- `SandboxUriResolver` (yalnız derleme aşamasında, `sch:include` çözümü için) / `DenyAllUriResolver`
+  (per-request doğrulamada, TÜM harici kaynak erişimini reddeder) — .NET tarafındaki
+  `EBelgeUblSandboxXmlResolver` ile AYNI iki-katmanlı desen.
+- `SidecarMain` — JDK'nin yerleşik `com.sun.net.httpserver.HttpServer`'ı (ek bağımlılık yok)
+  ile `/health/live`, `/health/ready`, `POST /internal/schematron/validate` uç noktalarını sunar.
+
+### Rule-set whitelist yaklaşımı
+
+İstek yalnız üç bilgi taşır: `X-RuleSet-Id` header'ı, ham XML gövdesi, `X-Correlation-Id` header'ı
+(izleme amaçlı, PII değil). Stylesheet içeriği, path, URL veya XPath ASLA istekte YER ALMAZ.
+Sidecar yalnız `manifest.json`'daki TEK `ruleSetId` değerini (`GIB-UBL-TR-1.2.1/2026-09-14`)
+kabul eder; başka herhangi bir değer `400 UNKNOWN_RULESET` ile reddedilir (bkz. test
+`BilinmeyenRuleSetReddedilir`).
+
+### HTTP protokolü — ham `application/xml` gövde kararı
+
+Base64+JSON yerine **ham `application/xml` gövde** tercih edildi: (a) base64 kodlaması gereksiz
+~33% boyut artışı ve ekstra encode/decode adımı getirir, (b) JSON içine XML gömmek kaçış
+karakterleri nedeniyle hata ayıklamayı zorlaştırır, (c) `Content-Type: application/xml` zaten
+doğru, standart bir HTTP mekanizmasıdır. `ruleSetId`/`correlationId` HTTP header'larına
+taşındığından gövde SAF XML kalır. Yanıt JSON'dır (`{"valid":bool,"violations":[...]}`) — bu
+tarafta yapılandırılmış veri (ihlal listesi) döndüğü için JSON doğal seçimdir.
+
+### Saxon compile/cache lifecycle
+
+Başlangıçta (arka plan thread'inde, HTTP sunucusu ayakta kalırken): (1) manifest hash'leri
+doğrulanır, (2) 3 aşamalı pipeline BİR KEZ derlenir, (3) yalnız BUNDAN SONRA `ready=true` olur.
+`GET /health/ready`, derleme bitmeden `503`, bittikten sonra `200` döner (bkz. testler
+`ReadyEndpointCompileOncesindeBasarisizdir` / `...SonrasindaBasarili`). Her `/validate` isteği
+kendi `Xslt30Transformer`'ını singleton `XsltExecutable`'dan türetir — yeniden derleme YOKTUR,
+paylaşılan mutable state YOKTUR (paralel istekler birbirini etkilemez, bkz. test
+`ParalelDogrulamalarBirbiriniEtkilemez`).
+
+### Timeout ve limitler
+
+- İstek gövdesi: 5.000.000 byte üst sınır (`Content-Length` ön kontrolü + akış sırasında sayaç) → `413`.
+- Doğrulama işlemi: 10 saniye (ayrı bir `ExecutorService` ile sarmalanır) → zaman aşımında `504`.
+- İhlal listesi: en fazla 200 (`MAX_VIOLATIONS`).
+- .NET client: `HttpClient.Timeout` (varsayılan 8 sn, `EBelgeSchematronSidecar__RequestTimeoutSeconds`
+  ile yapılandırılabilir), yanıt gövdesi 1.000.000 byte üst sınır.
+
+### Güvenlik önlemleri (gerçek testlerle doğrulandı)
+
+- DTD tamamen kapalı (`disallow-doctype-decl=true` + harici genel/parametre entity kapalı +
+  özel `EntityResolver` reddeder) — gerçek XXE payload'ı (`file:///etc/passwd` sızdırma denemesi)
+  test edildi, sızıntı YOK (`XxeVeDtdEngellenirIcerikSizmaz`).
+  `document()`/harici kaynak erişimi per-request doğrulamada `DenyAllUriResolver` ile TAMAMEN
+  kapalı; yalnız derleme aşamasında (sabit, vendored dosyalar için) `SandboxUriResolver` ile
+  kök dizine sınırlı.
+- Container: non-root kullanıcı (uid/gid 10001), `read_only: true` + yalnız `/tmp` için `tmpfs`,
+  `no-new-privileges:true`, `cap_drop: ALL`, CPU/bellek limiti (`docker-compose.yml`) — GERÇEKTEN
+  build edilip `docker run --read-only --tmpfs /tmp` ile çalıştırıldı, `id` komutu `uid=10001`
+  doğruladı.
+  KUR: public port YAYINLANMAZ (`expose`, `ports` DEĞİL); yalnız `stys-internal` Docker ağı.
+- Hassas veri: XML gövdesi, ihlal mesaj METNİ (VKN/unvan/adres taşıyabilir) sidecar loglarına
+  ASLA yazılmaz — yalnız `correlationId`, `ruleSetId`, ihlal SAYISI, süre loglanır. Hata
+  mesajlarında container path'i YOKTUR (genel hata kodları döner: `VALIDATION_INTERNAL_ERROR` vb.).
+  .NET client XML'i hiç loglamaz (kod tabanında hiçbir `ILogger` çağrısı XML/ihlal içeriği taşımaz).
+
+### XSD unsigned/signed ayrımı
+
+`IEBelgeUblXsdValidator.ValidateUnsignedRendererOutput` yeni metodu: `Validate`'in fırlattığı
+`EBelgeUblXsdValidationFailedException`'ı yakalar, hata listesi TAM OLARAK 1 eleman VE o eleman
+hem `'Invoice'` hem `UBLExtensions` alt dizelerini içeriyorsa (kararlı, kırılgan-olmayan kontrol —
+tam metin eşitliği YOK) sessizce döner; başka HERHANGİ bir durumda (0 hata VEYA 1'den fazla hata
+VEYA farklı bir hata) yeniden fırlatır. `EBelgeUblArtifactStage` enum'ı (`Unsigned`/`SignedReady`)
+`EBelgeUblRenderSonucu.ArtifactStage` alanında taşınır — bu faz HER ZAMAN `Unsigned` üretir;
+tüketen kodun bunu nihai/gönderilebilir artefakt SANMAMASI için type-safe bir işaretleyicidir.
+
+### Gerçek Schematron test sonuçları
+
+`java -cp Saxon-HE-13.0.jar;xmlresolver-6.0.23.jar ... /health/ready` sonrası, gerçek
+`POST /internal/schematron/validate` çağrıları GERÇEK GİB mesajları üretti — örnek (bilinçli
+ihlal): `"Uyumsuz fatura tipi: 'SATIS'. cac:WithholdingTaxTotal elamanı varken fatura tipi
+TEVKIFAT,YTBTEVKIFAT,IADE,YTBIADE,SGK,SARJ ve SARJANLIK olabilir."` — test'ini `exists()`
+XPath 2.0 ifadesi tetikliyor (bkz. `BilincliIhlalGercekExistsTabanliMesajUretir`). Yan bulgu
+(POC'tan taşınan, hâlâ geçerli): `UBL-TR_Main_Schematron.xml`'deki `<let name="type"
+value="efatura"/>` sabit kodlaması nedeniyle `ProfileID=EARSIVFATURA` varsayılan modda
+"geçersiz" raporlanır — bu, renderer'ın ürettiği GERÇEK snapshot'ın uçtan uca testinde
+(`EBelgeUblRendererEndToEndIntegrationTests`) GERÇEK bir schematron ihlali olarak GÖZLEMLENDİ
+ve testte AÇIKÇA beklenen davranış olarak doğrulandı (bu turun kapsamında GİB dosyası
+DEĞİŞTİRİLMEDİ; `$type` parametreleştirmesi açık bir sonraki-adım konusu olarak kalır).
+
+### Hata sınıflandırması (type-safe, string parse YOK)
+
+| Durum | İstisna | Kod | Kalıcılık |
+|---|---|---|---|
+| Gerçek schematron ihlali | `EBelgeUblSchematronValidationFailedException` | 422 | Kalıcı |
+| Sidecar erişilemiyor/timeout | `EBelgeUblSchematronServiceUnavailableException` | 503 | Geçici |
+| Rule-set/artifact geçersiz | `EBelgeUblRuleSetArtifactInvalidException` | 500 | Kalıcı |
+| Beklenmeyen/geçersiz yanıt | `EBelgeUblSchematronProtocolErrorException` | 502 | Geçici |
+
+Bu dört sınıf ASLA mali toplam (`EBelgeUblMonetaryTotalMismatchException`) veya kapsam
+(`EBelgeUblRenderScopeUnsupportedException`) hatalarıyla BİRLEŞTİRİLMEZ — her biri kendi tipiyle
+fırlatılır, gelecekteki outbox consumer'ı `catch`/`switch` ile tipe göre ayırabilir (string mesaj
+parse GEREKMEZ).
+
+### Hedefli test komutları ve sonuçları
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeUblRenderer|FullyQualifiedName~SaxonSidecar|FullyQualifiedName~EBelgeSchematronSidecar"
+  → Passed: 32, Failed: 0
+
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelge"
+  → Passed: 161, Skipped: 82 (SQL Server gerektiren, önceden var olan integration testleri - değişmedi), Failed: 0
+```
+
+Sidecar entegrasyon testleri (`EBelgeSchematronSidecarIntegrationTests`, 11 test) ve uçtan uca
+test (`EBelgeUblRendererEndToEndIntegrationTests`, 1 test) GERÇEK bir Java alt süreci başlatarak
+(`SchematronSidecarProcessFixture`, JDK 17+ + derlenmiş sınıflar + gerçek jar'lar) çalışır — mock
+sunucu veya sabit JSON YOKTUR. `.NET client` testleri (9 test, `SaxonSidecarEBelgeSchematronValidatorTests`)
+yalnız HTTP hata sınıflandırmasını izole eder (sahte `HttpMessageHandler`), gerçek schematron
+mantığını TEST ETMEZ (bu ayrım bilinçlidir, bkz. görev md.14).
+
+Docker imajı gerçekten build edildi (`docker build sidecar/schematron-validator`) ve
+`docker run --read-only --tmpfs /tmp` ile çalıştırılıp `docker exec ... id` → `uid=10001` ile
+non-root doğrulaması yapıldı (manuel, CI'ya bağlanmadı - bu turun kapsamı dışında).
+
+### Açık kalan konular
+
+1. `<let name="type" value="efatura"/>` sabit kodlaması - e-Arşiv (`EARSIVFATURA`) senaryoları
+   için parametreleştirme kararı gerekiyor (GİB dosyası değiştirilmeden nasıl ele alınacağı).
+2. Sidecar'ın `document()`/ağ sandbox'ı yalnız KOD seviyesinde (`DenyAllUriResolver`) test
+   edildi; container network policy (Docker `internal` ağ) AYRICA doğrulanmadı.
+3. Ready endpoint'in gerçek "compile öncesi 503" davranışı testte ZAYIF kanıtlandı (yarış
+   koşulu nedeniyle) - manuel olarak (curl ile) güçlü biçimde doğrulandı ama otomatik test
+   kırılgan.
+4. `cac:Signature` (imza referans metadatası) hâlâ üretilmiyor - resmi örnek/XSD doğrulaması
+   gerektiriyor.
+5. Outbox consumer kablolaması hâlâ yapılmadı (bu fazın kapsamı dışında bırakıldı, md.11).
+6. CI/CD boru hattına sidecar image build/push adımı eklenmedi (yalnız yerel `docker build` ile
+   doğrulandı).
+
+### Sonraki faz
+
+1. Outbox consumer sınırına gerçek kablolama (renderer + sidecar client hazır, tüketici yok).
+2. `cac:Signature`/XMLDSig/XAdES imzalama fazı - `ArtifactStage.SignedReady` üretimi.
+3. `$type` parametreleştirme kararı.
+4. CI/CD'ye sidecar image build + Trivy/benzeri güvenlik taraması eklenmesi.
+
+### Frontend hâlâ yapılmadı
+
+Faz 2B.4.2'den beri açık: otoriter satıcı/alıcı yapısal adres (sokak, bina no, ilçe, il, posta
+kodu) ve gerçek kişi alıcılar için ayrı ad/soyad alanları hâlâ UI'da girilemiyor. Renderer artık
+bu alanları DOĞRUDAN TÜKETTİĞİNDEN (bkz. `EBelgeUblRenderer.ValidateAuthoritativeFields`), bu
+eksik olmadan `EBelgeUblOptions.Enabled=true` hiçbir üretim ortamında pratikte kullanılamaz.
+Gereken ekranlar: Kurum ayarları (satıcı yapısal adres), CariKart/Müşteri formu (alıcı yapısal
+adres + gerçek kişi ad/soyad ayrımı, kurumsal/gerçek kişi seçimine göre koşullu alanlar).

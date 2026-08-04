@@ -474,3 +474,13 @@ Thumbs.db
 /backend/Data/license.json
 /backend/Data/license-stys-tod-01.json
 scripts/id_ed25519
+
+# Schematron sidecar - jar bağımlılıkları Dockerfile'da sabit sürüm + checksum ile indirilir
+# (build-time), commit edilmez; derlenmiş sınıflar da yerel geliştirme/test artefaktıdır.
+sidecar/schematron-validator/lib/
+sidecar/schematron-validator/out/
+
+# POC kanıtı SONUC.md'de belgelidir (komutlar + sonuçlar) - üretilen ara artefaktlar ve jar
+# ikili dosyası tekrar üretilebilir, commit edilmez (bkz. poc/schematron-xpath2-poc/SONUC.md).
+poc/schematron-xpath2-poc/out/
+poc/schematron-xpath2-poc/*.jar

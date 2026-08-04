@@ -13,7 +13,7 @@ namespace STYS.Tests;
 [Collection(SchematronSidecarCollection.Name)]
 public class EBelgeSchematronSidecarIntegrationTests
 {
-    private const string RuleSetId = "GIB-UBL-TR-1.2.1/2026-09-14";
+    private const string RuleSetId = "GIB-UBL-TR-1.2.1/2026-09-14/EARSIV";
 
     private readonly SchematronSidecarProcessFixture _fixture;
 
@@ -29,7 +29,7 @@ public class EBelgeSchematronSidecarIntegrationTests
                  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
           <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
           <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
-          <cbc:ProfileID>TEMELFATURA</cbc:ProfileID>
+          <cbc:ProfileID>EARSIVFATURA</cbc:ProfileID>
           <cbc:ID>EAR2026000000001</cbc:ID>
           <cbc:CopyIndicator>false</cbc:CopyIndicator>
           <cbc:UUID>a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789</cbc:UUID>
@@ -47,7 +47,7 @@ public class EBelgeSchematronSidecarIntegrationTests
                  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
           <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
           <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
-          <cbc:ProfileID>TEMELFATURA</cbc:ProfileID>
+          <cbc:ProfileID>EARSIVFATURA</cbc:ProfileID>
           <cbc:ID>EAR2026000000001</cbc:ID>
           <cbc:CopyIndicator>false</cbc:CopyIndicator>
           <cbc:UUID>a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789</cbc:UUID>
@@ -245,6 +245,75 @@ public class EBelgeSchematronSidecarIntegrationTests
         var response = await http.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // Eski (profil eki olmayan) ruleSetId artık reddedilir - whitelist yalnız /EARSIV kabul eder.
+    [Fact]
+    public async Task ProfilEkiOlmayanEskiRuleSetIdReddedilir()
+    {
+        SidecarHazirDegilseBasarisizOl();
+        using var http = new HttpClient { BaseAddress = new Uri(_fixture.BaseUrl!) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/internal/schematron/validate");
+        request.Headers.Add("X-RuleSet-Id", "GIB-UBL-TR-1.2.1/2026-09-14");
+        request.Content = new StringContent(TemizXml, System.Text.Encoding.UTF8, "application/xml");
+        var response = await http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // e-Arşiv doğrulamasında failed-assert FİLTRELEME yapılmadığının kanıtı: aynı ihlalli XML
+    // içindeki DİĞER (WithholdingTaxTotal dışı) ihlaller de TAM SAYIDA raporlanır - yalnız
+    // profil-özel ProfileID bulgusu "kaybolur" (çünkü artık gerçekten geçerli), başka hiçbir
+    // ihlal gizlenmez/filtrelenmez.
+    [Fact]
+    public async Task EArsivDogrulamasindaFailedAssertFiltrelemeYapilmaz()
+    {
+        SidecarHazirDegilseBasarisizOl();
+        using var http = new HttpClient { BaseAddress = new Uri(_fixture.BaseUrl!) };
+        var response = await Gonder(http, IhlalliXml);
+        var body = await response.Content.ReadAsStringAsync();
+
+        using var doc = JsonDocument.Parse(body);
+        var mesajlar = doc.RootElement.GetProperty("violations").EnumerateArray()
+            .Select(v => v.GetProperty("message").GetString()!)
+            .ToList();
+
+        // WithholdingTaxTotal'a bağlı ÜÇ ayrı gerçek ihlal (exists() tabanlı + iki TaxTypeCode
+        // kontrolü) hâlâ TAM OLARAK raporlanıyor - hiçbiri sessizce bastırılmadı.
+        Assert.Contains(mesajlar, m => m.Contains("Uyumsuz fatura tipi", StringComparison.Ordinal));
+        Assert.Contains(mesajlar, m => m.Contains("TaxTypeCode", StringComparison.Ordinal) && m.Contains("4171", StringComparison.Ordinal));
+        Assert.Contains(mesajlar, m => m.Contains("vergi tipinin yüzdesi", StringComparison.Ordinal));
+        // ProfileID artık e-Arşiv kapsamında GEÇERLİ olduğundan bu bulgu ARTIK ÜRETİLMEZ -
+        // filtrelemeden değil, gerçek doğrulama sonucundan dolayı.
+        Assert.DoesNotContain(mesajlar, m => m.Contains("ProfileID", StringComparison.Ordinal));
+    }
+
+    // Sidecar restart sonrası aynı XML aynı sonucu verir (yeniden başlatılan taze bir süreçle test edilir).
+    [Fact]
+    public async Task SidecarRestartSonrasiAyniXmlAyniSonucuVerir()
+    {
+        SidecarHazirDegilseBasarisizOl();
+        using var http1 = new HttpClient { BaseAddress = new Uri(_fixture.BaseUrl!) };
+        var oncekiBody = await (await Gonder(http1, IhlalliXml)).Content.ReadAsStringAsync();
+
+        var yeniSurec = new SchematronSidecarProcessFixture();
+        try
+        {
+            await yeniSurec.InitializeAsync();
+            if (yeniSurec.BaseUrl is null)
+            {
+                Assert.Fail($"Yeniden başlatılan sidecar ayağa kaldırılamadı: {yeniSurec.AtlamaNedeni}");
+            }
+
+            using var http2 = new HttpClient { BaseAddress = new Uri(yeniSurec.BaseUrl!) };
+            var sonrakiBody = await (await Gonder(http2, IhlalliXml)).Content.ReadAsStringAsync();
+
+            Assert.Equal(oncekiBody, sonrakiBody);
+        }
+        finally
+        {
+            await yeniSurec.DisposeAsync();
+        }
     }
 
     // 18. Büyük XML limitte reddedilir.

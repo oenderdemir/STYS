@@ -57,19 +57,19 @@ internal static class EBelgeUblRendererTestVerisi
                 EBelgeKaydiDurumu = EBelgeKaydiDurumu.SnapshotHazir,
                 EBelgeKanali = EBelgeKanali.EArsiv,
                 KararKaynagi = "Test",
-                KararZamaniUtc = new DateTime(2026, 9, 15, 8, 0, 0, DateTimeKind.Utc),
+                KararZamaniUtc = new DateTime(2026, 7, 1, 8, 0, 0, DateTimeKind.Utc),
             },
             Belge = new EBelgeCanonicalBelgeV2
             {
                 SatisBelgesiId = 1,
                 BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
-                BelgeTarihi = new DateTime(2026, 9, 15),
-                FaturaKesimTarihi = new DateTime(2026, 9, 15, 11, 0, 0),
+                BelgeTarihi = new DateTime(2026, 7, 1),
+                FaturaKesimTarihi = new DateTime(2026, 7, 1, 11, 0, 0),
                 ResmiFaturaNo = "EAR2026000000001",
                 EBelgeUuid = "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789",
                 ProfileID = "EARSIVFATURA",
                 InvoiceTypeCode = "SATIS",
-                FaturaTarihiTrt = new DateOnly(2026, 9, 15),
+                FaturaTarihiTrt = new DateOnly(2026, 7, 1),
                 FaturaSaatiTrt = new TimeOnly(11, 0, 0),
             },
             Kurum = new EBelgeCanonicalKurumV2

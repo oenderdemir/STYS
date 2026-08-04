@@ -30,14 +30,38 @@ public final class SidecarMain {
     private static final int MAX_BODY_BYTES = 5_000_000;
     private static final long REQUEST_TIMEOUT_MS = 10_000;
 
+    /**
+     * Başlangıç öz-testi (self-test) için kullanılan, GERÇEK kişisel veri İÇERMEYEN, sabit
+     * (deterministik) e-Arşiv örnek XML'i. Ready endpoint yalnız bu örnek sıfır ihlal
+     * ÜRETİRSE 200 döner (bkz. görev md.6). Tarih kasıtlı olarak sabit ve geçmişte - ileride
+     * "günün tarihinden ileri olamaz" kuralını asla ihlal etmeyecek şekilde seçildi.
+     */
+    private static final String SELF_TEST_EARSIV_XML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+                 xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+                 xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+          <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+          <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
+          <cbc:ProfileID>EARSIVFATURA</cbc:ProfileID>
+          <cbc:ID>SLF2020000000001</cbc:ID>
+          <cbc:CopyIndicator>false</cbc:CopyIndicator>
+          <cbc:UUID>00000000-0000-4000-8000-000000000000</cbc:UUID>
+          <cbc:IssueDate>2020-06-15</cbc:IssueDate>
+          <cbc:IssueTime>10:00:00</cbc:IssueTime>
+          <cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>
+          <cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>
+        </Invoice>
+        """;
+
     private volatile SchematronPipeline pipeline;
     private volatile boolean ready = false;
     private volatile String startupError = null;
-    private final String expectedRuleSetId;
+    private final String baseRuleSetId;
     private final ExecutorService transformExecutor = Executors.newCachedThreadPool(SidecarMain::daemonThread);
 
-    private SidecarMain(String expectedRuleSetId) {
-        this.expectedRuleSetId = expectedRuleSetId;
+    private SidecarMain(String baseRuleSetId) {
+        this.baseRuleSetId = baseRuleSetId;
     }
 
     public static void main(String[] args) throws Exception {
@@ -62,9 +86,21 @@ public final class SidecarMain {
         Thread t = new Thread(() -> {
             try {
                 manifest.verifyOrThrow();
-                this.pipeline = SchematronPipeline.compile(manifest);
+                SchematronPipeline compiled = SchematronPipeline.compile(manifest);
+
+                // Öz-test: e-Arşiv profili GERÇEKTEN sıfır ihlal üretmiyorsa sidecar ready OLMAZ
+                // (bkz. görev md.6 - "küçük bir embedded self-test e-Arşiv örneği beklenen
+                // sonucu vermiş" olmalı). Kişisel veri İÇERMEZ.
+                List<Violation> selfTestViolations = compiled.validate(
+                        SELF_TEST_EARSIV_XML.getBytes(StandardCharsets.UTF_8), DocumentProfile.EARSIV);
+                if (!selfTestViolations.isEmpty()) {
+                    throw new IllegalStateException(
+                            "Öz-test (self-test) başarısız: e-Arşiv örneği " + selfTestViolations.size() + " ihlal üretti.");
+                }
+
+                this.pipeline = compiled;
                 this.ready = true;
-                LOG.info("schematron pipeline compiled, ruleSetId=" + manifest.ruleSetId + ", sidecar ready");
+                LOG.info("schematron pipeline compiled, self-test passed, baseRuleSetId=" + baseRuleSetId + ", sidecar ready");
             } catch (Exception e) {
                 this.startupError = e.getClass().getSimpleName();
                 LOG.log(Level.SEVERE, "sidecar startup failed: " + e.getClass().getSimpleName());
@@ -100,7 +136,11 @@ public final class SidecarMain {
             }
 
             String ruleSetId = firstHeader(exchange, "X-RuleSet-Id");
-            if (ruleSetId == null || !ruleSetId.equals(expectedRuleSetId)) {
+            DocumentProfile profile = DocumentProfile.fromRuleSetId(ruleSetId, baseRuleSetId);
+            // İlk dalgada yalnız e-Arşiv aktif (bkz. görev md.5) - EFATURA whitelist'te
+            // tanımlı olsa da bu sidecar sürümünde bilinçli olarak REDDEDİLİR.
+            if (profile != DocumentProfile.EARSIV)
+            {
                 writeJson(exchange, 400, "{\"error\":\"UNKNOWN_RULESET\"}");
                 return;
             }
@@ -120,7 +160,7 @@ public final class SidecarMain {
             }
 
             Instant started = Instant.now();
-            Future<List<Violation>> future = transformExecutor.submit(() -> pipeline.validate(xmlBytes));
+            Future<List<Violation>> future = transformExecutor.submit(() -> pipeline.validate(xmlBytes, profile));
 
             List<Violation> violations;
             try {

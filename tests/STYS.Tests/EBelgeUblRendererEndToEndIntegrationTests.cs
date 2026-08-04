@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using STYS.Muhasebe.SatisBelgeleri;
 using Xunit;
 
@@ -5,8 +6,10 @@ namespace STYS.Tests;
 
 /// <summary>
 /// Faz 2B.5 TAM uçtan uca akış: gerçek renderer + gerçek yerel XSD doğrulayıcı + GERÇEK Java
-/// Saxon-HE 13.0 sidecar süreci (bkz. SchematronSidecarProcessFixture) + gerçek GİB
-/// stylesheet'leri. Sahte/mock hiçbir bileşen YOKTUR (bkz. görev md.14).
+/// Saxon-HE 13.0 sidecar süreci (bkz. SchematronSidecarProcessFixture) + gerçek GİB e-Arşiv
+/// Schematron kuralları ($type='earchive' resmî xsl:param bağlaması ile). Sahte/mock hiçbir
+/// bileşen YOKTUR (bkz. görev md.14). Gerçek e-Arşiv renderer çıktısı artık SIFIR Schematron
+/// ihlaliyle doğrulanır - Faz 2B.5'in tamamlanma kriteri budur.
 /// </summary>
 [Collection(SchematronSidecarCollection.Name)]
 public class EBelgeUblRendererEndToEndIntegrationTests
@@ -27,32 +30,88 @@ public class EBelgeUblRendererEndToEndIntegrationTests
         }
 
         public Task<EBelgeSchematronValidationResult> ValidateAsync(
-            System.Collections.Immutable.ImmutableArray<byte> xmlBytes, string ruleSetId, CancellationToken cancellationToken)
+            ImmutableArray<byte> xmlBytes, string ruleSetId, CancellationToken cancellationToken)
             => _inner.ValidateAsync(xmlBytes, ruleSetId, cancellationToken);
     }
 
-    [Fact]
-    public async Task GercekSidecarUzerindenSchematronDogrulamasiBasarisizOlurCunkuUblExtensionsYok()
+    private EBelgeUblRenderer CreateRealRenderer(out GibKuralSeti kuralSeti)
     {
         if (_fixture.BaseUrl is null)
         {
             Assert.Fail($"Sidecar ayağa kaldırılamadı: {_fixture.AtlamaNedeni}");
         }
 
-        var kuralSeti = EBelgeUblRendererTestVerisi.KuralSetiYukle();
+        kuralSeti = EBelgeUblRendererTestVerisi.KuralSetiYukle();
         var xsdValidator = new EBelgeUblXsdValidator(kuralSeti);
         var schematronValidator = new HttpTabanliTestValidator(_fixture.BaseUrl!);
-        var renderer = new EBelgeUblRenderer(kuralSeti, xsdValidator, schematronValidator);
+        return new EBelgeUblRenderer(kuralSeti, xsdValidator, schematronValidator);
+    }
+
+    // §7: geçerli e-Arşiv snapshot -> XSD (yalnız bilinen bulgu) -> gerçek sidecar -> valid=true, violations=[] -> başarılı sonuç, ArtifactStage=Unsigned.
+    [Fact]
+    public async Task GercekEArsivRendererCiktisiSifirSchematronIhlaliyleBasariylaSonuclanir()
+    {
+        var renderer = CreateRealRenderer(out _);
         var snapshot = EBelgeUblRendererTestVerisi.GecerliSnapshot();
 
-        // XSD zaten "yalnız bilinen UBLExtensions bulgusu" filtresinden geçer (renderer bunu
-        // sessizce kabul eder) - GERÇEK sidecar'a kadar ulaşır ve gerçek schematron sonucunu
-        // döner. Snapshot'ın ürettiği ProfileID=EARSIVFATURA, GİB kuralının varsayılan "efatura"
-        // modunda tanınmadığından (bkz. rapor, "yan bulgu") GERÇEK bir ihlal bekleniyor - bu da
-        // "gerçek sidecar + gerçek GİB kuralları" entegrasyonunun uçtan uca çalıştığının kanıtı.
-        var ex = await Assert.ThrowsAsync<EBelgeUblSchematronValidationFailedException>(
-            () => renderer.RenderAsync(snapshot, CancellationToken.None));
+        var sonuc = await renderer.RenderAsync(snapshot, CancellationToken.None);
 
-        Assert.NotEmpty(ex.Ihlaller);
+        Assert.NotEmpty(sonuc.UnsignedUblUtf8);
+        Assert.NotEmpty(sonuc.UnsignedUblSha256);
+        Assert.Equal(EBelgeUblArtifactStage.Unsigned, sonuc.ArtifactStage);
+        Assert.Equal("EARSIVFATURA", sonuc.KullanilanProfileId);
+    }
+
+    // Negatif test 2: ProfileID yanlışsa (e-Arşiv kapsamı dışı bir değer) gerçek Schematron ihlali verir.
+    [Fact]
+    public async Task YanlisProfileIdGercekSchematronIhlaliUretir()
+    {
+        if (_fixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_fixture.AtlamaNedeni}");
+        }
+
+        var schematronValidator = new HttpTabanliTestValidator(_fixture.BaseUrl!);
+        const string yanlisProfilXml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+                     xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+              <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+              <cbc:CustomizationID>TR1.2</cbc:CustomizationID>
+              <cbc:ProfileID>YANLISPROFIL</cbc:ProfileID>
+              <cbc:ID>EAR2026000000001</cbc:ID>
+              <cbc:CopyIndicator>false</cbc:CopyIndicator>
+              <cbc:UUID>a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789</cbc:UUID>
+              <cbc:IssueDate>2026-07-01</cbc:IssueDate>
+              <cbc:IssueTime>11:00:00</cbc:IssueTime>
+              <cbc:InvoiceTypeCode>SATIS</cbc:InvoiceTypeCode>
+              <cbc:DocumentCurrencyCode>TRY</cbc:DocumentCurrencyCode>
+            </Invoice>
+            """;
+        var xmlBytes = ImmutableArray.Create(System.Text.Encoding.UTF8.GetBytes(yanlisProfilXml));
+
+        var sonuc = await schematronValidator.ValidateAsync(xmlBytes, EBelgeSchematronSidecarOptions.SupportedRuleSetId, CancellationToken.None);
+
+        Assert.False(sonuc.Valid);
+        Assert.Contains(sonuc.Violations, v => v.Message.Contains("ProfileID", StringComparison.Ordinal));
+    }
+
+    // Negatif test 4: e-Fatura profil id'si (henüz desteklenmeyen ruleset suffix'i) ilk dalgada reddedilir.
+    [Fact]
+    public async Task EFaturaRuleSetIdIlkDalgadaReddedilir()
+    {
+        if (_fixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_fixture.AtlamaNedeni}");
+        }
+
+        var schematronValidator = new HttpTabanliTestValidator(_fixture.BaseUrl!);
+        var snapshot = EBelgeUblRendererTestVerisi.GecerliSnapshot();
+
+        await Assert.ThrowsAsync<EBelgeUblRuleSetArtifactInvalidException>(() =>
+            schematronValidator.ValidateAsync(
+                ImmutableArray.Create(System.Text.Encoding.UTF8.GetBytes("<Invoice/>")),
+                "GIB-UBL-TR-1.2.1/2026-09-14/EFATURA",
+                CancellationToken.None));
     }
 }

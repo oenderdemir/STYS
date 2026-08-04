@@ -13,28 +13,34 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ISO Schematron skeleton'ın 3 aşamalı derleme hattını (sch:include çöz -> sch:extends genişlet
- * -> SVRL üretici XSLT'ye derle) Java Saxon-HE 13.0 (s9api) ile GERÇEKTEN çalıştırır ve nihai
- * derlenmiş {@link XsltExecutable}'ı BİR KEZ üretip saklar (bkz. görev md.4 - "her request'te
- * yeniden compile edilmemeli"). {@link XsltExecutable} Saxon dokümantasyonuna göre immutable ve
- * thread-safe'tir; her istek kendi {@link Xslt30Transformer}'ını ondan türetir (paralel
- * kullanım güvenlidir, pool gerekmez).
+ * -> SVRL üretici XSLT'ye derle) Java Saxon-HE 13.0 (s9api) ile GERÇEKTEN çalıştırır. Üretilen
+ * validator XSLT, GİB'in resmî derleme hattının kendi davranışı gereği kök seviyedeki
+ * {@code <sch:let name="type" .../>} bildirimini {@code <xsl:param name="type" .../>} olarak
+ * derler - bu, ISO Schematron/XSLT standardının GENUINELY desteklediği bir mekanizmadır (GİB
+ * kaynak dosyası hiç değişmez). Her {@link DocumentProfile} için AYRI bir {@link XsltExecutable}
+ * derlenir ve saklanır (bkz. görev md.4/md.5 - "e-Fatura ve e-Arşiv için ayrı compiled
+ * executable cache'leri"); ikisi de AYNI kaynak metinden türer, GİB assertion/pattern/XPath
+ * metinleri asla değiştirilmez. $type dışında hiçbir parametre bağlanmaz.
  */
 final class SchematronPipeline {
 
     private static final String SVRL_NS = "http://purl.oclc.org/dsdl/svrl";
     private static final int MAX_VIOLATIONS = 200;
+    private static final QName TYPE_PARAM = new QName("type");
 
     private final Processor processor;
-    private final XsltExecutable compiledValidator;
+    private final Map<DocumentProfile, XsltExecutable> compiledValidatorsByProfile;
     private final XPathCompiler xpathCompiler;
 
-    private SchematronPipeline(Processor processor, XsltExecutable compiledValidator, XPathCompiler xpathCompiler) {
+    private SchematronPipeline(Processor processor, Map<DocumentProfile, XsltExecutable> compiledValidatorsByProfile, XPathCompiler xpathCompiler) {
         this.processor = processor;
-        this.compiledValidator = compiledValidator;
+        this.compiledValidatorsByProfile = compiledValidatorsByProfile;
         this.xpathCompiler = xpathCompiler;
     }
 
@@ -69,34 +75,56 @@ final class SchematronPipeline {
         // ad alanı önekini kullanıyor (xs:date(...) tip dökümleri). Bu, YALNIZ bizim ürettiğimiz
         // ARA ARTEFAKTA (GİB kaynak dosyasına DEĞİL) standart xmlns:xs bildirimi eklenerek
         // çözülür - semantik değişiklik yoktur, yalnız eksik ad alanı bağlamı tamamlanır (bkz.
-        // poc/schematron-xpath2-poc/SONUC.md, "yan bulgu").
+        // poc/schematron-xpath2-poc/SONUC.md, "yan bulgu"). Bu, XML-metin ekleme İŞLEMİDİR,
+        // assertion/pattern/XPath metinlerine DOKUNMAZ.
         String validatorXsltText = serialize(processor, stage3.getXdmNode());
         validatorXsltText = validatorXsltText.replaceFirst(
                 "<xsl:stylesheet ",
                 "<xsl:stylesheet xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" ");
 
-        XsltCompiler finalCompiler = processor.newXsltCompiler();
-        finalCompiler.setURIResolver(new DenyAllUriResolver());
-        XsltExecutable compiledValidator = finalCompiler.compile(new StreamSource(new StringReader(validatorXsltText)));
+        // GERÇEK, DOĞRULANMIŞ BULGU: ISO Schematron skeleton, kök seviye <sch:let> bildirimlerini
+        // (name="type" dahil) üretilen XSLT'de <xsl:param> olarak derler - bu GİB'in KENDİ resmî
+        // derleme hattının davranışıdır (metin arama ile teyit edilebilir: validatorXsltText
+        // "<xsl:param name=\"type\"" içerir, "<xsl:variable name=\"type\"" DEĞİL). Bu nedenle
+        // $type, standart Saxon setStylesheetParameters() API'siyle GENUINELY bağlanabilir -
+        // metin patch'i veya XPath/assertion değişikliği GEREKMEZ.
+        if (!validatorXsltText.contains("<xsl:param name=\"type\"")) {
+            throw new IllegalStateException(
+                    "Beklenmeyen derleme çıktısı: $type xsl:param olarak derlenmedi - ISO skeleton davranışı değişmiş olabilir.");
+        }
+
+        Map<DocumentProfile, XsltExecutable> executablesByProfile = new EnumMap<>(DocumentProfile.class);
+        for (DocumentProfile profile : DocumentProfile.values()) {
+            XsltCompiler finalCompiler = processor.newXsltCompiler();
+            finalCompiler.setURIResolver(new DenyAllUriResolver());
+            executablesByProfile.put(profile, finalCompiler.compile(new StreamSource(new StringReader(validatorXsltText))));
+        }
 
         XPathCompiler xpathCompiler = processor.newXPathCompiler();
         xpathCompiler.declareNamespace("svrl", SVRL_NS);
 
-        return new SchematronPipeline(processor, compiledValidator, xpathCompiler);
+        return new SchematronPipeline(processor, executablesByProfile, xpathCompiler);
     }
 
     /**
-     * Üretilen belgeyi (instance XML) derlenmiş validator'a karşı doğrular. Her çağrı KENDİ
-     * {@link Xslt30Transformer}'ını türetir (paylaşılan mutable state yoktur - paralel çağrılar
-     * birbirini etkilemez). DTD/harici entity TAMAMEN kapalıdır (XXE korumalı ayrıştırma).
+     * Üretilen belgeyi (instance XML) verilen profile göre derlenmiş validator'a karşı doğrular.
+     * Her çağrı KENDİ {@link Xslt30Transformer}'ını türetir (paylaşılan mutable state yoktur -
+     * paralel çağrılar birbirini etkilemez). DTD/harici entity TAMAMEN kapalıdır. Yalnız $type
+     * parametresi bağlanır - başka hiçbir XPath/parametre kullanıcıdan alınmaz.
      */
-    List<Violation> validate(byte[] xmlBytes) throws Exception {
+    List<Violation> validate(byte[] xmlBytes, DocumentProfile profile) throws Exception {
+        XsltExecutable compiledValidator = compiledValidatorsByProfile.get(profile);
+        if (compiledValidator == null) {
+            throw new IllegalArgumentException("Desteklenmeyen profil: " + profile);
+        }
+
         XMLReader secureReader = createSecureXmlReader();
         InputSource inputSource = new InputSource(new ByteArrayInputStream(xmlBytes));
         SAXSource saxSource = new SAXSource(secureReader, inputSource);
 
         Xslt30Transformer transformer = compiledValidator.load30();
         transformer.setURIResolver(new DenyAllUriResolver());
+        transformer.setStylesheetParameters(Map.of(TYPE_PARAM, new XdmAtomicValue(profile.schematronTypeValue)));
 
         XdmDestination result = new XdmDestination();
         transformer.transform(saxSource, result);

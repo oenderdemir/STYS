@@ -1536,8 +1536,112 @@ non-root doğrulaması yapıldı (manuel, CI'ya bağlanmadı - bu turun kapsamı
 
 1. Outbox consumer sınırına gerçek kablolama (renderer + sidecar client hazır, tüketici yok).
 2. `cac:Signature`/XMLDSig/XAdES imzalama fazı - `ArtifactStage.SignedReady` üretimi.
-3. `$type` parametreleştirme kararı.
+3. ~~`$type` parametreleştirme kararı.~~ **ÇÖZÜLDÜ (bkz. aşağıdaki bölüm).**
 4. CI/CD'ye sidecar image build + Trivy/benzeri güvenlik taraması eklenmesi.
+
+## Faz 2B.5 Schematron profil seçimi düzeltmesi (commit 986743a sonrası)
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.** Gerçek e-Arşiv renderer çıktısı artık **sıfır**
+Schematron ihlaliyle doğrulanıyor - Faz 2B.5'in nihai tamamlanma kriteri budur.
+
+### Kök neden ve resmî paket incelemesi
+
+Vendored/indirilmiş resmî paketler incelendi (`e-FaturaPaketi.zip` schematron klasörü,
+`earsiv_paket_v1.1_8.zip`). Bulgular:
+
+- `earsiv_paket_v1.1_8/earsiv_schematron.xsl` diye AYRI bir "e-Arşiv" dosyası var, AMA bu
+  tamamen FARKLI, eski (UBL OLMAYAN) bir format için: kök ad alanı
+  `http://earsiv.efatura.gov.tr`, elemanlar `earsiv:eArsivRaporu`/`earsiv:fatura`/
+  `earsiv:mustahsilMakbuz` vb. - bizim ürettiğimiz UBL `<Invoice>` XML'iyle HİÇBİR ilgisi yok
+  (bu, periyodik e-Arşiv RAPORLAMA formatıdır, önceki fazlarda kapsam dışı bırakıldı). Bu dosya
+  YANLIŞ İPUCU olarak elendi.
+- Ayrı bir "e-Arşiv UBL schematron" paketi indirilen/cache'lenen hiçbir GİB kaynağında
+  BULUNAMADI - `UBL-TR_Main_Schematron.xml` (e-FaturaPaketi'nin kendi schematron'u) tek adaydır.
+- **Gerçek, kanıtlanmış bulgu**: `History.txt` (e-FaturaPaketi/schematron), `20170428` tarihli
+  girişte "'type' isimli parametre eklendi" diyor - GİB mühendisleri `$type`'ı BİLEREK bir
+  parametre olarak tasarladı. Bunun somut kanıtı: derlenmiş (ISO Schematron skeleton çıktısı)
+  XSLT'de kök seviyedeki `<let name="type" value="efatura"/>` (ve `envelopeType`/`senderId`/vb.
+  diğer TÜM kök-seviye `<sch:let>`'ler), **`<xsl:param name="type" select="efatura"/>` olarak
+  derleniyor** - `<xsl:variable>` DEĞİL. Bu, resmî ISO Schematron skeleton derleme hattının
+  (`iso_svrl_for_xslt1.xsl`) KENDİ davranışıdır; STYS tarafından icat edilmiş bir yorum değildir
+  (Saxon ile üretilen gerçek çıktıda doğrudan gözlemlendi: `grep "name=\"type\""
+  validator.xsl` → `<xsl:param name="type" select="efatura"/>`).
+- **Ampirik kanıt**: Saxon CLI'ye `type=earchive` parametresi geçilerek (`net.sf.saxon.Transform
+  ... type=earchive`) GERÇEK bir e-Arşiv örneği (ProfileID=EARSIVFATURA) çalıştırıldı - sonuç
+  **0 `failed-assert`** (önceden 1 tane: ProfileID codelist bulgusu). Aynı ihlalli örnek
+  (`cac:WithholdingTaxTotal` içeren) `type=earchive` ile de test edildi - `exists()` tabanlı
+  GERÇEK ihlal HÂLÂ doğru biçimde üretildi (filtreleme YOK, gerçek doğrulama).
+- `$ProfileIDTypeEarchive` codelist'i (`UBL-TR_Codelist.xml`) `,EARSIVFATURA,` değerini
+  taşıyor - `$type='earchive'` iken ProfileIDCheck bu listeye bakıyor, `$type` varsayılan/boş
+  iken (fiilen "efatura" davranışına denk düşüyor) yalnız e-Fatura profil id'lerini içeren
+  `$ProfileIDType`'a bakıyor.
+- Sonuç: **resmî artifact yapısı `$type`'ı GERÇEKTEN dışarıdan bağlanabilir bir XSLT stylesheet
+  parametresi olarak tasarlamış ve derlemiş** - GİB kaynak dosyasında (`UBL-TR_Main_Schematron.xml`)
+  HİÇBİR metin değişikliği GEREKMEDİ. GİB kaynak dosyası ve manifest hash'leri AYNEN korundu
+  (bkz. test `ManifestTumArtifactHashleriEslesir`).
+
+### Uygulanan çözüm
+
+`sidecar/schematron-validator/src/.../SchematronPipeline.java`: derleme sırasında üretilen
+XSLT metninde `<xsl:param name="type"` varlığı DOĞRULANIR (yoksa başlangıç BAŞARISIZ olur -
+"ISO skeleton davranışı değişmiş olabilir" güvenlik kontrolü). Her `DocumentProfile` (şu an
+yalnız `EARSIV`, `EFATURA` ileride) için AYRI bir `XsltExecutable` derlenip cache'lenir (aynı
+kaynak metinden, GİB assertion/pattern/XPath metinlerine dokunulmadan). `validate()` çağrısında
+YALNIZ `type` parametresi (`Xslt30Transformer.setStylesheetParameters`, standart Saxon s9api)
+bağlanır - başka hiçbir XPath/parametre kullanıcıdan/istekten ALINMAZ.
+
+Sidecar `manifest.json`'daki `ruleSetId` (`GIB-UBL-TR-1.2.1/2026-09-14`) TABAN kimlik olarak
+kalır; kabul edilen TAM rule-set kimlikleri artık profil son ekiyle whitelist'lenir:
+`GIB-UBL-TR-1.2.1/2026-09-14/EARSIV` (ilk dalgada AKTİF), `GIB-UBL-TR-1.2.1/2026-09-14/EFATURA`
+(kodda tanımlı ama sidecar bu sürümde bilinçli olarak REDDEDİYOR - `DocumentProfile.EARSIV`
+dışındaki her profil `400 UNKNOWN_RULESET`). `.NET` tarafında `EBelgeSchematronSidecarOptions.
+SupportedRuleSetId` bu tam değere güncellendi.
+
+### Başlangıç öz-testi (self-test)
+
+`SidecarMain`, pipeline derlemesi bittikten HEMEN sonra, kişisel veri İÇERMEYEN sabit bir e-Arşiv
+örneğini (`SELF_TEST_EARSIV_XML`, sabit geçmiş tarihli) `EARSIV` profiliyle doğrular; sonuç
+BOŞ DEĞİLSE (yani en az bir ihlal varsa) başlangıç BAŞARISIZ sayılır ve `/health/ready` HİÇBİR
+ZAMAN `200` dönmez. Bu, "e-Arşiv çıktısı sıfır ihlal üretmeli" garantisinin bizzat sidecar'ın
+kendi başlangıcında GERÇEKTEN doğrulanmasını sağlar - yalnız test-zamanı değil, HER üretim
+başlatmasında.
+
+### `cac:Signature` incelemesi
+
+Codelist/Common schematron dosyaları `$type='earchive'` ile `cac:Signature` VARLIĞINI zorunlu
+kılan HİÇBİR assertion içermiyor (yalnız `SignatureCountCheck`: en fazla 1 - 0 tane de geçerli).
+Bu nedenle bu turda `cac:Signature` referans metadata yapısı EKLENMEDİ - gerçek e-Arşiv
+Schematron doğrulaması bunsuz zaten sıfır ihlal veriyor (ampirik olarak doğrulandı).
+
+### Gerçek uçtan uca sonuç
+
+```
+EBelgeUblRendererEndToEndIntegrationTests.GercekEArsivRendererCiktisiSifirSchematronIhlaliyleBasariylaSonuclanir
+  → gerçek EBelgeCanonicalSnapshotV2 → gerçek renderer → gerçek XSD (yalnız bilinen UBLExtensions
+    bulgusu) → GERÇEK Java Saxon-HE 13.0 sidecar → GERÇEK GİB e-Arşiv Schematron kuralları
+  → valid=true, violations=[] → EBelgeUblRenderSonucu başarıyla döner, ArtifactStage=Unsigned
+  → PASSED
+```
+
+Ek negatif testler eklendi: yanlış ProfileID gerçek ihlal üretir, e-Fatura ruleset id'si ilk
+dalgada reddedilir (`EBELGE_UBL_RULESET_ARTIFACT_INVALID`), eski (profil eki olmayan) ruleSetId
+reddedilir, sidecar restart sonrası aynı XML aynı sonucu verir, e-Arşiv doğrulamasında
+failed-assert filtrelemesi YAPILMADIĞI (WithholdingTaxTotal ihlalleri hâlâ tam üretiliyor)
+açıkça kanıtlandı.
+
+### Test sonuçları
+
+```
+dotnet test --filter "FullyQualifiedName~EBelgeUblRenderer|FullyQualifiedName~SaxonSidecar|FullyQualifiedName~EBelgeSchematronSidecar"
+  → Passed: 37, Failed: 0
+
+dotnet test --filter "FullyQualifiedName~EBelge"
+  → Passed: 166, Skipped: 82 (SQL Server gerektiren, önceden var olan integration testleri), Failed: 0
+```
+
+Docker imajı yeniden build edildi ve `docker run --read-only --tmpfs /tmp` ile çalıştırılıp
+gerçek `/health/ready` → `200` ve gerçek `/internal/schematron/validate` çağrısı →
+`{"valid":true,"violations":[]}` doğrulandı (container log'unda "self-test passed" satırı).
 
 ### Frontend hâlâ yapılmadı
 

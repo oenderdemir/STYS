@@ -3,13 +3,32 @@ using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
-public sealed record EBelgeArtefaktOlusturmaTalebi(int KurumId, int EBelgeKaydiId);
+/// <summary>
+/// Claim ile gelen lease bilgisini (KilitToken/KilitBitisZamaniUtc) taşır - artefakt işleme
+/// servisinin, sonucu KENDİ atomik transaction'ında kaydetmeden ÖNCE ownership'i YENİDEN
+/// doğrulaması için gereklidir (bkz. Faz 2B.6.1 görev md.1-2). Token LOGLANMAZ.
+/// </summary>
+public sealed record EBelgeArtefaktOlusturmaTalebi(
+    int KurumId,
+    int EBelgeKaydiId,
+    int OutboxMesajiId,
+    string KilitToken,
+    DateTime KilitBitisZamaniUtc);
 
+/// <summary>
+/// Artefakt oluşturma servisinin sonucu - HER değer artık (SahiplikKaybedildi hariç) servisin
+/// KENDİ atomik transaction'ında ilgili DB geçişini TAMAMLADIĞINI ifade eder (bkz. Faz 2B.6.1):
+/// <see cref="AtomikBasarili"/> ve <see cref="AtomikKaliciHata"/>, outbox'ı KENDİ İÇİNDE
+/// Tamamlandi/terminal Hata'ya geçirmiştir - çağıran (handler/IsleAsync) İKİNCİ bir DB geçişi
+/// YAPMAMALIDIR. <see cref="GeciciHata"/> İSTİSNADIR - geçici hatalarda EBelgeKaydi
+/// değişmediğinden mevcut (ayrı, retry-policy'li) TryFailAsync akışı KORUNUR.
+/// </summary>
 public enum EBelgeArtefaktOlusturmaSonucuTuru
 {
-    Basarili = 1,
+    AtomikBasarili = 1,
     GeciciHata = 2,
-    KaliciHata = 3
+    AtomikKaliciHata = 3,
+    SahiplikKaybedildi = 4
 }
 
 public sealed record EBelgeArtefaktOlusturmaSonucu
@@ -20,7 +39,7 @@ public sealed record EBelgeArtefaktOlusturmaSonucu
 
     public string? HataMesaji { get; }
 
-    public bool BasariliMi => SonucTuru == EBelgeArtefaktOlusturmaSonucuTuru.Basarili;
+    public bool BasariliMi => SonucTuru == EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili;
 
     private EBelgeArtefaktOlusturmaSonucu(
         EBelgeArtefaktOlusturmaSonucuTuru sonucTuru,
@@ -32,8 +51,8 @@ public sealed record EBelgeArtefaktOlusturmaSonucu
         HataMesaji = hataMesaji;
     }
 
-    public static EBelgeArtefaktOlusturmaSonucu Basarili()
-        => new(EBelgeArtefaktOlusturmaSonucuTuru.Basarili, null, null);
+    public static EBelgeArtefaktOlusturmaSonucu AtomikBasarili()
+        => new(EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili, null, null);
 
     public static EBelgeArtefaktOlusturmaSonucu GeciciHata(string hataKodu, string hataMesaji)
     {
@@ -41,11 +60,14 @@ public sealed record EBelgeArtefaktOlusturmaSonucu
         return new(EBelgeArtefaktOlusturmaSonucuTuru.GeciciHata, hataKodu, hataMesaji);
     }
 
-    public static EBelgeArtefaktOlusturmaSonucu KaliciHata(string hataKodu, string hataMesaji)
+    public static EBelgeArtefaktOlusturmaSonucu AtomikKaliciHata(string hataKodu, string hataMesaji)
     {
         EBelgeOutboxLeaseValidationHelper.ValidateHataAlanlari(hataKodu, hataMesaji);
-        return new(EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata, hataKodu, hataMesaji);
+        return new(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, hataKodu, hataMesaji);
     }
+
+    public static EBelgeArtefaktOlusturmaSonucu SahiplikKaybedildi()
+        => new(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, null, null);
 }
 
 public interface IEBelgeArtefaktOlusturmaService
@@ -80,8 +102,14 @@ public sealed class EBelgeArtefaktOlusturOutboxHandler : IEBelgeOutboxIsTuruHand
             throw new BaseException("Bu handler yalnız ArtefaktOlustur iş türünü destekler.", 400);
         }
 
+        // Gerçek lease token'ı (ve bitiş zamanı) aynen aktarılır - loglanmaz.
         var sonuc = await _artefaktOlusturmaService.OlusturAsync(
-            new EBelgeArtefaktOlusturmaTalebi(baglam.KurumId, baglam.EBelgeKaydiId),
+            new EBelgeArtefaktOlusturmaTalebi(
+                baglam.KurumId,
+                baglam.EBelgeKaydiId,
+                baglam.OutboxMesajiId,
+                baglam.KilitToken,
+                baglam.KilitBitisZamaniUtc),
             cancellationToken);
 
         if (sonuc is null)
@@ -91,12 +119,14 @@ public sealed class EBelgeArtefaktOlusturOutboxHandler : IEBelgeOutboxIsTuruHand
 
         return sonuc.SonucTuru switch
         {
-            EBelgeArtefaktOlusturmaSonucuTuru.Basarili
-                => EBelgeOutboxHandlerSonucu.Basarili(),
+            EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili
+                => EBelgeOutboxHandlerSonucu.AtomikTamamlandi(),
             EBelgeArtefaktOlusturmaSonucuTuru.GeciciHata
                 => EBelgeOutboxHandlerSonucu.Basarisiz(EBelgeOutboxHataSinifi.Gecici, sonuc.HataKodu!, sonuc.HataMesaji!),
-            EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata
-                => EBelgeOutboxHandlerSonucu.Basarisiz(EBelgeOutboxHataSinifi.Kalici, sonuc.HataKodu!, sonuc.HataMesaji!),
+            EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata
+                => EBelgeOutboxHandlerSonucu.AtomikTerminalHata(),
+            EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi
+                => EBelgeOutboxHandlerSonucu.SahiplikKaybedildi(),
             _ => throw new InvalidOperationException("Bilinmeyen artefakt sonucu.")
         };
     }

@@ -18,12 +18,21 @@ using Xunit;
 namespace STYS.Tests;
 
 /// <summary>
-/// Faz 2B.6 - GERÇEK SQL Server'a karşı, GERÇEK renderer + GERÇEK Java Saxon sidecar ile
+/// Faz 2B.6.1 - GERÇEK SQL Server'a karşı, GERÇEK renderer + GERÇEK Java Saxon sidecar ile
 /// EBelgeArtefaktOlusturmaService'in outbox tüketim akışını doğrular (bkz. görev md.17,
 /// "gerçek sidecar gereken en az bir outbox integration testi"). Snapshot içeriği, Faz 2B.5'te
 /// zaten uçtan uca doğrulanmış EBelgeUblRendererTestVerisi.GecerliSnapshot()'tan türetilir -
 /// snapshot ÜRETİMİ burada test EDİLMEZ (ayrı, önceki fazlarda test edildi); burada test edilen
 /// KONU, VAROLAN bir immutable snapshot kaydından artefakt üretme/kalıcılaştırma akışıdır.
+///
+/// Faz 2B.6.1 ile artık HER OlusturAsync çağrısı GERÇEK, GEÇERLİ bir outbox lease talep eder
+/// (bkz. EBelgeArtefaktOlusturmaTalebi.KilitToken/KilitBitisZamaniUtc) - bu yüzden testler önce
+/// GERÇEK bir outbox mesajı seed edip GERÇEK claim SQL'i üzerinden (EBelgeOutboxClaimLeaseService)
+/// bir lease alır, sonra o lease'in token'ıyla talep oluşturur. Lease süresinin dolması/başka bir
+/// worker tarafından reclaim edilmesi gibi durumlar, DB tarafının SYSUTCDATETIME() kullanması
+/// nedeniyle (bkz. EBelgeOutboxLeaseTransitionService - kasıtlı olarak değiştirilmedi) gerçek
+/// zamanda beklemek yerine satırın KilitBitisZamaniUtc/KilitToken alanları DOĞRUDAN SQL ile
+/// deterministik olarak manipüle edilerek simüle edilir (Task.Delay KULLANILMAZ).
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
@@ -69,7 +78,8 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
 
         // EBelgeArtifactlari, EBelgeKayitlari'na Restrict FK ile bağlıdır (bilinçli tasarım -
         // bkz. görev md.16, "cascade delete kullanma") - genel temizlik yardımcısı bunu
-        // BİLMEZ, bu yüzden artefaktlar ÖNCE burada, doğrudan silinir.
+        // BİLMEZ, bu yüzden artefaktlar ÖNCE burada, doğrudan silinir (soft-delete edilmiş
+        // satırlar dahil - IgnoreQueryFilters olmadan DELETE zaten filtre uygulamaz).
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"DELETE FROM [muhasebe].[EBelgeArtifactlari] WHERE [KurumId] = {_kurumId}");
 
@@ -147,7 +157,42 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         return eBelgeKaydi.Id;
     }
 
-    private EBelgeArtefaktOlusturmaService CreateService(StysAppDbContext dbContext)
+    /// <summary>Gerçek bir Bekliyor outbox mesajı seed eder ve GERÇEK claim SQL'i (UPDLOCK/READPAST) üzerinden geçerli bir lease alır.</summary>
+    private async Task<EBelgeOutboxClaimLeaseResultDto> SeedAndClaimOutboxAsync(StysAppDbContext dbContext, int eBelgeKaydiId, TimeSpan? leaseDuration = null)
+    {
+        dbContext.EBelgeOutboxMesajlari.Add(new EBelgeOutboxMesaji
+        {
+            KurumId = _kurumId,
+            EBelgeKaydiId = eBelgeKaydiId,
+            IsTuru = EBelgeOutboxIsTuru.ArtefaktOlustur,
+            Durum = EBelgeOutboxDurumu.Bekliyor,
+            DenemeSayisi = 0,
+        });
+        await dbContext.SaveChangesAsync();
+
+        var claimService = new EBelgeOutboxClaimLeaseService(dbContext);
+        var claim = await claimService.TryClaimNextAsync(leaseDuration ?? TimeSpan.FromMinutes(5));
+        Assert.NotNull(claim);
+        return claim!;
+    }
+
+    private static EBelgeArtefaktOlusturmaTalebi TalepFromClaim(EBelgeOutboxClaimLeaseResultDto claim, int kurumId, int eBelgeKaydiId)
+        => new(kurumId, eBelgeKaydiId, claim.OutboxMesajiId, claim.KilitToken, claim.KilitBitisZamaniUtc);
+
+    /// <summary>DB tarafındaki lease'i (SYSUTCDATETIME() tabanlı) deterministik biçimde GEÇMİŞE çeker - gerçek zamanda beklemek YERİNE.</summary>
+    private static Task BackdateLeaseExpiryAsync(StysAppDbContext dbContext, int outboxMesajiId) =>
+        dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[EBelgeOutboxMesajlari] SET [KilitBitisZamaniUtc] = DATEADD(MINUTE, -1, SYSUTCDATETIME()) WHERE [Id] = {outboxMesajiId}");
+
+    /// <summary>Satırın KilitToken'ını DEĞİŞTİREREK, mesajın (gerçekte olduğu gibi) BAŞKA bir worker tarafından reclaim edildiğini simüle eder.</summary>
+    private static Task SimulateOwnershipLostAsync(StysAppDbContext dbContext, int outboxMesajiId)
+    {
+        var yeniToken = Guid.NewGuid().ToString("D");
+        return dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[EBelgeOutboxMesajlari] SET [KilitToken] = {yeniToken} WHERE [Id] = {outboxMesajiId}");
+    }
+
+    private EBelgeArtefaktOlusturmaService CreateService(StysAppDbContext dbContext, TimeProvider? timeProvider = null)
     {
         if (_sidecarFixture.BaseUrl is null)
         {
@@ -158,89 +203,222 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             dbContext,
             new EBelgeCanonicalSnapshotV2Reader(),
             RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!),
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            timeProvider ?? TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
     }
 
-    // ---- Başarılı akış ----
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _zaman;
+        public FixedTimeProvider(DateTimeOffset zaman) => _zaman = zaman;
+        public override DateTimeOffset GetUtcNow() => _zaman;
+    }
+
+    /// <summary>Gerçek renderer'ı sarar, yalnız beyan edilen hash'i BOZAR - runtime hash yeniden doğrulamasını (md.7) tetiklemek için.</summary>
+    private sealed class HashBozanRendererDecorator : IEBelgeUblRenderer
+    {
+        private readonly IEBelgeUblRenderer _inner;
+        public HashBozanRendererDecorator(IEBelgeUblRenderer inner) => _inner = inner;
+
+        public async Task<EBelgeUblRenderSonucu> RenderAsync(EBelgeCanonicalSnapshotV2 snapshot, CancellationToken cancellationToken)
+        {
+            var sonuc = await _inner.RenderAsync(snapshot, cancellationToken);
+            return sonuc with { UnsignedUblSha256 = new string('f', 64) };
+        }
+    }
+
+    // ---- Başarılı akış (senaryo 1, 15) ----
 
     [IntegrationFact]
-    public async Task GercekV2SnapshotGercekSidecarIleArtefaktUretirVeHashZinciriDogrulanir()
+    public async Task GecerliLeaseIleArtefaktEBelgeKaydiVeOutboxTekTransactionIleTamamlanir()
     {
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
 
-        var service = CreateService(dbContext);
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId));
+        var sabitZaman = new DateTimeOffset(2026, 3, 4, 10, 0, 0, TimeSpan.Zero);
+        var service = CreateService(dbContext, new FixedTimeProvider(sabitZaman));
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
 
         Assert.NotNull(sonuc);
         Assert.True(sonuc!.BasariliMi, $"{sonuc.SonucTuru}: {sonuc.HataKodu} {sonuc.HataMesaji}");
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili, sonuc.SonucTuru);
 
         await using var verifyCtx = CreateDbContext();
         var artifact = await verifyCtx.EBelgeArtifactlari.AsNoTracking().SingleAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
         var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
         var snapshot = await verifyCtx.EBelgeSnapshots.AsNoTracking().SingleAsync(x => x.EBelgeKaydiId == eBelgeKaydiId);
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
 
         Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum);
         Assert.Equal(snapshot.CanonicalSha256, artifact.KaynakSnapshotSha256);
+        // İçerik EXACT byte'lar üzerinden saklanır - yeniden serialize edilmemiştir (senaryo 15).
         Assert.Equal(Convert.ToHexString(SHA256.HashData(artifact.Icerik)), artifact.ArtifactSha256);
         Assert.Equal("application/xml", artifact.MimeType);
         Assert.EndsWith(".xml", artifact.DosyaAdi, StringComparison.Ordinal);
         Assert.DoesNotContain("/", artifact.DosyaAdi, StringComparison.Ordinal);
         Assert.DoesNotContain("\\", artifact.DosyaAdi, StringComparison.Ordinal);
+        Assert.Equal(sabitZaman.UtcDateTime, artifact.OlusturulmaZamaniUtc);
+
+        // Outbox, artefakt+EBelgeKaydi ile AYNI atomik transaction'da Tamamlandi'ya geçmiştir
+        // (senaryo 1) - lease alanları temizlenmiştir.
+        Assert.Equal(EBelgeOutboxDurumu.Tamamlandi, outbox.Durum);
+        Assert.Null(outbox.KilitToken);
+        Assert.Null(outbox.KilitBitisZamaniUtc);
     }
 
     [IntegrationFact]
-    public async Task IdempotentTekrarIslemeIkinciArtefaktOlusturmaz()
+    public async Task OnceOnceSeedliHashEslesenMevcutArtefaktIdempotentBasariylaTamamlanirIkinciSatirEklenmez()
     {
+        // [muhasebe].[EBelgeOutboxMesajlari] üzerinde (EBelgeKaydiId, IsTuru) BENZERSİZ indeksi
+        // olduğundan, aynı e-belge kaydı için İKİNCİ bir outbox mesajı seed EDİLEMEZ - bu yüzden
+        // idempotent-eşleşme (senaryo 12'nin "hash zinciri eşleşiyorsa" dalı) burada, render
+        // SONUCUYLA TAM eşleşen bir artefaktı ÖNCEDEN (ör. bir veri taşıma/backfill senaryosunu
+        // temsilen) seed ederek doğrulanır - renderer DETERMİNİSTİK olduğundan (bkz. Faz 2B.5)
+        // gerçek bir render çağrısıyla üretilen hash, servis içindeki render ile AYNI olacaktır.
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
 
-        var service1 = CreateService(dbContext);
-        var sonuc1 = await service1.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId));
-        Assert.True(sonuc1!.BasariliMi);
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
 
-        await using var dbContext2 = CreateDbContext();
-        var service2 = CreateService(dbContext2);
-        var sonuc2 = await service2.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId));
-        Assert.True(sonuc2!.BasariliMi);
+        var v2Snapshot = EBelgeUblRendererTestVerisi.GecerliSnapshot();
+        var beklenenRenderSonucu = await RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!)
+            .RenderAsync(v2Snapshot, CancellationToken.None);
+        var snapshotEntity = await dbContext.EBelgeSnapshots.AsNoTracking().SingleAsync(x => x.EBelgeKaydiId == eBelgeKaydiId);
+        var xmlBytes = beklenenRenderSonucu.UnsignedUblUtf8.ToArray();
+
+        dbContext.EBelgeArtifactlari.Add(new EBelgeArtifact
+        {
+            KurumId = _kurumId,
+            EBelgeKaydiId = eBelgeKaydiId,
+            ArtifactTipi = EBelgeArtifactTipi.UblXml,
+            ArtifactAsamasi = EBelgeArtifactAsamasi.Unsigned,
+            RuleSetId = beklenenRenderSonucu.KuralSetiKimligi,
+            SnapshotSchemaVersion = int.Parse(EBelgeCanonicalSnapshotV2Reader.SupportedSnapshotSchemaVersion),
+            KaynakSnapshotSha256 = snapshotEntity.CanonicalSha256,
+            ArtifactSha256 = beklenenRenderSonucu.UnsignedUblSha256,
+            Icerik = xmlBytes,
+            MimeType = "application/xml",
+            DosyaAdi = "onceden-seedli.xml",
+            OlusturulmaZamaniUtc = DateTime.UtcNow,
+        });
+        await dbContext.SaveChangesAsync();
+
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili, sonuc!.SonucTuru);
 
         await using var verifyCtx = CreateDbContext();
         var sayi = await verifyCtx.EBelgeArtifactlari.CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
-        Assert.Equal(1, sayi);
+        Assert.Equal(1, sayi); // ikinci (kendi) satır EKLENMEDİ - mevcut satır aynen kaldı
+        var artifact = await verifyCtx.EBelgeArtifactlari.AsNoTracking().SingleAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
+        Assert.Equal("onceden-seedli.xml", artifact.DosyaAdi); // ORİJİNAL satır - üzerine YAZILMADI
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Tamamlandi, outbox.Durum);
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum);
     }
 
     [IntegrationFact]
-    public async Task IkiParalelIstekTekArtefaktUretir()
+    public async Task AyniLeaseIleEszamanliIkiYazmaDenemesindeYalnizBiriBasariliOlurArtefaktCoklanmaz()
     {
         await using var seedCtx = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(seedCtx);
+        var claim = await SeedAndClaimOutboxAsync(seedCtx, eBelgeKaydiId);
 
         await using var ctx1 = CreateDbContext();
         await using var ctx2 = CreateDbContext();
         var service1 = CreateService(ctx1);
         var service2 = CreateService(ctx2);
 
-        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId);
+        // Aynı GEÇERLİ lease token'ıyla eşzamanlı iki yazma denemesi - IsOwnedAsync'in UPDLOCK'u
+        // satırı transaction commit/rollback olana kadar KİLİTLER (bkz. görev md.2), bu yüzden
+        // KAZANAN transaction commit olup satırı Tamamlandi/KilitToken=NULL yaptıktan SONRA
+        // açılan ikinci ownership kontrolü artık Durum=Isleniyor GÖRMEZ ve GÜVENLE
+        // SahiplikKaybedildi döner - iki kez artefakt YAZILMAZ, exception FIRLATILMAZ.
+        var talep = TalepFromClaim(claim, _kurumId, eBelgeKaydiId);
         var sonuclar = await Task.WhenAll(
             service1.OlusturAsync(talep),
             service2.OlusturAsync(talep));
 
-        Assert.All(sonuclar, s => Assert.True(s!.BasariliMi, $"{s!.SonucTuru}: {s.HataKodu} {s.HataMesaji}"));
+        Assert.Single(sonuclar, s => s!.SonucTuru == EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili);
+        Assert.Single(sonuclar, s => s!.SonucTuru == EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi);
 
         await using var verifyCtx = CreateDbContext();
         var sayi = await verifyCtx.EBelgeArtifactlari.CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
         Assert.Equal(1, sayi);
     }
 
-    // ---- Kalıcı hatalar ----
+    // ---- Lease sahipliği (senaryo 3, 4, 5, 6, 7) ----
 
     [IntegrationFact]
-    public async Task DesteklenmeyenSnapshotSemaSurumuKaliciHataOlurArtefaktOlusmaz()
+    public async Task LeaseSuresiRenderSirasindaDolmussaArtefaktOlusturulmazVeKayitDegismez()
     {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        // Render'ın DB dışı, uzun sürebilen bölümü sırasında lease'in dolduğunu simüle eder.
+        await BackdateLeaseExpiryAsync(dbContext, claim.OutboxMesajiId);
+
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId));
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kayit.Durum);
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, outbox.Durum);
+    }
+
+    [IntegrationFact]
+    public async Task ReclaimEdilmisMesajdaEskiWorkerYazamazSadeceYeniSahipYazar()
+    {
+        await using var seedCtx = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(seedCtx);
+        var eskiClaim = await SeedAndClaimOutboxAsync(seedCtx, eBelgeKaydiId);
+
+        // Eski worker'ın lease'i dolar, mesaj İKİNCİ bir worker tarafından GERÇEKTEN reclaim
+        // edilir (yeni, farklı bir KilitToken alır) - senaryo 4/5/6/7.
+        await BackdateLeaseExpiryAsync(seedCtx, eskiClaim.OutboxMesajiId);
+
+        await using var reclaimCtx = CreateDbContext();
+        var yeniClaim = await new EBelgeOutboxClaimLeaseService(reclaimCtx).TryClaimNextAsync(TimeSpan.FromMinutes(5));
+        Assert.NotNull(yeniClaim);
+        Assert.Equal(eskiClaim.OutboxMesajiId, yeniClaim!.OutboxMesajiId);
+        Assert.NotEqual(eskiClaim.KilitToken, yeniClaim.KilitToken);
+
+        await using var eskiWorkerCtx = CreateDbContext();
+        await using var yeniWorkerCtx = CreateDbContext();
+        var eskiSonuc = await CreateService(eskiWorkerCtx).OlusturAsync(TalepFromClaim(eskiClaim, _kurumId, eBelgeKaydiId));
+        var yeniSonuc = await CreateService(yeniWorkerCtx).OlusturAsync(TalepFromClaim(yeniClaim, _kurumId, eBelgeKaydiId));
+
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, eskiSonuc!.SonucTuru);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili, yeniSonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        var sayi = await verifyCtx.EBelgeArtifactlari.CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
+        Assert.Equal(1, sayi);
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum);
+    }
+
+    [IntegrationFact]
+    public async Task KaliciHataYolundaSahiplikKaybedilmisseHicbirSeyDegismez()
+    {
+        // Kalıcı hataya (desteklenmeyen snapshot şema sürümü) düşecek bir kayıt seed edilir.
         await using var dbContext = CreateDbContext();
         var satisBelgesiId = await CreateSatisBelgesiIdAsync(dbContext);
 
-        await using var seedCtx = CreateDbContext();
         var eBelgeKaydi = new EBelgeKaydi
         {
             KurumId = _kurumId,
@@ -249,13 +427,12 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             EBelgeKanali = EBelgeKanali.EArsiv,
             Durum = EBelgeKaydiDurumu.SnapshotHazir,
         };
-        seedCtx.EBelgeKayitlari.Add(eBelgeKaydi);
-        await seedCtx.SaveChangesAsync();
+        dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
+        await dbContext.SaveChangesAsync();
 
-        // V1 benzeri, geçersiz/desteklenmeyen bir "canonical" gövde - şema sürümü "2" değil.
         const string v1BenzeriJson = "{\"surum\":\"1\"}";
         var v1Bytes = Encoding.UTF8.GetBytes(v1BenzeriJson);
-        seedCtx.EBelgeSnapshots.Add(new EBelgeSnapshot
+        dbContext.EBelgeSnapshots.Add(new EBelgeSnapshot
         {
             KurumId = _kurumId,
             EBelgeKaydiId = eBelgeKaydi.Id,
@@ -264,25 +441,34 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             CanonicalJson = v1BenzeriJson,
             CanonicalSha256 = Convert.ToHexString(SHA256.HashData(v1Bytes)),
         });
-        await seedCtx.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
 
-        var service = CreateService(seedCtx);
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydi.Id));
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydi.Id);
 
-        Assert.NotNull(sonuc);
-        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata, sonuc!.SonucTuru);
+        // Sahiplik, render ile atomik hata transaction'ı arasında (başka bir worker reclaim
+        // etmiş gibi) kaybedilir.
+        await SimulateOwnershipLostAsync(dbContext, claim.OutboxMesajiId);
+
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydi.Id));
+
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, sonuc!.SonucTuru);
 
         await using var verifyCtx = CreateDbContext();
-        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydi.Id));
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydi.Id);
+        Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kayit.Durum); // KaliciHata'ya GEÇMEDİ
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, outbox.Durum); // hâlâ Isleniyor - Hata'ya geçmedi
     }
 
+    // ---- Kalıcı hatalar (senaryo 9) ----
+
     [IntegrationFact]
-    public async Task SnapshotHashUyusmazligiKaliciHataOlur()
+    public async Task DesteklenmeyenSnapshotSemaSurumuAtomikKaliciHataOlurArtefaktOlusmaz()
     {
         await using var dbContext = CreateDbContext();
         var satisBelgesiId = await CreateSatisBelgesiIdAsync(dbContext);
 
-        await using var seedCtx = CreateDbContext();
         var eBelgeKaydi = new EBelgeKaydi
         {
             KurumId = _kurumId,
@@ -291,14 +477,64 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             EBelgeKanali = EBelgeKanali.EArsiv,
             Durum = EBelgeKaydiDurumu.SnapshotHazir,
         };
-        seedCtx.EBelgeKayitlari.Add(eBelgeKaydi);
-        await seedCtx.SaveChangesAsync();
+        dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
+        await dbContext.SaveChangesAsync();
+
+        // V1 benzeri, geçersiz/desteklenmeyen bir "canonical" gövde - şema sürümü "2" değil.
+        const string v1BenzeriJson = "{\"surum\":\"1\"}";
+        var v1Bytes = Encoding.UTF8.GetBytes(v1BenzeriJson);
+        dbContext.EBelgeSnapshots.Add(new EBelgeSnapshot
+        {
+            KurumId = _kurumId,
+            EBelgeKaydiId = eBelgeKaydi.Id,
+            BelgeVersiyonu = 1,
+            SnapshotSchemaVersion = "1",
+            CanonicalJson = v1BenzeriJson,
+            CanonicalSha256 = Convert.ToHexString(SHA256.HashData(v1Bytes)),
+        });
+        await dbContext.SaveChangesAsync();
+
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydi.Id);
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydi.Id));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydi.Id));
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydi.Id);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblKaliciHata, kayit.Durum);
+
+        // Outbox, EBelgeKaydi ile AYNI atomik transaction'da terminal Hata'ya geçmiştir - retry PLANLANMAMIŞTIR.
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Hata, outbox.Durum);
+        Assert.Null(outbox.SonrakiDenemeZamaniUtc);
+        Assert.Null(outbox.KilitToken);
+    }
+
+    [IntegrationFact]
+    public async Task SnapshotHashUyusmazligiAtomikKaliciHataOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        var satisBelgesiId = await CreateSatisBelgesiIdAsync(dbContext);
+
+        var eBelgeKaydi = new EBelgeKaydi
+        {
+            KurumId = _kurumId,
+            SatisBelgesiId = satisBelgesiId,
+            EBelgeUuid = Guid.NewGuid().ToString("D"),
+            EBelgeKanali = EBelgeKanali.EArsiv,
+            Durum = EBelgeKaydiDurumu.SnapshotHazir,
+        };
+        dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
+        await dbContext.SaveChangesAsync();
 
         var v2Snapshot = EBelgeUblRendererTestVerisi.GecerliSnapshot();
         var utf8Bytes = JsonSerializer.SerializeToUtf8Bytes(v2Snapshot, EBelgeCanonicalSnapshotV2Reader.CanonicalJsonOptions);
         var json = Encoding.UTF8.GetString(utf8Bytes);
 
-        seedCtx.EBelgeSnapshots.Add(new EBelgeSnapshot
+        dbContext.EBelgeSnapshots.Add(new EBelgeSnapshot
         {
             KurumId = _kurumId,
             EBelgeKaydiId = eBelgeKaydi.Id,
@@ -307,44 +543,95 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             CanonicalJson = json,
             CanonicalSha256 = new string('0', 64), // kasıtlı olarak YANLIŞ hash
         });
-        await seedCtx.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
 
-        var service = CreateService(seedCtx);
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydi.Id));
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydi.Id);
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydi.Id));
 
         Assert.NotNull(sonuc);
-        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
         Assert.Equal(EBelgeCanonicalSnapshotException.SafeErrorCode, sonuc.HataKodu);
     }
 
     [IntegrationFact]
-    public async Task EBelgeKaydiBulunamazsaKaliciHataOlur()
-    {
-        await using var dbContext = CreateDbContext();
-        var service = CreateService(dbContext);
-
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, int.MaxValue - 1));
-
-        Assert.NotNull(sonuc);
-        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata, sonuc!.SonucTuru);
-        Assert.Equal("EBELGE_KAYDI_BULUNAMADI", sonuc.HataKodu);
-    }
-
-    [IntegrationFact]
-    public async Task YanlisKurumIdIleEBelgeKaydiBulunamaz()
+    public async Task EBelgeKaydiBulunamazsaAtomikKaliciHataOlur()
     {
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        // Herhangi geçerli bir claim - talepteki EBelgeKaydiId ise KASITLI olarak var OLMAYAN bir id.
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
 
         var service = CreateService(dbContext);
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId + 999_000, eBelgeKaydiId));
+        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, int.MaxValue - 1, claim.OutboxMesajiId, claim.KilitToken, claim.KilitBitisZamaniUtc);
+        var sonuc = await service.OlusturAsync(talep);
 
         Assert.NotNull(sonuc);
-        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
         Assert.Equal("EBELGE_KAYDI_BULUNAMADI", sonuc.HataKodu);
+
+        await using var verifyCtx = CreateDbContext();
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Hata, outbox.Durum);
+        Assert.Null(outbox.SonrakiDenemeZamaniUtc);
     }
 
-    // ---- Tam outbox akışı (handler + işleme servisi ile) ----
+    [IntegrationFact]
+    public async Task YanlisKurumIdIleTalepSahiplikKaybedildiDonerVeHicbirSeyDegismez()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        var service = CreateService(dbContext);
+        // Yanlış KurumId, gerçek claim'in satırındaki KurumId ile eşleşmez - ownership katmanı
+        // (multi-tenant izolasyonu dahil) bunu "kayıt bulunamadı" aşamasına gelmeden REDDEDER.
+        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId + 999_000, eBelgeKaydiId, claim.OutboxMesajiId, claim.KilitToken, claim.KilitBitisZamaniUtc);
+        var sonuc = await service.OlusturAsync(talep);
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId));
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, outbox.Durum);
+    }
+
+    // ---- Runtime hash doğrulaması (senaryo 14) ----
+
+    [IntegrationFact]
+    public async Task RuntimeHashUyusmazligiAtomikKaliciHataUretirArtefaktOlusmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        var gercekRenderer = RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!);
+        var service = new EBelgeArtefaktOlusturmaService(
+            dbContext,
+            new EBelgeCanonicalSnapshotV2Reader(),
+            new HashBozanRendererDecorator(gercekRenderer),
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
+
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
+        Assert.Equal("EBELGE_ARTIFACT_HASH_MISMATCH", sonuc.HataKodu);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId));
+    }
+
+    // ---- Tam outbox akışı (handler + işleme servisi ile, gerçek sidecar) (senaryo 18) ----
 
     [IntegrationFact]
     public async Task TamOutboxAkisiClaimIslemeVeTamamlamaBirlikteCalisir()
@@ -395,8 +682,9 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
     {
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
         var service = CreateService(dbContext);
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId));
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
         Assert.True(sonuc!.BasariliMi);
 
         await using var readCtx = CreateDbContext();
@@ -410,10 +698,10 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         Assert.Null(yanlisTenant);
     }
 
-    // ---- Geçici hatalar ----
+    // ---- Geçici hatalar (senaryo 11) ----
 
     [IntegrationFact]
-    public async Task SidecarErisilemiyorsaGeciciHataOlurArtefaktOlusmaz()
+    public async Task SidecarErisilemiyorsaGeciciHataOlurArtefaktOlusmazVeSahiplikKontroluGerekmez()
     {
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
@@ -426,9 +714,15 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         var schematronValidator = new SaxonSidecarEBelgeSchematronValidator(http);
         var renderer = new EBelgeUblRenderer(kuralSeti, xsdValidator, schematronValidator);
         var service = new EBelgeArtefaktOlusturmaService(
-            dbContext, new EBelgeCanonicalSnapshotV2Reader(), renderer, NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
+            dbContext, new EBelgeCanonicalSnapshotV2Reader(), renderer,
+            new EBelgeOutboxLeaseTransitionService(dbContext), TimeProvider.System,
+            NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId));
+        // Geçici hata yolu (Gecici) EBelgeKaydi'yı hiç DEĞİŞTİRMEDİĞİNDEN, atomik transaction/lease
+        // sahiplik doğrulaması GEREKMEZ (bkz. görev md.5) - bu yüzden talep KASITLI OLARAK gerçek
+        // olmayan bir OutboxMesajiId/KilitToken taşır ve yine de aynı sonuca ulaşılmalıdır.
+        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, -1, "gecersiz-ama-kullanilmayacak-token", DateTime.UtcNow.AddMinutes(5));
+        var sonuc = await service.OlusturAsync(talep);
 
         Assert.NotNull(sonuc);
         Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.GeciciHata, sonuc!.SonucTuru);
@@ -440,10 +734,10 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kayit.Durum); // geçici hatada EBelgeKaydi.Durum DEĞİŞMEZ
     }
 
-    // ---- İdempotency çakışması ----
+    // ---- İdempotency çakışması / soft-delete (senaryo 12, 13) ----
 
     [IntegrationFact]
-    public async Task FarkliHashliMevcutArtefaktIdempotencyConflictUretir()
+    public async Task FarkliHashliMevcutArtefaktAtomikIdempotencyConflictUretir()
     {
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
@@ -467,15 +761,65 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         });
         await dbContext.SaveChangesAsync();
 
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
         var service = CreateService(dbContext);
-        var sonuc = await service.OlusturAsync(new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId));
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
 
         Assert.NotNull(sonuc);
-        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.KaliciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
         Assert.Equal(EBelgeArtifactIdempotencyConflictException.SafeErrorCode, sonuc.HataKodu);
 
         await using var verifyCtx = CreateDbContext();
         var sayi = await verifyCtx.EBelgeArtifactlari.CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
         Assert.Equal(1, sayi); // ikinci (rakip) satır EKLENMEDİ - yalnız orijinal "yabancı" satır kaldı
+    }
+
+    [IntegrationFact]
+    public async Task SoftDeleteEdilmisMevcutArtefaktAtomikIdempotencyConflictUretirTekrarDenemeAtanmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+
+        // Önce (aynı benzersiz anahtarlı) bir artefakt eklenir, ardından - EF'in normal
+        // Modified/Deleted yollarını BİLEREK atlayarak (EBelgeArtifact immutable - bkz.
+        // StysAppDbContext.ApplyAuditInfo) - DOĞRUDAN SQL ile soft-delete edilir. Mali/yasal
+        // artefaktlar SİLİNEMEZ sözleşmesi nedeniyle bu durum veri bütünlüğü ihlali sayılır
+        // (bkz. görev md.6) - sessiz başarı YOK.
+        dbContext.EBelgeArtifactlari.Add(new EBelgeArtifact
+        {
+            KurumId = _kurumId,
+            EBelgeKaydiId = eBelgeKaydiId,
+            ArtifactTipi = EBelgeArtifactTipi.UblXml,
+            ArtifactAsamasi = EBelgeArtifactAsamasi.Unsigned,
+            RuleSetId = "eski-kural-seti",
+            SnapshotSchemaVersion = 2,
+            KaynakSnapshotSha256 = new string('a', 64),
+            ArtifactSha256 = new string('b', 64),
+            Icerik = "<eski/>"u8.ToArray(),
+            MimeType = "application/xml",
+            DosyaAdi = "eski.xml",
+            OlusturulmaZamaniUtc = DateTime.UtcNow,
+        });
+        await dbContext.SaveChangesAsync();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [IsDeleted] = 1 WHERE [EBelgeKaydiId] = {eBelgeKaydiId}");
+
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeArtifactIdempotencyConflictException.SafeErrorCode, sonuc.HataKodu);
+
+        await using var verifyCtx = CreateDbContext();
+        // IgnoreQueryFilters KULLANILMADAN normal sorgu, soft-delete edilmiş satırı zaten
+        // GÖRMEZ - global filtre olmadan da tekrar sayarak "yeni satır eklenmedi"ği doğrulanır.
+        var sayiFiltresiz = await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
+        Assert.Equal(1, sayiFiltresiz); // yeni satır EKLENMEDİ
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Hata, outbox.Durum);
+        Assert.Null(outbox.SonrakiDenemeZamaniUtc); // KALICI - geçici retry ATANMADI (senaryo 12)
     }
 }

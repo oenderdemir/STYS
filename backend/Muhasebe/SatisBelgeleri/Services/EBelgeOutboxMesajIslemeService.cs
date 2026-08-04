@@ -24,11 +24,40 @@ public sealed record EBelgeOutboxIslemBaglami(
     int KurumId,
     int EBelgeKaydiId,
     EBelgeOutboxIsTuru IsTuru,
-    int DenemeSayisi);
+    int DenemeSayisi,
+    string KilitToken,
+    DateTime KilitBitisZamaniUtc);
+
+/// <summary>
+/// Handler'ın outbox geçişini KENDİSİ mi yaptığını (Atomik*), yoksa
+/// <see cref="EBelgeOutboxMesajIslemeService"/>'in AYRI bir çağrıyla mı yapması gerektiğini
+/// (Basarili/Basarisiz - ESKİ, hâlâ geçerli davranış) type-safe biçimde ayırır (bkz. Faz 2B.6.1
+/// görev md.3 - "başarılı artifact handler'ından sonra ikinci kez TryCompleteAsync çağrılmamalı").
+/// </summary>
+public enum EBelgeOutboxHandlerSonucTuru
+{
+    /// <summary>Handler kendi işini bitirdi ama outbox geçişini YAPMADI - IsleAsync ZATEN yaptığı gibi TryCompleteAsync'i KENDİSİ çağırmalı (mevcut/eski davranış, DİĞER handler'lar için korunur).</summary>
+    Basarili = 1,
+
+    /// <summary>Handler, outbox'ı KENDİ transaction'ında ZATEN Tamamlandi'ya geçirdi - IsleAsync BAŞKA HİÇBİR DB çağrısı yapmadan Tamamlandi sonucunu döner.</summary>
+    AtomikTamamlandi = 2,
+
+    /// <summary>Handler, outbox'ı KENDİ transaction'ında ZATEN terminal Hata'ya geçirdi (kalıcı) - IsleAsync BAŞKA HİÇBİR DB çağrısı yapmadan TerminalHata sonucunu döner.</summary>
+    AtomikTerminalHata = 3,
+
+    /// <summary>ESKİ/mevcut davranış - IsleAsync, retry policy'yi uygulayıp TryFailAsync'i KENDİSİ çağırır.</summary>
+    Basarisiz = 4,
+
+    /// <summary>Handler, işlem sırasında (kendi ownership kontrolüyle) lease'in ARTIK bu çağırana ait OLMADIĞINI tespit etti - IsleAsync BAŞKA HİÇBİR DB çağrısı yapmadan SahiplikKaybedildi döner.</summary>
+    SahiplikKaybedildi = 5
+}
 
 public sealed record EBelgeOutboxHandlerSonucu
 {
-    public bool BasariliMi { get; }
+    public EBelgeOutboxHandlerSonucTuru SonucTuru { get; }
+
+    /// <summary>Basarili VEYA AtomikTamamlandi - genel "işlem iş mantığı açısından başarılı" göstergesi.</summary>
+    public bool BasariliMi => SonucTuru is EBelgeOutboxHandlerSonucTuru.Basarili or EBelgeOutboxHandlerSonucTuru.AtomikTamamlandi;
 
     public EBelgeOutboxHataSinifi? HataSinifi { get; }
 
@@ -36,16 +65,25 @@ public sealed record EBelgeOutboxHandlerSonucu
 
     public string? HataMesaji { get; }
 
-    private EBelgeOutboxHandlerSonucu(bool basariliMi, EBelgeOutboxHataSinifi? hataSinifi, string? hataKodu, string? hataMesaji)
+    private EBelgeOutboxHandlerSonucu(EBelgeOutboxHandlerSonucTuru sonucTuru, EBelgeOutboxHataSinifi? hataSinifi, string? hataKodu, string? hataMesaji)
     {
-        BasariliMi = basariliMi;
+        SonucTuru = sonucTuru;
         HataSinifi = hataSinifi;
         HataKodu = hataKodu;
         HataMesaji = hataMesaji;
     }
 
     public static EBelgeOutboxHandlerSonucu Basarili()
-        => new(true, null, null, null);
+        => new(EBelgeOutboxHandlerSonucTuru.Basarili, null, null, null);
+
+    public static EBelgeOutboxHandlerSonucu AtomikTamamlandi()
+        => new(EBelgeOutboxHandlerSonucTuru.AtomikTamamlandi, null, null, null);
+
+    public static EBelgeOutboxHandlerSonucu AtomikTerminalHata()
+        => new(EBelgeOutboxHandlerSonucTuru.AtomikTerminalHata, null, null, null);
+
+    public static EBelgeOutboxHandlerSonucu SahiplikKaybedildi()
+        => new(EBelgeOutboxHandlerSonucTuru.SahiplikKaybedildi, null, null, null);
 
     public static EBelgeOutboxHandlerSonucu Basarisiz(EBelgeOutboxHataSinifi hataSinifi, string hataKodu, string hataMesaji)
     {
@@ -55,7 +93,7 @@ public sealed record EBelgeOutboxHandlerSonucu
         }
 
         EBelgeOutboxLeaseValidationHelper.ValidateHataAlanlari(hataKodu, hataMesaji);
-        return new(false, hataSinifi, hataKodu, hataMesaji);
+        return new(EBelgeOutboxHandlerSonucTuru.Basarisiz, hataSinifi, hataKodu, hataMesaji);
     }
 }
 
@@ -144,7 +182,9 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
             claim.KurumId,
             claim.EBelgeKaydiId,
             claim.IsTuru,
-            claim.DenemeSayisi);
+            claim.DenemeSayisi,
+            normalizedToken,
+            claim.KilitBitisZamaniUtc);
 
         EBelgeOutboxHandlerSonucu handlerSonucu;
         try
@@ -160,20 +200,33 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
             return await HandleBeklenmeyenHandlerExceptionAsync(claim, normalizedToken, cancellationToken, ex);
         }
 
-        if (handlerSonucu.BasariliMi)
+        switch (handlerSonucu.SonucTuru)
         {
-            var completeEdildi = await _transitionService.TryCompleteAsync(
-                claim.OutboxMesajiId,
-                claim.KurumId,
-                normalizedToken,
-                cancellationToken);
+            case EBelgeOutboxHandlerSonucTuru.AtomikTamamlandi:
+                // Handler outbox geçişini KENDİ transaction'ında ZATEN yaptı - burada İKİNCİ
+                // bir TryCompleteAsync çağrısı YAPILMAZ (bkz. Faz 2B.6.1 görev md.3).
+                return EBelgeOutboxIslemeSonucu.Tamamlandi();
 
-            return completeEdildi
-                ? EBelgeOutboxIslemeSonucu.Tamamlandi()
-                : EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+            case EBelgeOutboxHandlerSonucTuru.AtomikTerminalHata:
+                return EBelgeOutboxIslemeSonucu.TerminalHata();
+
+            case EBelgeOutboxHandlerSonucTuru.SahiplikKaybedildi:
+                return EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+
+            case EBelgeOutboxHandlerSonucTuru.Basarili:
+                var completeEdildi = await _transitionService.TryCompleteAsync(
+                    claim.OutboxMesajiId,
+                    claim.KurumId,
+                    normalizedToken,
+                    cancellationToken);
+
+                return completeEdildi
+                    ? EBelgeOutboxIslemeSonucu.Tamamlandi()
+                    : EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+
+            default:
+                return await HandleBasarisizHandlerSonucuAsync(claim, normalizedToken, handlerSonucu, cancellationToken);
         }
-
-        return await HandleBasarisizHandlerSonucuAsync(claim, normalizedToken, handlerSonucu, cancellationToken);
     }
 
     private async Task<EBelgeOutboxIslemeSonucu> HandleDesteklenmeyenIsTuruAsync(

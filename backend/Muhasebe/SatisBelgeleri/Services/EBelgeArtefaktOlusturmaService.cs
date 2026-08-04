@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
@@ -14,16 +15,15 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 /// EBelgeKaydi/EBelgeSnapshot kaydından V2 canonical snapshot'ı okur, GERÇEK
 /// <see cref="IEBelgeUblRenderer"/>'ı (yerel XSD + gerçek Java Saxon sidecar Schematron
 /// doğrulaması dahil) çağırır ve başarılı sonucu immutable <see cref="EBelgeArtifact"/> olarak
-/// kalıcılaştırır (bkz. Faz 2B.6 görev md.6-8).
+/// kalıcılaştırır (bkz. Faz 2B.6.1 görev - lease ownership ve atomik sonuç kaydı düzeltmesi).
 ///
-/// Üç aşamalı akış (md.7): (1) kısa okuma - snapshot + mevcut artefakt kontrolü, AÇIK transaction
-/// YOKTUR; (2) DB DIŞI render (sidecar HTTP çağrısı dahil) - hiçbir satır kilidi TUTULMAZ; (3)
-/// kısa yazma - artefakt insert + EBelgeKaydi.Durum güncellemesi TEK SaveChangesAsync'te (tek
-/// implicit transaction). Outbox TAMAMLAMA geçişi (TryCompleteAsync) bu servisin DIŞINDA, ayrı
-/// bir lease-token-korumalı çağrıdır (mevcut mimari - bkz. EBelgeOutboxMesajIslemeService); bu
-/// servis o adımı bilerek İÇERMEZ. Bu ayrımın güvenliği İDEMPOTENCY ile sağlanır: artefakt zaten
-/// varsa (ikinci worker veya tamamlama başarısız olup mesaj yeniden işlendiyse) yeniden insert
-/// DENENMEZ, aynı sonuç (Basarili) döner - bkz. görev md.6 son cümle.
+/// Kesin akış: claim → DB DIŞI render (satır kilidi TUTULMAZ) → lease YENİDEN doğrulama →
+/// artefakt + EBelgeKaydi + outbox TEK atomik transaction. Başarı VE kalıcı hata yolları,
+/// KENDİ transaction'larında outbox geçişini de (TryCompleteAsync/TryFailAsync üzerinden,
+/// AYNI ambient transaction içinde) TAMAMLAR - <see cref="EBelgeOutboxMesajIslemeService"/>
+/// bu durumda İKİNCİ bir geçiş çağrısı YAPMAZ (bkz. EBelgeArtefaktOlusturmaSonucuTuru.Atomik*).
+/// Yalnız GEÇİCİ hatalar (EBelgeKaydi'yi hiç değiştirmediğinden) ESKİ, ayrı/retry-policy'li
+/// TryFailAsync akışını kullanmaya devam eder.
 /// </summary>
 public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaService
 {
@@ -35,17 +35,23 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     private readonly StysAppDbContext _dbContext;
     private readonly IEBelgeCanonicalSnapshotV2Reader _snapshotReader;
     private readonly IEBelgeUblRenderer _renderer;
+    private readonly IEBelgeOutboxLeaseTransitionService _leaseTransitionService;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<EBelgeArtefaktOlusturmaService> _logger;
 
     public EBelgeArtefaktOlusturmaService(
         StysAppDbContext dbContext,
         IEBelgeCanonicalSnapshotV2Reader snapshotReader,
         IEBelgeUblRenderer renderer,
+        IEBelgeOutboxLeaseTransitionService leaseTransitionService,
+        TimeProvider timeProvider,
         ILogger<EBelgeArtefaktOlusturmaService> logger)
     {
         _dbContext = dbContext;
         _snapshotReader = snapshotReader;
         _renderer = renderer;
+        _leaseTransitionService = leaseTransitionService;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -62,24 +68,13 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
 
         if (kayit is null)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
-                "EBELGE_KAYDI_BULUNAMADI", "E-belge kaydı bulunamadı.");
+            return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: false, "EBELGE_KAYDI_BULUNAMADI", "E-belge kaydı bulunamadı.", cancellationToken);
         }
 
         if (kayit.Snapshot is null)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
-                "EBELGE_SNAPSHOT_BULUNAMADI", "E-belge kaydına ait canonical snapshot bulunamadı.");
+            return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, "EBELGE_SNAPSHOT_BULUNAMADI", "E-belge kaydına ait canonical snapshot bulunamadı.", cancellationToken);
         }
-
-        var mevcutArtifact = await _dbContext.Set<EBelgeArtifact>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a =>
-                a.KurumId == talep.KurumId &&
-                a.EBelgeKaydiId == talep.EBelgeKaydiId &&
-                a.ArtifactTipi == EBelgeArtifactTipi.UblXml &&
-                a.ArtifactAsamasi == EBelgeArtifactAsamasi.Unsigned,
-                cancellationToken);
 
         var snapshotSchemaVersionYaziIle = kayit.Snapshot.SnapshotSchemaVersion;
         var snapshotBytes = Encoding.UTF8.GetBytes(kayit.Snapshot.CanonicalJson);
@@ -95,8 +90,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         }
         catch (EBelgeCanonicalSnapshotException)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
-                EBelgeCanonicalSnapshotException.SafeErrorCode, EBelgeCanonicalSnapshotException.SafeMessage);
+            return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, EBelgeCanonicalSnapshotException.SafeErrorCode, EBelgeCanonicalSnapshotException.SafeMessage, cancellationToken);
         }
 
         // ---- Faz 2: DB dışı render (sidecar HTTP çağrısı dahil) - satır kilidi TUTULMAZ ----
@@ -111,47 +105,54 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         }
         catch (EBelgeUblRenderSnapshotVersionUnsupportedException ex)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(EBelgeUblRenderSnapshotVersionUnsupportedException.SafeErrorCode, GuvenliMesaj(ex));
+            return await SonuclandirKaliciHataAtomikAsync(talep, true, EBelgeUblRenderSnapshotVersionUnsupportedException.SafeErrorCode, GuvenliMesaj(ex), cancellationToken);
         }
         catch (EBelgeUblRenderScopeUnsupportedException ex)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(EBelgeUblRenderScopeUnsupportedException.SafeErrorCode, GuvenliMesaj(ex));
+            return await SonuclandirKaliciHataAtomikAsync(talep, true, EBelgeUblRenderScopeUnsupportedException.SafeErrorCode, GuvenliMesaj(ex), cancellationToken);
         }
         catch (EBelgeUblAuthoritativeFieldMissingException ex)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(EBelgeUblAuthoritativeFieldMissingException.SafeErrorCode, GuvenliMesaj(ex));
+            return await SonuclandirKaliciHataAtomikAsync(talep, true, EBelgeUblAuthoritativeFieldMissingException.SafeErrorCode, GuvenliMesaj(ex), cancellationToken);
+        }
+        catch (EBelgeUblKuralSetiManifestException ex)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(talep, true, EBelgeUblKuralSetiManifestException.SafeErrorCode, GuvenliMesaj(ex), cancellationToken);
         }
         catch (EBelgeUblMonetaryTotalMismatchException)
         {
             // Snapshot immutable olduğundan AYNI mesajı yeniden denemek sorunu ÇÖZMEZ - kalıcı
             // düzeltilebilir iş hatası: belge verisi düzeltilip YENİ bir fatura/snapshot/outbox
             // mesajı üretilmelidir (bkz. görev md.10, "düzeltilebilir iş hataları").
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, true,
                 EBelgeUblMonetaryTotalMismatchException.SafeErrorCode,
-                "Belge toplamları tutarsız - snapshot immutable olduğundan bu mesaj tekrar denenerek çözülemez; belge düzeltilip yeni bir kesim/snapshot üretilmelidir.");
+                "Belge toplamları tutarsız - snapshot immutable olduğundan bu mesaj tekrar denenerek çözülemez; belge düzeltilip yeni bir kesim/snapshot üretilmelidir.",
+                cancellationToken);
         }
         catch (EBelgeUblXsdValidationFailedException ex)
         {
             // Hata mesajı METNİ YAZILMAZ - XSD hata metinleri XML'den alınan alan DEĞERLERİNİ
             // (ör. ProfileID) echo edebilir; yalnız sayı ve sabit şablon saklanır (bkz. md.14).
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
-                EBelgeUblXsdValidationFailedException.SafeErrorCode,
-                $"XSD doğrulaması {ex.Hatalar.Count} hata ile başarısız oldu.");
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, true, EBelgeUblXsdValidationFailedException.SafeErrorCode,
+                $"XSD doğrulaması {ex.Hatalar.Count} hata ile başarısız oldu.", cancellationToken);
         }
         catch (EBelgeUblSchematronValidationFailedException ex)
         {
             // Aynı gerekçe: schematron ihlal metinleri alan DEĞERLERİNİ echo edebilir (bkz.
             // sidecar SVRL çıktısı) - yalnız ihlal SAYISI saklanır, ham metin YOK.
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
-                EBelgeUblSchematronValidationFailedException.SafeErrorCode,
-                $"Schematron doğrulaması {ex.Ihlaller.Count} ihlal ile başarısız oldu.");
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, true, EBelgeUblSchematronValidationFailedException.SafeErrorCode,
+                $"Schematron doğrulaması {ex.Ihlaller.Count} ihlal ile başarısız oldu.", cancellationToken);
         }
         catch (EBelgeUblRuleSetArtifactInvalidException ex)
         {
-            return EBelgeArtefaktOlusturmaSonucu.KaliciHata(EBelgeUblRuleSetArtifactInvalidException.SafeErrorCode, GuvenliMesaj(ex));
+            return await SonuclandirKaliciHataAtomikAsync(talep, true, EBelgeUblRuleSetArtifactInvalidException.SafeErrorCode, GuvenliMesaj(ex), cancellationToken);
         }
         catch (EBelgeUblSchematronServiceUnavailableException ex)
         {
+            // Geçici hata - EBelgeKaydi DEĞİŞMEZ, transaction/atomik geçiş GEREKMEZ (bkz. görev md.5).
             return EBelgeArtefaktOlusturmaSonucu.GeciciHata(EBelgeUblSchematronServiceUnavailableException.SafeErrorCode, GuvenliMesaj(ex));
         }
         catch (EBelgeUblSchematronProtocolErrorException ex)
@@ -159,10 +160,101 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             return EBelgeArtefaktOlusturmaSonucu.GeciciHata(EBelgeUblSchematronProtocolErrorException.SafeErrorCode, GuvenliMesaj(ex));
         }
 
-        // ---- Faz 3: kısa yazma ----
+        // ---- Runtime hash doğrulaması (md.7): XML yeniden serialize EDİLMEZ, yalnız EXACT
+        // bytes üzerinden bağımsız SHA-256 hesaplanır ve renderer'ın kendi beyanıyla karşılaştırılır. ----
+        var xmlBytes = renderSonuc.UnsignedUblUtf8.ToArray();
+        var bagimsizHash = Convert.ToHexString(SHA256.HashData(xmlBytes));
+        if (!string.Equals(bagimsizHash, renderSonuc.UnsignedUblSha256, StringComparison.Ordinal))
+        {
+            _logger.LogError("Runtime artifact hash uyuşmazlığı tespit edildi (EBelgeKaydiId={EBelgeKaydiId}).", talep.EBelgeKaydiId);
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, true, "EBELGE_ARTIFACT_HASH_MISMATCH",
+                "Renderer sonucu hash'i, bağımsız hesaplanan hash ile eşleşmiyor.", cancellationToken);
+        }
+
+        // ---- Faz 3: atomik başarı transaction'ı - unique violation'da BİR KEZ yeniden dener ----
+        var sonuc = await DenemeBasariAtomikAsync(talep, renderSonuc, xmlBytes, snapshotSchemaVersionYaziIle, snapshotHash, snapshot, cancellationToken);
+        if (sonuc is not null)
+        {
+            return sonuc;
+        }
+
+        sonuc = await DenemeBasariAtomikAsync(talep, renderSonuc, xmlBytes, snapshotSchemaVersionYaziIle, snapshotHash, snapshot, cancellationToken);
+        return sonuc ?? EBelgeArtefaktOlusturmaSonucu.GeciciHata(
+            "EBELGE_ARTIFACT_YARIS_DURUMU", "Artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
+    }
+
+    /// <summary>
+    /// Tek bir atomik deneme: lease ownership doğrula → (mevcut artefakt varsa idempotency
+    /// karşılaştır, yoksa insert et) → EBelgeKaydi.Durum = UnsignedUblHazir → outbox Tamamlandi
+    /// → TEK transaction ile commit. Benzersizlik ihlaliyle karşılaşırsa rollback yapar, DbContext
+    /// ChangeTracker'ı temizler ve `null` döner (çağıran BİR KEZ daha dener).
+    /// </summary>
+    private async Task<EBelgeArtefaktOlusturmaSonucu?> DenemeBasariAtomikAsync(
+        EBelgeArtefaktOlusturmaTalebi talep,
+        EBelgeUblRenderSonucu renderSonuc,
+        byte[] xmlBytes,
+        string snapshotSchemaVersionYaziIle,
+        string snapshotHash,
+        EBelgeCanonicalSnapshotV2 snapshot,
+        CancellationToken cancellationToken)
+    {
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var sahip = await _leaseTransitionService.IsOwnedAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+        if (!sahip)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
+        }
+
+        // Taze, TRANSACTION İÇİNDE izlenen (tracked) bir EBelgeKaydi al - Faz 1'deki referans,
+        // önceki bir denemede rollback edilmiş olabilir (stale tracking riskini önler).
+        var kayit = await _dbContext.Set<EBelgeKaydi>()
+            .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
+
+        // Soft-delete edilmiş kayıt bile benzersizlik rezervasyonunu KORUR (bkz. görev md.6) -
+        // bu yüzden idempotency/benzersizlik sorgusu IgnoreQueryFilters() KULLANIR.
+        var mevcutArtifact = await _dbContext.Set<EBelgeArtifact>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a =>
+                a.KurumId == talep.KurumId &&
+                a.EBelgeKaydiId == talep.EBelgeKaydiId &&
+                a.ArtifactTipi == EBelgeArtifactTipi.UblXml &&
+                a.ArtifactAsamasi == EBelgeArtifactAsamasi.Unsigned,
+                cancellationToken);
+
         if (mevcutArtifact is not null)
         {
-            return DegerlendirIdempotentSonuc(mevcutArtifact, renderSonuc, snapshotHash);
+            if (!EslesiyorMu(mevcutArtifact, renderSonuc, snapshotHash))
+            {
+                // Soft-delete edilmiş VEYA farklı hash'li bir rezervasyon - mali/yasal artefakt
+                // silinemez sözleşmesi nedeniyle bu, veri bütünlüğü ihlali kabul edilir (bkz.
+                // görev md.6) - sessiz başarı YOK, kalıcı çakışma hatası.
+                await tx.RollbackAsync(cancellationToken);
+                return await SonuclandirKaliciHataAtomikAsync(
+                    talep, kayitVarMi: true,
+                    EBelgeArtifactIdempotencyConflictException.SafeErrorCode,
+                    "Aynı benzersiz anahtar altında farklı içerikli veya soft-delete edilmiş bir artefakt zaten mevcut.",
+                    cancellationToken);
+            }
+
+            // İdempotent başarı: artefakt zaten doğru - yalnız EBelgeKaydi/outbox durumlarının
+            // da tutarlı olduğundan emin ol (önceki bir deneme artefaktı yazıp tamamlama
+            // aşamasında kesilmiş olabilir - bkz. görev md.6 son cümlesi).
+            kayit.Durum = EBelgeKaydiDurumu.UnsignedUblHazir;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var tamamIdempotent = await _leaseTransitionService.TryCompleteAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+            if (!tamamIdempotent)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
+            }
+
+            await tx.CommitAsync(cancellationToken);
+            return EBelgeArtefaktOlusturmaSonucu.AtomikBasarili();
         }
 
         var yeniArtifact = new EBelgeArtifact
@@ -175,10 +267,10 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             SnapshotSchemaVersion = int.Parse(snapshotSchemaVersionYaziIle),
             KaynakSnapshotSha256 = snapshotHash,
             ArtifactSha256 = renderSonuc.UnsignedUblSha256,
-            Icerik = renderSonuc.UnsignedUblUtf8.ToArray(),
+            Icerik = xmlBytes,
             MimeType = "application/xml",
             DosyaAdi = TurentDosyaAdi(snapshot),
-            OlusturulmaZamaniUtc = DateTime.UtcNow,
+            OlusturulmaZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime,
         };
 
         _dbContext.Add(yeniArtifact);
@@ -191,52 +283,78 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         catch (DbUpdateException ex) when (IsBenzersizlikIhlali(ex))
         {
             // Yarış durumu: başka bir worker aynı artefaktı bu sırada eklemiş olabilir (bkz.
-            // görev md.12, "iki paralel worker tek artifact üretir"). Yerel değişikliği geri al,
-            // rakip satırı OKU ve idempotency karşılaştırmasıyla sonuçlandır.
-            _dbContext.Entry(yeniArtifact).State = EntityState.Detached;
-            _dbContext.Entry(kayit).Reload();
-
-            var rakipArtifact = await _dbContext.Set<EBelgeArtifact>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(a =>
-                    a.KurumId == talep.KurumId &&
-                    a.EBelgeKaydiId == talep.EBelgeKaydiId &&
-                    a.ArtifactTipi == EBelgeArtifactTipi.UblXml &&
-                    a.ArtifactAsamasi == EBelgeArtifactAsamasi.Unsigned,
-                    cancellationToken);
-
-            if (rakipArtifact is null)
-            {
-                _logger.LogWarning(ex, "Benzersizlik ihlali sonrası rakip artefakt bulunamadı - geçici olarak sınıflandırılıyor.");
-                return EBelgeArtefaktOlusturmaSonucu.GeciciHata(
-                    "EBELGE_ARTIFACT_YARIS_DURUMU", "Artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
-            }
-
-            return DegerlendirIdempotentSonuc(rakipArtifact, renderSonuc, snapshotHash);
+            // görev md.12, "iki paralel worker tek artifact üretir"). TÜM transaction rollback
+            // edilir (artefakt İLE EBelgeKaydi güncellemesi birlikte geri alınır) ve ChangeTracker
+            // temizlenir - çağıran taze bir denemeyle idempotency yoluna düşecektir.
+            await tx.RollbackAsync(cancellationToken);
+            _dbContext.ChangeTracker.Clear();
+            _logger.LogInformation(ex, "Artefakt benzersizlik çakışması - yeniden denenecek (EBelgeKaydiId={EBelgeKaydiId}).", talep.EBelgeKaydiId);
+            return null;
         }
 
-        return EBelgeArtefaktOlusturmaSonucu.Basarili();
-    }
-
-    private static EBelgeArtefaktOlusturmaSonucu DegerlendirIdempotentSonuc(
-        EBelgeArtifact mevcutArtifact,
-        EBelgeUblRenderSonucu renderSonuc,
-        string snapshotHash)
-    {
-        var ayniZincir =
-            string.Equals(mevcutArtifact.KaynakSnapshotSha256, snapshotHash, StringComparison.Ordinal) &&
-            string.Equals(mevcutArtifact.ArtifactSha256, renderSonuc.UnsignedUblSha256, StringComparison.Ordinal) &&
-            string.Equals(mevcutArtifact.RuleSetId, renderSonuc.KuralSetiKimligi, StringComparison.Ordinal);
-
-        if (ayniZincir)
+        var completeEdildi = await _leaseTransitionService.TryCompleteAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+        if (!completeEdildi)
         {
-            return EBelgeArtefaktOlusturmaSonucu.Basarili();
+            // Lease, render + insert sırasında dolmuş/kaybedilmiş - TÜM transaction (artefakt +
+            // EBelgeKaydi.Durum dahil) geri alınır; hiçbir şey KALICILAŞMAZ (bkz. görev md.2).
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
         }
 
-        return EBelgeArtefaktOlusturmaSonucu.KaliciHata(
-            EBelgeArtifactIdempotencyConflictException.SafeErrorCode,
-            "Aynı benzersiz anahtar altında farklı içerikli bir artefakt zaten mevcut.");
+        await tx.CommitAsync(cancellationToken);
+        return EBelgeArtefaktOlusturmaSonucu.AtomikBasarili();
     }
+
+    /// <summary>
+    /// Kalıcı hata sonucunu, lease ownership'i yeniden doğrulayarak, TEK transaction içinde
+    /// EBelgeKaydi.Durum=UnsignedUblKaliciHata + outbox terminal Hata (SonrakiDenemeZamaniUtc=null)
+    /// olarak ATOMİK biçimde kaydeder (bkz. görev md.4).
+    /// </summary>
+    private async Task<EBelgeArtefaktOlusturmaSonucu> SonuclandirKaliciHataAtomikAsync(
+        EBelgeArtefaktOlusturmaTalebi talep,
+        bool kayitVarMi,
+        string hataKodu,
+        string hataMesaji,
+        CancellationToken cancellationToken)
+    {
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var sahip = await _leaseTransitionService.IsOwnedAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+        if (!sahip)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
+        }
+
+        if (kayitVarMi)
+        {
+            var kayit = await _dbContext.Set<EBelgeKaydi>()
+                .FirstOrDefaultAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
+            if (kayit is not null)
+            {
+                kayit.Durum = EBelgeKaydiDurumu.UnsignedUblKaliciHata;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        var failEdildi = await _leaseTransitionService.TryFailAsync(
+            talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, hataKodu, hataMesaji, retryDelay: null, cancellationToken);
+
+        if (!failEdildi)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return EBelgeArtefaktOlusturmaSonucu.AtomikKaliciHata(hataKodu, hataMesaji);
+    }
+
+    private static bool EslesiyorMu(EBelgeArtifact mevcutArtifact, EBelgeUblRenderSonucu renderSonuc, string snapshotHash) =>
+        !mevcutArtifact.IsDeleted &&
+        string.Equals(mevcutArtifact.KaynakSnapshotSha256, snapshotHash, StringComparison.Ordinal) &&
+        string.Equals(mevcutArtifact.ArtifactSha256, renderSonuc.UnsignedUblSha256, StringComparison.Ordinal) &&
+        string.Equals(mevcutArtifact.RuleSetId, renderSonuc.KuralSetiKimligi, StringComparison.Ordinal);
 
     private static bool IsBenzersizlikIhlali(DbUpdateException ex) =>
         ex.InnerException is SqlException sqlEx &&
@@ -262,7 +380,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     /// Hata mesajları veritabanında saklanacağından (SonHataMesaji, en fazla 2000 karakter) ve
     /// loglanacağından, XML/kişisel veri İÇERMEYEN, ilgili exception'ın kendi güvenli/sınırlı
     /// mesajını kullanır (bu exception tipleri zaten güvenli mesaj sözleşmesine sahiptir - bkz.
-    /// EBelgeUblRenderExceptions.cs, md.14).
+    /// EBelgeUblRenderExceptions.cs, md.14). Lease token HİÇBİR YERDE loglanmaz.
     /// </summary>
     private static string GuvenliMesaj(Exception ex) => ex.Message.Length > 1900 ? ex.Message[..1900] : ex.Message;
 }

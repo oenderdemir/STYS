@@ -96,6 +96,27 @@ WHERE [Id] = @OutboxMesajiId
             cancellationToken);
     }
 
+    public Task<bool> IsOwnedAsync(int outboxMesajiId, int kurumId, string kilitToken, CancellationToken cancellationToken = default)
+        => ExecuteTransitionAsync(
+            """
+DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
+
+SELECT [Id]
+FROM [muhasebe].[EBelgeOutboxMesajlari] WITH (UPDLOCK, ROWLOCK)
+WHERE [Id] = @OutboxMesajiId
+  AND [KurumId] = @KurumId
+  AND [IsDeleted] = 0
+  AND [Durum] = 2
+  AND [KilitToken] = @KilitToken
+  AND [KilitBitisZamaniUtc] IS NOT NULL
+  AND [KilitBitisZamaniUtc] > @NowUtc;
+""",
+            outboxMesajiId,
+            kurumId,
+            kilitToken,
+            configure: command => { },
+            cancellationToken);
+
     public Task<bool> TryRenewAsync(int outboxMesajiId, int kurumId, string kilitToken, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
     {
         var leaseSeconds = EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateLeaseSeconds(leaseDuration);

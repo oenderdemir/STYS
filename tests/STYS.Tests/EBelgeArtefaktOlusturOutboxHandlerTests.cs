@@ -27,7 +27,7 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
     }
 
     [Fact]
-    public async Task KurumIdEBelgeKaydiIdVeTokenAynenAktarilir()
+    public async Task KurumIdEBelgeKaydiIdVeCancellationTokenAynenAktarilir()
     {
         var (sut, service) = CreateSut();
         using var cts = new CancellationTokenSource();
@@ -42,6 +42,20 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
     }
 
     [Fact]
+    public async Task OutboxMesajiIdVeGercekKilitBilgisiAynenAktarilirVeLoglanmaz()
+    {
+        var (sut, service) = CreateSut();
+        var kilitBitisi = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var baglam = CreateBaglam(outboxMesajiId: 55, kilitToken: "gercek-lease-token-guid", kilitBitisZamaniUtc: kilitBitisi);
+
+        await sut.HandleAsync(baglam);
+
+        Assert.Equal(55, service.LastTalep!.OutboxMesajiId);
+        Assert.Equal("gercek-lease-token-guid", service.LastTalep.KilitToken);
+        Assert.Equal(kilitBitisi, service.LastTalep.KilitBitisZamaniUtc);
+    }
+
+    [Fact]
     public async Task BasariliSonucBasariliHandlerSonucunaDoner()
     {
         var (sut, _) = CreateSut();
@@ -49,6 +63,7 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
         var sonuc = await sut.HandleAsync(CreateBaglam());
 
         Assert.True(sonuc.BasariliMi);
+        Assert.Equal(EBelgeOutboxHandlerSonucTuru.AtomikTamamlandi, sonuc.SonucTuru);
         Assert.Null(sonuc.HataSinifi);
         Assert.Null(sonuc.HataKodu);
         Assert.Null(sonuc.HataMesaji);
@@ -70,18 +85,37 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
     }
 
     [Fact]
-    public async Task KaliciHataKaliciOutboxSonucunaDoner()
+    public async Task AtomikKaliciHataAtomikTerminalHataSonucunaDoner()
     {
         const string hataKodu = "ARTEF-02";
         const string hataMesaji = "kalıcı artefakt hatası";
-        var (sut, _) = CreateSut((_, _) => Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.KaliciHata(hataKodu, hataMesaji)));
+        var (sut, _) = CreateSut((_, _) => Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.AtomikKaliciHata(hataKodu, hataMesaji)));
+
+        var sonuc = await sut.HandleAsync(CreateBaglam());
+
+        // Artefakt servisi kalıcı hatayı KENDİ atomik transaction'ında outbox'a zaten
+        // yansıtmıştır (bkz. EBelgeArtefaktOlusturmaService.SonuclandirKaliciHataAtomikAsync) -
+        // IsleAsync İKİNCİ bir DB geçişi yapmamalı, bu yüzden hata detayları burada TEKRAR
+        // taşınmaz (zaten kalıcılaştırılmıştır).
+        Assert.False(sonuc.BasariliMi);
+        Assert.Equal(EBelgeOutboxHandlerSonucTuru.AtomikTerminalHata, sonuc.SonucTuru);
+        Assert.Null(sonuc.HataSinifi);
+        Assert.Null(sonuc.HataKodu);
+        Assert.Null(sonuc.HataMesaji);
+    }
+
+    [Fact]
+    public async Task SahiplikKaybedildiSonucuAynenYansir()
+    {
+        var (sut, _) = CreateSut((_, _) => Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi()));
 
         var sonuc = await sut.HandleAsync(CreateBaglam());
 
         Assert.False(sonuc.BasariliMi);
-        Assert.Equal(EBelgeOutboxHataSinifi.Kalici, sonuc.HataSinifi);
-        Assert.Equal(hataKodu, sonuc.HataKodu);
-        Assert.Equal(hataMesaji, sonuc.HataMesaji);
+        Assert.Equal(EBelgeOutboxHandlerSonucTuru.SahiplikKaybedildi, sonuc.SonucTuru);
+        Assert.Null(sonuc.HataSinifi);
+        Assert.Null(sonuc.HataKodu);
+        Assert.Null(sonuc.HataMesaji);
     }
 
     [Fact]
@@ -105,7 +139,7 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
         var (sut, service) = CreateSut((_, token) =>
         {
             token.ThrowIfCancellationRequested();
-            return Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.Basarili());
+            return Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.AtomikBasarili());
         });
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => sut.HandleAsync(CreateBaglam(), cts.Token));
@@ -151,7 +185,7 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
     public void GecersizHataAlanlariReddedilir(string hataKodu, string hataMesaji)
     {
         Assert.Throws<BaseException>(() => EBelgeArtefaktOlusturmaSonucu.GeciciHata(hataKodu, hataMesaji));
-        Assert.Throws<BaseException>(() => EBelgeArtefaktOlusturmaSonucu.KaliciHata(hataKodu, hataMesaji));
+        Assert.Throws<BaseException>(() => EBelgeArtefaktOlusturmaSonucu.AtomikKaliciHata(hataKodu, hataMesaji));
     }
 
     public static IEnumerable<object[]> GecersizHataAlanlariCases()
@@ -172,18 +206,23 @@ public class EBelgeArtefaktOlusturOutboxHandlerTests
     private static Task<EBelgeArtefaktOlusturmaSonucu?> DefaultCallback(
         EBelgeArtefaktOlusturmaTalebi _,
         CancellationToken __)
-        => Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.Basarili());
+        => Task.FromResult<EBelgeArtefaktOlusturmaSonucu?>(EBelgeArtefaktOlusturmaSonucu.AtomikBasarili());
 
     private static EBelgeOutboxIslemBaglami CreateBaglam(
         int kurumId = 42,
         int eBelgeKaydiId = 7,
-        EBelgeOutboxIsTuru isTuru = EBelgeOutboxIsTuru.ArtefaktOlustur)
+        int outboxMesajiId = 11,
+        EBelgeOutboxIsTuru isTuru = EBelgeOutboxIsTuru.ArtefaktOlustur,
+        string kilitToken = "test-lease-token",
+        DateTime? kilitBitisZamaniUtc = null)
         => new(
-            OutboxMesajiId: 11,
+            OutboxMesajiId: outboxMesajiId,
             KurumId: kurumId,
             EBelgeKaydiId: eBelgeKaydiId,
             IsTuru: isTuru,
-            DenemeSayisi: 1);
+            DenemeSayisi: 1,
+            KilitToken: kilitToken,
+            KilitBitisZamaniUtc: kilitBitisZamaniUtc ?? new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
     private sealed class FakeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaService
     {

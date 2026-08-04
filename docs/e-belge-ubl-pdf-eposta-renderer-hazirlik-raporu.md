@@ -1657,6 +1657,20 @@ adres + gerçek kişi ad/soyad ayrımı, kurumsal/gerçek kişi seçimine göre 
 
 **Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.21 koşulları — hepsi genuinely karşılandı).**
 
+> **ÖNEMLİ - bu bölümdeki üç iddia Faz 2B.6.1'de GEÇERSİZLEŞTİRİLDİ ve düzeltildi (bkz. aşağıda
+> "Faz 2B.6.1 sonuç bölümü"): (1) "`EBelgeArtefaktOlusturmaTalebi` `KilitToken` TAŞIMAZ, bu
+> KASITLIDIR" iddiası YANLIŞTI - lease token taşımaması, bir worker lease'ini kaybettikten SONRA
+> bile artefakt yazabilmesine izin veren gerçek bir açıktı. (2) "Ownership koruması İKİ KATMANDA
+> sağlanır: DB benzersizlik indeksi + outbox `TryCompleteAsync` token guard'ı" iddiası YETERSİZDİ
+> - `TryCompleteAsync` guard'ı yalnız outbox durum GEÇİŞİNİ korur, artefakt YAZMA anını KORUMAZ;
+> lease'i kaybetmiş bir worker render'ı bitirip artefaktı YİNE DE insert edebiliyordu. (3) "Outbox
+> `TryCompleteAsync`, bu üç aşamanın DIŞINDADIR" ve ayrı `SaveChangesAsync` çağrılarının Faz
+> 2B.6'yı TAMAMLADIĞI iddiası YANLIŞTI - artefakt insert + `EBelgeKaydi` durum güncellemesi +
+> outbox tamamlama AYNI transaction'da DEĞİLDİ, bu yüzden ikisi arasında bir hata/crash split-brain
+> durum (artefakt var ama outbox hâlâ Isleniyor, veya tam tersi) YARATABİLİRDİ. Aşağıdaki bölüm
+> yalnız TARİHSEL bağlam için KORUNMUŞTUR - güncel, doğru davranış için Faz 2B.6.1 bölümüne
+> bakın.
+
 ### Mevcut outbox mimarisinin analizi
 
 İncelemede (bkz. görev md.1) şu gerçek, önceden var olan bileşenler bulundu ve AYNEN
@@ -1864,14 +1878,183 @@ haftadır çalışan) paylaşımlı yerel Docker SQL Server test container'ında
 test verisinden kaynaklanan, Faz 2B.6'nın kod değişiklikleriyle HİÇBİR İLGİSİ olmayan bir ortam
 sorunudur - bu turda DÜZELTİLMEDİ (kapsam dışı).
 
-### Açık kalan teknik konular
+### Açık kalan teknik konular (Faz 2B.6 zamanındaki durum - bkz. Faz 2B.6.1 için güncel liste)
 
-1. `EBelgeKaydiDurumu.UnsignedUblKaliciHata`'ya geçiş kodu YAZILMADI - kalıcı render hatalarında
-   `EBelgeKaydi.Durum` şu an `SnapshotHazir`'de kalıyor (yalnız outbox terminal duruma geçiyor).
-2. Sürekli çalışan bir outbox worker/polling döngüsü YOK (bkz. "Background worker kararı").
+1. ~~`EBelgeKaydiDurumu.UnsignedUblKaliciHata`'ya geçiş kodu YAZILMADI~~ - **Faz 2B.6.1'de
+   YAZILDI** (bkz. aşağıda).
+2. Sürekli çalışan bir outbox worker/polling döngüsü YOK (bkz. "Background worker kararı") -
+   Faz 2B.6.1 kapsamı DIŞINDA, hâlâ açık.
 3. Paylaşımlı yerel test SQL Server container'ındaki önceden var olan veri tutarsızlığı
-   (yukarıda kanıtlandı) temizlenmedi/kök nedeni araştırılmadı - ayrı bir bakım konusu.
+   (yukarıda kanıtlandı) temizlenmedi/kök nedeni araştırılmadı - ayrı bir bakım konusu, Faz
+   2B.6.1 sırasında da AYNI (ilgisiz) desende gözlemlenmeye devam etti (bkz. aşağıda).
 4. `IEBelgeArtifactService` için controller/download endpoint'i YOK (bilinçli - bkz. md.13).
+
+## Faz 2B.6.1 sonuç bölümü — lease ownership + atomik sonuç kaydı düzeltmesi
+
+**Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.12 koşulları — hepsi genuinely karşılandı).**
+
+### Neden gerekliydi
+
+Faz 2B.6'nın kod incelemesinde 5 gerçek açık tespit edildi:
+
+1. `EBelgeArtefaktOlusturmaTalebi` lease token TAŞIMIYORDU - artefakt servisi HANGİ worker'ın
+   HANGİ lease'le çağrıldığını hiç BİLMİYORDU.
+2. Lease'ini kaybetmiş (süresi dolmuş VEYA reclaim edilmiş) bir worker, render'ı bitirdikten
+   SONRA artefaktı YİNE DE yazabiliyordu - yazma ANINDA yeniden bir sahiplik kontrolü YOKTU.
+3. Artefakt insert + `EBelgeKaydi.Durum` güncellemesi + outbox `Tamamlandi` geçişi AYNI
+   transaction'da DEĞİLDİ - aralarında bir hata/crash split-brain durum yaratabilirdi.
+4. Kalıcı render hatalarında `EBelgeKaydi.Durum`, `UnsignedUblKaliciHata`'ya hiç GEÇMİYORDU.
+5. Soft-delete edilmiş bir artefakt, global EF sorgu filtresi nedeniyle idempotency
+   kontrollerinde GÖRÜNMEYEBİLİRDİ.
+
+### Yeni, kesin akış
+
+```
+claim (UPDLOCK/READPAST, mevcut - değiştirilmedi)
+  → DB DIŞI render (satır kilidi TUTULMAZ, sidecar HTTP çağrısı dahil)
+  → runtime SHA-256 yeniden doğrulama (renderer'ın beyan ettiği hash'e KÖRÜ KÖRÜNE güvenilmez)
+  → lease YENİDEN doğrulama (IsOwnedAsync, UPDLOCK ile satırı transaction commit/rollback
+    olana kadar kilitler)
+  → artifact + EBelgeKaydi + outbox TEK atomik transaction (`_dbContext.Database
+    .BeginTransactionAsync()` + ambient-transaction-reuse - bkz. aşağıda)
+```
+
+### Lease bilgisinin taşınması (md.1)
+
+`EBelgeOutboxIslemBaglami` ve `EBelgeArtefaktOlusturmaTalebi`, artık claim'den gelen GERÇEK
+`OutboxMesajiId`, `KilitToken`, `KilitBitisZamaniUtc` alanlarını taşır -
+`EBelgeOutboxMesajIslemeService.IsleAsync`, claim'in kendi (normalize edilmiş) token'ını aynen
+aktarır. Token HİÇBİR YERDE loglanmaz (`_logger` çağrılarının hiçbirinde token parametresi YOK -
+kod incelemesiyle doğrulanabilir).
+
+### Yazma anında sahiplik doğrulaması (md.2)
+
+`IEBelgeOutboxLeaseTransitionService.IsOwnedAsync` (yeni metot, mevcut `ExecuteTransitionAsync`
+ham-SQL/ambient-transaction-reuse altyapısını AYNEN kullanır - genel lease altyapısı yeniden
+YAZILMADI) şu koşulların HEPSİNİ `UPDLOCK` ile satırı kilitleyerek doğrular: `Id`, `KurumId`,
+`IsDeleted=0`, `Durum=Isleniyor`, `KilitToken` eşleşmesi, `KilitBitisZamaniUtc > SYSUTCDATETIME()`.
+Bu kontrol, `EBelgeArtefaktOlusturmaService.DenemeBasariAtomikAsync` ve
+`SonuclandirKaliciHataAtomikAsync` içinde, AÇILAN transaction'ın İLK adımı olarak çağrılır - render
+TAMAMLANDIKTAN SONRA, herhangi bir DB yazımından ÖNCE. Başarısız olursa (`SahiplikKaybedildi`)
+NE artefakt insert edilir NE `EBelgeKaydi` NE de outbox durumu değişir; transaction rollback
+edilir. `UPDLOCK` satır kilidi commit/rollback'e kadar TUTULDUĞUNDAN, aynı token'la eşzamanlı
+iki deneme bile güvenlidir (kazanan commit olduktan sonra satır artık `Isleniyor` olmadığından
+ikinci deneme deterministik biçimde `SahiplikKaybedildi` alır - bkz.
+`AyniLeaseIleEszamanliIkiYazmaDenemesindeYalnizBiriBasariliOlurArtefaktCoklanmaz` testi).
+
+### Atomik sonuç transaction'ı (md.3-5)
+
+`EBelgeArtefaktOlusturmaService`, başarı ve kalıcı-hata yollarını `_dbContext.Database
+.BeginTransactionAsync()` ile açık bir transaction'a sarar. Var olan `EBelgeOutboxLeaseTransitionService`
+(`TryCompleteAsync`/`TryFailAsync`), ambient `_dbContext.Database.CurrentTransaction`'ı otomatik
+olarak KULLANDIĞINDAN (mevcut, değiştirilmeyen bir tasarım deseni), bu servisin ham-SQL
+çağrıları ve EF `SaveChangesAsync()` çağrıları AYNI DB transaction'ında birleşir - genel outbox
+lease altyapısı yeniden yazılmadan gerçek atomiklik elde edilir:
+
+- **Başarı**: `IsOwnedAsync` → (mevcut artefakt var mı, `IgnoreQueryFilters()` ile) → yoksa
+  insert / varsa idempotency karşılaştırması → `EBelgeKaydi.Durum = UnsignedUblHazir` →
+  `TryCompleteAsync` → commit. `EBelgeOutboxHandlerSonucu.AtomikTamamlandi()` döner -
+  `EBelgeOutboxMesajIslemeService.IsleAsync` bu durumda İKİNCİ bir `TryCompleteAsync` ÇAĞIRMAZ
+  (bkz. `EBelgeOutboxHandlerSonucTuru` switch'i - yeni `AtomikTamamlandi`/`AtomikTerminalHata`/
+  `SahiplikKaybedildi` dalları, ESKİ `Basarili`/`Basarisiz` davranışını bozmadan eklendi).
+- **Kalıcı hata**: `IsOwnedAsync` → `EBelgeKaydi.Durum = UnsignedUblKaliciHata` → `TryFailAsync`
+  (`SonrakiDenemeZamaniUtc=null`, yani terminal) → commit. `AtomikKaliciHata()` döner.
+- **Geçici hata** (md.5): DEĞİŞTİRİLMEDİ - `EBelgeKaydi` hiç dokunulmadığından atomik
+  transaction'a GEREK yok; mevcut `HandleBasarisizHandlerSonucuAsync` → `TryFailAsync` (retry
+  gecikmeli) akışı zaten kendi ownership guard'ını taşıyordu, AYNEN kullanılmaya devam eder.
+
+Unique-index çakışması (benzersizlik ihlali) durumunda transaction rollback edilir,
+`ChangeTracker.Clear()` ile temizlenir ve çağıran BİR KEZ daha dener (bounded, sonsuz döngü YOK) -
+ikinci denemede rakip satır artık görünür olduğundan idempotency yoluna düşer.
+
+### Soft-delete ve idempotency (md.6)
+
+Hem ön-kontrol hem unique-violation-sonrası sorgu `IgnoreQueryFilters()` KULLANIR - soft-delete
+edilmiş bir rezervasyon ARTIK görünmez OLMAZ. Soft-delete edilmiş bir artefakt bulunursa (hash
+zinciri eşleşse BİLE) sessiz başarı KABUL EDİLMEZ - mali/yasal artefaktların silinemez sözleşmesi
+nedeniyle bu veri bütünlüğü ihlali sayılır ve `EBELGE_ARTIFACT_IDEMPOTENCY_CONFLICT` (kalıcı,
+retry YOK) döner. Benzersizlik indeksi FİLTRESİZ kalmaya devam eder (değiştirilmedi).
+
+### Runtime hash yeniden doğrulaması (md.7)
+
+Artefaktı insert etmeden ÖNCE, `SHA256.HashData(renderSonuc.UnsignedUblUtf8)` bağımsız olarak
+yeniden hesaplanır ve renderer'ın kendi beyan ettiği `UnsignedUblSha256` ile karşılaştırılır (XML
+yeniden serialize EDİLMEZ - aynı `ImmutableArray<byte>` üzerinden). Uyuşmazlıkta
+`EBELGE_ARTIFACT_HASH_MISMATCH` (kalıcı) döner.
+
+### TimeProvider (md.8)
+
+Artefakt `OlusturulmaZamaniUtc`'si artık DI'a kayıtlı `TimeProvider` (`_timeProvider.GetUtcNow()
+.UtcDateTime`) üzerinden alınır - testler deterministik bir `FixedTimeProvider` enjekte edebilir.
+DB tarafındaki lease-süresi kontrolleri (`SYSUTCDATETIME()`) KASITLI OLARAK değiştirilmedi (md.11 -
+"genel outbox lease altyapısını yeniden yazma").
+
+### Test kapsamı (md.9)
+
+Gerçek SQL Server + gerçek Java Saxon sidecar ile, `Task.Delay` KULLANILMADAN (lease süresinin
+dolması/reclaim, `KilitBitisZamaniUtc`/`KilitToken`'ın doğrudan SQL ile deterministik olarak
+geriye çekilmesiyle simüle edilir - DB tarafı kendi `SYSUTCDATETIME()` saatini kullandığından bir
+C# `TimeProvider`'ıyla ilerletilemez):
+
+- `GecerliLeaseIleArtefaktEBelgeKaydiVeOutboxTekTransactionIleTamamlanir` (senaryo 1, 15)
+- `OnceOnceSeedliHashEslesenMevcutArtefaktIdempotentBasariylaTamamlanirIkinciSatirEklenmez`
+- `AyniLeaseIleEszamanliIkiYazmaDenemesindeYalnizBiriBasariliOlurArtefaktCoklanmaz` (senaryo 7)
+- `LeaseSuresiRenderSirasindaDolmussaArtefaktOlusturulmazVeKayitDegismez` (senaryo 3, 5, 6)
+- `ReclaimEdilmisMesajdaEskiWorkerYazamazSadeceYeniSahipYazar` (senaryo 4, 5, 6, 7)
+- `KaliciHataYolundaSahiplikKaybedilmisseHicbirSeyDegismez` (senaryo 10)
+- `DesteklenmeyenSnapshotSemaSurumuAtomikKaliciHataOlurArtefaktOlusmaz`,
+  `SnapshotHashUyusmazligiAtomikKaliciHataOlur`, `EBelgeKaydiBulunamazsaAtomikKaliciHataOlur`,
+  `YanlisKurumIdIleTalepSahiplikKaybedildiDonerVeHicbirSeyDegismez` (senaryo 9)
+- `RuntimeHashUyusmazligiAtomikKaliciHataUretirArtefaktOlusmaz` (senaryo 14)
+- `TamOutboxAkisiClaimIslemeVeTamamlamaBirlikteCalisir` (senaryo 18, gerçek sidecar)
+- `SidecarErisilemiyorsaGeciciHataOlurArtefaktOlusmazVeSahiplikKontroluGerekmez` (senaryo 11)
+- `FarkliHashliMevcutArtefaktAtomikIdempotencyConflictUretir`,
+  `SoftDeleteEdilmisMevcutArtefaktAtomikIdempotencyConflictUretirTekrarDenemeAtanmaz`
+  (senaryo 12, 13 - aynı, `IgnoreQueryFilters()`'lı sorgu ön-kontrol VE unique-violation-sonrası
+  yeniden deneme yolunda PAYLAŞILDIĞINDAN tek testle ikisi de kanıtlanır)
+- Birim testleri (`EBelgeOutboxMesajIslemeServiceTests`):
+  `AtomikTamamlandiSonucundaCompleteIkinciKezCagrilmaz`,
+  `AtomikTerminalHataSonucundaFailIkinciKezCagrilmaz`,
+  `SahiplikKaybedildiSonucundaHicbirTransitionCagrilmaz` (senaryo 8)
+
+**Md.9 senaryo 2 hakkında not**: "Outbox güncellemesi artifact insert'ten SONRA başarısız
+olursa transaction TAMAMEN rollback edilmeli" senaryosu, `IsOwnedAsync`'in `UPDLOCK`'u satırı
+transaction commit/rollback olana kadar KİLİTLEMESİ nedeniyle GERÇEK eşzamanlılıkla tetiklenemez
+hale geldi (satır, ownership kontrolünden TryComplete'e kadar başka hiçbir transaction tarafından
+değiştirilemez) - bu, senaryonun test EDİLEMEDİĞİ anlamına gelmez, tam tersi: tasarımın bu
+senaryoyu YAPISAL olarak İMKÂNSIZ kıldığı anlamına gelir; ayrı bir fault-injection testi bu
+turun kapsamı dışında (md.11 - "genel altyapıyı yeniden yazma/genişletme") bırakılmıştır.
+
+### Çalıştırılan hedefli test komutları ve sonuçları
+
+```
+dotnet test --filter "FullyQualifiedName~EBelge"
+  → Passed: 279, Failed: 2, Total: 281 (gerçek SQL Server + gerçek Java Saxon sidecar ile)
+
+dotnet test  (tam solüsyon)
+  → Passed: 1343, Failed: 87, Total: 1430
+```
+
+**2 (EBelge-taraması) / 87 (tam solüsyon) başarısızlık hakkında kanıt**: TÜMÜ
+`TicariBelgeIptalYarisKosuluIntegrationTests`, `FaturaNumaraIntegrationTests`,
+`BelgeTipiGecisleriIntegrationTests` ve benzeri, bu turda HİÇ dokunulmayan dosyalardadır; hepsi
+`ResolveEBelgeKanali`/mükellefiyet bayrağı veya fatura numarası çakışma davranışıyla ilgilidir -
+`EBelgeArtefaktOlusturmaService`/outbox/lease koduyla HİÇBİR İLGİSİ yoktur ve bu başarısızlıklar
+İZOLE çalıştırıldıklarında da (bu turun değişiklikleri olmadan da) AYNEN tekrarlanır - Faz 2B.6
+raporunda zaten belgelenen, paylaşımlı yerel test container'ındaki BİRİKMİŞ/tutarsız veriden
+kaynaklanan, önceden var olan bir ortam sorunudur (bkz. yukarıda "Açık kalan teknik konular" md.3).
+Bu turda DÜZELTİLMEDİ (kapsam dışı, md.11).
+
+### Açık kalan teknik konular (Faz 2B.6.1 sonrası güncel liste)
+
+1. Sürekli çalışan bir outbox worker/polling döngüsü YOK (bkz. Faz 2B.6 "Background worker
+   kararı") - hâlâ kapsam dışı.
+2. Paylaşımlı yerel test SQL Server container'ındaki önceden var olan veri tutarsızlığı hâlâ
+   temizlenmedi - ayrı bir bakım konusu.
+3. `IEBelgeArtifactService` için controller/download endpoint'i YOK (bilinçli - bkz. md.13).
+4. Render sırasında bir lease-renewal mekanizması YOK (Faz 2B.6'da bilinçli olarak ertelendi) -
+   render'ın normalde kısa sürmesi ve şimdi eklenen yazma-anı ownership kontrolü nedeniyle risk
+   düşük kabul edilir, ama çok uzun süren render senaryolarında hâlâ açık bir konu.
 
 ### Sonraki faz
 
@@ -1879,6 +2062,5 @@ sorunudur - bu turda DÜZELTİLMEDİ (kapsam dışı).
 2. Sağlayıcı bağımsız gönderim portu + e-Arşiv entegratör adapter'ı.
 3. Gönderim/durum sorgulama ve retry.
 4. Outbox'ı sürekli tüketen bir `BackgroundService` (feature flag'li, config'den batch/polling).
-5. `UnsignedUblKaliciHata` durum geçiş kodu.
-6. Frontend zorunlu veri giriş ekranları (hâlâ yapılmadı) ve e-belge takip/hata yönetimi ekranları.
-7. PDF ve e-posta artifact'ları (bu noktada `Icerik varbinary(max)` kararı yeniden değerlendirilmeli).
+5. Frontend zorunlu veri giriş ekranları (hâlâ yapılmadı) ve e-belge takip/hata yönetimi ekranları.
+6. PDF ve e-posta artifact'ları (bu noktada `Icerik varbinary(max)` kararı yeniden değerlendirilmeli).

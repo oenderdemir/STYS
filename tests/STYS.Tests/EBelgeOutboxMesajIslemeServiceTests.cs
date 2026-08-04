@@ -28,6 +28,57 @@ public class EBelgeOutboxMesajIslemeServiceTests
     }
 
     [Fact]
+    public async Task AtomikTamamlandiSonucundaCompleteIkinciKezCagrilmaz()
+    {
+        // Handler (ör. artefakt oluşturma), outbox geçişini KENDİ atomik transaction'ında zaten
+        // yapmıştır (bkz. Faz 2B.6.1 görev md.3) - IsleAsync bu durumda TryCompleteAsync'i İKİNCİ
+        // kez ÇAĞIRMAMALIDIR.
+        var handler = new FakeHandler(
+            EBelgeOutboxIsTuru.ArtefaktOlustur,
+            _ => EBelgeOutboxHandlerSonucu.AtomikTamamlandi());
+        var sut = CreateSut(handler);
+
+        var sonuc = await sut.Service.IsleAsync(CreateClaim());
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(0, sut.Transition.CompleteCallCount);
+        Assert.Equal(0, sut.Transition.FailCallCount);
+        Assert.Equal(EBelgeOutboxIslemeSonucuTuru.Tamamlandi, sonuc.SonucTuru);
+    }
+
+    [Fact]
+    public async Task AtomikTerminalHataSonucundaFailIkinciKezCagrilmaz()
+    {
+        var handler = new FakeHandler(
+            EBelgeOutboxIsTuru.ArtefaktOlustur,
+            _ => EBelgeOutboxHandlerSonucu.AtomikTerminalHata());
+        var sut = CreateSut(handler);
+
+        var sonuc = await sut.Service.IsleAsync(CreateClaim());
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(0, sut.Transition.CompleteCallCount);
+        Assert.Equal(0, sut.Transition.FailCallCount);
+        Assert.Equal(EBelgeOutboxIslemeSonucuTuru.TerminalHata, sonuc.SonucTuru);
+    }
+
+    [Fact]
+    public async Task SahiplikKaybedildiSonucundaHicbirTransitionCagrilmaz()
+    {
+        var handler = new FakeHandler(
+            EBelgeOutboxIsTuru.ArtefaktOlustur,
+            _ => EBelgeOutboxHandlerSonucu.SahiplikKaybedildi());
+        var sut = CreateSut(handler);
+
+        var sonuc = await sut.Service.IsleAsync(CreateClaim());
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(0, sut.Transition.CompleteCallCount);
+        Assert.Equal(0, sut.Transition.FailCallCount);
+        Assert.Equal(EBelgeOutboxIslemeSonucuTuru.SahiplikKaybedildi, sonuc.SonucTuru);
+    }
+
+    [Fact]
     public async Task TryCompleteAsyncExceptionUretirseExceptionYayilirFailVePolicyCagrilmaz()
     {
         var sut = CreateSut(
@@ -701,6 +752,14 @@ public class EBelgeOutboxMesajIslemeServiceTests
         public Task<bool> TryRenewAsync(int outboxMesajiId, int kurumId, string kilitToken, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
         {
             RenewCallCount++;
+            return Task.FromResult(true);
+        }
+
+        public int OwnedCallCount { get; private set; }
+
+        public Task<bool> IsOwnedAsync(int outboxMesajiId, int kurumId, string kilitToken, CancellationToken cancellationToken = default)
+        {
+            OwnedCallCount++;
             return Task.FromResult(true);
         }
     }

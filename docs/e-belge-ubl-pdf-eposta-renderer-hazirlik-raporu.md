@@ -2234,4 +2234,319 @@ doğrulanmıştır (Failed: 2, ikisi de bu turda dokunulmayan dosyalarda).
 3. Gönderim/durum sorgulama ve retry.
 4. Outbox'ı sürekli tüketen bir `BackgroundService` (feature flag'li, config'den batch/polling).
 5. Frontend zorunlu veri giriş ekranları (hâlâ yapılmadı) ve e-belge takip/hata yönetimi ekranları.
+
+## Faz 2B.7 sonuç bölümü — XMLDSig/XAdES-BES imzalama ve SignedReady artifact
+
+**Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.28 koşulları — hepsi genuinely karşılandı).**
+
+### GİB imza profili — kanıt zinciri ve güven seviyeleri
+
+**Yüksek güven (doğrudan resmî/vendored kaynaktan alıntı):**
+
+- **XAdES-BES + enveloped teknik**: GİB'in resmî *"e-Fatura Uygulaması Entegrasyon Kılavuzu"*
+  (v1.10, Haziran 2018, `https://ebelge.gib.gov.tr/dosyalar/kilavuzlar/e-FaturaUygulamasiEntegrasyonKilavuzu-v1.10.pdf`,
+  sayfa 17) şu cümleyi içerir: *"Belgelerin imzalanmasında ve onaylanmasında en az XAdES-BES
+  standardı ve enveloped tekniği kullanılır."* Aynı belge, UTF-8 kodlamasını zorunlu kılar ve
+  GİB Merkezi'nin imza doğrulaması YAPMADIĞINI, doğrulamanın gönderici/alıcı biriminin kendi
+  sorumluluğunda olduğunu açıkça belirtir (dipnot: *"Merkez imza doğrulaması yapmamaktadır. İmza
+  doğrulamasının gönderici birim tarafından yapılması gerekmektedir."*) — bu, bağımsız
+  doğrulayıcının (md.11) neden ayrı, kendi başına yeterli bir katman olarak tasarlandığının
+  doğrudan gerekçesidir.
+- **RSA-SHA1 yasağı**: vendored `UBL-TR_Common_Schematron.xml`, `SignatureMethodCheck` kuralı:
+  `ds:SignedInfo/ds:SignatureMethod/@Algorithm != 'http://www.w3.org/2000/09/xmldsig#rsa-sha1'`.
+- **Referans/transform yapısı**: aynı schematron dosyasında `TransformCountCheck` (referans başına
+  en fazla 1 `ds:Transform`), `SignatureCountCheck`/`X509DataCheck` (`ds:KeyInfo/ds:X509Data/ds:X509Certificate`
+  zorunlu), `XadesSignatureCheck`/`XadesSignatureCheckForInvoice` (`xades:SigningTime` +
+  `xades:SigningCertificate` — V2 DEĞİL — zorunlu), `SignatureCheck` (`cac:Signature/cbc:ID/@schemeID='VKN_TCKN'`,
+  uzunluk 10/11), `<sch:ns prefix="xades" uri="http://uri.etsi.org/01903/v1.3.2#" />` (XAdES v1.3.2
+  ad alanı doğrulaması).
+- **`cac:Signature`'ın GERÇEK yapısı**: bu turda kritik bir ARAŞTIRMA HATASI düzeltildi — önceki
+  turda `cac:Signature`'ın `UBL-SignatureAggregateComponents-2.1.xsd`'deki
+  `sac:SignatureInformationType` (cbc:ID?, sbc:ReferencedSignatureID?, ds:Signature?) ile
+  YANLIŞLIKLA karıştırılmıştı. Gerçek şema (`UBL-CommonAggregateComponents-2.1.xsd`,
+  `SignatureType`, `<xsd:element name="Signature" type="SignatureType"/>`) şudur:
+  `cbc:ID` (ZORUNLU), `cac:SignatoryParty` (ZORUNLU, `PartyType`), `cac:DigitalSignatureAttachment`
+  (ZORUNLU, `AttachmentType`) — ÜÇÜ DE minOccurs'suz, yani varsayılan `minOccurs=1`. Bu hata,
+  imzalı XML'i sıfır-tolerans XSD doğrulamasına (md.12) tabi tutana kadar hiç ORTAYA ÇIKMAMIŞTI
+  (bkz. "Renderer'da ortaya çıkan pre-existing hatalar" bölümü).
+- **`cac:DigitalSignatureAttachment`'ın içeriği**: aynı schematron dosyasının `SignatureCheck`
+  kuralı içinde, YORUMA ALINMIŞ (şu an aktif DEĞİL) ama AÇIKÇA belgelenmiş 2 assert bulunur:
+  `cac:DigitalSignatureAttachment/cac:ExternalReference` bulunmalı, ve
+  `cac:DigitalSignatureAttachment/cac:ExternalReference/cbc:URI` `'#'` ile BAŞLAMALI. Bu,
+  `cac:DigitalSignatureAttachment/cac:ExternalReference/cbc:URI = "#" + ds:Signature/@Id`
+  deseninin resmî kaynakta AÇIKÇA belgelendiğinin kanıtıdır (henüz zorunlu kılınmamış olsa da).
+- **`cac:SignatoryParty` içeriği**: aynı schematron dosyasında **AKTİF** (yoruma alınmamış) bir
+  kural — `SignatoryPartyPartyIdentificationCheck`: `cac:SignatoryParty`, `schemeID` değeri
+  `'VKN'` veya `'TCKN'` olan EN AZ BİR `cac:PartyIdentification/cbc:ID` içermelidir.
+
+**Orta güven (ikincil/yardımcı kaynak, doğrudan GİB metniyle TEYİT EDİLMEMİŞ — açıkça işaretlenir):**
+
+- **SHA-256 digest, RSA-SHA256 imza algoritması, C14N 1.0 (kapsayıcı, `REC-xml-c14n-20010315`)
+  canonicalization**: TÜBİTAK KamuSM'nin (GİB kılavuzunun mali mühür sertifikası için resmi
+  kaynak olarak işaret ettiği kurum) ESYA SDK dokümantasyonu
+  (`https://yazilim.kamusm.gov.tr/esya-api/doku.php?id=esya:xades:kod-e-fatura`) `DigestMethod.SHA_256`,
+  `TransformType.ENVELOPED`, boş-URI tüm-belge referansı, `ds:Signature/@Id`'nin faturanın
+  `cbc:URI` değeriyle (başındaki `#` çıkarılarak) eşleşmesi desenini doğrular. Bu, vendored
+  schematron/XSD'de DOĞRUDAN belirtilmemiştir (yalnız RSA-SHA1'in YASAK olduğu doğrulanmıştır) —
+  bu yüzden `EBelgeXadesProfili.GibUblTr` kaydında (bkz. aşağı) her alanın kaynağı XML doc
+  yorumunda AYRI AYRI işaretlenmiştir.
+
+Bu profil `EBelgeXadesProfili.GibUblTr` (yeni `backend/Muhasebe/SatisBelgeleri/EBelgeXadesProfili.cs`)
+içinde type-safe, tek bir kayıt olarak merkezileştirilmiştir; ayrıca `YasakliRsaSha1Uri` sabiti
+RSA-SHA1'in asla sessizce kullanılamayacağını kod seviyesinde belgeler (md.2).
+
+### `System.Security.Cryptography.Xml` yeterlilik kararı (md.23)
+
+Üçüncü taraf bir XAdES kütüphanesi EKLENMEDİ. `System.Security.Cryptography.Xml.SignedXml` +
+`X509Certificate2` + elle inşa edilmiş XAdES `QualifyingProperties` alt-ağacı yeterli bulundu:
+gerekli tüm imza türleri (enveloped XMLDSig, XAdES-BES SignedProperties referansı) bu API'lerle
+üretilebiliyor ve BAĞIMSIZ olarak (kütüphanenin kendi doğrulayıcısına güvenmeden) doğrulanabiliyor
+(md.11). Bu karar, lisans/bakım/güncellik değerlendirme tablosu gerektiren md.23 kapısını (yeni bir
+bağımlılık riski taşımadığından) TAMAMEN BAYPAS eder.
+
+### İki gerçek `SignedXml`/C14N mühendislik hatası ve düzeltmeleri
+
+Bu iki hata, "GİB profilini uygulamak" ile "`System.Security.Cryptography.Xml`'in kendi iç
+davranışını doğru kullanmak" arasındaki farkı gösterir — GİB profiliyle İLGİSİZDİR, .NET'in XAdES
+imzalama deseninin BİLİNEN kısıtlarıdır:
+
+1. **"Malformed reference element"**: `.NET`'in `SignedXml.GetIdElement()` TEMEL implementasyonu,
+   `SignedXml.AddObject()` ile eklenmiş, henüz belgeye YERLEŞTİRİLMEMİŞ bir `DataObject` içindeki
+   `Id` niteliğini (`xades:SignedProperties/@Id`) OTOMATİK OLARAK ARAMAZ. Çözüm: özel bir
+   `XadesAwareSignedXml : SignedXml` alt sınıfı, `GetIdElement`'i override ederek `Signature.ObjectList`
+   içinde de arama yapar (yalnız bu TEK davranışı değiştirir).
+2. **SignedProperties digest uyuşmazlığı**: `xades:SignedProperties` referansının transformu
+   olarak BAŞLANGIÇTA kapsayıcı (`http://www.w3.org/TR/2001/REC-xml-c14n-20010315`) C14N
+   kullanıldı (profildeki `CanonicalizationAlgorithmUri` ile TUTARLI olsun diye). Ancak
+   `SignedProperties`, imzalama ANINDA belgeye HENÜZ YERLEŞTİRİLMEMİŞ (kopuk/detached) bir
+   alt-ağaç olarak canonicalize edilir — kapsayıcı C14N, kapsam-içi TÜM ad alanı düğümlerini
+   (kullanılsın ya da kullanılmasın) render ETMEK ZORUNDADIR; bu, imzalama anındaki (kopuk, yalnız
+   `xades`/`ds` önekleri kapsam-içi) bağlamla, son serialize edilmiş belgede yeniden ayrıştırma
+   SONRASI (kök `Invoice`'un `cac`/`cbc`/`ext` ad alanları VE `ds:Signature`'ın varsayılan ad alanı
+   da artık miras alınabilir durumda) bağımsızca yeniden hesaplanan digest'in ASLA
+   eşleşemeyeceği anlamına gelir. **Çözüm**: yalnız BU referansın transformu için Exclusive XML
+   Canonicalization (`http://www.w3.org/2001/10/xml-exc-c14n#`) kullanılır — yalnız FİİLEN
+   kullanılan ad alanı öneklerini render eder, gömülme bağlamından BAĞIMSIZDIR.
+   `ds:SignedInfo/ds:CanonicalizationMethod` ve belge referansının (`URI=""`) transformu
+   BUNDAN ETKİLENMEZ — ikisi de araştırmayla doğrulanmış kapsayıcı C14N'de KALIR (`ds:SignedInfo`
+   zaten kendi başına, ambient ad alanı sızıntısı OLMADAN, XMLDSig spesifikasyonu gereği bağımsız
+   bir canonicalization kökü gibi ele alınır — SignedProperties'in aksine bu sorunu YAŞAMAZ, bkz.
+   `EBelgeXmlImzalayici.cs`/`EBelgeXmlImzaDogrulayici.cs` içindeki ayrıntılı XML doc açıklamaları).
+   GİB kaynaklarının HİÇBİRİ SignedProperties referansının transform algoritmasını AÇIKÇA
+   belirtmediğinden (yalnız "referans başına en fazla bir Transform" ve rsa-sha1 yasağı
+   doğrulanmıştır), bu seçim GİB profilini İHLAL ETMEZ — yalnız .NET'in kendi kısıtına karşı
+   gerekli, izole bir mühendislik kararıdır.
+
+### Renderer'da ortaya çıkan pre-existing hatalar (md.12 sıfır-tolerans XSD doğrulamasıyla ortaya çıktı)
+
+İmzalı XML'i sıfır-tolerans tam XSD doğrulamasına (`EBelgeUblXsdValidator.Validate`, md.12) tabi
+tutmak, Faz 2B.5'ten beri VAR OLAN ama hiç FARK EDİLMEMİŞ 2 renderer hatasını ortaya çıkardı — bu
+hatalar imzalamayla İLGİSİZDİR, ama imzalı çıktının sıfır-tolerans kapısından geçebilmesi için
+DÜZELTİLMESİ ZORUNLUYDU. İkisi de şimdiye kadar fark edilmemişti çünkü unsigned doğrulama
+(`ValidateUnsignedRendererOutput`) yalnız TEK bir bilinen bulguyu (`ext:UBLExtensions` eksikliği —
+kök `Invoice`'un İLK elemanı) tolere eder ve .NET'in şema doğrulayıcısı bu eksiklikte belgenin
+DAHA İLK elemanında (pozisyon 0) durur — hiçbir zaman belgenin geri kalanını doğrulamaya
+DEVAM ETMEZ:
+
+1. **`cbc:LineCountNumeric` hiç emit edilmiyordu**: `UBL-Invoice-2.1.xsd`'de bu eleman `cbc:DocumentCurrencyCode`
+   ailesinden SONRA, `cac:Signature`/`cac:AccountingSupplierParty`'den ÖNCE ZORUNLUDUR
+   (`minOccurs` YOK). `EBelgeUblRenderer.WriteHeader` bu elemanı hiç yazmıyordu. Düzeltme:
+   `BuildXml`, `WriteHeader`'dan hemen sonra `snapshot.Satirlar.Count` değerini yazar.
+2. **`cbc:Percent`, `cac:TaxCategory` içinde YANLIŞ konumdaydı**: vendored `TaxCategoryType`
+   (`UBL-CommonAggregateComponents-2.1.xsd`) `cbc:Percent` İÇERMEZ (yalnız
+   `Name?/TaxExemptionReasonCode?/TaxExemptionReason?/TaxScheme` — Percent, `cac:TaxSubtotal`
+   seviyesinde zaten DOĞRU konumdaydı). `WriteKdvTaxCategory`, oranı `cac:TaxCategory` İÇİNE de
+   (geçersiz, ikinci bir kez) yazıyordu. Düzeltme: `cac:TaxCategory` içindeki tekrarlı `WriteCbc(w, "Percent", ...)` satırı KALDIRILDI.
+
+Her iki düzeltme de `EBelgeUblRenderer.cs`'te, imzalama koduna HİÇ dokunmadan yapılmıştır — Faz
+2B.5/2B.6'nın "unsigned XML'in TEK bilinen bulgusu `ext:UBLExtensions` eksikliğidir" iddiası artık
+DAHA GÜÇLÜ bir temelde durmaktadır (önceden yalnız İLK hata görülebiliyordu; şimdi imzalı çıktı
+gerçekten sıfır ek hatayla doğrulanmıştır).
+
+### `cac:Signature`'ın tam, şema-geçerli inşası (md.7)
+
+`InsertCacSignature` (bkz. `EBelgeXmlImzalayici.cs`) artık üç ZORUNLU alt elemanı da üretir:
+
+- `cbc:ID` (`schemeID="VKN_TCKN"`) — belgenin KENDİ, ZATEN doğrulanmış
+  `AccountingSupplierParty/cac:Party/cac:PartyIdentification[schemeID='VKN']/cbc:ID` değerinden
+  okunur (sertifika subject'inden TAHMİNÎ parse EDİLMEZ).
+- `cac:SignatoryParty` — AYNI, ZATEN doğrulanmış `PartyIdentification` (schemeID=VKN) VE
+  `PostalAddress` alt-ağaçları `AccountingSupplierParty/cac:Party`'den KLONLANIR (YENİ iş verisi
+  İCAT EDİLMEZ; `PartyType`'ın zorunlu `cac:PartyIdentification`+`cac:PostalAddress`'ini VE
+  `SignatoryPartyPartyIdentificationCheck`'i birlikte karşılar).
+- `cac:DigitalSignatureAttachment/cac:ExternalReference/cbc:URI` = `"#" + signatureId` — gömülü
+  `ds:Signature`'a işaret eder (yoruma alınmış ama belgelenmiş schematron deseniyle uyumlu).
+
+Gerçek kriptografik imza (`ds:Signature`) BURAYA KONULMAZ — yalnız `ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent`
+altına eklenir (md.7); `cac:Signature` ile `ds:Signature` birbirinden KESİN olarak ayrıdır.
+
+### XAdES SignedProperties, sertifika ön-kontrolleri, güven doğrulayıcısı (md.9-10)
+
+`xades:QualifyingProperties/@Target="#Signature-1"` → `xades:SignedProperties/@Id="SignedProperties-1"`
+→ `xades:SignedSignatureProperties/{xades:SigningTime, xades:SigningCertificate/xades:Cert/{xades:CertDigest,
+xades:IssuerSerial}}`. `xades:SigningTime`, `talep.ImzalamaZamaniUtc` (çağıran taraftan `TimeProvider`
+üzerinden gelir — `DateTime.Now`/`UtcNow` HİÇ KULLANILMAZ) üzerinden `"yyyy-MM-ddTHH:mm:ssZ"`
+formatında, `InvariantCulture` ile yazılır (tr-TR `CurrentCulture` altında test edilmiştir).
+`xades:IssuerSerial/ds:X509SerialNumber`, sertifikanın little-endian seri numarası byte'larını
+büyük-endian'a çevirip işaretsiz `BigInteger` olarak ondalık string'e dönüştürür.
+
+Sertifika, imzalamadan ÖNCE `ValidateSertifika` ile kontrol edilir: private key varlığı, geçerlilik
+aralığı (parametre olarak geçirilen `simdiUtc`'ye göre — `DateTime.UtcNow` DEĞİL), `X509KeyUsageExtension`
+(varsa `DigitalSignature` bayrağını İÇERMELİ), RSA anahtar + `KeySize >= 2048`, ve public/private
+anahtar eşleşmesi (sabit bir probe byte dizisi üzerinde imzala+doğrula round-trip'i ile). Ayrı bir
+`IEBelgeSertifikaGuvenValidatoru` portu (md.10) tam zincir/iptal (OCSP/CRL) doğrulamasını TEMSİL
+EDER ama bu turda GERÇEK bir trust-store/OCSP implementasyonu YAZILMAMIŞTIR — production
+implementasyonu (`EBelgeSertifikaGuvenValidatoruYapilandirilmadi`) fail-closed'dır (her zaman
+`Guvensiz` döner, `EBELGE_SIGNING_TRUST_VALIDATOR_NOT_CONFIGURED`), test'ler kendi açık politika
+double'ını (`EBelgeTestSertifikaGuvenPolicy`) kullanır. **Bu, açık bırakılan bir üretim
+konusudur** (bkz. "Açık kalan konular").
+
+### Sertifika/private key sağlayıcı portu (md.4-6)
+
+`IEBelgeImzaKimligiSaglayici.GetAsync(kurumId, ct)` → `EBelgeImzaKimligi` (sertifika, sağlayıcı
+türü, parmak izi, geçerlilik tarihleri). Production varsayılanı `EBelgeImzaKimligiYapilandirilmadiSaglayici`
+— HER ZAMAN `EBelgeSigningProviderNotConfiguredException` (`EBELGE_SIGNING_PROVIDER_NOT_CONFIGURED`)
+fırlatır; dosya sistemi/env-var-PFX/Windows sertifika mağazası/repo dosyası OKUMAZ, otomatik
+self-signed üretim sertifikası OLUŞTURMAZ. Gelecekteki HSM/PKCS11/CNG/uzak-imzalama/mali-mühür
+entegrasyonu için genişletilebilir (bu turda GERÇEK bir vendor entegrasyonu YAZILMAMIŞTIR — bilinçli
+kapsam dışı bırakma). Test sağlayıcısı (`EBelgeTestSertifikaSaglayici`, `tests/STYS.Tests/`) `CertificateRequest.CreateSelfSigned`
+ile bellek-içi RSA 2048 sertifika üretir; private key HİÇBİR ZAMAN diske YAZILMAZ, loglanmaz.
+**Bu self-signed test sertifikası, GERÇEK bir üretim güven zincirini (mali mühür/QES) TEMSİL
+ETMEZ** — yalnız kriptografik imza/doğrulama MEKANİZMASININ doğruluğunu kanıtlar.
+
+### Bağımsız doğrulayıcı (md.11) — imzalayıcıdan AYRI kod yolu
+
+`EBelgeXmlImzaDogrulayici`, imzalayıcının yardımcı metotlarını PAYLAŞMAZ — ayrı bir XML parse
+(DTD/harici entity/network/dosya URI'si KAPALI), ayrı node çözümlemesi, ayrı hash hesaplaması
+kullanır: (1) TEK bir `ds:Signature`; (2) yinelenen `Id` niteliği YOK (signature-wrapping
+sertleştirmesi); (3) TAM OLARAK 2 `ds:Reference`; (4) `SignatureMethod`/`CanonicalizationMethod`
+profil whitelist'iyle TAM eşleşme; (5) tüm-belge referansının (`URI=""`) digest'i, `ds:Signature`
+KALDIRILMIŞ bir KOPYA üzerinde tüm-belge C14N ile BAĞIMSIZ yeniden hesaplanır; (6) `SignedProperties`
+referansının hedef `Id`'si belgede TAM OLARAK BİR KEZ bulunur (signature-wrapping savunması),
+digest'i Exclusive C14N ile BAĞIMSIZ yeniden hesaplanır; (7) gömülü sertifikanın `xades:CertDigest`'i
+BAĞIMSIZ yeniden hesaplanır; (8) `SignedInfo` üzerindeki RSA imzası, gömülü sertifikanın public
+key'iyle elle C14N + `RSA.VerifyData` ile BAĞIMSIZ yeniden doğrulanır; (9) EK bir katman olarak
+`.NET`'in kendi `SignedXml.CheckSignature()`'ı çağrılır — **TEK BAŞINA YETERLİ SAYILMAZ**, yalnız
+yukarıdaki bağımsız katmanları TAMAMLAR.
+
+### Artifact/hash zinciri, outbox iş türü, transaction sınırı (md.13-17)
+
+`EBelgeArtifactAsamasi.SignedReady = 2` eklendi; `EBelgeArtifact`'a 7 yeni nullable alan
+(`KaynakArtifactId`, `KaynakArtifactSha256`, `ImzaProfili`, `ImzaAlgoritmasi`, `DigestAlgoritmasi`,
+`ImzalayanSertifikaSha256ParmakIzi`, `ImzalamaZamaniUtc`) — yeni `CK_EBelgeArtifactlari_ImzaAlanlari`
+check constraint'i bunların SignedReady'de TAMAMI dolu, Unsigned'da TAMAMI null olmasını DB
+seviyesinde garanti eder; kendine-referanslı, tenant-farkında (`Id+KurumId`) `Restrict` FK
+(`FK_EBelgeArtifactlari_EBelgeArtifactlari_KaynakArtifactId_KurumId`) cascade delete/cross-tenant
+zincir RİSKİNİ yapısal olarak engeller. `EBelgeOutboxIsTuru.UblImzala = 2` eklendi; Faz 2B.6'nın
+artifact-farkında lease guard'ı (`IsOwnedForArtifactAsync` vb.) `IsOwnedForJobAsync(...,
+expectedIsTuru, ...)` olarak İŞ-TÜRÜ-PARAMETRELİ genelleştirildi (SQL artık `@IsTuru` parametresi
+kullanır — hardcoded `IsTuru = 1` KALDIRILDI); `EBelgeArtefaktOlusturmaService`'in TÜM çağrı
+noktaları güncellendi.
+
+`EBelgeUblImzalamaService.ImzalaAsync` kesin akışı: (1) DB DIŞI kısa okuma — `EBelgeKaydi` +
+`IgnoreQueryFilters()` ile Unsigned artifact (soft-delete edilmiş kaynak REDDEDİLİR) + kayıtlı
+hash'in içerikle yeniden doğrulanması; (2) DB DIŞI imzalama (`IEBelgeXmlImzalayici`) + sonuç
+hash'inin bağımsız yeniden hesaplanması + bağımsız doğrulama (`IEBelgeXmlImzaDogrulayici`) + TAM
+XSD (sıfır tolerans) + GERÇEK Java Saxon sidecar Schematron (sıfır ihlal) — satır kilidi bu SÜREÇTE
+HİÇ TUTULMAZ; (3) KISA bir atomik transaction: `IsOwnedForJobAsync` (UblImzala) → idempotency
+kontrolü (bkz. aşağı) → SignedReady artifact insert + `EBelgeKaydi.Durum = SignedReady` +
+`TryCompleteJobAsync` → **TEK** commit. `EBelgeUblImzalaOutboxHandler`, `EBelgeArtefaktOlusturOutboxHandler`
+İLE AYNI type-safe dispatch desenini kullanır.
+
+### İdempotency (md.20)
+
+Mevcut bir SignedReady artifact bulunursa: kaynak (`KaynakArtifactId`+`KaynakArtifactSha256`)
+EŞLEŞİYORSA VE soft-delete edilmemişse, mevcut artifact'in imzası **BAĞIMSIZ OLARAK YENİDEN
+DOĞRULANIR** (yalnız var olduğu için güvenilmez) — geçerliyse idempotent başarı; kaynak
+EŞLEŞMİYORSA VEYA soft-delete edilmişse `EBELGE_SIGNING_SIGNED_ARTIFACT_IDEMPOTENCY_CONFLICT` ile
+kalıcı hata. Byte-birebir eşleşme BEKLENMEZ (`xades:SigningTime` her yeniden imzalamada farklıdır —
+RSA-PKCS1 kendi başına deterministik olsa da girdi her defasında değişir) — bu KASITLI bir tasarım
+kararıdır ve kodda AÇIKÇA belgelenmiştir. Mevcut bir SignedReady artifact ASLA güncellenmez/üzerine
+yazılmaz.
+
+### Aktivasyon kapısı (md.18)
+
+`EBelgeSigningActivationGate.ShouldCreateSigningMessage()`: `EBelgeSigningOptions.Enabled=false`
+İSE her zaman `false` (fail-closed varsayılan, `appsettings.json`: `{"EBelgeSigning": {"Enabled":
+false, "NotBeforeLocalDate": "2026-09-15"}}`); `TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul")`
+ile SUNUCU YEREL saat dilimine GÜVENMEDEN, `TimeProvider` üzerinden test-sabitlenebilir biçimde
+`NotBeforeLocalDate`'in Europe/Istanbul yerel gün BAŞLANGICINI UTC'ye çevirip karşılaştırır;
+geçersiz/eksik tarih konfigürasyonu FAIL-CLOSED (`false`) döner. `EBelgeArtefaktOlusturmaService`,
+bir Unsigned artifact'ın İLK GERÇEK (idempotent replay DEĞİL) başarılı oluşturulmasında, kapı AÇIKSA
+AYNI atomik transaction içinde TEK bir `UblImzala` outbox mesajı ekler.
+
+### Test kapsamı ve çalıştırılan hedefli komutlar
+
+**Birim testleri (DB/sidecar GEREKMEZ, gerçek RSA test sertifikasıyla GERÇEK kriptografik imza):**
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests"
+  → Passed: 27, Failed: 0, Total: 27
+```
+
+`EBelgeXmlImzalayiciTests` (17 test): XML yapısı/ad alanı/ID-URI bağları, `cac:Signature`
+kriptografik imza İÇERMEZ, mevcut-Id çakışması reddi, **GERÇEK sertifikayla GERÇEK imza üretimi +
+bağımsız doğrulama başarısı**, tek-byte `SignatureValue` bozulması → doğrulama reddi, `xades:SigningTime`
+bozulması → doğrulama reddi, başka sertifikanın public key'i → doğrulama reddi, private-key'siz
+sertifika reddi, süresi dolmuş/henüz geçerli olmayan sertifika reddi, güvensiz sertifika reddi,
+determinizm (aynı girdi+sabit zaman → byte-birebir aynı sonuç — RSA-PKCS1 deterministiktir),
+`SigningTime`'ın `TimeProvider`'dan gelmesi + culture-bağımsızlığı (tr-TR ile test edildi),
+kaynak/sonuç hash uyuşmazlığı reddi, production fail-closed sağlayıcı/güven-validatörü davranışı,
+düz imzasız XML'in bağımsız doğrulamadan GEÇEMEMESİ. `EBelgeSigningActivationGateTests` (10 test):
+`Enabled=false`, 14/15 Eylül 2026 Europe/Istanbul sınırı (tam gün başlangıcı dahil), server-UTC/yerel
+fark eşdeğerliği, geçersiz tarih formatları (5 senaryo) fail-closed, gelecek tarihli `NotBeforeLocalDate`.
+
+**Entegrasyon testleri (GERÇEK SQL Server + GERÇEK Java Saxon sidecar + GERÇEK test sertifikası):**
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests|FullyQualifiedName~EBelgeUblImzalamaServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeUblRendererEndToEndIntegrationTests|FullyQualifiedName~EBelgeSchematronSidecarIntegrationTests|FullyQualifiedName~EBelgeFaz1IntegrationTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests"
+  → Passed: 185, Failed: 0, Total: 185 (gerçek SQL Server + gerçek Java Saxon sidecar ile)
+```
+
+Yeni `EBelgeUblImzalamaServiceIntegrationTests` (9 test) kapsamı: GERÇEK imza + SignedReady
+artifact üretimi + hash zinciri doğrulaması (kaynak/sonuç, sıfır-tolerans XSD + GERÇEK Schematron
+zaten servisin İÇİNDE geçilmiş olmalı — aksi halde `AtomikBasarili` dönmezdi) + kalıcılaşan içerik
+üzerinde AYRICA bağımsız doğrulama; tam outbox akışı (claim→handler→işleme servisi, gerçek sidecar);
+aynı kaynağa eşleşen mevcut SignedReady ile idempotent başarı (ikinci satır EKLENMEZ, mevcut
+YENİDEN doğrulanır); farklı (ama GERÇEK, kendine-referanslı FK'yı sağlayan) bir kaynağa bağlı
+mevcut SignedReady ile idempotency-conflict; Unsigned artifact yok/soft-delete edilmiş/hash
+uyuşmuyor → kalıcı hata; imzalama sırasında lease süresinin dolması → SahiplikKaybedildi, hiçbir
+şey değişmez; yanlış iş-türlü (`ArtefaktOlustur`) bir claim ile imzalama YAPILAMAZ (iş-türü-farkında
+guard'ın imzalama servisi TARAFINDAN da GERÇEKTEN kullanıldığının kanıtı). Mevcut
+`EBelgeArtefaktOlusturmaServiceIntegrationTests`'e eklenen 3 yeni test: aktivasyon kapısı AÇIKKEN
+İLK gerçek başarıda tam olarak BİR `UblImzala` mesajı oluşur; kapı KAPALIYKEN mesaj OLUŞMAZ; kapı
+AÇIKKEN idempotent (önceden-seedli) tamamlanmada İKİNCİ bir mesaj EKLENMEZ.
+
+`TicariBelgeIptalYarisKosuluIntegrationTests`/`FaturaNumaraIntegrationTests` bu filtrenin DIŞINDA
+bırakılmıştır — bu iki sınıf, Faz 2B.6.2 raporunda ZATEN belgelenen, bu turun HİÇBİR değişikliğiyle
+İLGİSİZ, önceden var olan ortam sorununu taşımaya DEVAM ETMEKTEDİR (bu turda dokunulan HİÇBİR
+dosya — `SatisBelgesiService.cs` dahil — bu sınıfların bağımlı olduğu koda DEĞİNMEMİŞTİR;
+ayrıca bu iki sınıf TEK BAŞINA çalıştırıldığında da AYNI şekilde başarısızdır, bu turun
+değişiklikleriyle bir ETKİLEŞİMİ OLMADIĞININ kanıtıdır).
+
+### Açık kalan konular (üretime geçmeden önce)
+
+1. **Gerçek trust-store/OCSP/CRL doğrulaması YOK** — `IEBelgeSertifikaGuvenValidatoru`nun
+   production implementasyonu (`EBelgeSertifikaGuvenValidatoruYapilandirilmadi`) fail-closed'dır
+   ama GERÇEK bir zincir/iptal kontrolü henüz YAZILMAMIŞTIR.
+2. **Gerçek mali mühür/HSM/PKCS11/CNG/uzak-imzalama entegrasyonu YOK** — `IEBelgeImzaKimligiSaglayici`
+   portu bunun İÇİN genişletilebilir tasarlanmıştır ama bu turda GERÇEK bir vendor entegrasyonu
+   YAZILMAMIŞTIR (bilinçli kapsam dışı — md.4).
+3. Self-signed test sertifikası GERÇEK bir üretim güven zincirini TEMSİL ETMEZ (yukarıda tekrar
+   vurgulanmıştır).
+4. Sürekli çalışan bir outbox worker/polling döngüsü hâlâ YOK (Faz 2B.6'dan beri açık, kapsam dışı).
+5. Gönderim/durum sorgulama, PDF/e-posta üretimi, frontend zorunlu veri giriş ve e-belge takip
+   ekranları hâlâ YAPILMADI.
+6. Üretim etkinleştirmesi 15 Eylül 2026 Europe/Istanbul öncesi `EBelgeSigningActivationGate`
+   tarafından YAPISAL olarak ENGELLENİR (`appsettings.json`: `Enabled: false` varsayılanı VE
+   tarih kapısı BİRLİKTE) — bu tarihten önce `Enabled: true` yapılsa BİLE tarih kapısı imzalama
+   mesajı oluşturulmasını engeller.
+
+### Sonraki faz
+
+1. Gerçek mali mühür/HSM sertifika sağlayıcısı + trust-store/OCSP/CRL doğrulaması.
+2. Sağlayıcı bağımsız gönderim portu + e-Arşiv entegratör adapter'ı.
+3. Gönderim/durum sorgulama ve retry.
+4. Outbox'ı sürekli tüketen bir `BackgroundService` (feature flag'li, config'den batch/polling).
+5. Frontend zorunlu veri giriş ekranları ve e-belge takip/hata yönetimi ekranları.
 6. PDF ve e-posta artifact'ları (bu noktada `Icerik varbinary(max)` kararı yeniden değerlendirilmeli).

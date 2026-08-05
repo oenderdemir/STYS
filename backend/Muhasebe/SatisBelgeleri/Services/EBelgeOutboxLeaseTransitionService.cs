@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.SatisBelgeleri.Enums;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
@@ -117,7 +118,7 @@ WHERE [Id] = @OutboxMesajiId
             configure: command => { },
             cancellationToken);
 
-    public Task<bool> IsOwnedForArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default)
+    public Task<bool> IsOwnedForJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, CancellationToken cancellationToken = default)
         => ExecuteTransitionAsync(
             """
 DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
@@ -127,7 +128,7 @@ FROM [muhasebe].[EBelgeOutboxMesajlari] WITH (UPDLOCK, ROWLOCK)
 WHERE [Id] = @OutboxMesajiId
   AND [KurumId] = @KurumId
   AND [EBelgeKaydiId] = @EBelgeKaydiId
-  AND [IsTuru] = 1
+  AND [IsTuru] = @IsTuru
   AND [IsDeleted] = 0
   AND [Durum] = 2
   AND [KilitToken] = @KilitToken
@@ -137,10 +138,14 @@ WHERE [Id] = @OutboxMesajiId
             outboxMesajiId,
             kurumId,
             kilitToken,
-            configure: command => command.Parameters.Add(new SqlParameter("@EBelgeKaydiId", SqlDbType.Int) { Value = eBelgeKaydiId }),
+            configure: command =>
+            {
+                command.Parameters.Add(new SqlParameter("@EBelgeKaydiId", SqlDbType.Int) { Value = eBelgeKaydiId });
+                command.Parameters.Add(new SqlParameter("@IsTuru", SqlDbType.Int) { Value = (int)expectedIsTuru });
+            },
             cancellationToken);
 
-    public Task<bool> TryCompleteArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default)
+    public Task<bool> TryCompleteJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, CancellationToken cancellationToken = default)
         => ExecuteTransitionAsync(
             """
 DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
@@ -159,7 +164,7 @@ OUTPUT inserted.[Id]
 WHERE [Id] = @OutboxMesajiId
   AND [KurumId] = @KurumId
   AND [EBelgeKaydiId] = @EBelgeKaydiId
-  AND [IsTuru] = 1
+  AND [IsTuru] = @IsTuru
   AND [IsDeleted] = 0
   AND [Durum] = 2
   AND [KilitToken] = @KilitToken
@@ -169,13 +174,18 @@ WHERE [Id] = @OutboxMesajiId
             outboxMesajiId,
             kurumId,
             kilitToken,
-            configure: command => command.Parameters.Add(new SqlParameter("@EBelgeKaydiId", SqlDbType.Int) { Value = eBelgeKaydiId }),
+            configure: command =>
+            {
+                command.Parameters.Add(new SqlParameter("@EBelgeKaydiId", SqlDbType.Int) { Value = eBelgeKaydiId });
+                command.Parameters.Add(new SqlParameter("@IsTuru", SqlDbType.Int) { Value = (int)expectedIsTuru });
+            },
             cancellationToken);
 
-    public Task<bool> TryFailArtifactAsync(
+    public Task<bool> TryFailJobAsync(
         int outboxMesajiId,
         int kurumId,
         int eBelgeKaydiId,
+        EBelgeOutboxIsTuru expectedIsTuru,
         string kilitToken,
         string sonHataKodu,
         string sonHataMesaji,
@@ -206,7 +216,7 @@ OUTPUT inserted.[Id]
 WHERE [Id] = @OutboxMesajiId
   AND [KurumId] = @KurumId
   AND [EBelgeKaydiId] = @EBelgeKaydiId
-  AND [IsTuru] = 1
+  AND [IsTuru] = @IsTuru
   AND [IsDeleted] = 0
   AND [Durum] = 2
   AND [KilitToken] = @KilitToken
@@ -219,6 +229,7 @@ WHERE [Id] = @OutboxMesajiId
             configure: command =>
             {
                 command.Parameters.Add(new SqlParameter("@EBelgeKaydiId", SqlDbType.Int) { Value = eBelgeKaydiId });
+                command.Parameters.Add(new SqlParameter("@IsTuru", SqlDbType.Int) { Value = (int)expectedIsTuru });
                 command.Parameters.Add(new SqlParameter("@SonHataKodu", SqlDbType.NVarChar, 100) { Value = sonHataKodu });
                 command.Parameters.Add(new SqlParameter("@SonHataMesaji", SqlDbType.NVarChar, 2000) { Value = sonHataMesaji });
                 command.Parameters.Add(new SqlParameter("@RetryDelaySeconds", SqlDbType.Int) { Value = (object?)retryDelaySeconds ?? DBNull.Value });

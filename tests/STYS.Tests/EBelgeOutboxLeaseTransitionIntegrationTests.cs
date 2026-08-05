@@ -634,21 +634,22 @@ public class EBelgeOutboxLeaseTransitionIntegrationTests : IAsyncLifetime
         Assert.Equal(expected.IsDeleted, actual.IsDeleted);
     }
 
-    // ---- Artifact-aware guard (EBelgeKaydiId + IsTuru=ArtefaktOlustur) (Faz 2B.6.2 görev md.1, md.6-7) ----
+    // ---- İş-türü-farkında guard (EBelgeKaydiId + IsTuru) (Faz 2B.6.2 görev md.1, Faz 2B.7 görev md.16 - senaryo 6-7) ----
 
     [IntegrationFact]
-    public async Task YanlisEBelgeKaydiIdIleArtifactIsOwnedCompleteFailYapilamazHicbirAlanDegismez()
+    public async Task YanlisEBelgeKaydiIdIleJobIsOwnedCompleteFailYapilamazHicbirAlanDegismez()
     {
         var context = await ClaimAndGetContextAsync();
         var before = await GetOutboxAsync(context.OutboxMesajiId);
         var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
         var wrongEBelgeKaydiId = context.EBelgeKaydiId + 999_000;
 
-        // Doğru token/kurum/outbox - ama YANLIŞ EBelgeKaydiId: SQL guard'ı bunu REDDETMELİDİR
-        // (bkz. Faz 2B.6.2 görev md.1 - "outbox satırının EBelgeKaydiId alanı kontrol edilmiyor").
-        Assert.False(await transition.IsOwnedForArtifactAsync(context.OutboxMesajiId, context.KurumId, wrongEBelgeKaydiId, context.KilitToken, CancellationToken.None));
-        Assert.False(await transition.TryCompleteArtifactAsync(context.OutboxMesajiId, context.KurumId, wrongEBelgeKaydiId, context.KilitToken, CancellationToken.None));
-        Assert.False(await transition.TryFailArtifactAsync(context.OutboxMesajiId, context.KurumId, wrongEBelgeKaydiId, context.KilitToken, "E1", "mesaj", null, CancellationToken.None));
+        // Doğru token/kurum/outbox/iş türü - ama YANLIŞ EBelgeKaydiId: SQL guard'ı bunu
+        // REDDETMELİDİR (bkz. Faz 2B.6.2 görev md.1 - "outbox satırının EBelgeKaydiId alanı
+        // kontrol edilmiyor").
+        Assert.False(await transition.IsOwnedForJobAsync(context.OutboxMesajiId, context.KurumId, wrongEBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, context.KilitToken, CancellationToken.None));
+        Assert.False(await transition.TryCompleteJobAsync(context.OutboxMesajiId, context.KurumId, wrongEBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, context.KilitToken, CancellationToken.None));
+        Assert.False(await transition.TryFailJobAsync(context.OutboxMesajiId, context.KurumId, wrongEBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, context.KilitToken, "E1", "mesaj", null, CancellationToken.None));
 
         var after = await GetOutboxAsync(context.OutboxMesajiId);
         Assert.Equal(before.Durum, after.Durum);
@@ -659,14 +660,14 @@ public class EBelgeOutboxLeaseTransitionIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task DogruEBelgeKaydiIdIleArtifactIsOwnedTrueDonerVeCompleteBasariliOlur()
+    public async Task DogruEBelgeKaydiIdIleJobIsOwnedTrueDonerVeCompleteBasariliOlur()
     {
         var context = await ClaimAndGetContextAsync();
         var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
 
-        Assert.True(await transition.IsOwnedForArtifactAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, context.KilitToken, CancellationToken.None));
+        Assert.True(await transition.IsOwnedForJobAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, context.KilitToken, CancellationToken.None));
 
-        var completed = await transition.TryCompleteArtifactAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, context.KilitToken, CancellationToken.None);
+        var completed = await transition.TryCompleteJobAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, context.KilitToken, CancellationToken.None);
 
         Assert.True(completed);
         var outbox = await GetOutboxAsync(context.OutboxMesajiId);
@@ -675,13 +676,13 @@ public class EBelgeOutboxLeaseTransitionIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task DogruEBelgeKaydiIdIleArtifactFailTerminalHataUretir()
+    public async Task DogruEBelgeKaydiIdIleJobFailTerminalHataUretir()
     {
         var context = await ClaimAndGetContextAsync();
         var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
 
-        var failed = await transition.TryFailArtifactAsync(
-            context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, context.KilitToken, "EBELGE_TEST", "test hatasi", retryDelay: null, CancellationToken.None);
+        var failed = await transition.TryFailJobAsync(
+            context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, context.KilitToken, "EBELGE_TEST", "test hatasi", retryDelay: null, CancellationToken.None);
 
         Assert.True(failed);
         var outbox = await GetOutboxAsync(context.OutboxMesajiId);
@@ -691,40 +692,29 @@ public class EBelgeOutboxLeaseTransitionIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task YanlisIsTuruTasiyanSatirArtifactGuardTarafindanReddedilir()
+    public async Task YanlisBeklenenIsTuruIleJobGuardTarafindanReddedilirHicbirAlanDegismez()
     {
+        // Job-parametreli guard sayesinde (bkz. Faz 2B.7 görev md.16), "yanlış iş türü"
+        // senaryosunu üretmek için artık CHECK constraint manipülasyonuna GEREK YOKTUR -
+        // GERÇEK bir ArtefaktOlustur satırına, KASITLI OLARAK YANLIŞ bir expectedIsTuru
+        // (UblImzala) ile erişilmeye çalışılır ve SQL guard'ı bunu REDDETMELİDİR.
         var context = await ClaimAndGetContextAsync();
+        var before = await GetOutboxAsync(context.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxIsTuru.ArtefaktOlustur, before.IsTuru);
 
-        // [muhasebe].[EBelgeOutboxMesajlari].[IsTuru], bugün TEK değeri (ArtefaktOlustur=1)
-        // zorunlu kılan bir CHECK constraint taşıdığından (CK_EBelgeOutboxMesajlari_IsTuru),
-        // "yanlış iş türü" durumunu GERÇEK bir satırla üretebilmek için constraint TEK bir
-        // transaction İÇİNDE geçici olarak devre dışı bırakılır ve transaction SONUNDA rollback
-        // edilir - paylaşımlı test container'ında (constraint dahil) HİÇBİR kalıcı iz BIRAKMAZ
-        // (SQL Server'da DDL transactional'dır). Bkz. Faz 2B.6.2 görev md.1/md.6 senaryo 5.
-        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
-        await using var tx = await dbContext.Database.BeginTransactionAsync();
+        var transition = CreateTransitionService(SatisBelgesiMuhasebeTestSupport.CreateDbContext());
 
-        await dbContext.Database.ExecuteSqlRawAsync(
-            "ALTER TABLE [muhasebe].[EBelgeOutboxMesajlari] NOCHECK CONSTRAINT CK_EBelgeOutboxMesajlari_IsTuru;");
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE [muhasebe].[EBelgeOutboxMesajlari] SET [IsTuru] = 2 WHERE [Id] = {context.OutboxMesajiId}");
-
-        var transition = new EBelgeOutboxLeaseTransitionService(dbContext);
-
-        var sahip = await transition.IsOwnedForArtifactAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, context.KilitToken, CancellationToken.None);
-        var completed = await transition.TryCompleteArtifactAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, context.KilitToken, CancellationToken.None);
-        var failed = await transition.TryFailArtifactAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, context.KilitToken, "E1", "mesaj", null, CancellationToken.None);
+        var sahip = await transition.IsOwnedForJobAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, context.KilitToken, CancellationToken.None);
+        var completed = await transition.TryCompleteJobAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, context.KilitToken, CancellationToken.None);
+        var failed = await transition.TryFailJobAsync(context.OutboxMesajiId, context.KurumId, context.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, context.KilitToken, "E1", "mesaj", null, CancellationToken.None);
 
         Assert.False(sahip);
         Assert.False(completed);
         Assert.False(failed);
 
-        await tx.RollbackAsync();
-
-        // Rollback sonrası, generic (artifact-farkında OLMAYAN) guard hâlâ normal çalışır -
-        // constraint/IsTuru değişikliğinin GERÇEKTEN geri alındığının bağımsız kanıtı.
-        var afterRollback = await GetOutboxAsync(context.OutboxMesajiId);
-        Assert.Equal(EBelgeOutboxIsTuru.ArtefaktOlustur, afterRollback.IsTuru);
+        var after = await GetOutboxAsync(context.OutboxMesajiId);
+        Assert.Equal(before.Durum, after.Durum);
+        Assert.Equal(before.KilitToken, after.KilitToken);
     }
 
     private sealed record ClaimedOutboxContext(

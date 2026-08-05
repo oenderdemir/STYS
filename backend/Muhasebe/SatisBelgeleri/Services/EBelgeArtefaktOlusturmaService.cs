@@ -22,10 +22,10 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 ///
 /// Kesin akış: claim → DB DIŞI render (satır kilidi TUTULMAZ) → lease YENİDEN doğrulama
 /// (`OutboxId + KurumId + EBelgeKaydiId + IsTuru + Token + Expiry` - bkz.
-/// <see cref="IEBelgeOutboxLeaseTransitionService.IsOwnedForArtifactAsync"/>) → artefakt +
+/// <see cref="IEBelgeOutboxLeaseTransitionService.IsOwnedForJobAsync"/>) → artefakt +
 /// EBelgeKaydi + outbox TEK atomik transaction. Başarı VE kalıcı hata yolları, KENDİ
-/// transaction'larında outbox geçişini de (artifact-aware TryCompleteArtifactAsync/
-/// TryFailArtifactAsync üzerinden, AYNI ambient transaction içinde) TAMAMLAR -
+/// transaction'larında outbox geçişini de (iş-türü-farkında TryCompleteJobAsync/
+/// TryFailJobAsync üzerinden, AYNI ambient transaction içinde) TAMAMLAR -
 /// <see cref="EBelgeOutboxMesajIslemeService"/> bu durumda İKİNCİ bir geçiş çağrısı YAPMAZ
 /// (bkz. EBelgeArtefaktOlusturmaSonucuTuru.Atomik*). Yalnız GEÇİCİ hatalar (EBelgeKaydi'yi hiç
 /// değiştirmediğinden) ESKİ, ayrı/retry-policy'li (genel, artifact-farkında OLMAYAN)
@@ -47,6 +47,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     private readonly IEBelgeCanonicalSnapshotV2Reader _snapshotReader;
     private readonly IEBelgeUblRenderer _renderer;
     private readonly IEBelgeOutboxLeaseTransitionService _leaseTransitionService;
+    private readonly IEBelgeSigningActivationGate _signingActivationGate;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EBelgeArtefaktOlusturmaService> _logger;
 
@@ -55,6 +56,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         IEBelgeCanonicalSnapshotV2Reader snapshotReader,
         IEBelgeUblRenderer renderer,
         IEBelgeOutboxLeaseTransitionService leaseTransitionService,
+        IEBelgeSigningActivationGate signingActivationGate,
         TimeProvider timeProvider,
         ILogger<EBelgeArtefaktOlusturmaService> logger)
     {
@@ -62,6 +64,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         _snapshotReader = snapshotReader;
         _renderer = renderer;
         _leaseTransitionService = leaseTransitionService;
+        _signingActivationGate = signingActivationGate;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -213,7 +216,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     {
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var sahip = await _leaseTransitionService.IsOwnedForArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
+        var sahip = await _leaseTransitionService.IsOwnedForJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, talep.KilitToken, cancellationToken);
         if (!sahip)
         {
             await tx.RollbackAsync(cancellationToken);
@@ -261,7 +264,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             kayit.Durum = EBelgeKaydiDurumu.UnsignedUblHazir;
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            var tamamIdempotent = await _leaseTransitionService.TryCompleteArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
+            var tamamIdempotent = await _leaseTransitionService.TryCompleteJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, talep.KilitToken, cancellationToken);
             if (!tamamIdempotent)
             {
                 await tx.RollbackAsync(cancellationToken);
@@ -291,6 +294,23 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         _dbContext.Add(yeniArtifact);
         kayit.Durum = EBelgeKaydiDurumu.UnsignedUblHazir;
 
+        // Faz 2B.7 görev md.18: unsigned artifact İLK KEZ başarıyla oluşturulduğunda, signing
+        // aktivasyon kapısı AÇIKSA (Enabled=true VE Europe/Istanbul tarih kapısı geçilmiş) AYNI
+        // transaction içinde TEK bir UblImzala outbox mesajı oluşturulur. İdempotent-eşleşme
+        // dalında (yukarıda) BUNU YAPMAYIZ - aksi halde (EBelgeKaydiId, IsTuru) benzersizlik
+        // indeksini ihlal eder (bkz. görev md.18 - kapı yalnız İLK başarılı oluşturmada değerlendirilir).
+        if (_signingActivationGate.ShouldCreateSigningMessage())
+        {
+            _dbContext.Add(new EBelgeOutboxMesaji
+            {
+                KurumId = talep.KurumId,
+                EBelgeKaydiId = talep.EBelgeKaydiId,
+                IsTuru = EBelgeOutboxIsTuru.UblImzala,
+                Durum = EBelgeOutboxDurumu.Bekliyor,
+                DenemeSayisi = 0,
+            });
+        }
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -307,7 +327,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             return null;
         }
 
-        var completeEdildi = await _leaseTransitionService.TryCompleteArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
+        var completeEdildi = await _leaseTransitionService.TryCompleteJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, talep.KilitToken, cancellationToken);
         if (!completeEdildi)
         {
             // Lease, render + insert sırasında dolmuş/kaybedilmiş - TÜM transaction (artefakt +
@@ -334,7 +354,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     {
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var sahip = await _leaseTransitionService.IsOwnedForArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
+        var sahip = await _leaseTransitionService.IsOwnedForJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, talep.KilitToken, cancellationToken);
         if (!sahip)
         {
             await tx.RollbackAsync(cancellationToken);
@@ -355,7 +375,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     /// Talep alanlarını (bkz. Faz 2B.6.2 görev md.5) doğrular ve `KilitToken`'ı kanonik forma
     /// normalize eder. `KilitBitisZamaniUtc` yalnız BİLGİ amaçlıdır - hiçbir doğrulama/ownership
     /// kararı bu alana DAYANMAZ; DB'deki gerçek `KilitBitisZamaniUtc` (SYSUTCDATETIME() ile
-    /// karşılaştırılan) OTORİTERDİR (bkz. IsOwnedForArtifactAsync SQL'i). İstemciden gelen bu
+    /// karşılaştırılan) OTORİTERDİR (bkz. IsOwnedForJobAsync SQL'i). İstemciden gelen bu
     /// timestamp'e güvenilmez.
     /// </summary>
     private static EBelgeArtefaktOlusturmaTalebi ValidateTalepAndNormalize(EBelgeArtefaktOlusturmaTalebi talep)
@@ -382,7 +402,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     /// <summary>
     /// Zaten AÇIK olan (ownership'i doğrulanmış) `tx` transaction'ı İÇİNDE, kalıcı hatayı
     /// terminalize eder: `EBelgeKaydi.Durum = UnsignedUblKaliciHata` (kayit varsa) →
-    /// artifact-aware `TryFailArtifactAsync` → TEK commit. Yeni/ikinci bir transaction ASLA
+    /// iş-türü-farkında `TryFailJobAsync` → TEK commit. Yeni/ikinci bir transaction ASLA
     /// AÇILMAZ (bkz. Faz 2B.6.2 görev md.3-4 - rollback edilmiş/dispose edilmemiş bir
     /// transaction üzerinde ikinci `BeginTransactionAsync` çağrısı riskini YAPISAL olarak
     /// ortadan kaldırır).
@@ -401,8 +421,8 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        var failEdildi = await _leaseTransitionService.TryFailArtifactAsync(
-            talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, hataKodu, hataMesaji, retryDelay: null, cancellationToken);
+        var failEdildi = await _leaseTransitionService.TryFailJobAsync(
+            talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, talep.KilitToken, hataKodu, hataMesaji, retryDelay: null, cancellationToken);
 
         if (!failEdildi)
         {

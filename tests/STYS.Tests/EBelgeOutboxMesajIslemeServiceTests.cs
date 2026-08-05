@@ -763,13 +763,13 @@ public class EBelgeOutboxMesajIslemeServiceTests
             return Task.FromResult(true);
         }
 
-        public Task<bool> IsOwnedForArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default)
+        public Task<bool> IsOwnedForJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, CancellationToken cancellationToken = default)
         {
             OwnedCallCount++;
             return Task.FromResult(true);
         }
 
-        public Task<bool> TryCompleteArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default)
+        public Task<bool> TryCompleteJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, CancellationToken cancellationToken = default)
         {
             CompleteCallCount++;
             LastCompleteOutboxMesajiId = outboxMesajiId;
@@ -782,7 +782,7 @@ public class EBelgeOutboxMesajIslemeServiceTests
             return Task.FromResult(_completeResult);
         }
 
-        public Task<bool> TryFailArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, string sonHataKodu, string sonHataMesaji, TimeSpan? retryDelay, CancellationToken cancellationToken = default)
+        public Task<bool> TryFailJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, string sonHataKodu, string sonHataMesaji, TimeSpan? retryDelay, CancellationToken cancellationToken = default)
         {
             FailCallCount++;
             LastFailOutboxMesajiId = outboxMesajiId;

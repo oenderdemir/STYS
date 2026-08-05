@@ -18,5 +18,16 @@ public enum EBelgeKaydiDurumu
     /// sınıfı). Snapshot immutable olduğundan aynı kayıt üzerinde otomatik retry ANLAMSIZDIR;
     /// düzeltme yeni bir fatura/snapshot/outbox mesajı gerektirir.
     /// </summary>
-    UnsignedUblKaliciHata = 3
+    UnsignedUblKaliciHata = 3,
+
+    /// <summary>XAdES-BES ile imzalanmış, immutable SignedReady artefaktı başarıyla üretildi ve kalıcılaştırıldı (bkz. Faz 2B.7).</summary>
+    SignedReady = 4,
+
+    /// <summary>
+    /// İmzalama KALICI olarak başarısız oldu (bkz. Faz 2B.7 görev md.21 - kalıcı hata
+    /// sınıfı). Kaynak unsigned artifact immutable olduğundan aynı kayıt üzerinde otomatik
+    /// retry ANLAMSIZDIR (sertifika/profil sorunları elle çözülüp yeni bir imzalama mesajı
+    /// gerektirir).
+    /// </summary>
+    ImzalamaKaliciHata = 5
 }

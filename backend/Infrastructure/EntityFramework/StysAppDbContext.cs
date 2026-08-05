@@ -2841,7 +2841,7 @@ public class StysAppDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_EBelgeKayitlari_Durum",
-                    "[Durum] IN (1, 2, 3)");
+                    "[Durum] IN (1, 2, 3, 4, 5)");
             });
 
             entity.Property(x => x.EBelgeUuid)
@@ -2913,7 +2913,7 @@ public class StysAppDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_EBelgeOutboxMesajlari_IsTuru",
-                    "[IsTuru] IN (1)");
+                    "[IsTuru] IN (1, 2)");
 
                 t.HasCheckConstraint(
                     "CK_EBelgeOutboxMesajlari_Durum",
@@ -2967,7 +2967,22 @@ public class StysAppDbContext : DbContext
 
                 t.HasCheckConstraint(
                     "CK_EBelgeArtifactlari_ArtifactAsamasi",
-                    "[ArtifactAsamasi] IN (1)");
+                    "[ArtifactAsamasi] IN (1, 2)");
+
+                // SignedReady (2) için imza metadata alanlarının TÜMÜ dolu, Unsigned (1) için
+                // TÜMÜ null olmalıdır (bkz. Faz 2B.7 görev md.13 - "unsigned artifact için imza
+                // alanları boş olmalı").
+                t.HasCheckConstraint(
+                    "CK_EBelgeArtifactlari_ImzaAlanlari",
+                    """
+                    ([ArtifactAsamasi] = 2 AND [KaynakArtifactId] IS NOT NULL AND [KaynakArtifactSha256] IS NOT NULL
+                        AND [ImzaProfili] IS NOT NULL AND [ImzaAlgoritmasi] IS NOT NULL AND [DigestAlgoritmasi] IS NOT NULL
+                        AND [ImzalayanSertifikaSha256ParmakIzi] IS NOT NULL AND [ImzalamaZamaniUtc] IS NOT NULL)
+                    OR
+                    ([ArtifactAsamasi] = 1 AND [KaynakArtifactId] IS NULL AND [KaynakArtifactSha256] IS NULL
+                        AND [ImzaProfili] IS NULL AND [ImzaAlgoritmasi] IS NULL AND [DigestAlgoritmasi] IS NULL
+                        AND [ImzalayanSertifikaSha256ParmakIzi] IS NULL AND [ImzalamaZamaniUtc] IS NULL)
+                    """);
             });
 
             entity.Property(x => x.KurumId)
@@ -3012,12 +3027,43 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.OlusturulmaZamaniUtc)
                 .IsRequired();
 
+            entity.Property(x => x.KaynakArtifactSha256)
+                .HasMaxLength(64);
+
+            entity.Property(x => x.ImzaProfili)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ImzaAlgoritmasi)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.DigestAlgoritmasi)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ImzalayanSertifikaSha256ParmakIzi)
+                .HasMaxLength(64);
+
             // Bilinçli olarak FİLTRESİZ (IsDeleted=0 filtresi YOK) - soft-delete edilmiş bir
             // artefakt bile aynı benzersizlik rezervasyonunu korur (bkz. Faz 2B.6 görev md.4,
             // "filtered unique index kullanma; silinmiş kayıt da benzersizliği korumalı" - aynı
-            // desen EBelgeOutboxMesajlari(EBelgeKaydiId, IsTuru) için de kullanılıyor).
+            // desen EBelgeOutboxMesajlari(EBelgeKaydiId, IsTuru) için de kullanılıyor). Aynı
+            // belge için hem Unsigned hem SignedReady bir arada var olabilir (bkz. Faz 2B.7
+            // görev md.14) - ArtifactAsamasi anahtarın PARÇASI olduğundan bu YAPISAL olarak izinlidir.
             entity.HasIndex(x => new { x.KurumId, x.EBelgeKaydiId, x.ArtifactTipi, x.ArtifactAsamasi })
                 .IsUnique();
+
+            // Self-referencing tenant-aware FK (Faz 2B.7 görev md.13/24) - bunun için (Id, KurumId)
+            // bir principal key olarak da tanımlanmalıdır. KaynakArtifactId NULL olduğunda (Unsigned
+            // artefaktlar) çok-sütunlu FK SQL Server tarafından ZATEN uygulanmaz - Restrict, yalnız
+            // SignedReady satırları (KaynakArtifactId dolu) İÇİN etkindir ve kaynak Unsigned
+            // artefaktın silinmesini/(bu tabloda zaten mümkün olmayan) güncellenmesini engeller.
+            entity.HasAlternateKey(x => new { x.Id, x.KurumId });
+
+            entity.HasOne<EBelgeArtifact>()
+                .WithMany()
+                .HasForeignKey(x => new { x.KaynakArtifactId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
 
             entity.HasOne(x => x.EBelgeKaydi)
                 .WithMany()

@@ -277,6 +277,11 @@ public sealed class EBelgeUblRenderer : IEBelgeUblRenderer
             writer.WriteAttributeString("xmlns", "ext", null, NsExt);
 
             WriteHeader(writer, snapshot);
+            // UBL-Invoice-2.1.xsd: cbc:LineCountNumeric, DocumentCurrencyCode ailesinden SONRA,
+            // cac:Signature/cac:AccountingSupplierParty'den ÖNCE ZORUNLUDUR (minOccurs YOK) - imzasız
+            // çıktıda bu eksiklik, XSD doğrulamasının DAHA İLK elemanda (eksik ext:UBLExtensions)
+            // durması nedeniyle şimdiye kadar hiç ORTAYA ÇIKMAMIŞTI (bkz. Faz 2B.7 raporu).
+            WriteCbc(writer, "LineCountNumeric", snapshot.Satirlar.Count.ToString(CultureInfo.InvariantCulture));
             WriteParty(writer, "AccountingSupplierParty", BuildSupplierParty(snapshot));
             WriteParty(writer, "AccountingCustomerParty", BuildCustomerParty(snapshot));
             WriteDocumentTaxTotal(writer, snapshot);
@@ -454,8 +459,10 @@ public sealed class EBelgeUblRenderer : IEBelgeUblRenderer
 
     private static void WriteKdvTaxCategory(XmlWriter w, decimal oran)
     {
+        // cac:TaxCategory (bkz. UBL-CommonAggregateComponents-2.1.xsd TaxCategoryType) cbc:Percent
+        // İÇERMEZ (yalnız Name?/TaxExemptionReasonCode?/TaxExemptionReason?/TaxScheme) - oran zaten
+        // cac:TaxSubtotal seviyesinde (bkz. üst çağıran) doğru konumda yazılmıştır.
         w.WriteStartElement("cac", "TaxCategory", NsCac);
-        WriteCbc(w, "Percent", FormatDecimal(oran));
         w.WriteStartElement("cac", "TaxScheme", NsCac);
         WriteCbc(w, "Name", "KDV");
         WriteCbc(w, "TaxTypeCode", KdvTaxTypeCode);

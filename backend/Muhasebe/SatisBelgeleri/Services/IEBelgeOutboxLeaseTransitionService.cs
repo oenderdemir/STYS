@@ -1,3 +1,5 @@
+using STYS.Muhasebe.SatisBelgeleri.Enums;
+
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
 public interface IEBelgeOutboxLeaseTransitionService
@@ -33,22 +35,24 @@ public interface IEBelgeOutboxLeaseTransitionService
 
     /// <summary>
     /// <see cref="IsOwnedAsync"/> ile AYNI UPDLOCK/ambient-transaction deseni, EK olarak
-    /// `EBelgeKaydiId` ve `IsTuru = ArtefaktOlustur` eşleşmesini de zorunlu kılar (bkz. Faz
-    /// 2B.6.2 görev md.1 - "outbox satırının EBelgeKaydiId alanı kontrol edilmiyor"). Bu, bir
-    /// outbox mesajının (doğru token'la bile) YANLIŞ bir `EBelgeKaydi`'yi hedeflemesini veya
-    /// yanlış iş türündeki bir satırın artifact akışında kullanılmasını engeller - çapraz kayıt
+    /// `EBelgeKaydiId` ve `IsTuru = expectedIsTuru` eşleşmesini de zorunlu kılar (bkz. Faz
+    /// 2B.6.2 görev md.1, Faz 2B.7 görev md.16 - "artifact-aware guard'ı iş türü parametreli
+    /// ve type-safe hale getir"). Bu, bir outbox mesajının (doğru token'la bile) YANLIŞ bir
+    /// `EBelgeKaydi`'yi hedeflemesini veya yanlış iş türündeki bir satırın (ör. `UblImzala`
+    /// mesajının `ArtefaktOlustur` akışında ya da tersi) kullanılmasını engeller - çapraz kayıt
     /// mutasyonuna karşı sahiplik sözleşmesinin TAMAMLANMIŞ hâlidir.
     /// </summary>
-    Task<bool> IsOwnedForArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default);
+    Task<bool> IsOwnedForJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, CancellationToken cancellationToken = default);
 
-    /// <summary><see cref="TryCompleteAsync"/> ile AYNI, EK olarak `EBelgeKaydiId` + `IsTuru = ArtefaktOlustur` guard'ı taşıyan artifact-aware tamamlama (bkz. Faz 2B.6.2 görev md.1).</summary>
-    Task<bool> TryCompleteArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default);
+    /// <summary><see cref="TryCompleteAsync"/> ile AYNI, EK olarak `EBelgeKaydiId` + `IsTuru = expectedIsTuru` guard'ı taşıyan iş-türü-farkında tamamlama (bkz. Faz 2B.6.2/2B.7 görev md.1/md.16).</summary>
+    Task<bool> TryCompleteJobAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru expectedIsTuru, string kilitToken, CancellationToken cancellationToken = default);
 
-    /// <summary><see cref="TryFailAsync"/> ile AYNI, EK olarak `EBelgeKaydiId` + `IsTuru = ArtefaktOlustur` guard'ı taşıyan artifact-aware terminal/geçici hata geçişi (bkz. Faz 2B.6.2 görev md.1).</summary>
-    Task<bool> TryFailArtifactAsync(
+    /// <summary><see cref="TryFailAsync"/> ile AYNI, EK olarak `EBelgeKaydiId` + `IsTuru = expectedIsTuru` guard'ı taşıyan iş-türü-farkında terminal/geçici hata geçişi (bkz. Faz 2B.6.2/2B.7 görev md.1/md.16).</summary>
+    Task<bool> TryFailJobAsync(
         int outboxMesajiId,
         int kurumId,
         int eBelgeKaydiId,
+        EBelgeOutboxIsTuru expectedIsTuru,
         string kilitToken,
         string sonHataKodu,
         string sonHataMesaji,

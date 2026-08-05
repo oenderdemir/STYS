@@ -219,8 +219,20 @@ builder.Services.AddScoped<IEBelgeOutboxClaimLeaseService, EBelgeOutboxClaimLeas
 builder.Services.AddScoped<IEBelgeOutboxLeaseTransitionService, EBelgeOutboxLeaseTransitionService>();
 builder.Services.AddScoped<IEBelgeOutboxRetryPolicy, EBelgeOutboxRetryPolicy>();
 builder.Services.AddSingleton<IEBelgeCanonicalSnapshotV2Reader, EBelgeCanonicalSnapshotV2Reader>();
+builder.Services.AddOptions<EBelgeSigningOptions>()
+    .Bind(builder.Configuration.GetSection(EBelgeSigningOptions.SectionName));
+builder.Services.AddSingleton<IEBelgeSigningActivationGate, EBelgeSigningActivationGate>();
 builder.Services.AddScoped<IEBelgeArtefaktOlusturmaService, EBelgeArtefaktOlusturmaService>();
 builder.Services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeArtefaktOlusturOutboxHandler>();
+// Faz 2B.7: XAdES-BES imzalama - üretim sertifika/güven sağlayıcıları KASITLI OLARAK fail-closed
+// (bkz. görev md.5/md.10) - gerçek bir HSM/mali mühür/PKCS11/OCSP-CRL sağlayıcısı SONRAKİ bir
+// fazda bunların YERİNE kaydedilmelidir.
+builder.Services.AddSingleton<IEBelgeImzaKimligiSaglayici, EBelgeImzaKimligiYapilandirilmadiSaglayici>();
+builder.Services.AddSingleton<IEBelgeSertifikaGuvenValidatoru, EBelgeSertifikaGuvenValidatoruYapilandirilmadi>();
+builder.Services.AddSingleton<IEBelgeXmlImzalayici, EBelgeXmlImzalayici>();
+builder.Services.AddSingleton<IEBelgeXmlImzaDogrulayici, EBelgeXmlImzaDogrulayici>();
+builder.Services.AddScoped<IEBelgeUblImzalamaService, EBelgeUblImzalamaService>();
+builder.Services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeUblImzalaOutboxHandler>();
 builder.Services.AddScoped<IEBelgeOutboxMesajIslemeService, EBelgeOutboxMesajIslemeService>();
 builder.Services.AddScoped<IEBelgeArtifactService, EBelgeArtifactService>();
 builder.Services.AddScoped<ITicariBelgeService, TicariBelgeService>();

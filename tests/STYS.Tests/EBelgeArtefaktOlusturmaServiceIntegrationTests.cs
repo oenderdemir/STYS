@@ -193,7 +193,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             $"UPDATE [muhasebe].[EBelgeOutboxMesajlari] SET [KilitToken] = {yeniToken} WHERE [Id] = {outboxMesajiId}");
     }
 
-    private EBelgeArtefaktOlusturmaService CreateService(StysAppDbContext dbContext, TimeProvider? timeProvider = null)
+    private EBelgeArtefaktOlusturmaService CreateService(StysAppDbContext dbContext, TimeProvider? timeProvider = null, IEBelgeSigningActivationGate? signingActivationGate = null)
     {
         if (_sidecarFixture.BaseUrl is null)
         {
@@ -205,8 +205,20 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             new EBelgeCanonicalSnapshotV2Reader(),
             RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!),
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            signingActivationGate ?? FakeSigningActivationGate.Kapali,
             timeProvider ?? TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
+    }
+
+    /// <summary>Gerçek EBelgeSigningActivationGate'in davranışını (Enabled/tarih kapısı) test etmeyen senaryolarda sabit bir sonuç döner - AYRI, açık bir test double'ı (bkz. Faz 2B.7 görev md.18 testleri için EBelgeSigningActivationGateTests).</summary>
+    private sealed class FakeSigningActivationGate : IEBelgeSigningActivationGate
+    {
+        public static readonly FakeSigningActivationGate Kapali = new(false);
+        public static readonly FakeSigningActivationGate Acik = new(true);
+
+        private readonly bool _sonuc;
+        private FakeSigningActivationGate(bool sonuc) => _sonuc = sonuc;
+        public bool ShouldCreateSigningMessage() => _sonuc;
     }
 
     private sealed class FixedTimeProvider : TimeProvider
@@ -700,6 +712,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             new EBelgeCanonicalSnapshotV2Reader(),
             new HashBozanRendererDecorator(gercekRenderer),
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            FakeSigningActivationGate.Kapali,
             TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
@@ -757,6 +770,94 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum);
     }
 
+    // ---- Faz 2B.7: imzalama aktivasyon kapısının GERÇEK artefakt-oluşturma akışına bağlanması (md.18) ----
+
+    [IntegrationFact]
+    public async Task AktivasyonKapisiAcikkenIlkBasariylaTekBirUblImzalaOutboxMesajiOlusturulur()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        var service = CreateService(dbContext, signingActivationGate: FakeSigningActivationGate.Acik);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.True(sonuc!.BasariliMi, $"{sonuc.SonucTuru}: {sonuc.HataKodu} {sonuc.HataMesaji}");
+
+        await using var verifyCtx = CreateDbContext();
+        var imzalaMesajlari = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking()
+            .Where(x => x.EBelgeKaydiId == eBelgeKaydiId && x.IsTuru == EBelgeOutboxIsTuru.UblImzala)
+            .ToListAsync();
+        Assert.Single(imzalaMesajlari);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, imzalaMesajlari[0].Durum);
+    }
+
+    [IntegrationFact]
+    public async Task AktivasyonKapisiKapaliykenUblImzalaOutboxMesajiOlusturulmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        // CreateService varsayılanı zaten Kapali'dır (bkz. FakeSigningActivationGate) - açıkça geçirilir.
+        var service = CreateService(dbContext, signingActivationGate: FakeSigningActivationGate.Kapali);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.True(sonuc!.BasariliMi);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeOutboxMesajlari.AnyAsync(x => x.EBelgeKaydiId == eBelgeKaydiId && x.IsTuru == EBelgeOutboxIsTuru.UblImzala));
+    }
+
+    [IntegrationFact]
+    public async Task AktivasyonKapisiAcikkenIdempotentTekrardaIkinciUblImzalaMesajiOlusturulmaz()
+    {
+        // Senaryo: gate AÇIK iken İLK çağrıda tam olarak bir UblImzala mesajı oluşur; AYNI
+        // (önceden seedli, hash'i eşleşen) idempotent-başarı yolu TEKRAR tetiklense bile - bkz.
+        // OnceOnceSeedliHashEslesenMevcutArtefaktIdempotentBasariylaTamamlanirIkinciSatirEklenmez -
+        // İKİNCİ bir UblImzala mesajı EKLENMEZ (yalnız İLK GERÇEK oluşturmada tetiklenir, bkz.
+        // EBelgeArtefaktOlusturmaService'teki ilgili yorum).
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        var v2Snapshot = EBelgeUblRendererTestVerisi.GecerliSnapshot();
+        var beklenenRenderSonucu = await RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!)
+            .RenderAsync(v2Snapshot, CancellationToken.None);
+        var snapshotEntity = await dbContext.EBelgeSnapshots.AsNoTracking().SingleAsync(x => x.EBelgeKaydiId == eBelgeKaydiId);
+
+        dbContext.EBelgeArtifactlari.Add(new EBelgeArtifact
+        {
+            KurumId = _kurumId,
+            EBelgeKaydiId = eBelgeKaydiId,
+            ArtifactTipi = EBelgeArtifactTipi.UblXml,
+            ArtifactAsamasi = EBelgeArtifactAsamasi.Unsigned,
+            RuleSetId = beklenenRenderSonucu.KuralSetiKimligi,
+            SnapshotSchemaVersion = int.Parse(EBelgeCanonicalSnapshotV2Reader.SupportedSnapshotSchemaVersion),
+            KaynakSnapshotSha256 = snapshotEntity.CanonicalSha256,
+            ArtifactSha256 = beklenenRenderSonucu.UnsignedUblSha256,
+            Icerik = beklenenRenderSonucu.UnsignedUblUtf8.ToArray(),
+            MimeType = "application/xml",
+            DosyaAdi = "onceden-seedli.xml",
+            OlusturulmaZamaniUtc = DateTime.UtcNow,
+        });
+        await dbContext.SaveChangesAsync();
+
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+        var service = CreateService(dbContext, signingActivationGate: FakeSigningActivationGate.Acik);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikBasarili, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        var imzalaMesajSayisi = await verifyCtx.EBelgeOutboxMesajlari.CountAsync(x => x.EBelgeKaydiId == eBelgeKaydiId && x.IsTuru == EBelgeOutboxIsTuru.UblImzala);
+        Assert.Equal(0, imzalaMesajSayisi); // idempotent (önceden seedli) tamamlanma - YENİ mesaj EKLENMEDİ
+    }
+
     // ---- Okuma servisi ----
 
     [IntegrationFact]
@@ -797,7 +898,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         var renderer = new EBelgeUblRenderer(kuralSeti, xsdValidator, schematronValidator);
         var service = new EBelgeArtefaktOlusturmaService(
             dbContext, new EBelgeCanonicalSnapshotV2Reader(), renderer,
-            new EBelgeOutboxLeaseTransitionService(dbContext), TimeProvider.System,
+            new EBelgeOutboxLeaseTransitionService(dbContext), FakeSigningActivationGate.Kapali, TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
         // Geçici hata yolu (Gecici) EBelgeKaydi'yı hiç DEĞİŞTİRMEDİĞİNDEN, atomik transaction/lease

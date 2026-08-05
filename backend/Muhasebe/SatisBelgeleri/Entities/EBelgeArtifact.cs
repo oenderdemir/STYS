@@ -41,4 +41,27 @@ public class EBelgeArtifact : BaseEntity<long>, ITenantEntity
     public string DosyaAdi { get; set; } = string.Empty;
 
     public DateTime OlusturulmaZamaniUtc { get; set; }
+
+    // ---- Faz 2B.7: SignedReady imza zinciri alanları - Unsigned artefaktlarda HEPSİ null kalır ----
+
+    /// <summary>SignedReady artefaktın imzaladığı kaynak Unsigned artefaktın Id'si (bkz. görev md.13) - AYNI KurumId+EBelgeKaydiId'ye ait olmak ZORUNDADIR (tenant-aware self-FK, bkz. StysAppDbContext).</summary>
+    public long? KaynakArtifactId { get; set; }
+
+    /// <summary>Kaynak Unsigned artefaktın (imzalama ANINDA yeniden doğrulanmış) ArtifactSha256'sı - hash zincirinin ikinci halkası.</summary>
+    public string? KaynakArtifactSha256 { get; set; }
+
+    /// <summary>Kullanılan XAdES profil kimliği (bkz. EBelgeXadesProfili.ProfilKimligi).</summary>
+    public string? ImzaProfili { get; set; }
+
+    /// <summary>Kullanılan ds:SignatureMethod algoritma URI'si.</summary>
+    public string? ImzaAlgoritmasi { get; set; }
+
+    /// <summary>Kullanılan ds:DigestMethod algoritma URI'si.</summary>
+    public string? DigestAlgoritmasi { get; set; }
+
+    /// <summary>İmzalayan sertifikanın SHA-256 parmak izi (ham sertifika/private key DEĞİL - yalnız parmak izi, bkz. görev md.22).</summary>
+    public string? ImzalayanSertifikaSha256ParmakIzi { get; set; }
+
+    /// <summary>İmzanın oluşturulduğu an (xades:SigningTime ile AYNI, TimeProvider üzerinden alınır - bkz. görev md.9).</summary>
+    public DateTime? ImzalamaZamaniUtc { get; set; }
 }

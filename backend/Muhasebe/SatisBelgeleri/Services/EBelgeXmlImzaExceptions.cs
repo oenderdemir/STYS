@@ -59,3 +59,24 @@ public sealed class EBelgeXmlImzaGeciciHataException : BaseException
         HataKodu = hataKodu;
     }
 }
+
+/// <summary>
+/// Kalıcı, KONFİGÜRASYON sınıfı hata: kullanılmak istenen <see cref="EBelgeXadesProfili"/>
+/// production imzalama için ONAYLANMAMIŞ (<c>Onayli = false</c>) - bkz. Faz 2B.7.1 görev md.2,
+/// "profil kararının kesinliği yeterli değilse production signing kapalı kalmalı". Retry
+/// ANLAMSIZDIR - profil onayı kod/veri değişmeden kendiliğinden değişmez
+/// (<see cref="EBelgeSigningProviderNotConfiguredException"/> ile AYNI fail-closed tasarım
+/// deseni, farklı KONU).
+/// </summary>
+public sealed class EBelgeXadesProfiliOnaylanmadiException : BaseException
+{
+    public const int HttpStatusCode = 500;
+    public const string SafeErrorCode = "EBELGE_SIGNING_PROFILE_NOT_APPROVED";
+
+    public string HataKodu { get; } = SafeErrorCode;
+
+    public EBelgeXadesProfiliOnaylanmadiException(string profilKimligi)
+        : base($"XAdES imza profili ('{profilKimligi}') production imzalama için onaylanmamış.", HttpStatusCode)
+    {
+    }
+}

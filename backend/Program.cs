@@ -233,6 +233,9 @@ builder.Services.AddSingleton<IEBelgeXmlImzalayici, EBelgeXmlImzalayici>();
 builder.Services.AddSingleton<IEBelgeXmlImzaDogrulayici, EBelgeXmlImzaDogrulayici>();
 builder.Services.AddScoped<IEBelgeUblImzalamaService, EBelgeUblImzalamaService>();
 builder.Services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeUblImzalaOutboxHandler>();
+// Faz 2B.7.1 md.7: yalnız uygulama servisi kaydedilir - otomatik hosted worker/endpoint YOKTUR,
+// operasyonel çağırma (manuel/gelecekteki bir admin aracı) SONRAKİ bir faza bırakılmıştır.
+builder.Services.AddScoped<IEBelgeSigningBackfillService, EBelgeSigningBackfillService>();
 builder.Services.AddScoped<IEBelgeOutboxMesajIslemeService, EBelgeOutboxMesajIslemeService>();
 builder.Services.AddScoped<IEBelgeArtifactService, EBelgeArtifactService>();
 builder.Services.AddScoped<ITicariBelgeService, TicariBelgeService>();

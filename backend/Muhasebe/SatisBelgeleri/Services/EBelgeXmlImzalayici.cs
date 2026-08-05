@@ -84,6 +84,13 @@ public sealed class EBelgeXmlImzalayici : IEBelgeXmlImzalayici
     {
         ArgumentNullException.ThrowIfNull(talep);
 
+        // Faz 2B.7.1 görev md.2: kanıtlanmamış/onaysız bir profille ÜRETİM imzalaması SESSİZCE
+        // devam ETMEZ - bkz. EBelgeXadesProfili.Onayli XML doc'u.
+        if (!_profil.Onayli)
+        {
+            throw new EBelgeXadesProfiliOnaylanmadiException(_profil.ProfilKimligi);
+        }
+
         // md.15: kaynak bytes'ın hash'i - motor kendi bağımsız garantisini de sağlar (çağıran
         // taraf zaten kontrol etmiş olsa bile).
         var bagimsizKaynakHash = Convert.ToHexString(SHA256.HashData(talep.UnsignedUblUtf8.AsSpan()));
@@ -235,14 +242,18 @@ public sealed class EBelgeXmlImzalayici : IEBelgeXmlImzalayici
         // eşleşemeyeceği anlamına gelir (bu, .NET SignedXml.AddObject + kapsayıcı C14N
         // kombinasyonunun BİLİNEN bir kısıtıdır). Bu nedenle - yalnız BU referansın transformu için
         // - "yalnız FİİLEN kullanılan" ad alanlarını render eden, gömülme bağlamından BAĞIMSIZ,
-        // Exclusive XML Canonicalization (http://www.w3.org/2001/10/xml-exc-c14n#) kullanılır.
+        // Exclusive XML Canonicalization (bkz. `_profil.SignedPropertiesTransformUri` - TEK
+        // merkezî sabit, hem burada hem `EBelgeXmlImzaDogrulayici`'de kullanılır) kullanılır.
         // ds:SignedInfo/ds:CanonicalizationMethod (bkz. `_profil.CanonicalizationAlgorithmUri`) ve
         // belge referansının (URI="") transformu BUNDAN ETKİLENMEZ - ikisi de araştırmayla
         // doğrulanmış kapsayıcı C14N'de KALIR. GİB kaynaklarının HİÇBİRİ, SignedProperties
         // referansının transform algoritmasını AÇIKÇA belirtmiyor (yalnız "referans başına en fazla
         // bir Transform" ve rsa-sha1 yasağı doğrulanmıştır) - bu yüzden bu seçim GİB profilini
         // İHLAL ETMEZ, yalnız .NET'in kendi kısıtına karşı gerekli bir mühendislik kararıdır (bkz.
-        // Faz 2B.7 raporu).
+        // Faz 2B.7.1 raporu).
+        System.Diagnostics.Debug.Assert(
+            new XmlDsigExcC14NTransform().Algorithm == _profil.SignedPropertiesTransformUri,
+            "Transform URI'si profil sabitiyle eşleşmiyor.");
         signedPropertiesReferansi.AddTransform(new XmlDsigExcC14NTransform());
         signedXml.AddReference(signedPropertiesReferansi);
 

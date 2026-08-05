@@ -348,6 +348,232 @@ public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
         Assert.False(dogrulama.GecerliMi);
     }
 
+    // ---- Faz 2B.7.1 görev md.4/md.8: doğrulayıcının genişletilmiş profil/URI kontrolleri ----
+
+    [Fact]
+    public async Task QualifyingPropertiesTargetYanlissaDogrulamaBasarisizOlur()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var xmlText = System.Text.Encoding.UTF8.GetString(sonuc.SignedUblUtf8.AsSpan());
+        var tampered = System.Text.RegularExpressions.Regex.Replace(xmlText, "Target=\"#[^\"]+\"", "Target=\"#yanlis-id\"");
+        Assert.NotEqual(xmlText, tampered);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(System.Text.Encoding.UTF8.GetBytes(tampered)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task IkinciQualifyingPropertiesEklenirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var qualifyingProperties = (XmlElement)doc.SelectSingleNode("//xades:QualifyingProperties", nsmgr)!;
+        var klon = (XmlElement)qualifyingProperties.CloneNode(deep: true);
+        // Klonun kendi xades:SignedProperties/@Id'sini DEĞİŞTİR - aksi halde bu, YinelenenXmlId
+        // kontrolünü (daha ÖNCE) tetikler; bu test ÖZELLİKLE QualifyingProperties SAYISINI hedefler.
+        var klonSignedProps = (XmlElement)klon.SelectSingleNode("xades:SignedProperties", nsmgr)!;
+        klonSignedProps.SetAttribute("Id", "SignedProperties-2");
+        qualifyingProperties.ParentNode!.AppendChild(klon);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task SignedPropertiesUriYanlisNodeYonelirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var signatureId = ((XmlElement)doc.SelectSingleNode("//ds:Signature", nsmgr)!).GetAttribute("Id");
+        // SignedProperties referansını, VAR OLAN ama xades:SignedProperties OLMAYAN bir hedefe
+        // (ds:Signature'ın KENDİSİ) yönlendirir.
+        var signedPropsReferansi = (XmlElement)doc.SelectSingleNode("//ds:Reference[@Type]", nsmgr)!;
+        signedPropsReferansi.SetAttribute("URI", "#" + signatureId);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task BelgeReferansiDigestMethodDegistirilirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var digestMethod = (XmlElement)doc.SelectSingleNode("//ds:Reference[@URI='']/ds:DigestMethod", nsmgr)!;
+        digestMethod.SetAttribute("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1");
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task SignedPropertiesDigestMethodDegistirilirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var digestMethod = (XmlElement)doc.SelectSingleNode("//ds:Reference[@Type]/ds:DigestMethod", nsmgr)!;
+        digestMethod.SetAttribute("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1");
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task BelgeReferansiTransformUriDegistirilirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var transform = (XmlElement)doc.SelectSingleNode("//ds:Reference[@URI='']/ds:Transforms/ds:Transform", nsmgr)!;
+        transform.SetAttribute("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task SignedPropertiesReferansiTransformUriDegistirilirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var transform = (XmlElement)doc.SelectSingleNode("//ds:Reference[@Type]/ds:Transforms/ds:Transform", nsmgr)!;
+        transform.SetAttribute("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task EkTransformEklenirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var transforms = (XmlElement)doc.SelectSingleNode("//ds:Reference[@URI='']/ds:Transforms", nsmgr)!;
+        var ekTransform = doc.CreateElement("ds", "Transform", "http://www.w3.org/2000/09/xmldsig#");
+        ekTransform.SetAttribute("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
+        transforms.AppendChild(ekTransform);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task IssuerAdiDegistirilirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var issuerName = (XmlElement)doc.SelectSingleNode("//xades:IssuerSerial/ds:X509IssuerName", nsmgr)!;
+        issuerName.InnerText = "CN=Baska Bir Issuer, O=Sahte, C=TR";
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task SerialNumberDegistirilirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var serialNumber = (XmlElement)doc.SelectSingleNode("//xades:IssuerSerial/ds:X509SerialNumber", nsmgr)!;
+        serialNumber.InnerText = (System.Numerics.BigInteger.Parse(serialNumber.InnerText) + 1).ToString();
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task CacSignatureUriYanlisSignatureIdYonelirseReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var uri = (XmlElement)doc.SelectSingleNode("//cac:Signature/cac:DigitalSignatureAttachment/cac:ExternalReference/cbc:URI", nsmgr)!;
+        uri.InnerText = "#yanlis-signature-id";
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task DsSignatureBeklenenExtensionContentDisindaBulunursaReddedilir()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var signature = (XmlElement)doc.SelectSingleNode("//ds:Signature", nsmgr)!;
+        signature.ParentNode!.RemoveChild(signature);
+        // ds:Signature'ı, beklenen ext:ExtensionContent yerine DOĞRUDAN kök elemana taşır.
+        doc.DocumentElement!.AppendChild(signature);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task SignerRoleVeKeyValueOlmadanDaImzaGecerliKabulEdilir()
+    {
+        // Faz 2B.7.1 görev md.3 kararı: xades:SignerRole VE ds:KeyValue, vendored XSD'de SEÇİMLİ
+        // (minOccurs=0) olarak tanımlanmıştır; hiçbir aktif/yoruma alınmış schematron kuralı
+        // ikisinden birini ZORUNLU KILMAZ; ne eski (2018) ne güncel (Ağustos 2025, v1.18) resmî
+        // GİB kılavuzu bunlardan HİÇ BAHSETMEZ - bu yüzden İKİSİ DE EKLENMEZ (bkz.
+        // EBelgeXadesProfili.cs sınıf düzeyi XML doc'u). Bu test, GERÇEK üretim çıktısının
+        // (SignerRole/KeyValue içermeyen) bağımsız doğrulamadan BAŞARIYLA geçtiğini - yani bu
+        // kararın doğrulayıcı tarafında YANLIŞLIKLA bir "zorunlu" varsayımına dönüşmediğini -
+        // teyit eder.
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var xmlText = System.Text.Encoding.UTF8.GetString(sonuc.SignedUblUtf8.AsSpan());
+        Assert.DoesNotContain("SignerRole", xmlText, StringComparison.Ordinal);
+        Assert.DoesNotContain("KeyValue", xmlText, StringComparison.Ordinal);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(sonuc.SignedUblUtf8, CancellationToken.None);
+        Assert.True(dogrulama.GecerliMi, $"{dogrulama.HataKodu}: {dogrulama.HataMesaji}");
+    }
+
     private static XmlDocument LoadXml(ImmutableArray<byte> xmlUtf8)
     {
         var doc = new XmlDocument { XmlResolver = null };
@@ -366,5 +592,25 @@ public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
         nsmgr.AddNamespace("ds", "http://www.w3.org/2000/09/xmldsig#");
         nsmgr.AddNamespace("xades", "http://uri.etsi.org/01903/v1.3.2#");
         return nsmgr;
+    }
+
+    /// <summary>DOM üzerinde kurcalanmış bir belgeyi, imzalayıcının kendi serialize ayarlarıyla (UTF-8, BOM'suz) tutarlı biçimde byte'lara döker - yalnız BU dosyadaki kurcalama testleri İÇİNDİR.</summary>
+    private static byte[] SaveXmlBytes(XmlDocument doc)
+    {
+        using var ms = new MemoryStream();
+        var settings = new XmlWriterSettings
+        {
+            Encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            Indent = false,
+            NewLineHandling = NewLineHandling.None,
+            OmitXmlDeclaration = false,
+            ConformanceLevel = ConformanceLevel.Document,
+        };
+        using (var writer = XmlWriter.Create(ms, settings))
+        {
+            doc.Save(writer);
+        }
+
+        return ms.ToArray();
     }
 }

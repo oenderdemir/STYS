@@ -75,9 +75,13 @@ public interface IEBelgeUblImzalamaService
 /// `TryFailJobAsync`, `EBelgeOutboxIsTuru.UblImzala` ile) yeniden kullanır - genel outbox
 /// mimarisi BAŞTAN YAZILMAZ (bkz. görev md.16-17).
 ///
-/// Kesin akış: claim → DB DIŞI imzalama+bağımsız doğrulama+XSD+Schematron (satır kilidi
-/// TUTULMAZ) → lease YENİDEN doğrulama → SignedReady artefakt + EBelgeKaydi + outbox TEK
-/// atomik transaction (bkz. görev md.17).
+/// Faz 2B.7.1 görev md.5-6 ile GÜNCELLENMİŞTİR: mevcut bir SignedReady artefakt bulunduğunda
+/// (idempotent replay), BAĞIMSIZ imza + sıfır-tolerans XSD + GERÇEK Schematron doğrulaması ARTIK
+/// SQL transaction'ın TAMAMEN DIŞINDA çalışır - satır kilidi/UPDLOCK bu süre boyunca HİÇ
+/// TUTULMAZ. Kısa "Faz 3" transaction'ı yalnız ownership'i yeniden doğrular, artefaktın
+/// tx-dışı-doğrulama SIRASINDA DEĞİŞMEDİĞİNİ (immutable Id+hash) teyit eder ve tamamlar. YENİ bir
+/// artefakt imzalanırken de AYNI üç kapı (imza/XSD/Schematron) AYNI şekilde tx dışında çalışır -
+/// idempotent ve ilk-kez yollar SİMETRİKTİR (md.6).
 /// </summary>
 public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
 {
@@ -156,7 +160,17 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, EBelgeXmlImzaHataKodlari.KaynakHashUyumsuz, "Unsigned artefaktın kayıtlı hash'i, saklanan içerikle eşleşmiyor.", cancellationToken);
         }
 
-        // ---- Faz 2: DB dışı imzalama + doğrulama (satır kilidi TUTULMAZ, md.17 adım 8) ----
+        // Faz 2B.7.1 görev md.5: mevcut SignedReady artefaktı - VARSA - TRANSACTION DIŞINDA okunur.
+        // Bulunursa idempotency akışı TAMAMEN tx dışı doğrulamayla yürütülür (bkz.
+        // IslemMevcutSignedAsync) - SQL transaction/UPDLOCK yalnız EN SONDA, kısa bir "teyit et ve
+        // tamamla" adımı için açılır.
+        var mevcutSigned = await OkuMevcutSignedAsync(talep, cancellationToken);
+        if (mevcutSigned is not null)
+        {
+            return await IslemMevcutSignedAsync(talep, unsignedArtifact, mevcutSigned, cancellationToken);
+        }
+
+        // ---- Faz 2 (yeni imza): DB dışı imzalama + doğrulama (satır kilidi TUTULMAZ, md.17 adım 8) ----
         EBelgeXmlImzaSonucu imzaSonucu;
         try
         {
@@ -179,6 +193,11 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         catch (EBelgeSigningProviderNotConfiguredException ex)
         {
             // Konfigürasyon hatası - fail-closed, retry ANLAMSIZDIR (bkz. görev md.21 "Konfigürasyon hataları").
+            return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, ex.HataKodu, ex.Message, cancellationToken);
+        }
+        catch (EBelgeXadesProfiliOnaylanmadiException ex)
+        {
+            // Konfigürasyon hatası - fail-closed, retry ANLAMSIZDIR (bkz. Faz 2B.7.1 görev md.2).
             return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, ex.HataKodu, ex.Message, cancellationToken);
         }
         catch (EBelgeXmlImzaKaliciHataException ex)
@@ -241,19 +260,167 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, "EBELGE_SIGNING_SCHEMATRON_VIOLATION", $"İmzalı XML, Schematron doğrulamasından {schematronSonucu.Violations.Count} ihlal ile geçemedi.", cancellationToken);
         }
 
-        // ---- Faz 3: atomik transaction - unique violation'da BİR KEZ yeniden dener ----
-        var sonuc = await DenemeBasariAtomikAsync(talep, unsignedArtifact, imzaSonucu, signedBytes, cancellationToken);
+        // ---- Faz 3: kısa transaction - yeni SignedReady insert eder ----
+        var sonuc = await DenemeYeniSignedInsertAtomikAsync(talep, unsignedArtifact, imzaSonucu, signedBytes, cancellationToken);
         if (sonuc is not null)
         {
             return sonuc;
         }
 
-        sonuc = await DenemeBasariAtomikAsync(talep, unsignedArtifact, imzaSonucu, signedBytes, cancellationToken);
-        return sonuc ?? EBelgeUblImzalamaSonucu.GeciciHata(
-            "EBELGE_SIGNING_YARIS_DURUMU", "SignedReady artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
+        // Insert unique-violation ile BAŞARISIZ oldu - BAŞKA bir worker (eşzamanlı) kazandı.
+        // YENİDEN İMZALAMADAN (gereksiz iş), rakibin YAZDIĞI satırı okuyup AYNI idempotent yoldan
+        // (tx dışı tam doğrulama + kısa teyit transaction'ı) tamamlar.
+        var raceSigned = await OkuMevcutSignedAsync(talep, cancellationToken);
+        if (raceSigned is null)
+        {
+            return EBelgeUblImzalamaSonucu.GeciciHata(
+                "EBELGE_SIGNING_YARIS_DURUMU", "SignedReady artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
+        }
+
+        return await IslemMevcutSignedAsync(talep, unsignedArtifact, raceSigned, cancellationToken);
     }
 
-    private async Task<EBelgeUblImzalamaSonucu?> DenemeBasariAtomikAsync(
+    private Task<EBelgeArtifact?> OkuMevcutSignedAsync(EBelgeUblImzalamaTalebi talep, CancellationToken cancellationToken) =>
+        _dbContext.Set<EBelgeArtifact>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a =>
+                a.KurumId == talep.KurumId &&
+                a.EBelgeKaydiId == talep.EBelgeKaydiId &&
+                a.ArtifactTipi == EBelgeArtifactTipi.UblXml &&
+                a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady,
+                cancellationToken);
+
+    /// <summary>
+    /// Mevcut bir SignedReady artefaktı (idempotent replay YA DA yeni-insert yarışını KAYBEDEN
+    /// bir denemenin rakip satırı) işler - bkz. Faz 2B.7.1 görev md.5-6. Kaynak eşleşme
+    /// kontrolünden SONRA, imza/XSD/Schematron doğrulaması TAMAMEN SQL transaction'ın DIŞINDA
+    /// çalışır (satır kilidi TUTULMAZ) - YENİ bir artefaktın imzalanma akışıyla (md.17 adım 8-11)
+    /// TAM SİMETRİKTİR (md.6). Yalnız EN SONDAKİ kısa transaction, ownership'i ve artefaktın
+    /// (immutable Id+hash) tx-dışı doğrulama SIRASINDA DEĞİŞMEDİĞİNİ teyit eder.
+    /// </summary>
+    private async Task<EBelgeUblImzalamaSonucu> IslemMevcutSignedAsync(
+        EBelgeUblImzalamaTalebi talep,
+        EBelgeArtifact unsignedArtifact,
+        EBelgeArtifact mevcutSigned,
+        CancellationToken cancellationToken)
+    {
+        // md.20: idempotency - AYNI kaynak (Id+hash) İSE, imzaların BYTE-BİREBİR eşleşmesi
+        // BEKLENMEZ (xades:SigningTime her denemede FARKLIDIR - bkz. md.21 determinizm notu).
+        var kaynakEslesiyor = !mevcutSigned.IsDeleted
+            && mevcutSigned.KaynakArtifactId == unsignedArtifact.Id
+            && string.Equals(mevcutSigned.KaynakArtifactSha256, unsignedArtifact.ArtifactSha256, StringComparison.Ordinal);
+
+        if (!kaynakEslesiyor)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
+                "Aynı benzersiz anahtar altında farklı kaynağa bağlı veya soft-delete edilmiş bir SignedReady artefakt zaten mevcut.",
+                cancellationToken);
+        }
+
+        // ---- Faz 2 (idempotent): DB dışı tam doğrulama (satır kilidi TUTULMAZ) ----
+        var mevcutBytes = ImmutableArray.Create(mevcutSigned.Icerik);
+
+        var mevcutDogrulama = await _dogrulayici.DogrulaAsync(mevcutBytes, cancellationToken);
+        if (!mevcutDogrulama.GecerliMi)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
+                $"Mevcut SignedReady artefaktın imzası bağımsız doğrulamadan geçemedi: {mevcutDogrulama.HataKodu} {mevcutDogrulama.HataMesaji}",
+                cancellationToken);
+        }
+
+        try
+        {
+            _xsdValidator.Validate(mevcutBytes);
+        }
+        catch (EBelgeUblXsdValidationFailedException ex)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
+                $"Mevcut SignedReady artefakt, XSD doğrulamasından {ex.Hatalar.Count} hata ile geçemedi.",
+                cancellationToken);
+        }
+
+        EBelgeSchematronValidationResult mevcutSchematron;
+        try
+        {
+            mevcutSchematron = await _schematronValidator.ValidateAsync(mevcutBytes, EBelgeSchematronSidecarOptions.SupportedRuleSetId, cancellationToken);
+        }
+        catch (EBelgeUblSchematronServiceUnavailableException ex)
+        {
+            return EBelgeUblImzalamaSonucu.GeciciHata(ex.HataKodu, GuvenliMesaj(ex));
+        }
+        catch (EBelgeUblSchematronProtocolErrorException ex)
+        {
+            return EBelgeUblImzalamaSonucu.GeciciHata(ex.HataKodu, GuvenliMesaj(ex));
+        }
+
+        if (!mevcutSchematron.Valid)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
+                $"Mevcut SignedReady artefakt, Schematron doğrulamasından {mevcutSchematron.Violations.Count} ihlal ile geçemedi.",
+                cancellationToken);
+        }
+
+        // ---- Faz 3: KISA transaction - ownership + "artefakt tx-dışı doğrulama sırasında
+        // DEĞİŞMEDİ" teyidi + tamamlama ----
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var sahip = await _leaseTransitionService.IsOwnedForJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
+        if (!sahip)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+        }
+
+        var kayit = await _dbContext.Set<EBelgeKaydi>()
+            .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
+
+        // Artefakt immutable'dır - Id+hash AYNI kalmışsa, tx-dışı doğrulanan içerik hâlâ
+        // GEÇERLİDİR. Değişmiş/kaybolmuşsa (bkz. görev md.5 "transaction dışı doğrulama
+        // sonrasında artifact hash'i değişmişse sonuç kullanılmaz") - önceki doğrulama SONUCU
+        // ARTIK GÜVENİLMEZ, geçici hata olarak raporlanır (üst katman yeniden dener).
+        var yenidenOkunanSigned = await OkuMevcutSignedAsync(talep, cancellationToken);
+        if (yenidenOkunanSigned is null ||
+            yenidenOkunanSigned.Id != mevcutSigned.Id ||
+            yenidenOkunanSigned.IsDeleted ||
+            !string.Equals(yenidenOkunanSigned.ArtifactSha256, mevcutSigned.ArtifactSha256, StringComparison.Ordinal))
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.GeciciHata(
+                "EBELGE_SIGNING_YARIS_DURUMU", "SignedReady artefakt, bağımsız tx-dışı doğrulama sırasında değişti - yeniden denenmeli.");
+        }
+
+        kayit.Durum = EBelgeKaydiDurumu.SignedReady;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var tamamIdempotent = await _leaseTransitionService.TryCompleteJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
+        if (!tamamIdempotent)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return EBelgeUblImzalamaSonucu.AtomikBasarili();
+    }
+
+    /// <summary>
+    /// YENİ bir SignedReady artefaktı, TEK kısa transaction içinde insert eder (bkz. görev md.17).
+    /// Bu noktaya gelindiğinde imza/bağımsız doğrulama/XSD/Schematron ZATEN (Faz 2'de, tx DIŞINDA)
+    /// tamamlanmıştır - bu metot yalnız ownership doğrulaması + kalıcılaştırma + tamamlamadan
+    /// ibarettir. Unique-violation'da (BAŞKA bir worker kazandı) `null` döner - çağıran, YENİDEN
+    /// İMZALAMADAN rakip satırı okuyup idempotent yoldan (<see cref="IslemMevcutSignedAsync"/>)
+    /// devam eder.
+    /// </summary>
+    private async Task<EBelgeUblImzalamaSonucu?> DenemeYeniSignedInsertAtomikAsync(
         EBelgeUblImzalamaTalebi talep,
         EBelgeArtifact unsignedArtifact,
         EBelgeXmlImzaSonucu imzaSonucu,
@@ -271,58 +438,6 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
 
         var kayit = await _dbContext.Set<EBelgeKaydi>()
             .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
-
-        var mevcutSigned = await _dbContext.Set<EBelgeArtifact>()
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a =>
-                a.KurumId == talep.KurumId &&
-                a.EBelgeKaydiId == talep.EBelgeKaydiId &&
-                a.ArtifactTipi == EBelgeArtifactTipi.UblXml &&
-                a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady,
-                cancellationToken);
-
-        if (mevcutSigned is not null)
-        {
-            // md.20: idempotency - AYNI kaynak (Id+hash) İSE, imzaların BYTE-BİREBİR eşleşmesi
-            // BEKLENMEZ (xades:SigningTime her denemede FARKLIDIR - bkz. md.21 determinizm notu);
-            // mevcut artefakt bağımsız olarak YENİDEN doğrulanır.
-            var kaynakEslesiyor = !mevcutSigned.IsDeleted
-                && mevcutSigned.KaynakArtifactId == unsignedArtifact.Id
-                && string.Equals(mevcutSigned.KaynakArtifactSha256, unsignedArtifact.ArtifactSha256, StringComparison.Ordinal);
-
-            if (!kaynakEslesiyor)
-            {
-                return await TamamlaKaliciHataAyniTransactiondaAsync(
-                    tx, talep, kayit,
-                    EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
-                    "Aynı benzersiz anahtar altında farklı kaynağa bağlı veya soft-delete edilmiş bir SignedReady artefakt zaten mevcut.",
-                    cancellationToken);
-            }
-
-            var mevcutDogrulama = await _dogrulayici.DogrulaAsync(ImmutableArray.Create(mevcutSigned.Icerik), cancellationToken);
-            if (!mevcutDogrulama.GecerliMi)
-            {
-                return await TamamlaKaliciHataAyniTransactiondaAsync(
-                    tx, talep, kayit,
-                    EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
-                    "Mevcut SignedReady artefaktın imzası bağımsız doğrulamadan geçemedi.",
-                    cancellationToken);
-            }
-
-            kayit.Durum = EBelgeKaydiDurumu.SignedReady;
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            var tamamIdempotent = await _leaseTransitionService.TryCompleteJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
-            if (!tamamIdempotent)
-            {
-                await tx.RollbackAsync(cancellationToken);
-                return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
-            }
-
-            await tx.CommitAsync(cancellationToken);
-            return EBelgeUblImzalamaSonucu.AtomikBasarili();
-        }
 
         var yeniSigned = new EBelgeArtifact
         {
@@ -358,7 +473,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         {
             await tx.RollbackAsync(cancellationToken);
             _dbContext.ChangeTracker.Clear();
-            _logger.LogInformation(ex, "SignedReady artefakt benzersizlik çakışması - yeniden denenecek (EBelgeKaydiId={EBelgeKaydiId}).", talep.EBelgeKaydiId);
+            _logger.LogInformation(ex, "SignedReady artefakt benzersizlik çakışması - rakip satır idempotent yoldan işlenecek (EBelgeKaydiId={EBelgeKaydiId}).", talep.EBelgeKaydiId);
             return null;
         }
 

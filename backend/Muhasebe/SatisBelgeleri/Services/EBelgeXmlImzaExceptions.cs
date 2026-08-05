@@ -40,6 +40,9 @@ public static class EBelgeXmlImzaHataKodlari
     /// <summary>Bkz. Faz 2B.7.2 görev md.5 - unsigned kaynak artefakt, imzalama SIRASINDA (tx-dışı imzalamadan SignedReady insert'ine kadar) değişti - GEÇİCİ bir yarış durumudur, yeni bir claim ile yeniden imzalanmalıdır.</summary>
     public const string KaynakImzalamaSirasindaDegisti = "EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING";
 
+    /// <summary>Bkz. Faz 2B.7.3 görev md.3/md.5/md.6 - SignedReady artefaktının (kendi metadata'sı VEYA kaynak Unsigned'la olan zinciri: RuleSetId/SnapshotSchemaVersion/KaynakSnapshotSha256/ImzaProfili/ImzaAlgoritmasi/DigestAlgoritmasi/ImzalayanSertifikaSha256ParmakIzi/ImzalamaZamaniUtc) bağımsız doğrulanmış XML'den çıkarılan GERÇEK değerlerle VEYA kilitli yeniden okumada kaynakla EŞLEŞMİYOR - audit/hash zinciri bütünlüğü ihlalidir, KALICI.</summary>
+    public const string SignedArtifactMetadataUyumsuz = "EBELGE_SIGNED_ARTIFACT_METADATA_MISMATCH";
+
     // ---- Geçici (bkz. görev md.21 "Geçici hatalar") ----
     public const string SaglayiciGeciciErisilemiyor = "EBELGE_SIGNING_PROVIDER_TEMPORARILY_UNAVAILABLE";
 }

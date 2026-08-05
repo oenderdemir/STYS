@@ -2956,6 +2956,198 @@ EKLENMEDİ; tüm çözüm test paketi ÇALIŞTIRILMADI (yalnız hedefli filtre);
 
 Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
 
+### Sonraki faz (Faz 2B.7.2)
+
+Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.
+
+## Faz 2B.7.3 sonuç bölümü — kaynak artifact kimliği ve imza metadata bütünlüğü
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+### Neden gerekliydi
+
+Faz 2B.7.2'nin kod incelemesinde 4 gerçek açık tespit edildi: (1) tx-dışı imzalamadan Faz-3
+insert'ine kadar, kaynak Unsigned artefaktı YALNIZ iş anahtarı (KurumId+EBelgeKaydiId+ArtifactTipi+
+ArtifactAsamasi) ÜZERİNDEN yeniden okunuyordu - AYNI iş anahtarına sahip AMA fiziksel olarak FARKLI
+bir satırla (ör. eski satır silinip yenisi eklenmişse) TESADÜFEN eşleşme riski TEORİK olarak
+mevcuttu; (2) `IslemMevcutSignedAsync`'e ve `DenemeYeniSignedInsertAtomikAsync`'e PARAMETRE olarak
+geçirilen `unsignedArtifact`, transaction-DIŞI ilk okumadan sonra HİÇ dondurulmamış, ham bir EF
+entity'siydi - "hangi değerlerin GERÇEKTEN imzalandığı" ile "en son okunan değerler" arasında kavramsal
+bir AYRIM YOKTU; (3) mevcut bir SignedReady artefaktı işlenirken, saklanan imza metadata'sı (profil/
+algoritma/sertifika parmak izi/imzalama zamanı) bağımsız doğrulanmış XML'den ÇIKARILAN GERÇEK
+değerlerle HİÇ karşılaştırılmıyordu - yalnız İÇERİK hash'i (Faz 2B.7.2) doğrulanıyordu, metadata
+sütunları KÖRÜ KÖRÜNE güveniliyordu; (4) Faz-3'ün kısa "sonuç" transaction'ı, satırın yeniden
+okunmasında yalnız Id/hash/kaynak Id-hash'i karşılaştırıyordu - RuleSetId/SnapshotSchemaVersion/
+KaynakSnapshotSha256/imza metadata'sı gibi audit alanlarındaki bir DEĞİŞİKLİK bu kısa pencerede HİÇ
+YAKALANMIYORDU.
+
+### 1. `EBelgeUnsignedArtifactSnapshot` - immutable kaynak anlık görüntüsü
+
+`EBelgeUblImzalamaService.cs`'e, `EBelgeUblImzalamaTalebi`'nin hemen ALTINA, yeni bir immutable
+record eklendi:
+
+```csharp
+public sealed record EBelgeUnsignedArtifactSnapshot
+{
+    public required long ArtifactId { get; init; }
+    public required int KurumId { get; init; }
+    public required int EBelgeKaydiId { get; init; }
+    public required EBelgeArtifactTipi ArtifactTipi { get; init; }
+    public required EBelgeArtifactAsamasi ArtifactAsamasi { get; init; }
+    public required string ArtifactSha256 { get; init; }
+    public required string RuleSetId { get; init; }
+    public required int SnapshotSchemaVersion { get; init; }
+    public required string KaynakSnapshotSha256 { get; init; }
+    public required string MimeType { get; init; }
+    public required string DosyaAdi { get; init; }
+}
+```
+
+`ImzalaAsync`, tx-dışı ilk okuma + hash doğrulamasından HEMEN SONRA bu anlık görüntüyü (+ AYRI bir
+`ImmutableArray<byte> unsignedIcerik`) oluşturur; bundan SONRA akışın TAMAMI (imzalama talebi,
+`IslemMevcutSignedAsync`, `DenemeYeniSignedInsertAtomikAsync`) yalnız BU KAYIT üzerinden ilerler -
+EF entity'sinin (`unsignedArtifact`) kendisi bir daha KULLANILMAZ.
+
+### 2-3. `OkuUnsignedKilitliAsync` - kesin Id ile kilitli yeniden okuma + yarış sınıflandırması
+
+`OkuUnsignedKilitliAsync`, artık `long artifactId` parametresi ALIR ve sorgusuna `WHERE [Id] =
+{artifactId}` koşulunu EKLER (yalnız Kurum/EBelge/aşama iş anahtarı DEĞİL). Bu, satırın fiziksel
+olarak silinip AYNI iş anahtarıyla YENİ bir Id'li satırla değiştirildiği senaryoda sorgunun
+DOĞRUDAN `null` DÖNMESİNİ sağlar - generic bir FK ihlali/`DbUpdateException`'a HİÇ düşülmeden,
+type-safe bir sonuç üretilir (bkz. görev md.2-3).
+
+`DenemeYeniSignedInsertAtomikAsync`, kilitli yeniden okuma sonrasında ÜÇ ayrı sınıflandırma yapar:
+
+1. **`null` VEYA `IsDeleted`** → `EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING` İLE GEÇİCİ hata
+   (kaynak kayboldu/fiziksel silinip değiştirildi/soft-delete edildi - YENİ bir claim ile yeniden
+   denenmelidir).
+2. **Kaydın KENDİ `ArtifactSha256` sütunu, `Icerik`'inin GERÇEK SHA-256'sıyla UYUŞMUYOR** →
+   `EBELGE_SIGNING_SOURCE_ARTIFACT_HASH_MISMATCH` İLE ATOMİK KALICI hata (kaydın kendi İÇİNDE
+   tutarsız olması - GERÇEK bir bütünlük sorunu, retry ANLAMSIZ).
+3. **Kayıt kendi İÇİNDE tutarlı AMA `unsignedSnapshot`'IN HERHANGİ bir alanından (ArtifactSha256,
+   RuleSetId, SnapshotSchemaVersion, KaynakSnapshotSha256, MimeType, DosyaAdi) FARKLI** →
+   `EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING` İLE GEÇİCİ hata.
+
+### 4. SignedReady insert'i - kilitli, doğrulanmış kaynaktan alan doldurma
+
+`DenemeYeniSignedInsertAtomikAsync`'in inşa ettiği YENİ `EBelgeArtifact` satırının `RuleSetId`/
+`SnapshotSchemaVersion`/`KaynakSnapshotSha256`/`KaynakArtifactId`/`KaynakArtifactSha256`/`DosyaAdi`
+alanları artık transaction-DIŞI eski `unsignedSnapshot`'tan DEĞİL, kilitli YENİDEN okunan VE
+snapshot'la eşleştiği yukarıda DOĞRULANAN `yenidenOkunanUnsigned` entity'sinden alınır - audit
+zinciri TAM OLARAK commit anındaki, doğrulanmış kaynağa BAĞLANIR.
+
+### 5. Existing SignedReady - metadata'nın doğrulanmış XML'le eşleşmesi
+
+Yeni hata kodu eklendi: `EBELGE_SIGNED_ARTIFACT_METADATA_MISMATCH`
+(`EBelgeXmlImzaHataKodlari.SignedArtifactMetadataUyumsuz`).
+
+`EBelgeXmlImzaDogrulamaSonucu`, `ImzaProfili`/`ImzaAlgoritmasi`/`DigestAlgoritmasi` alanlarıyla
+GENİŞLETİLDİ. Bu değerler STORED artefakttan DEĞİL, `EBelgeXmlImzaDogrulayici.DogrulaCore`'un
+sonunda, whitelist ile ONAYLANMIŞ `Profil`den (`EBelgeXadesProfili.GibUblTr`) üretilir - bu
+GÜVENLİDİR, çünkü `DogrulaCore` içindeki "Algoritma/profil whitelist" ve her `ds:Reference`'ın
+`DigestMethod`'u için yapılan kontroller, XML'deki GERÇEK `sigMethod`/`digestAlg` değerlerinin
+`Profil.SignatureAlgorithmUri`/`Profil.DigestAlgorithmUri`'YE BAYT-BİREBİR eşit olduğunu DAHA ÖNCE
+bağımsız doğrulamıştır - `Profil` alanları, doğrulanmış XML'deki gerçek değerlerin KENDİSİDİR.
+
+`IslemMevcutSignedAsync`, bağımsız imza doğrulaması (`mevcutDogrulama.GecerliMi`) BAŞARILI
+olduktan SONRA, saklanan `mevcutSigned` metadata'sını `mevcutDogrulama`'nın alanlarıyla karşılaştırır:
+
+```text
+mevcutSigned.ImzaProfili                      == mevcutDogrulama.ImzaProfili
+mevcutSigned.ImzaAlgoritmasi                  == mevcutDogrulama.ImzaAlgoritmasi
+mevcutSigned.DigestAlgoritmasi                == mevcutDogrulama.DigestAlgoritmasi
+mevcutSigned.ImzalayanSertifikaSha256ParmakIzi == mevcutDogrulama.SertifikaSha256ParmakIzi
+mevcutSigned.ImzalamaZamaniUtc (saniyeye kırpılmış) == mevcutDogrulama.SigningTimeUtc (saniyeye kırpılmış)
+```
+
+Ayrıca, mevcut `kaynakEslesiyor` (KaynakArtifactId+KaynakArtifactSha256) kontrolünden SONRA, YENİ
+bir `kaynakZinciriEslesiyor` kontrolü eklendi: `mevcutSigned.RuleSetId`/`SnapshotSchemaVersion`/
+`KaynakSnapshotSha256`, kaynak `unsignedKaynak` (snapshot) İLE eşleşmelidir. HERHANGİ bir uyumsuzluk
+`EBELGE_SIGNED_ARTIFACT_METADATA_MISMATCH` İLE atomik kalıcı hata üretir - mevcut
+`EBELGE_SIGNED_ARTIFACT_IDEMPOTENCY_CONFLICT` kodu (yalnız KaynakArtifactId/KaynakArtifactSha256
+uyumsuzluğu/soft-delete İÇİN, geriye dönük UYUMLULUK amacıyla) DEĞİŞTİRİLMEDİ.
+
+**`ImzalamaZamaniUtc` karşılaştırmasında SANİYE hassasiyeti** (görev md.5'in AÇIKÇA istediği
+"SQL hassasiyetini dikkate al... gevşek/belirsiz tolerans EKLEME" gereksinimi): `xades:SigningTime`,
+XML'e `EBelgeXmlImzalayici.BuildQualifyingProperties`'te `"yyyy-MM-ddTHH:mm:ssZ"` formatıyla YAZILIR
+- YALNIZ SANİYE çözünürlüğü TAŞIR (alt-saniye hassasiyeti XML serileştirmesinde KAYBOLUR). Saklanan
+`ImzalamaZamaniUtc` sütunu İSE (migration'da `datetime2`, EXPLICIT bir `HasPrecision` OLMADAN -
+SQL Server VARSAYILAN `datetime2(7)` hassasiyetiyle) `_timeProvider.GetUtcNow().UtcDateTime`'dan
+GELEN TAM hassasiyeti KORUR. Bu ikisinin DOĞRUDAN (`==`) karşılaştırılması neredeyse HER ZAMAN
+BAŞARISIZ olurdu (gerçek zamanın tam saniyeye denk gelmesi son derece nadir). Çözüm: YENİ
+`ImzalamaZamaniSaniyeHassasiyetindeEslesiyorMu`/`SaniyeyeKirp` yardımcı metotları, HER İKİ değeri
+de SANİYEYE kırpıp EXACT eşitlik karşılaştırır - bu, ±N saniyelik BULANIK bir tolerans PENCERESİ
+DEĞİLDİR; XML serileştirmesinin KENDİ, SABİT VE BELİRLEYİCİ hassasiyet sınırına göre yapılan, tam
+eşitlik gerektiren bir karşılaştırmadır. (Faz-3'ün kısa transaction'ındaki `yenidenOkunanSigned`
+vs `mevcutSigned` karşılaştırması İSE - bkz. md.6 - İKİ ayrı DB okumasının karşılaştırmasıdır, XML'e
+KARŞI DEĞİLDİR; bu yüzden ORADA `ImzalamaZamaniUtc` TAM hassasiyetle, kırpmadan karşılaştırılır.)
+
+### 6. Kısa transaction'da metadata'nın yeniden doğrulanması
+
+`IslemMevcutSignedAsync`'in Faz-3 kısa transaction'ındaki `satirDegismedi` karşılaştırması,
+Faz 2B.7.2'nin Id/hash/kaynak Id-hash/IsDeleted alanlarına EK olarak artık şunları da (kilitli
+yeniden okunan `yenidenOkunanSigned` İLE tx-dışı doğrulamada kullanılan `mevcutSigned` ANLIK
+GÖRÜNTÜSÜ ARASINDA) karşılaştırır: `RuleSetId`, `SnapshotSchemaVersion`, `KaynakSnapshotSha256`,
+`ImzaProfili`, `ImzaAlgoritmasi`, `DigestAlgoritmasi`, `ImzalayanSertifikaSha256ParmakIzi`,
+`ImzalamaZamaniUtc`, `MimeType`, `DosyaAdi`. HERHANGİ biri tx-dışı doğrulamadan SONRA değişmişse,
+önceki doğrulama sonucu ARTIK GÜVENİLMEZ - transaction rollback edilir, `EBELGE_SIGNING_YARIS_DURUMU`
+İLE geçici hata döner. İmza/XSD/Schematron doğrulaması BU kısa transaction'ın İÇİNE HİÇ TAŞINMADI -
+tümü (Faz 2B.7.2'de olduğu gibi) transaction AÇILMADAN ÖNCE, tx-dışı tamamlanır.
+
+### Test kapsamı ve çalıştırılan hedefli komut
+
+`EBelgeUblImzalamaServiceIntegrationTests`'e 12 yeni test eklendi (20→32):
+
+- `YeniImzaSirasindaUnsignedFizikselSilinipAyniAnahtarlaYeniIdliSatirEklenirseSignedReadyOlusmazTypeSafeSonucUretir`
+  - kaynak fiziksel olarak silinip AYNI iş anahtarıyla YENİ bir Id'li satırla değiştirilir; SignedReady
+  OLUŞMAZ VE sonuç generic bir FK/DbUpdateException'a DÜŞMEDEN type-safe bir `GeciciHata`/
+  `EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING` olarak DÖNER (görev md.8 senaryo 1-2).
+- `YeniImzaSirasindaUnsignedRuleSetIdDegisirseSignedReadyOlusmazGeciciHataDoner` (senaryo 3)
+- `YeniImzaSirasindaUnsignedSnapshotSchemaVersionDegisirseSignedReadyOlusmazGeciciHataDoner` (senaryo 4)
+- `YeniImzaSirasindaUnsignedKaynakSnapshotSha256DegisirseSignedReadyOlusmazGeciciHataDoner` (senaryo 5)
+- `UnsignedMetadataImzalamaSirasindaDegistiktenSonraYeniClaimIleYenidenDenemeBasariliOlur` (senaryo 6)
+- `MevcutSignedReadyImzaProfiliDegistirilirseIdempotentBasariOlmazMetadataUyumsuzKaliciHataUretir` (senaryo 7)
+- `MevcutSignedReadyImzaAlgoritmasiDegistirilirseIdempotentBasariOlmazMetadataUyumsuzKaliciHataUretir` (senaryo 8)
+- `MevcutSignedReadyDigestAlgoritmasiDegistirilirseIdempotentBasariOlmazMetadataUyumsuzKaliciHataUretir` (senaryo 9)
+- `MevcutSignedReadySertifikaParmakIziDegistirilirseIdempotentBasariOlmazMetadataUyumsuzKaliciHataUretir` (senaryo 10)
+- `MevcutSignedReadyImzalamaZamaniXmlSigningTimeIleEslesmezseIdempotentBasariOlmazMetadataUyumsuzKaliciHataUretir` (senaryo 11)
+- `MevcutSignedReadyRuleSetIdDegistirilirseIdempotentBasariOlmazMetadataUyumsuzKaliciHataUretir` (senaryo 12)
+- `MevcutSignedTxDisiDogrulamaSonrasiRuleSetIdDegistirilirseYarisDurumuDoner` (senaryo 13)
+
+Senaryo 14 (doğru metadata + exact bytes ile idempotent başarı), mevcut
+`GecerliImzaTamAtomikBasariylaSignedReadyArtefaktUretirVeHashZinciriDogrulanir` (yeni-imza yolu) ve
+`AyniKaynagaEslesenMevcutSignedReadyIdempotentBasariylaTamamlanirIkinciSatirEklenmezVeYenidenDogrulanir`
+(idempotent yol) testleri TARAFINDAN ZATEN REGRESYON olarak KANITLANMIŞTIR - bu turdaki TÜM yeni
+metadata kontrolleri EKLENDİKTEN SONRA da her iki test BAŞARILI olmaya devam eder.
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests|FullyQualifiedName~EBelgeUblImzalamaServiceIntegrationTests|FullyQualifiedName~EBelgeSigningBackfillServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeUblRendererEndToEndIntegrationTests|FullyQualifiedName~EBelgeSchematronSidecarIntegrationTests|FullyQualifiedName~EBelgeFaz1IntegrationTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests"
+  → Passed: 235, Failed: 0, Total: 235 (gerçek SQL Server + gerçek Java Saxon sidecar ile) - bu 235,
+  Faz 2B.7.2'nin 223'üne bu turun 12 YENİ testinin EKLENMESİYLE oluşur (37 doğrulayıcı/imzalayıcı
+  birim testi HİÇ DEĞİŞMEDİ - bu turda `EBelgeXmlImzalayiciTests` dosyasına DOKUNULMADI).
+```
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+XAdES mimarisi/imza motoru/doğrulayıcı/outbox handler'ı/activation gate/backfill servisi/migration
+BAŞTAN YAZILMADI - yalnız YUKARIDA açıklanan hedefli sertleştirmeler eklendi. Yeni migration
+EKLENMEDİ - mevcut sütunlar (tümü `EBelgeArtifact`'ta ZATEN var olan `RuleSetId`/
+`SnapshotSchemaVersion`/`KaynakSnapshotSha256`/`ImzaProfili`/`ImzaAlgoritmasi`/`DigestAlgoritmasi`/
+`ImzalayanSertifikaSha256ParmakIzi`/`ImzalamaZamaniUtc`/`MimeType`/`DosyaAdi`) YETERLİ bulunmuştur.
+İmza/XSD/Schematron doğrulaması SIRASINDA hiçbir SQL transaction AÇIK TUTULMADI. SignedReady VEYA
+Unsigned artefaktı HİÇBİR yerde UPDATE edilmedi (yalnız insert/soft-delete/test senaryolarındaki
+KASITLI tamperleme - test-only raw SQL, üretim kod yolunda YOK). Fiziksel silme özelliği/endpoint'i
+EKLENMEDİ - testlerdeki fiziksel silme yalnız bir DIŞ bozulma senaryosunu simüle eden, DOĞRUDAN
+test-only SQL'dir. Generic `DbUpdateException`, hiçbir yerde kaynak-değişikliği kontrolü YERİNE
+KULLANILMADI - kesin Id ile kilitli yeniden okuma, sorunu daha `SaveChanges` çağrılmadan, type-safe
+biçimde TESPİT eder. Gerçek sertifika/private key EKLENMEDİ; activation gate DEĞİŞTİRİLMEDİ;
+gönderim/PDF/e-posta/frontend/arka plan worker özelliği EKLENMEDİ; tüm çözüm test paketi
+ÇALIŞTIRILMADI (yalnız hedefli filtre); hiçbir test ATLANMADI.
+
+### Açık kalan konular
+
+Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
+
 ### Sonraki faz
 
 Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.

@@ -20,6 +20,41 @@ public sealed record EBelgeUblImzalamaTalebi(
     string KilitToken,
     DateTime KilitBitisZamaniUtc);
 
+/// <summary>
+/// İmzalamada KULLANILAN kaynak Unsigned artefaktın, transaction-dışı ilk okumadan HEMEN sonra
+/// dondurulmuş, immutable bir anlık görüntüsü (bkz. Faz 2B.7.3 görev md.1). Bundan SONRA, akışın
+/// GERİ KALANI (imzalama, bağımsız doğrulama, XSD/Schematron, kısa Faz-3 transaction'ı) yalnız BU
+/// KAYIT üzerinden ilerler - EF entity'sinin KENDİSİ (`EBelgeArtifact`) tekrar taşınmaz/yeniden
+/// KULLANILMAZ; bu, "hangi Unsigned satırının GERÇEKTEN imzalandığı" sorusunu, iş anahtarı (Kurum+
+/// EBelgeKaydi+Tip+Aşama) yerine GERÇEK, tam Id + tüm immutable alanlar ÜZERİNDEN kesinleştirir.
+/// XML içeriği (Icerik) AYRI, ayrıca taşınan bir `ImmutableArray&lt;byte&gt;` olarak tutulur (bkz.
+/// `ImzalaAsync`'teki `unsignedIcerik`).
+/// </summary>
+public sealed record EBelgeUnsignedArtifactSnapshot
+{
+    public required long ArtifactId { get; init; }
+
+    public required int KurumId { get; init; }
+
+    public required int EBelgeKaydiId { get; init; }
+
+    public required EBelgeArtifactTipi ArtifactTipi { get; init; }
+
+    public required EBelgeArtifactAsamasi ArtifactAsamasi { get; init; }
+
+    public required string ArtifactSha256 { get; init; }
+
+    public required string RuleSetId { get; init; }
+
+    public required int SnapshotSchemaVersion { get; init; }
+
+    public required string KaynakSnapshotSha256 { get; init; }
+
+    public required string MimeType { get; init; }
+
+    public required string DosyaAdi { get; init; }
+}
+
 public enum EBelgeUblImzalamaSonucuTuru
 {
     AtomikBasarili = 1,
@@ -161,6 +196,26 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             return await SonuclandirKaliciHataAtomikAsync(talep, kayitVarMi: true, EBelgeXmlImzaHataKodlari.KaynakHashUyumsuz, "Unsigned artefaktın kayıtlı hash'i, saklanan içerikle eşleşmiyor.", cancellationToken);
         }
 
+        // Faz 2B.7.3 görev md.1: bu andan İTİBAREN, EF entity'sinin (`unsignedArtifact`) KENDİSİ
+        // değil, DONDURULMUŞ bir immutable anlık görüntü (`unsignedSnapshot`) + AYRI bir immutable
+        // içerik dizisi (`unsignedIcerik`) KULLANILIR - akışın geri kalanı GERÇEKTEN HANGİ satırın
+        // (tam Id + tüm immutable alanlar) imzalandığını bu KAYIT üzerinden izler.
+        var unsignedIcerik = ImmutableArray.Create(unsignedArtifact.Icerik);
+        var unsignedSnapshot = new EBelgeUnsignedArtifactSnapshot
+        {
+            ArtifactId = unsignedArtifact.Id,
+            KurumId = unsignedArtifact.KurumId,
+            EBelgeKaydiId = unsignedArtifact.EBelgeKaydiId,
+            ArtifactTipi = unsignedArtifact.ArtifactTipi,
+            ArtifactAsamasi = unsignedArtifact.ArtifactAsamasi,
+            ArtifactSha256 = unsignedArtifact.ArtifactSha256,
+            RuleSetId = unsignedArtifact.RuleSetId,
+            SnapshotSchemaVersion = unsignedArtifact.SnapshotSchemaVersion,
+            KaynakSnapshotSha256 = unsignedArtifact.KaynakSnapshotSha256,
+            MimeType = unsignedArtifact.MimeType,
+            DosyaAdi = unsignedArtifact.DosyaAdi,
+        };
+
         // Faz 2B.7.1 görev md.5: mevcut SignedReady artefaktı - VARSA - TRANSACTION DIŞINDA okunur.
         // Bulunursa idempotency akışı TAMAMEN tx dışı doğrulamayla yürütülür (bkz.
         // IslemMevcutSignedAsync) - SQL transaction/UPDLOCK yalnız EN SONDA, kısa bir "teyit et ve
@@ -168,7 +223,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         var mevcutSigned = await OkuMevcutSignedAsync(talep, cancellationToken);
         if (mevcutSigned is not null)
         {
-            return await IslemMevcutSignedAsync(talep, unsignedArtifact, mevcutSigned, cancellationToken);
+            return await IslemMevcutSignedAsync(talep, unsignedSnapshot, mevcutSigned, cancellationToken);
         }
 
         // ---- Faz 2 (yeni imza): DB dışı imzalama + doğrulama (satır kilidi TUTULMAZ, md.17 adım 8) ----
@@ -179,9 +234,9 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
                 new EBelgeXmlImzaTalebi
                 {
                     KurumId = talep.KurumId,
-                    UnsignedUblUtf8 = ImmutableArray.Create(unsignedArtifact.Icerik),
-                    UnsignedUblSha256 = unsignedArtifact.ArtifactSha256,
-                    RuleSetId = unsignedArtifact.RuleSetId,
+                    UnsignedUblUtf8 = unsignedIcerik,
+                    UnsignedUblSha256 = unsignedSnapshot.ArtifactSha256,
+                    RuleSetId = unsignedSnapshot.RuleSetId,
                     EBelgeUuid = kayit.EBelgeUuid,
                     ImzalamaZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime,
                 },
@@ -262,7 +317,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         }
 
         // ---- Faz 3: kısa transaction - yeni SignedReady insert eder ----
-        var sonuc = await DenemeYeniSignedInsertAtomikAsync(talep, unsignedArtifact, imzaSonucu, signedBytes, cancellationToken);
+        var sonuc = await DenemeYeniSignedInsertAtomikAsync(talep, unsignedSnapshot, imzaSonucu, signedBytes, cancellationToken);
         if (sonuc is not null)
         {
             return sonuc;
@@ -278,7 +333,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
                 EBelgeXmlImzaHataKodlari.YarisDurumu, "SignedReady artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
         }
 
-        return await IslemMevcutSignedAsync(talep, unsignedArtifact, raceSigned, cancellationToken);
+        return await IslemMevcutSignedAsync(talep, unsignedSnapshot, raceSigned, cancellationToken);
     }
 
     private Task<EBelgeArtifact?> OkuMevcutSignedAsync(EBelgeUblImzalamaTalebi talep, CancellationToken cancellationToken) =>
@@ -310,14 +365,18 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             .SingleOrDefaultAsync(cancellationToken);
 
     /// <summary>
-    /// Kaynak Unsigned artefaktı `WITH (UPDLOCK, ROWLOCK)` satır kilidiyle okur - YALNIZ zaten
-    /// AÇIK bir transaction İÇİNDE çağrılmalıdır (bkz. Faz 2B.7.2 görev md.5).
+    /// Kaynak Unsigned artefaktı, KESİN Id'si ÜZERİNDEN (yalnız Kurum/EBelge/aşama iş anahtarı
+    /// DEĞİL - bkz. Faz 2B.7.3 görev md.2, "herhangi bir Unsigned satır DEĞİL") `WITH (UPDLOCK,
+    /// ROWLOCK)` satır kilidiyle okur - YALNIZ zaten AÇIK bir transaction İÇİNDE çağrılmalıdır.
+    /// Satır fiziksel olarak SİLİNMİŞ ve AYNI iş anahtarıyla YENİ bir Id'li satırla
+    /// DEĞİŞTİRİLMİŞSE, bu sorgu (tam Id eşleşmesi ARANDIĞI için) `null` DÖNER - genel bir FK/
+    /// DbUpdateException'a asla DÜŞÜLMEZ, çağıran type-safe bir "kaynak değişti" sonucu üretir.
     /// </summary>
-    private Task<EBelgeArtifact?> OkuUnsignedKilitliAsync(EBelgeUblImzalamaTalebi talep, CancellationToken cancellationToken) =>
+    private Task<EBelgeArtifact?> OkuUnsignedKilitliAsync(EBelgeUblImzalamaTalebi talep, long artifactId, CancellationToken cancellationToken) =>
         _dbContext.Set<EBelgeArtifact>()
             .FromSqlInterpolated($"""
                 SELECT * FROM [muhasebe].[EBelgeArtifactlari] WITH (UPDLOCK, ROWLOCK)
-                WHERE [KurumId] = {talep.KurumId} AND [EBelgeKaydiId] = {talep.EBelgeKaydiId}
+                WHERE [Id] = {artifactId} AND [KurumId] = {talep.KurumId} AND [EBelgeKaydiId] = {talep.EBelgeKaydiId}
                   AND [ArtifactTipi] = {(int)EBelgeArtifactTipi.UblXml} AND [ArtifactAsamasi] = {(int)EBelgeArtifactAsamasi.Unsigned}
                 """)
             .IgnoreQueryFilters()
@@ -365,7 +424,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
     /// </summary>
     private async Task<EBelgeUblImzalamaSonucu> IslemMevcutSignedAsync(
         EBelgeUblImzalamaTalebi talep,
-        EBelgeArtifact unsignedArtifact,
+        EBelgeUnsignedArtifactSnapshot unsignedKaynak,
         EBelgeArtifact mevcutSigned,
         CancellationToken cancellationToken)
     {
@@ -387,8 +446,8 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         // md.20: idempotency - AYNI kaynak (Id+hash) İSE, imzaların BYTE-BİREBİR eşleşmesi
         // BEKLENMEZ (xades:SigningTime her denemede FARKLIDIR - bkz. md.21 determinizm notu).
         var kaynakEslesiyor = !mevcutSigned.IsDeleted
-            && mevcutSigned.KaynakArtifactId == unsignedArtifact.Id
-            && string.Equals(mevcutSigned.KaynakArtifactSha256, unsignedArtifact.ArtifactSha256, StringComparison.Ordinal);
+            && mevcutSigned.KaynakArtifactId == unsignedKaynak.ArtifactId
+            && string.Equals(mevcutSigned.KaynakArtifactSha256, unsignedKaynak.ArtifactSha256, StringComparison.Ordinal);
 
         if (!kaynakEslesiyor)
         {
@@ -396,6 +455,25 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
                 talep, kayitVarMi: true,
                 EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
                 "Aynı benzersiz anahtar altında farklı kaynağa bağlı veya soft-delete edilmiş bir SignedReady artefakt zaten mevcut.",
+                cancellationToken);
+        }
+
+        // Faz 2B.7.3 görev md.5: SignedReady ile Unsigned kaynağı arasında yalnız Id/hash DEĞİL,
+        // TÜM audit/hash zinciri metadata'sı (RuleSetId/SnapshotSchemaVersion/KaynakSnapshotSha256)
+        // eşleşmelidir - bunlar teorik olarak AYNI kaynak Id+hash'e sahip ama FARKLI bir kural
+        // seti/snapshot şema sürümüyle üretilmiş (ör. veri bütünlüğü ihlali/manuel müdahale)
+        // bir SignedReady'yi TESPİT eder.
+        var kaynakZinciriEslesiyor =
+            string.Equals(mevcutSigned.RuleSetId, unsignedKaynak.RuleSetId, StringComparison.Ordinal)
+            && mevcutSigned.SnapshotSchemaVersion == unsignedKaynak.SnapshotSchemaVersion
+            && string.Equals(mevcutSigned.KaynakSnapshotSha256, unsignedKaynak.KaynakSnapshotSha256, StringComparison.Ordinal);
+
+        if (!kaynakZinciriEslesiyor)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.SignedArtifactMetadataUyumsuz,
+                "Mevcut SignedReady artefaktın RuleSetId/SnapshotSchemaVersion/KaynakSnapshotSha256 zinciri, kaynak Unsigned artefaktla eşleşmiyor.",
                 cancellationToken);
         }
 
@@ -413,6 +491,30 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
                 talep, kayitVarMi: true,
                 EBelgeXmlImzaHataKodlari.SignedArtifactIdempotencyConflict,
                 $"Mevcut SignedReady artefaktın imzası bağımsız doğrulamadan geçemedi: {mevcutDogrulama.HataKodu} {mevcutDogrulama.HataMesaji}",
+                cancellationToken);
+        }
+
+        // Faz 2B.7.3 görev md.5: bağımsız imza doğrulamasından SONRA, STORED SignedReady
+        // metadata'sı (ImzaProfili/ImzaAlgoritmasi/DigestAlgoritmasi/ImzalayanSertifikaSha256
+        // ParmakIzi/ImzalamaZamaniUtc), doğrulanmış XML'den ÇIKARILAN GERÇEK değerlerle
+        // (`mevcutDogrulama`) karşılaştırılır - saklanan sütunlara İMZA doğrulamasından BAĞIMSIZ
+        // güvenilmez. ImzalamaZamaniUtc karşılaştırması SANİYE hassasiyetinde yapılır (bkz.
+        // `ImzalamaZamaniSaniyeHassasiyetindeEslesiyorMu` - xades:SigningTime XML'e yalnız saniye
+        // çözünürlüğüyle yazılır, bu YUVARLAMA/gevşek bir tolerans DEĞİL, XML serileştirmesinin
+        // KENDİ, sabit/belirleyici hassasiyet sınırıdır).
+        var metadataDogrulanmisXmlIleEslesiyor =
+            string.Equals(mevcutSigned.ImzaProfili, mevcutDogrulama.ImzaProfili, StringComparison.Ordinal)
+            && string.Equals(mevcutSigned.ImzaAlgoritmasi, mevcutDogrulama.ImzaAlgoritmasi, StringComparison.Ordinal)
+            && string.Equals(mevcutSigned.DigestAlgoritmasi, mevcutDogrulama.DigestAlgoritmasi, StringComparison.Ordinal)
+            && string.Equals(mevcutSigned.ImzalayanSertifikaSha256ParmakIzi, mevcutDogrulama.SertifikaSha256ParmakIzi, StringComparison.Ordinal)
+            && ImzalamaZamaniSaniyeHassasiyetindeEslesiyorMu(mevcutSigned.ImzalamaZamaniUtc, mevcutDogrulama.SigningTimeUtc);
+
+        if (!metadataDogrulanmisXmlIleEslesiyor)
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.SignedArtifactMetadataUyumsuz,
+                "Mevcut SignedReady artefaktın saklanan imza metadata'sı, bağımsız doğrulanmış XML'den çıkarılan gerçek değerlerle eşleşmiyor.",
                 cancellationToken);
         }
 
@@ -477,6 +579,15 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         var yenidenOkunanSigned = await OkuMevcutSignedKilitliAsync(talep, cancellationToken);
         var yenidenHesaplananSignedHash = yenidenOkunanSigned is null ? null : Convert.ToHexString(SHA256.HashData(yenidenOkunanSigned.Icerik));
 
+        // Faz 2B.7.3 görev md.6: yalnız ID/hash/kaynak ID-hash DEĞİL, güvenlik VE audit
+        // metadata'sının TAMAMI (RuleSetId/SnapshotSchemaVersion/KaynakSnapshotSha256/ImzaProfili/
+        // ImzaAlgoritmasi/DigestAlgoritmasi/ImzalayanSertifikaSha256ParmakIzi/ImzalamaZamaniUtc/
+        // MimeType/DosyaAdi) tx-dışı doğrulamada kullanılan `mevcutSigned` anlık görüntüsüyle
+        // YENİDEN karşılaştırılır - bu ALANLARDAN biri bile DEĞİŞMİŞSE önceki (tx-dışı) doğrulama
+        // sonucu ARTIK GÜVENİLMEZ. Bu, İKİ AYRI DB okumasının (`yenidenOkunanSigned` vs
+        // `mevcutSigned`) karşılaştırmasıdır - XML'den türetilmiş bir değerle KARŞILAŞTIRMA
+        // DEĞİLDİR, bu yüzden `ImzalamaZamaniUtc` burada TAM hassasiyetle (saniyeye
+        // KIRPILMADAN) karşılaştırılır.
         var satirDegismedi = yenidenOkunanSigned is not null
             && yenidenOkunanSigned.Id == mevcutSigned.Id
             && yenidenOkunanSigned.KurumId == talep.KurumId
@@ -486,7 +597,17 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             && yenidenOkunanSigned.KaynakArtifactId == mevcutSigned.KaynakArtifactId
             && string.Equals(yenidenOkunanSigned.KaynakArtifactSha256, mevcutSigned.KaynakArtifactSha256, StringComparison.Ordinal)
             && string.Equals(yenidenOkunanSigned.ArtifactSha256, mevcutSigned.ArtifactSha256, StringComparison.Ordinal)
-            && string.Equals(yenidenHesaplananSignedHash, gercekSignedHash, StringComparison.Ordinal);
+            && string.Equals(yenidenHesaplananSignedHash, gercekSignedHash, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.RuleSetId, mevcutSigned.RuleSetId, StringComparison.Ordinal)
+            && yenidenOkunanSigned.SnapshotSchemaVersion == mevcutSigned.SnapshotSchemaVersion
+            && string.Equals(yenidenOkunanSigned.KaynakSnapshotSha256, mevcutSigned.KaynakSnapshotSha256, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.ImzaProfili, mevcutSigned.ImzaProfili, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.ImzaAlgoritmasi, mevcutSigned.ImzaAlgoritmasi, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.DigestAlgoritmasi, mevcutSigned.DigestAlgoritmasi, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.ImzalayanSertifikaSha256ParmakIzi, mevcutSigned.ImzalayanSertifikaSha256ParmakIzi, StringComparison.Ordinal)
+            && yenidenOkunanSigned.ImzalamaZamaniUtc == mevcutSigned.ImzalamaZamaniUtc
+            && string.Equals(yenidenOkunanSigned.MimeType, mevcutSigned.MimeType, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.DosyaAdi, mevcutSigned.DosyaAdi, StringComparison.Ordinal);
 
         if (!satirDegismedi)
         {
@@ -522,7 +643,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
     /// </summary>
     private async Task<EBelgeUblImzalamaSonucu?> DenemeYeniSignedInsertAtomikAsync(
         EBelgeUblImzalamaTalebi talep,
-        EBelgeArtifact unsignedArtifact,
+        EBelgeUnsignedArtifactSnapshot unsignedSnapshot,
         EBelgeXmlImzaSonucu imzaSonucu,
         byte[] signedBytes,
         CancellationToken cancellationToken)
@@ -539,29 +660,33 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         var kayit = await _dbContext.Set<EBelgeKaydi>()
             .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
 
-        // Faz 2B.7.2 görev md.5: SignedReady insert EDİLMEDEN ÖNCE, kaynak Unsigned artefaktı
-        // UYGUN bir satır kilidiyle (UPDLOCK/ROWLOCK) YENİDEN okunur ve kimlik+hash bütünlüğü
-        // BAĞIMSIZ olarak yeniden doğrulanır - imzalama (Faz 2, tx dışı) İLE bu nokta ARASINDA
-        // kaynak DEĞİŞMİŞ (soft-delete edilmiş) OLABİLİR.
-        var yenidenOkunanUnsigned = await OkuUnsignedKilitliAsync(talep, cancellationToken);
+        // Faz 2B.7.3 görev md.2: SignedReady insert EDİLMEDEN ÖNCE, kaynak Unsigned artefaktı -
+        // yalnız Kurum/EBelge/aşama iş anahtarı ÜZERİNDEN DEĞİL, snapshot'ın TAŞIDIĞI KESİN Id
+        // ÜZERİNDEN - UYGUN bir satır kilidiyle (UPDLOCK/ROWLOCK) YENİDEN okunur. Satır fiziksel
+        // olarak SİLİNİP AYNI iş anahtarıyla YENİ bir Id'li satırla DEĞİŞTİRİLMİŞ olsa BİLE, bu
+        // sorgu (tam Id eşleşmesi arandığı için) `null` DÖNER - generic bir FK/DbUpdateException
+        // YOLUNA HİÇ DÜŞÜLMEZ (bkz. görev md.3).
+        var yenidenOkunanUnsigned = await OkuUnsignedKilitliAsync(talep, unsignedSnapshot.ArtifactId, cancellationToken);
 
         if (yenidenOkunanUnsigned is null || yenidenOkunanUnsigned.IsDeleted)
         {
-            // Kaynak imzalama SIRASINDA kayboldu/soft-delete edildi - GEÇİCİ bir yarış durumudur,
-            // YENİ bir claim ile yeniden imzalanmalıdır (bkz. görev md.5).
+            // Kaynak imzalama SIRASINDA kayboldu/fiziksel olarak silinip değiştirildi/soft-delete
+            // edildi - GEÇİCİ bir yarış durumudur, YENİ bir claim ile yeniden imzalanmalıdır (bkz.
+            // görev md.3).
             await tx.RollbackAsync(cancellationToken);
             return EBelgeUblImzalamaSonucu.GeciciHata(
                 EBelgeXmlImzaHataKodlari.KaynakImzalamaSirasindaDegisti,
-                "Unsigned kaynak artefakt, imzalama sırasında değişti/soft-delete edildi.");
+                "Unsigned kaynak artefakt, imzalama sırasında değişti/bulunamadı/soft-delete edildi.");
         }
 
         var yenidenHesaplananUnsignedHash = Convert.ToHexString(SHA256.HashData(yenidenOkunanUnsigned.Icerik));
         if (!string.Equals(yenidenHesaplananUnsignedHash, yenidenOkunanUnsigned.ArtifactSha256, StringComparison.Ordinal))
         {
             // Kaydın KENDİ ArtifactSha256 sütunu, GERÇEK içeriğiyle eşleşmiyor - bu KALICI bir
-            // bütünlük sorunudur (bkz. görev md.5, "kalıcı olarak hash'i bozuksa"). `tx` ÖNCE
-            // rollback edilir - `SonuclandirKaliciHataAtomikAsync` KENDİ transaction'ını açar,
-            // aynı anda İKİ açık transaction OLAMAZ (bkz. Faz 2B.6.2 kanıtlanmış deseni).
+            // bütünlük sorunudur (bkz. görev md.3, "aynı artifact satırında SHA256(Icerik) !=
+            // ArtifactSha256"). `tx` ÖNCE rollback edilir - `SonuclandirKaliciHataAtomikAsync`
+            // KENDİ transaction'ını açar, aynı anda İKİ açık transaction OLAMAZ (bkz. Faz 2B.6.2
+            // kanıtlanmış deseni).
             await tx.RollbackAsync(cancellationToken);
             _dbContext.ChangeTracker.Clear();
             return await SonuclandirKaliciHataAtomikAsync(
@@ -571,33 +696,59 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
                 cancellationToken);
         }
 
-        if (!string.Equals(yenidenOkunanUnsigned.ArtifactSha256, unsignedArtifact.ArtifactSha256, StringComparison.Ordinal) ||
-            !string.Equals(unsignedArtifact.ArtifactSha256, imzaSonucu.KaynakUnsignedUblSha256, StringComparison.Ordinal))
+        // Faz 2B.7.3 görev md.2/md.3: kaydın hash'i KENDİ İÇİNDE tutarlı olsa BİLE, kilitli
+        // yeniden okunan satırın TÜM immutable alanları (Id/KurumId/EBelgeKaydiId/ArtifactTipi/
+        // ArtifactAsamasi/ArtifactSha256/RuleSetId/SnapshotSchemaVersion/KaynakSnapshotSha256/
+        // MimeType/DosyaAdi + EXACT-byte hash) tx-dışı imzalamanın BAŞLANGICINDA dondurulan
+        // `unsignedSnapshot`'la BİREBİR eşleşmelidir - RuleSetId'nin (veya diğer immutable
+        // metadata alanlarının) imzalama SIRASINDA değişmesi de bu yarışın bir parçasıdır.
+        var kilitliOkumaSnapshotIleEslesiyor =
+            yenidenOkunanUnsigned.Id == unsignedSnapshot.ArtifactId
+            && yenidenOkunanUnsigned.KurumId == unsignedSnapshot.KurumId
+            && yenidenOkunanUnsigned.EBelgeKaydiId == unsignedSnapshot.EBelgeKaydiId
+            && yenidenOkunanUnsigned.ArtifactTipi == unsignedSnapshot.ArtifactTipi
+            && yenidenOkunanUnsigned.ArtifactAsamasi == unsignedSnapshot.ArtifactAsamasi
+            && string.Equals(yenidenOkunanUnsigned.ArtifactSha256, unsignedSnapshot.ArtifactSha256, StringComparison.Ordinal)
+            && string.Equals(yenidenHesaplananUnsignedHash, unsignedSnapshot.ArtifactSha256, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanUnsigned.RuleSetId, unsignedSnapshot.RuleSetId, StringComparison.Ordinal)
+            && yenidenOkunanUnsigned.SnapshotSchemaVersion == unsignedSnapshot.SnapshotSchemaVersion
+            && string.Equals(yenidenOkunanUnsigned.KaynakSnapshotSha256, unsignedSnapshot.KaynakSnapshotSha256, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanUnsigned.MimeType, unsignedSnapshot.MimeType, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanUnsigned.DosyaAdi, unsignedSnapshot.DosyaAdi, StringComparison.Ordinal);
+
+        if (!kilitliOkumaSnapshotIleEslesiyor)
         {
-            // Kaynağın hash'i KENDİ İÇİNDE tutarlı ama tx-dışı imzalama SIRASINDA KULLANILANDAN
-            // FARKLI bulundu - GEÇİCİ bir yarış durumudur (bkz. görev md.5).
+            // Kaynağın hash'i KENDİ İÇİNDE tutarlı ama tx-dışı imzalama SIRASINDA KULLANILAN
+            // BAŞLANGIÇ SNAPSHOT'INDAN (hash VEYA RuleSetId/SnapshotSchemaVersion/
+            // KaynakSnapshotSha256/MimeType/DosyaAdi) FARKLI bulundu - GEÇİCİ bir yarış
+            // durumudur (bkz. görev md.3).
             await tx.RollbackAsync(cancellationToken);
             return EBelgeUblImzalamaSonucu.GeciciHata(
                 EBelgeXmlImzaHataKodlari.KaynakImzalamaSirasindaDegisti,
-                "Unsigned kaynak artefakt, imzalama sırasında kullanılan hash'ten farklı bulundu.");
+                "Unsigned kaynak artefakt, imzalama sırasında kullanılan başlangıç anlık görüntüsünden farklı bulundu.");
         }
 
+        // Faz 2B.7.3 görev md.4: SignedReady'nin RuleSetId/SnapshotSchemaVersion/
+        // KaynakSnapshotSha256/KaynakArtifactId/KaynakArtifactSha256/DosyaAdi alanları, tx-DIŞI
+        // eski `unsignedSnapshot`'tan DEĞİL - kilitli YENİDEN okunan VE yukarıda snapshot'la
+        // eşleştiği doğrulanan `yenidenOkunanUnsigned`'dan alınır - audit zinciri TAM OLARAK
+        // commit anındaki, doğrulanmış kaynağa bağlanır.
         var yeniSigned = new EBelgeArtifact
         {
             KurumId = talep.KurumId,
             EBelgeKaydiId = talep.EBelgeKaydiId,
             ArtifactTipi = EBelgeArtifactTipi.UblXml,
             ArtifactAsamasi = EBelgeArtifactAsamasi.SignedReady,
-            RuleSetId = unsignedArtifact.RuleSetId,
-            SnapshotSchemaVersion = unsignedArtifact.SnapshotSchemaVersion,
-            KaynakSnapshotSha256 = unsignedArtifact.KaynakSnapshotSha256,
+            RuleSetId = yenidenOkunanUnsigned.RuleSetId,
+            SnapshotSchemaVersion = yenidenOkunanUnsigned.SnapshotSchemaVersion,
+            KaynakSnapshotSha256 = yenidenOkunanUnsigned.KaynakSnapshotSha256,
             ArtifactSha256 = imzaSonucu.SignedUblSha256,
             Icerik = signedBytes,
             MimeType = "application/xml",
-            DosyaAdi = TuretSignedDosyaAdi(unsignedArtifact.DosyaAdi),
+            DosyaAdi = TuretSignedDosyaAdi(yenidenOkunanUnsigned.DosyaAdi),
             OlusturulmaZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime,
-            KaynakArtifactId = unsignedArtifact.Id,
-            KaynakArtifactSha256 = unsignedArtifact.ArtifactSha256,
+            KaynakArtifactId = yenidenOkunanUnsigned.Id,
+            KaynakArtifactSha256 = yenidenOkunanUnsigned.ArtifactSha256,
             ImzaProfili = imzaSonucu.ImzaProfili,
             ImzaAlgoritmasi = imzaSonucu.ImzaAlgoritmasi,
             DigestAlgoritmasi = imzaSonucu.DigestAlgoritmasi,
@@ -721,4 +872,26 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
     }
 
     private static string GuvenliMesaj(Exception ex) => ex.Message.Length > 1900 ? ex.Message[..1900] : ex.Message;
+
+    /// <summary>
+    /// Bkz. Faz 2B.7.3 görev md.5 - saklanan `EBelgeArtifact.ImzalamaZamaniUtc` (datetime2, TAM
+    /// hassasiyetle, `_timeProvider.GetUtcNow().UtcDateTime`'dan GELEN) İLE doğrulanmış XML'den
+    /// parse edilen `xades:SigningTime` (bkz. `EBelgeXmlImzalayici.BuildQualifyingProperties` -
+    /// `"yyyy-MM-ddTHH:mm:ssZ"` formatıyla yazılır, YALNIZ SANİYE çözünürlüğü TAŞIR) arasındaki
+    /// karşılaştırma. Bu, GEVŞEK/belirsiz bir tolerans (ör. ±N saniyelik bir pencere) DEĞİLDİR -
+    /// XML serileştirmesinin KENDİ, SABİT ve BELİRLEYİCİ hassasiyet sınırına (saniyeye kırpma)
+    /// göre YAPILAN, EXACT bir eşitlik kontrolüdür.
+    /// </summary>
+    private static bool ImzalamaZamaniSaniyeHassasiyetindeEslesiyorMu(DateTime? saklanan, DateTime? dogrulanmisXmlden)
+    {
+        if (saklanan is null || dogrulanmisXmlden is null)
+        {
+            return false;
+        }
+
+        return SaniyeyeKirp(saklanan.Value) == SaniyeyeKirp(dogrulanmisXmlden.Value);
+    }
+
+    private static DateTime SaniyeyeKirp(DateTime deger) =>
+        new(deger.Ticks - (deger.Ticks % TimeSpan.TicksPerSecond), deger.Kind);
 }

@@ -20,20 +20,35 @@ public sealed record EBelgeXmlImzaDogrulamaSonucu
 
     public DateTime? SigningTimeUtc { get; }
 
-    private EBelgeXmlImzaDogrulamaSonucu(bool gecerliMi, string? hataKodu, string? hataMesaji, string? sertifikaSha256ParmakIzi, DateTime? signingTimeUtc)
+    /// <summary>Bkz. Faz 2B.7.3 görev md.7 - doğrulanmış XML'in gerçek SignatureMethod'unun eşleştiği, whitelist ile ONAYLANMIŞ profil kimliği (ör. EBelgeXadesProfili.GibUblTr.ProfilKimligi) - stored artefakttan ALINMAZ, yalnız BAŞARILI doğrulamanın SONUCUDUR.</summary>
+    public string? ImzaProfili { get; }
+
+    /// <summary>Bkz. Faz 2B.7.3 görev md.7 - doğrulanmış ds:SignatureMethod/@Algorithm URI'si (whitelist ile onaylanmış profilden - zaten XML'deki gerçek değerle eşit olduğu YUKARIDA bağımsız doğrulanmıştır).</summary>
+    public string? ImzaAlgoritmasi { get; }
+
+    /// <summary>Bkz. Faz 2B.7.3 görev md.7 - doğrulanmış ds:DigestMethod/@Algorithm URI'si (whitelist ile onaylanmış profilden - zaten XML'deki gerçek değerle eşit olduğu YUKARIDA bağımsız doğrulanmıştır).</summary>
+    public string? DigestAlgoritmasi { get; }
+
+    private EBelgeXmlImzaDogrulamaSonucu(
+        bool gecerliMi, string? hataKodu, string? hataMesaji, string? sertifikaSha256ParmakIzi, DateTime? signingTimeUtc,
+        string? imzaProfili, string? imzaAlgoritmasi, string? digestAlgoritmasi)
     {
         GecerliMi = gecerliMi;
         HataKodu = hataKodu;
         HataMesaji = hataMesaji;
         SertifikaSha256ParmakIzi = sertifikaSha256ParmakIzi;
         SigningTimeUtc = signingTimeUtc;
+        ImzaProfili = imzaProfili;
+        ImzaAlgoritmasi = imzaAlgoritmasi;
+        DigestAlgoritmasi = digestAlgoritmasi;
     }
 
-    public static EBelgeXmlImzaDogrulamaSonucu Gecerli(string sertifikaSha256ParmakIzi, DateTime signingTimeUtc) =>
-        new(true, null, null, sertifikaSha256ParmakIzi, signingTimeUtc);
+    public static EBelgeXmlImzaDogrulamaSonucu Gecerli(
+        string sertifikaSha256ParmakIzi, DateTime signingTimeUtc, string imzaProfili, string imzaAlgoritmasi, string digestAlgoritmasi) =>
+        new(true, null, null, sertifikaSha256ParmakIzi, signingTimeUtc, imzaProfili, imzaAlgoritmasi, digestAlgoritmasi);
 
     public static EBelgeXmlImzaDogrulamaSonucu Gecersiz(string hataKodu, string hataMesaji) =>
-        new(false, hataKodu, hataMesaji, null, null);
+        new(false, hataKodu, hataMesaji, null, null, null, null, null);
 }
 
 public interface IEBelgeXmlImzaDogrulayici
@@ -416,7 +431,18 @@ public sealed class EBelgeXmlImzaDogrulayici : IEBelgeXmlImzaDogrulayici
             throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "xades:SigningTime parse edilemedi.");
         }
 
-        return EBelgeXmlImzaDogrulamaSonucu.Gecerli(Convert.ToHexString(SHA256.HashData(cert.RawData)), signingTimeUtc);
+        // Faz 2B.7.3 görev md.7: ImzaProfili/ImzaAlgoritmasi/DigestAlgoritmasi, STORED artefakttan
+        // DEĞİL - whitelist ile ONAYLANMIŞ `Profil`den üretilir. Bu, YUKARIDA (bkz. "Algoritma/
+        // profil whitelist" ve reference-loop içindeki DigestMethod kontrolleri) `sigMethod`/
+        // `digestAlg`'ın GERÇEKTEN `Profil.SignatureAlgorithmUri`/`Profil.DigestAlgorithmUri`'ye
+        // BAYT-BİREBİR eşit olduğu bağımsız doğrulandığı İÇİN GÜVENLİDİR - `Profil` alanları,
+        // doğrulanmış XML'deki gerçek değerlerin KENDİSİDİR, ayrı bir "beyan" DEĞİLDİR.
+        return EBelgeXmlImzaDogrulamaSonucu.Gecerli(
+            Convert.ToHexString(SHA256.HashData(cert.RawData)),
+            signingTimeUtc,
+            Profil.ProfilKimligi,
+            Profil.SignatureAlgorithmUri,
+            Profil.DigestAlgorithmUri);
     }
 
     private static XmlDocument LoadDocumentSecurely(ImmutableArray<byte> xmlUtf8)

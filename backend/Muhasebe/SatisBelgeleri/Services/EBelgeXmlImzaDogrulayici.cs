@@ -55,9 +55,9 @@ public interface IEBelgeXmlImzaDogrulayici
 ///    sayısı/tipleri/URI'leri/transform sayısı-URI'si/digest algoritması whitelist'i.
 /// 3. Tüm belge referansı (URI="") için BAĞIMSIZ, elle yeniden hesaplanmış digest (ds:Signature
 ///    KALDIRILIP C14N uygulanarak - SignedXml/CheckSignature'a HİÇ İHTİYAÇ DUYULMADAN).
-/// 4. xades:SigningCertificate/CertDigest VE xades:IssuerSerial için BAĞIMSIZ, elle yeniden
-///    hesaplanmış sertifika hash'i/issuer-serial (gömülü ds:X509Certificate bytes'ından -
-///    imzalayan tarafın kendi nesnesinden DEĞİL).
+/// 4. xades:SigningCertificate/CertDigest, xades:IssuerSerial VE xades:SignerRole/ds:KeyValue
+///    için BAĞIMSIZ, elle yeniden hesaplanmış sertifika hash'i/issuer-serial/public-key (gömülü
+///    ds:X509Certificate bytes'ından - imzalayan tarafın kendi nesnesinden DEĞİL).
 /// 5. SignedInfo üzerindeki RSA imzasının, gömülü sertifikanın public key'i ile BAĞIMSIZ
 ///    yeniden doğrulanması (elle C14N + RSA.VerifyData).
 /// 6. cac:Signature/cbc:ID (VKN) ile AccountingSupplierParty VKN'si arasındaki bağın VE
@@ -85,6 +85,22 @@ public sealed class EBelgeXmlImzaDogrulayici : IEBelgeXmlImzaDogrulayici
         catch (EBelgeXmlImzaDogrulamaException ex)
         {
             return Task.FromResult(EBelgeXmlImzaDogrulamaSonucu.Gecersiz(ex.HataKodu, ex.Message));
+        }
+        catch (Exception ex) when (ex is XmlException or FormatException or CryptographicException or ArgumentException or OverflowException or InvalidOperationException)
+        {
+            // Faz 2B.7.2 görev md.1: bozuk/kurcalanmış bir imza belgesi (İYİ BİÇİMLİ olmayan XML,
+            // geçersiz base64 sertifika/SignatureValue/DigestValue, geçersiz X509 sertifika
+            // bytes'ı, hatalı canonicalization girdisi, SignedXml.LoadXml/CheckSignature kaynaklı
+            // kriptografik hatalar vb.) BEKLENEN, KALICI bir doğrulama BAŞARISIZLIĞIDIR -
+            // programlama hatası DEĞİLDİR. Genel `catch (Exception)` KULLANILMAZ (bkz. görev md.9)
+            // - yalnız BU AÇIKÇA SINIFLANDIRILMIŞ, parse/kriptografi katmanından BEKLENEN exception
+            // tipleri yakalanır (`OperationCanceledException` bu kümenin DIŞINDADIR - GERÇEK bir
+            // iptal isteği varsa normal şekilde dışarı aktarılır). Mesaj KASITLI OLARAK sabittir -
+            // hiçbir kişisel veri/XML/sertifika içeriği/SignatureValue/tam digest değeri İÇERMEZ
+            // (bkz. görev md.1, md.22).
+            return Task.FromResult(EBelgeXmlImzaDogrulamaSonucu.Gecersiz(
+                EBelgeXmlImzaHataKodlari.BozukImzaBelgesi,
+                "İmzalı belge, ayrıştırma veya kriptografik doğrulama sırasında geçersiz/bozuk bulundu."));
         }
     }
 
@@ -288,6 +304,41 @@ public sealed class EBelgeXmlImzaDogrulayici : IEBelgeXmlImzaDogrulayici
         if (!string.Equals(serialNode.InnerText, GetSerialNumberDecimalString(cert), StringComparison.Ordinal))
         {
             throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "xades:IssuerSerial/ds:X509SerialNumber, gömülü sertifikanın gerçek seri numarasıyla eşleşmiyor.");
+        }
+
+        // xades:SignerRole/xades:ClaimedRoles/xades:ClaimedRole (bkz. Faz 2B.7.2 raporu - TÜBİTAK
+        // KamuSM ESYA SDK dokümantasyonu, "e-fatura standartlarında GEREKLİ KILINAN imzacı rolü,
+        // açık anahtar ve imza zamanı eklenir" ifadesi) - GİB'in KENDİSİ tarafından yayımlanan
+        // resmî bir metinle DOĞRUDAN teyit EDİLMEMİŞ olsa da, aksini gösteren hiçbir kanıt
+        // BULUNAMADIĞINDAN uyumluluk açısından GÜVENLİ taraf olarak zorunlu kılınır.
+        var claimedRoleNode = signedPropertiesElement.SelectSingleNode(
+            "xades:SignedSignatureProperties/xades:SignerRole/xades:ClaimedRoles/xades:ClaimedRole", nsmgr)
+            ?? throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "xades:SignerRole/xades:ClaimedRoles/xades:ClaimedRole bulunamadı.");
+
+        if (!string.Equals(claimedRoleNode.InnerText, EBelgeXmlImzalayici.SignerClaimedRole, StringComparison.Ordinal))
+        {
+            throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "xades:ClaimedRole, beklenen değerle eşleşmiyor.");
+        }
+
+        // ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue - gömülü X509 sertifikanın GERÇEK public key'iyle
+        // (sertifikanın KENDİSİNDEN BAĞIMSIZ olarak yeniden alınarak) karşılaştırılır.
+        var modulusBase64 = signatureElement.SelectSingleNode("ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Modulus", nsmgr)?.InnerText
+            ?? throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Modulus bulunamadı.");
+        var exponentBase64 = signatureElement.SelectSingleNode("ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Exponent", nsmgr)?.InnerText
+            ?? throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Exponent bulunamadı.");
+
+        using (var certPublicRsaForKeyValue = cert.GetRSAPublicKey()
+            ?? throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.DesteklenmeyenAnahtarAlgoritmasi, "Gömülü sertifika RSA public key içermiyor."))
+        {
+            var gercekParams = certPublicRsaForKeyValue.ExportParameters(false);
+            var beyanEdilenModulus = Convert.FromBase64String(modulusBase64);
+            var beyanEdilenExponent = Convert.FromBase64String(exponentBase64);
+
+            if (!beyanEdilenModulus.AsSpan().SequenceEqual(gercekParams.Modulus) ||
+                !beyanEdilenExponent.AsSpan().SequenceEqual(gercekParams.Exponent))
+            {
+                throw new EBelgeXmlImzaDogrulamaException(EBelgeXmlImzaHataKodlari.ImzaDogrulamaHatasi, "ds:KeyValue, gömülü sertifikanın gerçek public key'iyle eşleşmiyor.");
+            }
         }
 
         // ---- 5. SignedInfo üzerindeki RSA imzasının bağımsız doğrulanması ----

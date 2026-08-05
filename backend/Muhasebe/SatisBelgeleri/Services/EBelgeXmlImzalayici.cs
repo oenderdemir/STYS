@@ -67,6 +67,9 @@ public sealed class EBelgeXmlImzalayici : IEBelgeXmlImzalayici
     private const string SignatureVknSchemeId = "VKN_TCKN";
     private const int MinRsaKeySizeBits = 2048;
 
+    /// <summary>bkz. `BuildQualifyingProperties` içindeki xades:SignerRole açıklaması - TÜBİTAK KamuSM ESYA SDK dokümantasyonuyla uyumlu, sabit değer.</summary>
+    internal const string SignerClaimedRole = "Supplier";
+
     private readonly IEBelgeImzaKimligiSaglayici _kimlikSaglayici;
     private readonly IEBelgeSertifikaGuvenValidatoru _guvenValidatoru;
     private readonly EBelgeXadesProfili _profil;
@@ -216,8 +219,15 @@ public sealed class EBelgeXmlImzalayici : IEBelgeXmlImzalayici
         belgeReferansi.AddTransform(new XmlDsigEnvelopedSignatureTransform());
         signedXml.AddReference(belgeReferansi);
 
+        // ds:KeyInfo/ds:KeyValue (bkz. Faz 2B.7.2 raporu) - AYNI KamuSM ESYA gerekçesiyle
+        // (yukarı, xades:SignerRole açıklaması) eklenir; PUBLIC key'i taşır - private key ASLA
+        // bu şekilde/başka herhangi bir şekilde XML'e YAZILMAZ, LOGLANMAZ (bkz. görev md.22).
+        using var publicRsaForKeyInfo = kimlik.Sertifika.GetRSAPublicKey()
+            ?? throw new EBelgeXmlImzaKaliciHataException(EBelgeXmlImzaHataKodlari.DesteklenmeyenAnahtarAlgoritmasi, "Sertifika RSA public key içermiyor.");
+
         var keyInfo = new KeyInfo();
         keyInfo.AddClause(new KeyInfoX509Data(kimlik.Sertifika));
+        keyInfo.AddClause(new RSAKeyValue(publicRsaForKeyInfo));
         signedXml.KeyInfo = keyInfo;
 
         var qualifyingProperties = BuildQualifyingProperties(doc, talep, kimlik, signatureId, signedPropertiesId);
@@ -427,6 +437,21 @@ public sealed class EBelgeXmlImzalayici : IEBelgeXmlImzalayici
 
         signingCertificate.AppendChild(cert);
         signedSignatureProperties.AppendChild(signingCertificate);
+
+        // xades:SignerRole (bkz. Faz 2B.7.2 raporu) - TÜBİTAK KamuSM ESYA SDK dokümantasyonu
+        // (yazilim.kamusm.gov.tr/esya-api), "e-fatura standartlarında GEREKLİ KILINAN imzacı rolü,
+        // açık anahtar ve imza zamanı eklenir" ifadesiyle bunu AÇIKÇA e-Fatura standardının bir
+        // gereği olarak belirtir - bu, resmî GİB metninde DOĞRUDAN yazılı olmasa da, GİB'in
+        // adlandırdığı akredite e-imza altyapı sağlayıcısından gelen, AKSİNİ gösteren hiçbir kanıt
+        // BULUNAMAYAN, uyumluluk açısından güvenli tarafta duran bir karardır (bkz. görev md.6 -
+        // "kanıt bulunamıyorsa uyumluluk açısından güvenli olan tercih edilen yaklaşımı uygula").
+        var signerRole = doc.CreateElement("xades", "SignerRole", xadesNs);
+        var claimedRoles = doc.CreateElement("xades", "ClaimedRoles", xadesNs);
+        var claimedRole = doc.CreateElement("xades", "ClaimedRole", xadesNs);
+        claimedRole.InnerText = SignerClaimedRole;
+        claimedRoles.AppendChild(claimedRole);
+        signerRole.AppendChild(claimedRoles);
+        signedSignatureProperties.AppendChild(signerRole);
 
         signedProperties.AppendChild(signedSignatureProperties);
         qualifyingProperties.AppendChild(signedProperties);

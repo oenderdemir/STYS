@@ -28,6 +28,18 @@ public static class EBelgeXmlImzaHataKodlari
     public const string UnsignedArtifactSoftDeleted = "EBELGE_SIGNING_UNSIGNED_ARTIFACT_SOFT_DELETED";
     public const string SignedArtifactIdempotencyConflict = "EBELGE_SIGNED_ARTIFACT_IDEMPOTENCY_CONFLICT";
 
+    /// <summary>Bkz. Faz 2B.7.2 görev md.1 - iyi biçimli olmayan XML, geçersiz base64, geçersiz X509 sertifika bytes'ı vb. AÇIKÇA SINIFLANDIRILMIŞ, beklenen parse/kriptografi hataları için - programlama hatası DEĞİLDİR.</summary>
+    public const string BozukImzaBelgesi = "EBELGE_SIGNING_MALFORMED_SIGNATURE_DOCUMENT";
+
+    /// <summary>Bkz. Faz 2B.7.2 görev md.3 - mevcut SignedReady artefaktının kayıtlı ArtifactSha256 sütunu, İÇERİĞİNİN (Icerik) GERÇEK SHA-256'sıyla eşleşmiyor.</summary>
+    public const string MevcutArtifactHashUyumsuz = "EBELGE_SIGNING_EXISTING_ARTIFACT_HASH_MISMATCH";
+
+    /// <summary>Bkz. Faz 2B.7.2 görev md.4/md.5 - kısa sonuç transaction'ında yarış durumu tespit edildi (artefakt satırı/kaynak, tx-dışı doğrulama sırasında değişti) - yeniden denenmeli.</summary>
+    public const string YarisDurumu = "EBELGE_SIGNING_YARIS_DURUMU";
+
+    /// <summary>Bkz. Faz 2B.7.2 görev md.5 - unsigned kaynak artefakt, imzalama SIRASINDA (tx-dışı imzalamadan SignedReady insert'ine kadar) değişti - GEÇİCİ bir yarış durumudur, yeni bir claim ile yeniden imzalanmalıdır.</summary>
+    public const string KaynakImzalamaSirasindaDegisti = "EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING";
+
     // ---- Geçici (bkz. görev md.21 "Geçici hatalar") ----
     public const string SaglayiciGeciciErisilemiyor = "EBELGE_SIGNING_PROVIDER_TEMPORARILY_UNAVAILABLE";
 }

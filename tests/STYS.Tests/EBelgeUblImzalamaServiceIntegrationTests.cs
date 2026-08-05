@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using System.Xml;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Infrastructure.EntityFramework;
@@ -642,7 +643,11 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             RuleSetId = "farkli-kural-seti",
             SnapshotSchemaVersion = unsignedArtifact.SnapshotSchemaVersion,
             KaynakSnapshotSha256 = unsignedArtifact.KaynakSnapshotSha256,
-            ArtifactSha256 = new string('b', 64),
+            // Faz 2B.7.2 md.3'teki YENİ tam-bayt (exact-byte) hash ön-kontrolünün bu testte
+            // ERKEN devreye girip asıl test edilmek istenen idempotency-conflict yolunu MASKELEMEMESİ
+            // için ArtifactSha256, Icerik'in GERÇEK SHA-256'sı olmalıdır (kasıtlı farklılık yalnızca
+            // KaynakArtifactId/KaynakArtifactSha256 alanlarında olmalı).
+            ArtifactSha256 = Convert.ToHexString(SHA256.HashData("<farkli/>"u8.ToArray())),
             Icerik = "<farkli/>"u8.ToArray(),
             MimeType = "application/xml",
             DosyaAdi = "yabanci-imzali.xml",
@@ -805,5 +810,415 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
         var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
         Assert.Equal(EBelgeOutboxDurumu.Isleniyor, outbox.Durum); // yanlış-türlü claim terminalize EDİLMEDİ
+    }
+
+    // ---- Faz 2B.7.2: bozuk girdi sınıflandırması, mevcut/kaynak hash bütünlüğü, tx-penceresi yarışları ----
+
+    private sealed class ThrowingXmlExceptionDogrulayici : IEBelgeXmlImzaDogrulayici
+    {
+        public Task<EBelgeXmlImzaDogrulamaSonucu> DogrulaAsync(ImmutableArray<byte> signedXmlUtf8, CancellationToken cancellationToken)
+            => throw new XmlException("test: kasıtlı beklenmedik XmlException (savunma derinliği senaryosu - bkz. görev md.2).");
+    }
+
+    [IntegrationFact]
+    public async Task YeniImzaBagimsizDogrulamaBeklenmedikBozukSonucUretirseAtomikKaliciHataBozukImzaBelgesiOlurGeciciDegil()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        var kuralSeti = EBelgeUblRendererTestVerisi.KuralSetiYukle();
+        var service = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            new ThrowingXmlExceptionDogrulayici(),
+            new EBelgeUblXsdValidator(kuralSeti),
+            new AlwaysInvalidSchematronValidator(), // dogrulama erken başarısız olduğundan asla çağrılmamalı
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru); // GEÇİCİ hata OLARAK sızmadı
+        Assert.Equal(EBelgeXmlImzaHataKodlari.BozukImzaBelgesi, sonuc.HataKodu);
+        Assert.DoesNotContain("<", sonuc.HataMesaji); // kişisel veri/XML/sertifika içeriği SIZDIRMAYAN sabit mesaj
+
+        await using var verifyCtx = CreateDbContext();
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.ImzalamaKaliciHata, kayit.Durum);
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Hata, outbox.Durum);
+        Assert.Null(outbox.SonrakiDenemeZamaniUtc); // KALICI - retry ATANMADI
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+    }
+
+    private sealed class CallCountingDogrulayici : IEBelgeXmlImzaDogrulayici
+    {
+        private readonly IEBelgeXmlImzaDogrulayici _inner;
+        public int CagriSayisi { get; private set; }
+
+        public CallCountingDogrulayici(IEBelgeXmlImzaDogrulayici inner) => _inner = inner;
+
+        public async Task<EBelgeXmlImzaDogrulamaSonucu> DogrulaAsync(ImmutableArray<byte> signedXmlUtf8, CancellationToken cancellationToken)
+        {
+            CagriSayisi++;
+            return await _inner.DogrulaAsync(signedXmlUtf8, cancellationToken);
+        }
+    }
+
+    [IntegrationFact]
+    public async Task MevcutSignedIcerigiTamperlenirseImzaDogrulamasiAtlanirAtomikKaliciHataMevcutArtifactHashUyumsuzOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
+        var mevcutSigned = await SeedMatchingSignedReadyAsync(dbContext, eBelgeKaydiId, unsignedArtifact);
+
+        // İçerik SESSİZCE bozulur (ör. depolama katmanı bozulması) - kayıtlı ArtifactSha256 sütunu
+        // KASITLI OLARAK GÜNCELLENMEZ (bkz. görev md.3/md.9 - "hash sütunu aynı bırakılırsa
+        // idempotent başarı olmamalı").
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [Icerik] = 0x00 WHERE [Id] = {mevcutSigned.Id}");
+
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        var spyDogrulayici = new CallCountingDogrulayici(new EBelgeXmlImzaDogrulayici());
+        var kuralSeti = EBelgeUblRendererTestVerisi.KuralSetiYukle();
+        var service = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            spyDogrulayici,
+            new EBelgeUblXsdValidator(kuralSeti),
+            new AlwaysInvalidSchematronValidator(), // hash uyuşmazlığında asla çağrılmamalı
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.MevcutArtifactHashUyumsuz, sonuc.HataKodu);
+        Assert.Equal(0, spyDogrulayici.CagriSayisi); // hash uyuşmazlığında imza doğrulamasına HİÇ gidilmedi (md.8)
+
+        await using var verifyCtx = CreateDbContext();
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.ImzalamaKaliciHata, kayit.Durum);
+    }
+
+    /// <summary>
+    /// Gerçek schematron sonucunu döndürdükten SONRA, AYRI bir bağlantı üzerinden, verilen
+    /// SignedReady satırını BAŞKA (ama kendi içinde GEÇERLİ) bir imzalı içerikle DEĞİŞTİRİR - "yalnız
+    /// hash SÜTUNUNU değil, satırın TAMAMINI/İçeriği tekrar karşılaştırma" gerekliliğini KANITLAMAK
+    /// için (bkz. Faz 2B.7.2 görev md.4/md.10).
+    /// </summary>
+    private sealed class RowContentSwappingSchematronDecorator : IEBelgeSchematronValidator
+    {
+        private readonly IEBelgeSchematronValidator _inner;
+        private readonly long _signedArtifactId;
+        private readonly byte[] _yeniIcerik;
+        private readonly string _yeniHash;
+
+        public RowContentSwappingSchematronDecorator(IEBelgeSchematronValidator inner, long signedArtifactId, byte[] yeniIcerik, string yeniHash)
+        {
+            _inner = inner;
+            _signedArtifactId = signedArtifactId;
+            _yeniIcerik = yeniIcerik;
+            _yeniHash = yeniHash;
+        }
+
+        public async Task<EBelgeSchematronValidationResult> ValidateAsync(ImmutableArray<byte> xmlUtf8, string ruleSetId, CancellationToken cancellationToken)
+        {
+            var sonuc = await _inner.ValidateAsync(xmlUtf8, ruleSetId, cancellationToken);
+
+            await using var sideCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+            await sideCtx.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [Icerik] = {_yeniIcerik}, [ArtifactSha256] = {_yeniHash} WHERE [Id] = {_signedArtifactId}", cancellationToken);
+
+            return sonuc;
+        }
+    }
+
+    [IntegrationFact]
+    public async Task MevcutSignedTxDisiDogrulamaSonrasiIcerikFarkliGecerliImzayaDegistirilirseYarisDurumuDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
+        var mevcutSigned = await SeedMatchingSignedReadyAsync(dbContext, eBelgeKaydiId, unsignedArtifact);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        // Farklı (ama kendi içinde GEÇERLİ) bir ikinci imza üretilir - "içerik başka bir GEÇERLİ
+        // imzayla DEĞİŞTİRİLDİ" yarışını temsil eder.
+        var imzalayici = new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy());
+        var ikinciImza = await imzalayici.ImzalaAsync(new EBelgeXmlImzaTalebi
+        {
+            KurumId = _kurumId,
+            UnsignedUblUtf8 = ImmutableArray.Create(unsignedArtifact.Icerik),
+            UnsignedUblSha256 = unsignedArtifact.ArtifactSha256,
+            RuleSetId = unsignedArtifact.RuleSetId,
+            EBelgeUuid = Guid.NewGuid().ToString("D"),
+            ImzalamaZamaniUtc = DateTime.UtcNow.AddSeconds(5),
+        }, CancellationToken.None);
+
+        var http = new HttpClient { BaseAddress = new Uri(_sidecarFixture.BaseUrl!), Timeout = TimeSpan.FromSeconds(15) };
+        var swapper = new RowContentSwappingSchematronDecorator(
+            new SaxonSidecarEBelgeSchematronValidator(http), mevcutSigned.Id, ikinciImza.SignedUblUtf8.ToArray(), ikinciImza.SignedUblSha256);
+
+        var service = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            new EBelgeXmlImzaDogrulayici(),
+            new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
+            swapper,
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.GeciciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.YarisDurumu, sonuc.HataKodu);
+
+        await using var verifyCtx = CreateDbContext();
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum); // geçici hata DEĞİŞTİRMEZ
+    }
+
+    /// <summary>Gerçek schematron sonucunu döndürdükten SONRA, verilen Unsigned kaynak artefaktını soft-delete eder.</summary>
+    private sealed class UnsignedSoftDeletingSchematronDecorator : IEBelgeSchematronValidator
+    {
+        private readonly IEBelgeSchematronValidator _inner;
+        private readonly long _unsignedArtifactId;
+
+        public UnsignedSoftDeletingSchematronDecorator(IEBelgeSchematronValidator inner, long unsignedArtifactId)
+        {
+            _inner = inner;
+            _unsignedArtifactId = unsignedArtifactId;
+        }
+
+        public async Task<EBelgeSchematronValidationResult> ValidateAsync(ImmutableArray<byte> xmlUtf8, string ruleSetId, CancellationToken cancellationToken)
+        {
+            var sonuc = await _inner.ValidateAsync(xmlUtf8, ruleSetId, cancellationToken);
+
+            await using var sideCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+            await sideCtx.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [IsDeleted] = 1 WHERE [Id] = {_unsignedArtifactId}", cancellationToken);
+
+            return sonuc;
+        }
+    }
+
+    [IntegrationFact]
+    public async Task YeniImzaSirasindaUnsignedKaynakSoftDeleteEdilirseGeciciHataKaynakImzalamaSirasindaDegistiDonerVeSignedReadyEklenmez()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        var http = new HttpClient { BaseAddress = new Uri(_sidecarFixture.BaseUrl!), Timeout = TimeSpan.FromSeconds(15) };
+        // Kaynak, YENİ imzanın Schematron adımı İLE Faz-3'ün KISA transaction'ı ARASINDAKİ
+        // pencerede değişir - Faz 2B.7.2 md.5'in bu penceredeki yeniden-doğrulamayı KISA
+        // transaction İÇİNDE yaptığını (md.13) DOLAYLI olarak kanıtlar: değişiklik ANCAK
+        // transaction içindeki OkuUnsignedKilitliAsync tarafından yakalanabilir.
+        var softDeleter = new UnsignedSoftDeletingSchematronDecorator(new SaxonSidecarEBelgeSchematronValidator(http), unsignedArtifact.Id);
+
+        var service = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            new EBelgeXmlImzaDogrulayici(),
+            new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
+            softDeleter,
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.GeciciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.KaynakImzalamaSirasindaDegisti, sonuc.HataKodu);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum); // geçici hata DEĞİŞTİRMEZ
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, outbox.Durum); // terminalize EDİLMEDİ
+    }
+
+    /// <summary>Gerçek schematron sonucunu döndürdükten SONRA, verilen Unsigned kaynak artefaktının İçeriğini (ArtifactSha256 sütununu GÜNCELLEMEDEN) bozar.</summary>
+    private sealed class UnsignedContentCorruptingSchematronDecorator : IEBelgeSchematronValidator
+    {
+        private readonly IEBelgeSchematronValidator _inner;
+        private readonly long _unsignedArtifactId;
+
+        public UnsignedContentCorruptingSchematronDecorator(IEBelgeSchematronValidator inner, long unsignedArtifactId)
+        {
+            _inner = inner;
+            _unsignedArtifactId = unsignedArtifactId;
+        }
+
+        public async Task<EBelgeSchematronValidationResult> ValidateAsync(ImmutableArray<byte> xmlUtf8, string ruleSetId, CancellationToken cancellationToken)
+        {
+            var sonuc = await _inner.ValidateAsync(xmlUtf8, ruleSetId, cancellationToken);
+
+            await using var sideCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+            await sideCtx.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [Icerik] = 0x00 WHERE [Id] = {_unsignedArtifactId}", cancellationToken);
+
+            return sonuc;
+        }
+    }
+
+    [IntegrationFact]
+    public async Task YeniImzaSirasindaUnsignedKaynakIcerigiBozulursaAtomikKaliciHataKaynakHashUyumsuzOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        var http = new HttpClient { BaseAddress = new Uri(_sidecarFixture.BaseUrl!), Timeout = TimeSpan.FromSeconds(15) };
+        var corrupter = new UnsignedContentCorruptingSchematronDecorator(new SaxonSidecarEBelgeSchematronValidator(http), unsignedArtifact.Id);
+
+        var service = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            new EBelgeXmlImzaDogrulayici(),
+            new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
+            corrupter,
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.KaynakHashUyumsuz, sonuc.HataKodu);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.ImzalamaKaliciHata, kayit.Durum);
+    }
+
+    private sealed class CountingSchematronDecorator : IEBelgeSchematronValidator
+    {
+        private readonly IEBelgeSchematronValidator _inner;
+        public int CagriSayisi { get; private set; }
+
+        public CountingSchematronDecorator(IEBelgeSchematronValidator inner) => _inner = inner;
+
+        public async Task<EBelgeSchematronValidationResult> ValidateAsync(ImmutableArray<byte> xmlUtf8, string ruleSetId, CancellationToken cancellationToken)
+        {
+            CagriSayisi++;
+            return await _inner.ValidateAsync(xmlUtf8, ruleSetId, cancellationToken);
+        }
+    }
+
+    [IntegrationFact]
+    public async Task YeniSignedInsertAkisindaSchematronTamOlarakBirKezCagrilirKisaTransactionAltindaTekrarCalismaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        var http = new HttpClient { BaseAddress = new Uri(_sidecarFixture.BaseUrl!), Timeout = TimeSpan.FromSeconds(15) };
+        var counter = new CountingSchematronDecorator(new SaxonSidecarEBelgeSchematronValidator(http));
+
+        var service = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            new EBelgeXmlImzaDogrulayici(),
+            new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
+            counter,
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.True(sonuc!.BasariliMi, $"{sonuc.SonucTuru}: {sonuc.HataKodu} {sonuc.HataMesaji}");
+        // Faz 2B.7.2 md.5'teki YENİ kaynak yeniden-doğrulaması (OkuUnsignedKilitliAsync), Schematron'u
+        // TEKRAR ÇAĞIRMAZ - yalnız SQL satır okuma+hash karşılaştırmasıdır. Bu, Schematron'un TÜM
+        // akış boyunca yalnız BİR KEZ (Faz 2'de, tx açılmadan ÖNCE) çalıştığını - kısa Faz-3
+        // transaction'ı ALTINDA sidecar/kriptografi işi YAPILMADIĞINI (md.14) - kanıtlar.
+        Assert.Equal(1, counter.CagriSayisi);
+    }
+
+    [IntegrationFact]
+    public async Task UnsignedKaynakImzalamaSirasindaDegistiktenSonraYeniClaimIleYenidenDenemeBasariliOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        if (_sidecarFixture.BaseUrl is null)
+        {
+            Assert.Fail($"Sidecar ayağa kaldırılamadı: {_sidecarFixture.AtlamaNedeni}");
+        }
+
+        var http = new HttpClient { BaseAddress = new Uri(_sidecarFixture.BaseUrl!), Timeout = TimeSpan.FromSeconds(15) };
+        var softDeleter = new UnsignedSoftDeletingSchematronDecorator(new SaxonSidecarEBelgeSchematronValidator(http), unsignedArtifact.Id);
+
+        var ilkService = new EBelgeUblImzalamaService(
+            dbContext,
+            new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
+            new EBelgeXmlImzaDogrulayici(),
+            new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
+            softDeleter,
+            new EBelgeOutboxLeaseTransitionService(dbContext),
+            TimeProvider.System,
+            NullLogger<EBelgeUblImzalamaService>.Instance);
+
+        var ilkSonuc = await ilkService.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+        Assert.NotNull(ilkSonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.GeciciHata, ilkSonuc!.SonucTuru);
+
+        // Kaynak, yarış SIRASINDA soft-delete edildi - GERÇEK bir kalıcı bozulma DEĞİL, "geri al"
+        // (undo) edilir. Outbox mesajı terminalize EDİLMEDİĞİ için AYNI mesaj YENİ bir lease ile
+        // (retry policy'nin gerçekte yapacağı gibi) yeniden claim edilebilir ve BAŞARIYLA
+        // tamamlanabilir olmalıdır (bkz. görev md.5, "GEÇİCİ bir yarış durumudur, yeni bir claim
+        // ile yeniden imzalanmalıdır").
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [IsDeleted] = 0 WHERE [Id] = {unsignedArtifact.Id}");
+        await BackdateLeaseExpiryAsync(dbContext, claim.OutboxMesajiId);
+
+        var yeniClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromMinutes(5));
+        Assert.NotNull(yeniClaim);
+
+        var ikinciService = CreateService(dbContext);
+        var ikinciSonuc = await ikinciService.ImzalaAsync(TalepFromClaim(yeniClaim!, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(ikinciSonuc);
+        Assert.True(ikinciSonuc!.BasariliMi, $"{ikinciSonuc.SonucTuru}: {ikinciSonuc.HataKodu} {ikinciSonuc.HataMesaji}");
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.True(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.SignedReady, kayit.Durum);
     }
 }

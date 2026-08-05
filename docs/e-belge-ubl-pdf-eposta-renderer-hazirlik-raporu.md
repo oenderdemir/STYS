@@ -2583,9 +2583,13 @@ BAĞIMSIZ imza doğrulamasından geçiyordu — XSD/Schematron'dan HİÇ geçmiy
   KESİN olarak belirlemez.
 - **Bölüm 7/8/9** (Serbest Meslek Makbuzu/Müstahsil Makbuzu/Adisyon — fatura ile YAPISAL olarak
   ANALOG UBL-TR belgeleri): HER BİRİ AÇIKÇA *"Bu veriler XADES-BES standardı kullanılarak mali
-  mühür/ NES ile imzalanmalıdır"* der. Bölüm 6 (e-Arşiv Fatura Standardı) bu CÜMLEYİ birebir
-  TEKRARLAMAZ, ama YAPISAL benzerlik (hepsi UBL-TR tabanlı) VE eski kılavuzun DOĞRUDAN ifadesiyle
-  (aşağı, madde 3) BİRLİKTE XAdES-BES'i GÜÇLÜ biçimde DOĞRULAR.
+  mühür/ NES ile imzalanmalıdır"* der.
+  **DÜZELTME (bkz. Faz 2B.7.2)**: bu turda "Bölüm 6 (e-Arşiv Fatura Standardı) bu cümleyi birebir
+  TEKRARLAMAZ" denmişti — bu YANLIŞTIR. GÜNCEL e-Arşiv Kılavuzu'nun (Ağustos 2025, v1.18) s.57,
+  "6 e-Arşiv Fatura Standardı" başlığı ALTINDA, AYNI cümle BİREBİR yer alır: *"Bu veriler
+  XADES-BES standardı kullanılarak mali mühür/ NES ile imzalanmalıdır."* Yani e-Arşiv faturasının
+  XAdES-BES ile imzalanması GÜNCEL kılavuzun KENDİSİ tarafından DOĞRUDAN VE AÇIKÇA zorunlu
+  kılınmaktadır — bölüm 7/8/9 ile YAPISAL benzerlik üzerinden dolaylı çıkarıma HİÇ GEREK YOKTUR.
 - **Bölüm 5** (Elektronik Arşiv Raporlarının Başkanlık Sistemine Aktarımı, SOAP/WSS GÜVENLİĞİ):
   *"İmzanın canonicalization metot algoritması 'http://www.ws.org/2001/10/xml-exc-c14n#' olması
   tavsiye edilir. Signature metot algoritması 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256'
@@ -2615,8 +2619,15 @@ KORUNUR - artık GÜNCEL kılavuzun 7/8/9. bölümleriyle ÇAPRAZ doğrulanmış
 
 **4. TÜBİTAK KamuSM ESYA SDK dokümantasyonu** - İKİNCİL/destekleyici kaynak (GİB'İN KENDİ metni
 DEĞİLDİR). Bir e-Fatura ÖRNEĞİNDE `xades:SignerRole/ClaimedRole=Supplier` VE public-key bilgisi
-kullanıldığı GÖRÜLÜR - ama bu, ÜÇÜNCÜ TARAF bir entegratör örneğidir, GİB'İN KENDİSİ tarafından
-YAYIMLANMIŞ bir GEREKSİNİM DEĞİLDİR.
+kullanıldığı GÖRÜLÜR.
+**DÜZELTME (bkz. Faz 2B.7.2)**: bu turda KamuSM yalnız "ÜÇÜNCÜ TARAF bir entegratör örneği"
+olarak KÜÇÜMSENMİŞTİ - bu KARAKTERİZASYON eksiktir. TÜBİTAK KamuSM, GİB'in nitelikli mali
+mühür/e-imza sertifikalarını sağlayan AKREDİTE, resmi e-imza altyapısı sağlayıcısıdır (rastgele
+bir üçüncü taraf entegratör DEĞİLDİR) ve dokümantasyonu bu unsurların "e-fatura standartlarında
+GEREKLİ KILINDIĞINI" AÇIKÇA belirtir (`https://yazilim.kamusm.gov.tr/esya-api/doku.php?id=esya:xades:kod-e-fatura`,
+alıntı: *"Daha sonra ise yine e-fatura standartlarında gerekli kılınan imzacı rolü, açık anahtar
+ve imza zamanı eklenir."*). Bu, GİB'İN KENDİ metni olmasa da, bir GEREKSİNİM iddiası olarak
+görmezden gelinecek kadar zayıf bir kaynak DEĞİLDİR.
 
 **5. Yalnız yukarıdakilerin CEVAPLAMADIĞI noktalar için mühendislik tercihi** (bkz.
 `EBelgeXadesProfili.cs` sınıf düzeyi XML doc'u - `CanonicalizationAlgorithmUri` ve
@@ -2624,7 +2635,15 @@ YAYIMLANMIŞ bir GEREKSİNİM DEĞİLDİR.
 
 ### SignerRole/KeyValue kararı (md.3)
 
-**Sonuç: İKİSİ DE EKLENMEZ.** Gerekçe - "mevcut testler geçti" DEĞİL, doğrudan kanıt:
+> **DÜZELTME/GÜNCELLEME (bkz. Faz 2B.7.2 bölümü aşağıda)**: bu alt bölümdeki karar - "İKİSİ DE
+> EKLENMEZ" - bu turda TERS ÇEVRİLDİ. Kararın DAYANDIĞI iki öncül YANLIŞ bulundu: (1) GÜNCEL
+> kılavuzun bölüm 6'sı XAdES-BES'i "açıkça belirtmediği" iddiası YANLIŞTIR (bkz. yukarıdaki
+> düzeltme); (2) KamuSM kaynağının salt "üçüncü taraf entegratör örneği" olduğu için göz ardı
+> edilebileceği iddiası da EKSİK bir karakterizasyondur (bkz. yukarıdaki düzeltme). Bu alt bölüm
+> YALNIZ o zamanki (hatalı öncüllere dayanan) muhakemeyi TARİHSEL kayıt olarak KORUR - GÜNCEL
+> karar için Faz 2B.7.2 bölümüne bakınız.
+
+**(Faz 2B.7.1'deki ORİJİNAL, SONRADAN DÜZELTİLEN sonuç:) İKİSİ DE EKLENMEZ.** Gerekçe - "mevcut testler geçti" DEĞİL, doğrudan kanıt:
 
 - `xades:SignerRole` VE `ds:KeyValue`, vendored XSD'de AÇIKÇA SEÇİMLİ (`minOccurs="0"`) olarak
   tanımlanmıştır.
@@ -2720,7 +2739,9 @@ Yeni testler: `EBelgeXmlImzalayiciTests`'e 13 doğrulayıcı-sertleştirme testi
 referansının yanlış node'a yönlendirilmesi, belge/SignedProperties referanslarının digest/transform
 URI kurcalaması (4 ayrı test), ek transform eklenmesi, issuer adı/serial number kurcalaması,
 `cac:Signature` URI kurcalaması, `ds:Signature`'ın beklenen konum dışına taşınması, SignerRole/
-KeyValue olmadan da imzanın GEÇERLİ kabul edildiğinin teyidi. `EBelgeUblImzalamaServiceIntegrationTests`'e
+KeyValue olmadan da imzanın GEÇERLİ kabul edildiğinin teyidi (**bu SONUNCU test, Faz 2B.7.2'de
+karar TERS ÇEVRİLDİĞİNDE KALDIRILMIŞ ve YERİNE tam-tersini doğrulayan testlerle
+DEĞİŞTİRİLMİŞTİR - bkz. aşağıdaki Faz 2B.7.2 bölümü**). `EBelgeUblImzalamaServiceIntegrationTests`'e
 4 yeni test eklendi (9→13): mevcut SignedReady XSD-geçersizse idempotent başarı OLMAZ, Schematron-
 ihlalliyse idempotent başarı OLMAZ, mevcut SignedReady doğrulaması sırasında (GERÇEK bir UPDLOCK
 probe'u İLE KANITLANMIŞ biçimde) SQL transaction/outbox satır kilidi TUTULMAZ, artefakt tx-dışı
@@ -2739,6 +2760,202 @@ ENGELLENİR) AYNEN GEÇERLİDİR. EK olarak:
 7. `IEBelgeSigningBackfillService`'in operasyonel tetiklenmesi (manuel komut/gelecekteki bir admin
    aracı) HENÜZ YAPILMADI - yalnız uygulama servisi VE testleri eklenmiştir.
 
-### Sonraki faz
+### Sonraki faz (Faz 2B.7.1)
 
 Faz 2B.7'nin "Sonraki faz" listesi AYNEN geçerlidir.
+
+## Faz 2B.7.2 sonuç bölümü — güvenli doğrulama, artifact hash zinciri sertleştirmesi ve SignerRole/KeyValue kararının düzeltilmesi
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+### Neden gerekliydi
+
+Faz 2B.7.1'in kod incelemesinde 6 gerçek açık tespit edildi: (1) doğrulayıcı, bozuk/iyi-biçimli-
+olmayan girdilerde `XmlException`/`FormatException`/`CryptographicException` gibi beklenen
+parse/kriptografi exception'larını YAKALAMIYORDU - bunlar generic outbox katmanına SIZABİLİR ve
+YANLIŞLIKLA geçici (retry edilebilir) hata sayılabilirdi; (2) `EBelgeUblImzalamaService`, bağımsız
+doğrulayıcıdan gelen böyle bir beklenmedik exception'ı AYNI şekilde generic bir transient retry'a
+DÖNÜŞTÜREBİLİRDİ; (3) mevcut bir SignedReady artefaktı işlenirken, kayıtlı `ArtifactSha256`
+SÜTUNUNA, İÇERİĞİN (`Icerik`) GERÇEKTEN o hash'e sahip olduğu HİÇ DOĞRULANMADAN güveniliyordu; (4)
+Faz 2B.7.1'in kısa "sonuç" transaction'ı yalnız hash SÜTUNUNU karşılaştırıyordu - satırın TAMAMININ
+(Id/KurumId/EBelgeKaydiId/ArtifactAsamasi/IsDeleted/KaynakArtifactId/KaynakArtifactSha256) VE
+İçeriğin EXACT SHA-256'sının YENİDEN doğrulanması YOKTU; (5) YENİ bir SignedReady insert
+edilmeden ÖNCE, kaynak Unsigned artefaktının imzalama SIRASINDA (tx-dışı imzalamadan insert'e
+kadar) değişip değişmediği YENİDEN kontrol EDİLMİYORDU; (6) Faz 2B.7.1'in SignerRole/KeyValue
+kararı ("İKİSİ DE EKLENMEZ") İKİ YANLIŞ öncüle dayanıyordu - bkz. aşağıdaki düzeltmeler.
+
+### 1-2. Bozuk girdi sınıflandırması - doğrulayıcı VE servis katmanı
+
+`EBelgeXmlImzaDogrulayici.DogrulaAsync`'e, mevcut `EBelgeXmlImzaDogrulamaException` yakalamasından
+SONRA, İKİNCİ bir catch bloğu eklendi:
+
+```csharp
+catch (Exception ex) when (ex is XmlException or FormatException or CryptographicException
+    or ArgumentException or OverflowException or InvalidOperationException)
+```
+
+Bu, iyi-biçimli-olmayan XML, geçersiz base64 (`ds:X509Certificate`/`SignatureValue`/
+`DigestValue`), geçersiz X509 sertifika bytes'ı, geçersiz/taşan sertifika seri numarası gibi
+BEKLENEN, PROGRAMLAMA HATASI OLMAYAN girdi/kriptografi hatalarını YAKALAR ve HER ZAMAN yeni
+`EBELGE_SIGNING_MALFORMED_SIGNATURE_DOCUMENT` kodlu, KİŞİSEL VERİ/XML/sertifika/imza değeri
+İÇERMEYEN SABİT bir mesajla `Gecersiz` sonuca dönüştürür. `OperationCanceledException`, YALNIZ
+gerçek iptal talep EDİLMİŞSE (`cancellationToken.IsCancellationRequested`) fırlatılmaya devam eder
+- YUTULMAZ. Genel `catch (Exception)` KULLANILMADI - yalnız AÇIKÇA SINIFLANDIRILMIŞ, beklenen
+istisna tipleri yakalanır; programlama hataları (ör. `NullReferenceException`) GİZLENMEZ, olduğu
+gibi YUKARI fırlamaya devam eder.
+
+`EBelgeUblImzalamaService`'e, AYNI sınıflandırma mantığını `_dogrulayici.DogrulaAsync`
+çağrılarının ETRAFINA saran özel bir `DogrulaGuvenliAsync` yardımcı metodu eklendi - hem YENİ imza
+akışında (`ImzalaAsync`) hem de idempotent akışta (`IslemMevcutSignedAsync`) KULLANILIR. Bu,
+"savunma derinliği" katmanıdır - doğrulayıcı KENDİSİ zaten bu exception'ları yakalar (md.1), ama
+servis katmanı BUNA KÖRÜ KÖRÜNE GÜVENMEZ; beklenmedik bir parse/kriptografi exception'ı BURADA da
+yakalanırsa, sonuç HER ZAMAN `EBELGE_SIGNING_MALFORMED_SIGNATURE_DOCUMENT` İLE KALICI olarak
+sınıflandırılır - generic outbox transient-retry mekanizmasına ASLA SIZMAZ.
+
+### 3-4. Mevcut SignedReady artifact - exact-byte hash zinciri sertleştirmesi
+
+`IslemMevcutSignedAsync`, artık İLK ADIM olarak (kaynak eşleşme kontrolünden VE imza
+doğrulamasından ÖNCE) EXACT-BYTE bir hash kontrolü yapar:
+
+```csharp
+var gercekSignedHash = Convert.ToHexString(SHA256.HashData(mevcutSigned.Icerik));
+if (!string.Equals(gercekSignedHash, mevcutSigned.ArtifactSha256, StringComparison.Ordinal))
+    → EBELGE_SIGNING_EXISTING_ARTIFACT_HASH_MISMATCH, atomik kalıcı hata, imza doğrulamasına HİÇ DEVAM EDİLMEZ
+```
+
+Kayıtlı `ArtifactSha256` sütununa KÖRÜ KÖRÜNE güvenilmez - İÇERİĞİN (`Icerik`) GERÇEK SHA-256'sı
+HER SEFERİNDE yeniden hesaplanır. Uyuşmazlık varsa (içerik SESSİZCE bozulmuşsa, ör. depolama
+katmanı hatası VEYA "içerik değiştirilip hash sütunu aynı bırakılan" bir kurcalama), bağımsız
+imza+XSD+Schematron doğrulamasına HİÇ gidilmeden, DOĞRUDAN atomik kalıcı hata döner (bkz.
+`EBelgeUblImzalamaServiceIntegrationTests.MevcutSignedIcerigiTamperlenirseImzaDogrulamasiAtlanirAtomikKaliciHataMevcutArtifactHashUyumsuzOlur`
+- bu test, ayrıca bir çağrı-sayıcı doğrulayıcı DEKORATÖRÜYLE doğrulayıcının HİÇ ÇAĞRILMADIĞINI da
+kanıtlar).
+
+Faz 2B.7.1'in kısa "sonuç" transaction'ı, artık yalnız hash SÜTUNUNU DEĞİL, SATIRIN TAMAMINI
+YENİDEN doğrular. Yeni `OkuMevcutSignedKilitliAsync` yardımcı metodu, `FromSqlInterpolated` +
+`WITH (UPDLOCK, ROWLOCK)` SQL Server tablo ipucuyla (`.IgnoreQueryFilters().AsNoTracking()` ile
+BİRLEŞTİRİLEREK - bu birleşim, EF Core'un ham SQL'i bir alt sorguya SARMASINI GEREKTİRMEZ, tablo
+ipucu OLDUĞU GİBİ KORUNUR) satırı YENİDEN okur; ID/KurumId/EBelgeKaydiId/ArtifactAsamasi/
+IsDeleted/KaynakArtifactId/KaynakArtifactSha256/ArtifactSha256 ALANLARININ TAMAMI VE İçeriğin
+YENİDEN hesaplanan EXACT SHA-256'sı, tx-dışı doğrulamada kullanılan değerlerle karşılaştırılır.
+HERHANGİ biri uyuşmazsa - önceki doğrulama sonucu ARTIK GÜVENİLMEZ kabul edilir, transaction
+rollback edilir, `EBELGE_SIGNING_YARIS_DURUMU` İLE geçici hata döner (üst katman yeniden dener).
+Bu kilit YALNIZ bu KISA okuma+karşılaştırma+commit penceresinde tutulur - imza/XSD/Schematron
+doğrulaması BU KİLİT ALTINDA HİÇ ÇALIŞMAZ (zaten daha ÖNCE, transaction açılmadan tamamlanmıştır).
+Bu davranış, içeriği BAŞKA (ama kendi içinde GEÇERLİ) bir imzayla DEĞİŞTİREN bir yarış senaryosuyla
+test edilir
+(`MevcutSignedTxDisiDogrulamaSonrasiIcerikFarkliGecerliImzayaDegistirilirseYarisDurumuDoner`).
+
+### 5. Yeni SignedReady insert'i öncesi kaynak (Unsigned) yeniden doğrulaması
+
+`DenemeYeniSignedInsertAtomikAsync`, SignedReady insert EDİLMEDEN ÖNCE, kaynak Unsigned
+artefaktını `WITH (UPDLOCK, ROWLOCK)` satır kilidiyle (`OkuUnsignedKilitliAsync`) YENİDEN okur ve:
+
+- Kaynak bulunamıyorsa VEYA soft-delete edilmişse → `EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING`
+  İLE GEÇİCİ hata (imzalama SIRASINDA kaybolmuş/silinmiştir - GERÇEK bir kalıcı bozulma değil, YENİ
+  bir claim ile yeniden imzalanabilir bir yarış durumudur).
+- Kaynağın KENDİ `ArtifactSha256` sütunu, `Icerik`'inin GERÇEK SHA-256'sıyla UYUŞMUYORSA →
+  `EBELGE_SIGNING_SOURCE_ARTIFACT_HASH_MISMATCH` İLE ATOMİK KALICI hata (kaydın kendi İÇİNDE
+  TUTARSIZ olması - GERÇEK bir bütünlük sorunudur, retry ANLAMSIZDIR).
+- Kaynağın hash'i kendi İÇİNDE tutarlı AMA tx-dışı imzalama SIRASINDA kullanılan hash'ten FARKLI
+  bulunursa → `EBELGE_SIGNING_SOURCE_CHANGED_DURING_SIGNING` İLE GEÇİCİ hata.
+
+Bu üç dal, sırasıyla
+`YeniImzaSirasindaUnsignedKaynakSoftDeleteEdilirseGeciciHataKaynakImzalamaSirasindaDegistiDonerVeSignedReadyEklenmez`,
+`YeniImzaSirasindaUnsignedKaynakIcerigiBozulursaAtomikKaliciHataKaynakHashUyumsuzOlur` VE mevcut
+`UnsignedArtifactSaklananIcerikHashiKayitliHashIleUyusmuyorsaAtomikKaliciHataOlur` testleriyle
+doğrulanır. Bu yeniden-doğrulamanın GERÇEKTEN kısa transaction İÇİNDE yapıldığı (md.13) İKİ
+şekilde kanıtlanır: (a) her iki tamperlemenin GERÇEKLEŞTİĞİ nokta - Schematron çağrısı DÖNDÜKTEN
+HEMEN SONRA, yani Faz-3 transaction'ı AÇILMADAN HEMEN ÖNCE - yalnız transaction İÇİNDEKİ satır
+kilitli okuması TARAFINDAN yakalanabilir (daha ÖNCEKİ, tx-dışı bir okuma bu değişikliği HİÇ
+GÖREMEZDİ); (b) `YeniSignedInsertAkisindaSchematronTamOlarakBirKezCagrilirKisaTransactionAltindaTekrarCalismaz`
+testi, Schematron'un TÜM akış boyunca yalnız BİR KEZ çağrıldığını kanıtlayarak, kısa transaction
+ALTINDA sidecar/kriptografi işi YAPILMADIĞINI (md.14) doğrular - yeniden-doğrulama YALNIZ bir SQL
+satır okuma+hash karşılaştırmasıdır. Ayrıca, "geçici" olarak sınıflandırılan yarış senaryosunun
+GERÇEKTEN yeni bir claim ile BAŞARIYLA tamamlanabildiği
+`UnsignedKaynakImzalamaSirasindaDegistiktenSonraYeniClaimIleYenidenDenemeBasariliOlur` testiyle
+uçtan uca doğrulanır.
+
+### 6. SignerRole/KeyValue kararının düzeltilmesi
+
+Faz 2B.7.1'in "İKİSİ DE EKLENMEZ" kararı, İKİ YANLIŞ öncüle dayanıyordu - bu turda İKİSİ DE
+düzeltildi (bkz. yukarıdaki "Faz 2B.7.1 sonuç bölümü" içindeki DÜZELTME notları):
+
+1. **"GÜNCEL kılavuz XAdES-BES'i AÇIKÇA belirtmiyor" iddiası YANLIŞTI.** GÜNCEL e-Arşiv
+   Kılavuzu'nun (Ağustos 2025, v1.18) s.57, "6 e-Arşiv Fatura Standardı" başlığı ALTINDA, tam
+   olarak *"Bu veriler XADES-BES standardı kullanılarak mali mühür/ NES ile imzalanmalıdır"*
+   cümlesi BİREBİR yer alır - bölüm 7/8/9 ile dolaylı çıkarıma HİÇ GEREK YOKTUR.
+2. **KamuSM kaynağının "salt üçüncü taraf entegratör örneği" olduğu için göz ardı edilebileceği
+   iddiası EKSİKTİ.** TÜBİTAK KamuSM, GİB'in nitelikli mali mühür/e-imza sertifikalarını sağlayan
+   AKREDİTE, resmi e-imza altyapısı sağlayıcısıdır VE dokümantasyonu, `xades:SignerRole`+public-key
+   eklenmesinin *"yine e-fatura standartlarında GEREKLİ KILINAN"* bir unsur olduğunu AÇIKÇA
+   belirtir - rastgele bir entegratörün keyfi tercihi DEĞİLDİR.
+
+Görevin kendi kuralı gereği ("XSD `minOccurs=0` ve schematron sessizliği TEK BAŞINA yeterli
+DEĞİLDİR"; kanıt bulunamazsa GÜVENLİ/tercih edilen yaklaşım UYGULANIR) VE gerçek karşı-kanıt (GİB
+viewer, GİB-imzalı örnek artefakt, gerçek bir entegratörün yayımlanmış kabul profili) hiç
+BULUNAMADIĞINDAN, **KARAR TERS ÇEVRİLDİ: `xades:SignerRole/ClaimedRole=Supplier` VE
+`ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue` (sertifikanın public key'iyle) ARTIK EKLENİR**, İKİ
+BAĞIMSIZ doğrulayıcı kontrolüyle BİRLİKTE:
+
+- `EBelgeXmlImzalayici.ImzalaXml`: `KeyInfo`'ya, mevcut `KeyInfoX509Data`'nın YANINA, sertifikanın
+  RSA public key'inden türetilen bir `System.Security.Cryptography.Xml.RSAKeyValue` clause'u
+  EKLENİR (standart .NET BCL tipi - 3. parti kütüphane YOK). `BuildQualifyingProperties`,
+  `SignedSignatureProperties` İÇİNE `xades:SignerRole/xades:ClaimedRoles/xades:ClaimedRole` =
+  `"Supplier"` (`EBelgeXmlImzalayici.SignerClaimedRole` sabiti) EKLER.
+- `EBelgeXmlImzaDogrulayici.DogrulaCore`: mevcut IssuerSerial kontrolünden SONRA, (a)
+  `xades:ClaimedRole` metninin TAM OLARAK `"Supplier"` olduğunu, (b)
+  `ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue`'daki Modulus/Exponent'in, GÖMÜLÜ `ds:X509Certificate`
+  bytes'ından türetilen GERÇEK public key İLE (bayt-birebir) EŞLEŞTİĞİNİ BAĞIMSIZ olarak doğrular -
+  ikisi de EKSİKSE VEYA UYUŞMUYORSA imza REDDEDİLİR.
+
+`EBelgeXmlImzalayiciTests`'teki ESKİ "SignerRole/KeyValue olmadan da GEÇERLİ" testi KALDIRILDI,
+YERİNE üçü eklendi: doğru değerlerle üretilip bağımsız doğrulamadan GEÇTİĞİNİN teyidi, KeyValue
+sertifikayla eşleşmiyorsa REDDİNİN teyidi, ClaimedRole yanlışsa REDDİNİN teyidi.
+
+### Test kapsamı ve çalıştırılan hedefli komut
+
+`EBelgeXmlImzalayiciTests`'e 8 yeni test eklendi (30→37; 1 eski test KALDIRILIP 3 YENİ SignerRole/
+KeyValue testiyle DEĞİŞTİRİLDİ, NET +7): 5 bozuk-girdi testi (iyi-biçimli-olmayan XML, geçersiz
+sertifika base64, base64-ama-X509-olmayan sertifika bytes'ı, geçersiz SignatureValue base64,
+geçersiz DigestValue base64 - hepsi `EBELGE_SIGNING_MALFORMED_SIGNATURE_DOCUMENT` İLE güvenli
+`Gecersiz` sonuca dönüştüğünü doğrular) + 3 SignerRole/KeyValue testi.
+
+`EBelgeUblImzalamaServiceIntegrationTests`'e 7 yeni test eklendi (13→20):
+`YeniImzaBagimsizDogrulamaBeklenmedikBozukSonucUretirseAtomikKaliciHataBozukImzaBelgesiOlurGeciciDegil`,
+`MevcutSignedIcerigiTamperlenirseImzaDogrulamasiAtlanirAtomikKaliciHataMevcutArtifactHashUyumsuzOlur`,
+`MevcutSignedTxDisiDogrulamaSonrasiIcerikFarkliGecerliImzayaDegistirilirseYarisDurumuDoner`,
+`YeniImzaSirasindaUnsignedKaynakSoftDeleteEdilirseGeciciHataKaynakImzalamaSirasindaDegistiDonerVeSignedReadyEklenmez`,
+`YeniImzaSirasindaUnsignedKaynakIcerigiBozulursaAtomikKaliciHataKaynakHashUyumsuzOlur`,
+`YeniSignedInsertAkisindaSchematronTamOlarakBirKezCagrilirKisaTransactionAltindaTekrarCalismaz`,
+`UnsignedKaynakImzalamaSirasindaDegistiktenSonraYeniClaimIleYenidenDenemeBasariliOlur`. Ayrıca
+mevcut `FarkliKaynagaBagliMevcutSignedReadyAtomikKaliciHataIdempotencyConflictUretir` testinin
+fixture'ı düzeltildi - kasıtlı olarak fabrike edilmiş bir `ArtifactSha256` (`new string('b', 64)`),
+YENİ eklenen exact-byte hash ön-kontrolüyle ERKEN çakışıyordu; artık `Icerik`'in GERÇEK SHA-256'sı
+kullanılır (kasıtlı farklılık yalnız `KaynakArtifactId`/`KaynakArtifactSha256` alanlarındadır) - bu
+sayede test asıl hedeflediği idempotency-conflict yolunu doğru şekilde test etmeye devam eder.
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests|FullyQualifiedName~EBelgeUblImzalamaServiceIntegrationTests|FullyQualifiedName~EBelgeSigningBackfillServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeUblRendererEndToEndIntegrationTests|FullyQualifiedName~EBelgeSchematronSidecarIntegrationTests|FullyQualifiedName~EBelgeFaz1IntegrationTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests"
+  → Passed: 223, Failed: 0, Total: 223 (gerçek SQL Server + gerçek Java Saxon sidecar ile)
+```
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+XAdES mimarisi/imza motoru/backfill servisi/imzalama outbox handler'ı/migration BAŞTAN
+YAZILMADI - yalnız YUKARIDA açıklanan hedefli sertleştirmeler eklendi. Signature/XSD/Schematron
+doğrulaması SIRASINDA hiçbir SQL transaction AÇIK TUTULMADI. Hiçbir exception genel bir `catch
+(Exception)` İLE gizlenmedi VEYA körü körüne geçici hataya DÖNÜŞTÜRÜLMEDİ. Saklanan bir hash
+sütununa, EXACT-byte hash HESAPLANMADAN güvenilmedi. Unsigned artefakt yeniden serileştirilmedi;
+SignedReady artefaktı HİÇBİR yerde UPDATE edilmedi (yalnız insert/soft-delete). Production
+fail-closed sertifika/güven sağlayıcıları GEVŞETİLMEDİ; aktivasyon tarihi kapısı DEĞİŞTİRİLMEDİ;
+gerçek sertifika/private key EKLENMEDİ; gönderim/PDF/e-posta/frontend/arka plan worker özelliği
+EKLENMEDİ; tüm çözüm test paketi ÇALIŞTIRILMADI (yalnız hedefli filtre); hiçbir test ATLANMADI.
+
+### Açık kalan konular
+
+Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
+
+### Sonraki faz
+
+Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.

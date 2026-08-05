@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Xml;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Muhasebe.SatisBelgeleri;
@@ -348,6 +349,90 @@ public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
         Assert.False(dogrulama.GecerliMi);
     }
 
+    // ---- Faz 2B.7.2 görev md.1: bozuk/kurcalanmış girdiler EXCEPTION SIZDIRMADAN Gecersiz döner ----
+
+    [Fact]
+    public async Task IyiBicimliOlmayanXmlExceptionSizdirmadanGecersizDoner()
+    {
+        var bozukXml = ImmutableArray.Create("<Invoice><cbc:ID>123</cbc:ID>"u8.ToArray()); // kapanmamış etiket
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(bozukXml, CancellationToken.None);
+
+        Assert.False(dogrulama.GecerliMi);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.BozukImzaBelgesi, dogrulama.HataKodu);
+    }
+
+    [Fact]
+    public async Task GecersizSertifikaBase64DegeriGecersizDoner()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+        var certNode = (XmlElement)doc.SelectSingleNode("//ds:X509Certificate", nsmgr)!;
+        certNode.InnerText = "!!! gecerli-olmayan-base64 !!!";
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+
+        Assert.False(dogrulama.GecerliMi);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.BozukImzaBelgesi, dogrulama.HataKodu);
+    }
+
+    [Fact]
+    public async Task Base64OlanFakatX509OlmayanSertifikaBytesGecersizDoner()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+        var certNode = (XmlElement)doc.SelectSingleNode("//ds:X509Certificate", nsmgr)!;
+        certNode.InnerText = Convert.ToBase64String([1, 2, 3, 4, 5, 6, 7, 8]);
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+
+        Assert.False(dogrulama.GecerliMi);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.BozukImzaBelgesi, dogrulama.HataKodu);
+    }
+
+    [Fact]
+    public async Task GecersizSignatureValueBase64DegeriGecersizDoner()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+        var sigValueNode = (XmlElement)doc.SelectSingleNode("//ds:SignatureValue", nsmgr)!;
+        sigValueNode.InnerText = "!!! gecerli-olmayan-base64 !!!";
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+
+        Assert.False(dogrulama.GecerliMi);
+        Assert.Equal(EBelgeXmlImzaHataKodlari.BozukImzaBelgesi, dogrulama.HataKodu);
+    }
+
+    [Fact]
+    public async Task GecersizDigestValueBase64DegeriGecersizDoner()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+        var digestValueNode = (XmlElement)doc.SelectSingleNode("//ds:Reference[@URI='']/ds:DigestValue", nsmgr)!;
+        digestValueNode.InnerText = "!!! gecerli-olmayan-base64 !!!";
+
+        // Bu bozukluk BİZİM KENDİ karşılaştırmamızca (string eşitliği, decode GEREKMEDEN) zaten
+        // yakalanır - HataKodu farklı OLABİLİR (ImzaDogrulamaHatasi) ama exception KESİNLİKLE
+        // SIZDIRILMAZ, sonuç HER ZAMAN Gecersiz'dir.
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+
+        Assert.False(dogrulama.GecerliMi);
+        Assert.NotNull(dogrulama.HataKodu);
+    }
+
     // ---- Faz 2B.7.1 görev md.4/md.8: doğrulayıcının genişletilmiş profil/URI kontrolleri ----
 
     [Fact]
@@ -553,25 +638,75 @@ public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SignerRoleVeKeyValueOlmadanDaImzaGecerliKabulEdilir()
+    public async Task SignerRoleVeKeyValueDogruDegerlerleOlusurVeBagimsizDogrulamadanGecer()
     {
-        // Faz 2B.7.1 görev md.3 kararı: xades:SignerRole VE ds:KeyValue, vendored XSD'de SEÇİMLİ
-        // (minOccurs=0) olarak tanımlanmıştır; hiçbir aktif/yoruma alınmış schematron kuralı
-        // ikisinden birini ZORUNLU KILMAZ; ne eski (2018) ne güncel (Ağustos 2025, v1.18) resmî
-        // GİB kılavuzu bunlardan HİÇ BAHSETMEZ - bu yüzden İKİSİ DE EKLENMEZ (bkz.
-        // EBelgeXadesProfili.cs sınıf düzeyi XML doc'u). Bu test, GERÇEK üretim çıktısının
-        // (SignerRole/KeyValue içermeyen) bağımsız doğrulamadan BAŞARIYLA geçtiğini - yani bu
-        // kararın doğrulayıcı tarafında YANLIŞLIKLA bir "zorunlu" varsayımına dönüşmediğini -
-        // teyit eder.
+        // Faz 2B.7.2 görev md.6 kararı: TÜBİTAK KamuSM ESYA SDK dokümantasyonu
+        // (yazilim.kamusm.gov.tr/esya-api), "e-fatura standartlarında GEREKLİ KILINAN imzacı
+        // rolü, açık anahtar ve imza zamanı eklenir" ifadesiyle xades:SignerRole/ClaimedRole VE
+        // ds:KeyValue'yu AÇIKÇA e-Fatura standardının bir gereği olarak belirtir - aksini
+        // gösteren (resmî GİB görüntüleyici/imzalı örnek/entegratör kabul profili) hiçbir kanıt
+        // BULUNAMADIĞINDAN, uyumluluk açısından GÜVENLİ taraf olan "ekle" kararı uygulanmıştır
+        // (bkz. EBelgeXmlImzalayici.cs, BuildQualifyingProperties XML doc'u).
         using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var kimlik = await saglayici.GetAsync(1, CancellationToken.None);
         var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
 
-        var xmlText = System.Text.Encoding.UTF8.GetString(sonuc.SignedUblUtf8.AsSpan());
-        Assert.DoesNotContain("SignerRole", xmlText, StringComparison.Ordinal);
-        Assert.DoesNotContain("KeyValue", xmlText, StringComparison.Ordinal);
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+
+        var claimedRole = doc.SelectSingleNode("//xades:SignerRole/xades:ClaimedRoles/xades:ClaimedRole", nsmgr);
+        Assert.NotNull(claimedRole);
+        Assert.Equal(EBelgeXmlImzalayici.SignerClaimedRole, claimedRole!.InnerText);
+
+        var modulusNode = doc.SelectSingleNode("//ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Modulus", nsmgr);
+        var exponentNode = doc.SelectSingleNode("//ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Exponent", nsmgr);
+        Assert.NotNull(modulusNode);
+        Assert.NotNull(exponentNode);
+
+        using var publicRsa = kimlik.Sertifika.GetRSAPublicKey()!;
+        var gercekParams = publicRsa.ExportParameters(false);
+        Assert.Equal(Convert.ToBase64String(gercekParams.Modulus!), modulusNode!.InnerText);
+        Assert.Equal(Convert.ToBase64String(gercekParams.Exponent!), exponentNode!.InnerText);
+        kimlik.Dispose();
 
         var dogrulama = await CreateDogrulayici().DogrulaAsync(sonuc.SignedUblUtf8, CancellationToken.None);
         Assert.True(dogrulama.GecerliMi, $"{dogrulama.HataKodu}: {dogrulama.HataMesaji}");
+    }
+
+    [Fact]
+    public async Task KeyValueSertifikayleEslesmiyorsaDogrulamaBasarisizOlur()
+    {
+        using var saglayiciA = new EBelgeTestSertifikaSaglayici();
+        using var saglayiciB = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayiciA).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var farkliKimlik = await saglayiciB.GetAsync(1, CancellationToken.None);
+        using var farkliPublicRsa = farkliKimlik.Sertifika.GetRSAPublicKey()!;
+        var farkliParams = farkliPublicRsa.ExportParameters(false);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+        var modulusNode = (XmlElement)doc.SelectSingleNode("//ds:KeyInfo/ds:KeyValue/ds:RSAKeyValue/ds:Modulus", nsmgr)!;
+        modulusNode.InnerText = Convert.ToBase64String(farkliParams.Modulus!);
+        farkliKimlik.Dispose();
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
+    }
+
+    [Fact]
+    public async Task SignerRoleYanlissaDogrulamaBasarisizOlur()
+    {
+        using var saglayici = new EBelgeTestSertifikaSaglayici();
+        var sonuc = await CreateImzalayici(saglayici).ImzalaAsync(CreateTalep(), CancellationToken.None);
+
+        var doc = LoadXml(sonuc.SignedUblUtf8);
+        var nsmgr = CreateNsManager(doc);
+        var claimedRole = (XmlElement)doc.SelectSingleNode("//xades:SignerRole/xades:ClaimedRoles/xades:ClaimedRole", nsmgr)!;
+        claimedRole.InnerText = "YanlisRol";
+
+        var dogrulama = await CreateDogrulayici().DogrulaAsync(ImmutableArray.Create(SaveXmlBytes(doc)), CancellationToken.None);
+        Assert.False(dogrulama.GecerliMi);
     }
 
     private static XmlDocument LoadXml(ImmutableArray<byte> xmlUtf8)

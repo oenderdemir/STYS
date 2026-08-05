@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using System.Xml;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -220,7 +221,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         }
 
         // md.9/md.17 adım 9: bağımsız imza doğrulaması.
-        var dogrulamaSonucu = await _dogrulayici.DogrulaAsync(imzaSonucu.SignedUblUtf8, cancellationToken);
+        var dogrulamaSonucu = await DogrulaGuvenliAsync(_dogrulayici, imzaSonucu.SignedUblUtf8, cancellationToken);
         if (!dogrulamaSonucu.GecerliMi)
         {
             return await SonuclandirKaliciHataAtomikAsync(
@@ -274,7 +275,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         if (raceSigned is null)
         {
             return EBelgeUblImzalamaSonucu.GeciciHata(
-                "EBELGE_SIGNING_YARIS_DURUMU", "SignedReady artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
+                EBelgeXmlImzaHataKodlari.YarisDurumu, "SignedReady artefakt eşzamanlı yazma çakışması - yeniden denenmeli.");
         }
 
         return await IslemMevcutSignedAsync(talep, unsignedArtifact, raceSigned, cancellationToken);
@@ -292,6 +293,69 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
                 cancellationToken);
 
     /// <summary>
+    /// <see cref="OkuMevcutSignedAsync"/> İLE AYNI satırı, ama `WITH (UPDLOCK, ROWLOCK)` satır
+    /// kilidiyle okur - YALNIZ zaten AÇIK bir transaction İÇİNDE çağrılmalıdır (bkz. Faz 2B.7.2
+    /// görev md.4). Kontrol İLE commit ARASINDA satırın DEĞİŞMESİNİ engeller - kilit yalnız BU
+    /// KISA okuma+karşılaştırma+commit penceresinde tutulur.
+    /// </summary>
+    private Task<EBelgeArtifact?> OkuMevcutSignedKilitliAsync(EBelgeUblImzalamaTalebi talep, CancellationToken cancellationToken) =>
+        _dbContext.Set<EBelgeArtifact>()
+            .FromSqlInterpolated($"""
+                SELECT * FROM [muhasebe].[EBelgeArtifactlari] WITH (UPDLOCK, ROWLOCK)
+                WHERE [KurumId] = {talep.KurumId} AND [EBelgeKaydiId] = {talep.EBelgeKaydiId}
+                  AND [ArtifactTipi] = {(int)EBelgeArtifactTipi.UblXml} AND [ArtifactAsamasi] = {(int)EBelgeArtifactAsamasi.SignedReady}
+                """)
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// Kaynak Unsigned artefaktı `WITH (UPDLOCK, ROWLOCK)` satır kilidiyle okur - YALNIZ zaten
+    /// AÇIK bir transaction İÇİNDE çağrılmalıdır (bkz. Faz 2B.7.2 görev md.5).
+    /// </summary>
+    private Task<EBelgeArtifact?> OkuUnsignedKilitliAsync(EBelgeUblImzalamaTalebi talep, CancellationToken cancellationToken) =>
+        _dbContext.Set<EBelgeArtifact>()
+            .FromSqlInterpolated($"""
+                SELECT * FROM [muhasebe].[EBelgeArtifactlari] WITH (UPDLOCK, ROWLOCK)
+                WHERE [KurumId] = {talep.KurumId} AND [EBelgeKaydiId] = {talep.EBelgeKaydiId}
+                  AND [ArtifactTipi] = {(int)EBelgeArtifactTipi.UblXml} AND [ArtifactAsamasi] = {(int)EBelgeArtifactAsamasi.Unsigned}
+                """)
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// `dogrulayici.DogrulaAsync`'i, BEKLENMEDİK bir parse/kriptografi exception'ının (savunma
+    /// derinliği - doğrulayıcı KENDİSİ zaten bunları yakalar, bkz.
+    /// <see cref="EBelgeXmlImzaDogrulayici.DogrulaAsync"/>) generic outbox katmanına KAÇIP geçici
+    /// bir retry'a DÖNÜŞMESİNİ engeller (bkz. Faz 2B.7.2 görev md.2, md.9 - "genel catch (Exception)
+    /// ile doğrulama hatalarını gizleme" - bu yüzden yalnız AÇIKÇA SINIFLANDIRILMIŞ, beklenen
+    /// parse/kriptografi exception tipleri yakalanır). Böyle bir exception YAKALANIRSA, sonuç HER
+    /// ZAMAN KALICI bir Gecersiz olarak sınıflandırılır - hiçbir kişisel veri/XML/sertifika
+    /// içeriği İÇERMEYEN SABİT bir mesajla.
+    /// </summary>
+    private static async Task<EBelgeXmlImzaDogrulamaSonucu> DogrulaGuvenliAsync(
+        IEBelgeXmlImzaDogrulayici dogrulayici,
+        ImmutableArray<byte> xmlBytes,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await dogrulayici.DogrulaAsync(xmlBytes, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is XmlException or FormatException or CryptographicException or ArgumentException or OverflowException or InvalidOperationException)
+        {
+            return EBelgeXmlImzaDogrulamaSonucu.Gecersiz(
+                EBelgeXmlImzaHataKodlari.BozukImzaBelgesi,
+                "İmzalı belge, ayrıştırma veya kriptografik doğrulama sırasında geçersiz/bozuk bulundu.");
+        }
+    }
+
+    /// <summary>
     /// Mevcut bir SignedReady artefaktı (idempotent replay YA DA yeni-insert yarışını KAYBEDEN
     /// bir denemenin rakip satırı) işler - bkz. Faz 2B.7.1 görev md.5-6. Kaynak eşleşme
     /// kontrolünden SONRA, imza/XSD/Schematron doğrulaması TAMAMEN SQL transaction'ın DIŞINDA
@@ -305,6 +369,21 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         EBelgeArtifact mevcutSigned,
         CancellationToken cancellationToken)
     {
+        // Faz 2B.7.2 görev md.3: EXACT-BYTE hash kontrolü - kayıtlı ArtifactSha256 sütunu,
+        // İÇERİĞİN (Icerik) GERÇEK SHA-256'sıyla eşleşmelidir. Bu, İMZA DOĞRULAMASINDAN ÖNCE
+        // yapılır - hash uyuşmazlığı varsa imza doğrulamasına HİÇ DEVAM EDİLMEZ (stored hash
+        // sütununa, gerçekten hesaplamadan GÜVENİLMEZ). Bu hash - "tx-dışı doğrulamada kullanılan
+        // hash" - Faz 3'teki kısa transaction'da (bkz. md.4) YENİDEN kullanılacaktır.
+        var gercekSignedHash = Convert.ToHexString(SHA256.HashData(mevcutSigned.Icerik));
+        if (!string.Equals(gercekSignedHash, mevcutSigned.ArtifactSha256, StringComparison.Ordinal))
+        {
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.MevcutArtifactHashUyumsuz,
+                "Mevcut SignedReady artefaktın kayıtlı hash'i, saklanan içerikle eşleşmiyor.",
+                cancellationToken);
+        }
+
         // md.20: idempotency - AYNI kaynak (Id+hash) İSE, imzaların BYTE-BİREBİR eşleşmesi
         // BEKLENMEZ (xades:SigningTime her denemede FARKLIDIR - bkz. md.21 determinizm notu).
         var kaynakEslesiyor = !mevcutSigned.IsDeleted
@@ -323,7 +402,11 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         // ---- Faz 2 (idempotent): DB dışı tam doğrulama (satır kilidi TUTULMAZ) ----
         var mevcutBytes = ImmutableArray.Create(mevcutSigned.Icerik);
 
-        var mevcutDogrulama = await _dogrulayici.DogrulaAsync(mevcutBytes, cancellationToken);
+        // Faz 2B.7.2 görev md.2: `_dogrulayici.DogrulaAsync` BEKLENMEDİK bir parse/kriptografi
+        // exception'ı üretirse (savunma derinliği - doğrulayıcı KENDİSİ zaten bunları yakalar),
+        // bu generic outbox katmanına KAÇIP geçici bir retry'a DÖNÜŞMEZ - `DogrulaGuvenliAsync`
+        // ile HER ZAMAN KALICI olarak sınıflandırılır.
+        var mevcutDogrulama = await DogrulaGuvenliAsync(_dogrulayici, mevcutBytes, cancellationToken);
         if (!mevcutDogrulama.GecerliMi)
         {
             return await SonuclandirKaliciHataAtomikAsync(
@@ -383,19 +466,36 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         var kayit = await _dbContext.Set<EBelgeKaydi>()
             .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
 
-        // Artefakt immutable'dır - Id+hash AYNI kalmışsa, tx-dışı doğrulanan içerik hâlâ
-        // GEÇERLİDİR. Değişmiş/kaybolmuşsa (bkz. görev md.5 "transaction dışı doğrulama
-        // sonrasında artifact hash'i değişmişse sonuç kullanılmaz") - önceki doğrulama SONUCU
-        // ARTIK GÜVENİLMEZ, geçici hata olarak raporlanır (üst katman yeniden dener).
-        var yenidenOkunanSigned = await OkuMevcutSignedAsync(talep, cancellationToken);
-        if (yenidenOkunanSigned is null ||
-            yenidenOkunanSigned.Id != mevcutSigned.Id ||
-            yenidenOkunanSigned.IsDeleted ||
-            !string.Equals(yenidenOkunanSigned.ArtifactSha256, mevcutSigned.ArtifactSha256, StringComparison.Ordinal))
+        // Faz 2B.7.2 görev md.4: yalnız hash SÜTUNUNU karşılaştırmak YETERLİ DEĞİLDİR - artefakt
+        // satırı UYGUN bir satır kilidiyle (UPDLOCK/ROWLOCK) YENİDEN okunur ve ID/KurumId/
+        // EBelgeKaydiId/ArtifactAsamasi/IsDeleted/KaynakArtifactId/KaynakArtifactSha256/
+        // ArtifactSha256 alanlarının TAMAMI VE İçeriğin (Icerik) EXACT SHA-256'sı (yalnız stored
+        // sütun DEĞİL) tx-dışı doğrulamada kullanılanla (`gercekSignedHash`) yeniden karşılaştırılır.
+        // Kontrol İLE commit ARASINDA satırın DEĞİŞMESİNİ engelleyen bu kilit, YALNIZ bu KISA
+        // pencerede tutulur - imza/XSD/sidecar çağrısı bu kilit ALTINDA HİÇ ÇALIŞMAZ (zaten Faz
+        // 2'de, tx açılmadan ÖNCE tamamlanmıştır).
+        var yenidenOkunanSigned = await OkuMevcutSignedKilitliAsync(talep, cancellationToken);
+        var yenidenHesaplananSignedHash = yenidenOkunanSigned is null ? null : Convert.ToHexString(SHA256.HashData(yenidenOkunanSigned.Icerik));
+
+        var satirDegismedi = yenidenOkunanSigned is not null
+            && yenidenOkunanSigned.Id == mevcutSigned.Id
+            && yenidenOkunanSigned.KurumId == talep.KurumId
+            && yenidenOkunanSigned.EBelgeKaydiId == talep.EBelgeKaydiId
+            && yenidenOkunanSigned.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady
+            && !yenidenOkunanSigned.IsDeleted
+            && yenidenOkunanSigned.KaynakArtifactId == mevcutSigned.KaynakArtifactId
+            && string.Equals(yenidenOkunanSigned.KaynakArtifactSha256, mevcutSigned.KaynakArtifactSha256, StringComparison.Ordinal)
+            && string.Equals(yenidenOkunanSigned.ArtifactSha256, mevcutSigned.ArtifactSha256, StringComparison.Ordinal)
+            && string.Equals(yenidenHesaplananSignedHash, gercekSignedHash, StringComparison.Ordinal);
+
+        if (!satirDegismedi)
         {
+            // Bkz. görev md.5 "transaction dışı doğrulama sonrasında artifact hash'i değişmişse
+            // sonuç kullanılmaz" - önceki doğrulama SONUCU ARTIK GÜVENİLMEZ, geçici hata olarak
+            // raporlanır (üst katman/outbox retry policy yeniden dener).
             await tx.RollbackAsync(cancellationToken);
             return EBelgeUblImzalamaSonucu.GeciciHata(
-                "EBELGE_SIGNING_YARIS_DURUMU", "SignedReady artefakt, bağımsız tx-dışı doğrulama sırasında değişti - yeniden denenmeli.");
+                EBelgeXmlImzaHataKodlari.YarisDurumu, "SignedReady artefakt, bağımsız tx-dışı doğrulama sırasında değişti - yeniden denenmeli.");
         }
 
         kayit.Durum = EBelgeKaydiDurumu.SignedReady;
@@ -438,6 +538,49 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
 
         var kayit = await _dbContext.Set<EBelgeKaydi>()
             .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
+
+        // Faz 2B.7.2 görev md.5: SignedReady insert EDİLMEDEN ÖNCE, kaynak Unsigned artefaktı
+        // UYGUN bir satır kilidiyle (UPDLOCK/ROWLOCK) YENİDEN okunur ve kimlik+hash bütünlüğü
+        // BAĞIMSIZ olarak yeniden doğrulanır - imzalama (Faz 2, tx dışı) İLE bu nokta ARASINDA
+        // kaynak DEĞİŞMİŞ (soft-delete edilmiş) OLABİLİR.
+        var yenidenOkunanUnsigned = await OkuUnsignedKilitliAsync(talep, cancellationToken);
+
+        if (yenidenOkunanUnsigned is null || yenidenOkunanUnsigned.IsDeleted)
+        {
+            // Kaynak imzalama SIRASINDA kayboldu/soft-delete edildi - GEÇİCİ bir yarış durumudur,
+            // YENİ bir claim ile yeniden imzalanmalıdır (bkz. görev md.5).
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.GeciciHata(
+                EBelgeXmlImzaHataKodlari.KaynakImzalamaSirasindaDegisti,
+                "Unsigned kaynak artefakt, imzalama sırasında değişti/soft-delete edildi.");
+        }
+
+        var yenidenHesaplananUnsignedHash = Convert.ToHexString(SHA256.HashData(yenidenOkunanUnsigned.Icerik));
+        if (!string.Equals(yenidenHesaplananUnsignedHash, yenidenOkunanUnsigned.ArtifactSha256, StringComparison.Ordinal))
+        {
+            // Kaydın KENDİ ArtifactSha256 sütunu, GERÇEK içeriğiyle eşleşmiyor - bu KALICI bir
+            // bütünlük sorunudur (bkz. görev md.5, "kalıcı olarak hash'i bozuksa"). `tx` ÖNCE
+            // rollback edilir - `SonuclandirKaliciHataAtomikAsync` KENDİ transaction'ını açar,
+            // aynı anda İKİ açık transaction OLAMAZ (bkz. Faz 2B.6.2 kanıtlanmış deseni).
+            await tx.RollbackAsync(cancellationToken);
+            _dbContext.ChangeTracker.Clear();
+            return await SonuclandirKaliciHataAtomikAsync(
+                talep, kayitVarMi: true,
+                EBelgeXmlImzaHataKodlari.KaynakHashUyumsuz,
+                "Unsigned kaynak artefaktın kayıtlı hash'i, saklanan içerikle eşleşmiyor (imzalama sonucu kalıcılaştırılırken tespit edildi).",
+                cancellationToken);
+        }
+
+        if (!string.Equals(yenidenOkunanUnsigned.ArtifactSha256, unsignedArtifact.ArtifactSha256, StringComparison.Ordinal) ||
+            !string.Equals(unsignedArtifact.ArtifactSha256, imzaSonucu.KaynakUnsignedUblSha256, StringComparison.Ordinal))
+        {
+            // Kaynağın hash'i KENDİ İÇİNDE tutarlı ama tx-dışı imzalama SIRASINDA KULLANILANDAN
+            // FARKLI bulundu - GEÇİCİ bir yarış durumudur (bkz. görev md.5).
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.GeciciHata(
+                EBelgeXmlImzaHataKodlari.KaynakImzalamaSirasindaDegisti,
+                "Unsigned kaynak artefakt, imzalama sırasında kullanılan hash'ten farklı bulundu.");
+        }
 
         var yeniSigned = new EBelgeArtifact
         {

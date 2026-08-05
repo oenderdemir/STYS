@@ -3,10 +3,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
+using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
@@ -15,15 +17,24 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 /// EBelgeKaydi/EBelgeSnapshot kaydından V2 canonical snapshot'ı okur, GERÇEK
 /// <see cref="IEBelgeUblRenderer"/>'ı (yerel XSD + gerçek Java Saxon sidecar Schematron
 /// doğrulaması dahil) çağırır ve başarılı sonucu immutable <see cref="EBelgeArtifact"/> olarak
-/// kalıcılaştırır (bkz. Faz 2B.6.1 görev - lease ownership ve atomik sonuç kaydı düzeltmesi).
+/// kalıcılaştırır (bkz. Faz 2B.6.1/2B.6.2 görev - lease ownership, çapraz kayıt bağlama ve
+/// atomik sonuç kaydı düzeltmeleri).
 ///
-/// Kesin akış: claim → DB DIŞI render (satır kilidi TUTULMAZ) → lease YENİDEN doğrulama →
-/// artefakt + EBelgeKaydi + outbox TEK atomik transaction. Başarı VE kalıcı hata yolları,
-/// KENDİ transaction'larında outbox geçişini de (TryCompleteAsync/TryFailAsync üzerinden,
-/// AYNI ambient transaction içinde) TAMAMLAR - <see cref="EBelgeOutboxMesajIslemeService"/>
-/// bu durumda İKİNCİ bir geçiş çağrısı YAPMAZ (bkz. EBelgeArtefaktOlusturmaSonucuTuru.Atomik*).
-/// Yalnız GEÇİCİ hatalar (EBelgeKaydi'yi hiç değiştirmediğinden) ESKİ, ayrı/retry-policy'li
+/// Kesin akış: claim → DB DIŞI render (satır kilidi TUTULMAZ) → lease YENİDEN doğrulama
+/// (`OutboxId + KurumId + EBelgeKaydiId + IsTuru + Token + Expiry` - bkz.
+/// <see cref="IEBelgeOutboxLeaseTransitionService.IsOwnedForArtifactAsync"/>) → artefakt +
+/// EBelgeKaydi + outbox TEK atomik transaction. Başarı VE kalıcı hata yolları, KENDİ
+/// transaction'larında outbox geçişini de (artifact-aware TryCompleteArtifactAsync/
+/// TryFailArtifactAsync üzerinden, AYNI ambient transaction içinde) TAMAMLAR -
+/// <see cref="EBelgeOutboxMesajIslemeService"/> bu durumda İKİNCİ bir geçiş çağrısı YAPMAZ
+/// (bkz. EBelgeArtefaktOlusturmaSonucuTuru.Atomik*). Yalnız GEÇİCİ hatalar (EBelgeKaydi'yi hiç
+/// değiştirmediğinden) ESKİ, ayrı/retry-policy'li (genel, artifact-farkında OLMAYAN)
 /// TryFailAsync akışını kullanmaya devam eder.
+///
+/// Kalıcı hata yolları (idempotency conflict dahil) HER ZAMAN TEK bir açık transaction içinde
+/// terminalize edilir - rollback edilmiş ama dispose edilmemiş bir transaction üzerinde İKİNCİ
+/// bir `BeginTransactionAsync` ASLA çağrılmaz (bkz. Faz 2B.6.2 görev md.3-4,
+/// <see cref="TamamlaKaliciHataAyniTransactiondaAsync"/>).
 /// </summary>
 public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaService
 {
@@ -60,6 +71,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(talep);
+        talep = ValidateTalepAndNormalize(talep);
 
         // ---- Faz 1: kısa okuma (açık transaction yok) ----
         var kayit = await _dbContext.Set<EBelgeKaydi>()
@@ -201,7 +213,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     {
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var sahip = await _leaseTransitionService.IsOwnedAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+        var sahip = await _leaseTransitionService.IsOwnedForArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
         if (!sahip)
         {
             await tx.RollbackAsync(cancellationToken);
@@ -231,10 +243,13 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             {
                 // Soft-delete edilmiş VEYA farklı hash'li bir rezervasyon - mali/yasal artefakt
                 // silinemez sözleşmesi nedeniyle bu, veri bütünlüğü ihlali kabul edilir (bkz.
-                // görev md.6) - sessiz başarı YOK, kalıcı çakışma hatası.
-                await tx.RollbackAsync(cancellationToken);
-                return await SonuclandirKaliciHataAtomikAsync(
-                    talep, kayitVarMi: true,
+                // görev md.6) - sessiz başarı YOK, kalıcı çakışma hatası. AYNI (zaten ownership'i
+                // doğrulanmış) `tx` transaction'ı İÇİNDE terminalize edilir - rollback edip
+                // İKİNCİ bir transaction AÇILMAZ (bkz. Faz 2B.6.2 görev md.3 - önceki turda bu,
+                // rollback edilmiş ama dispose edilmemiş bir transaction üzerinde yeniden
+                // `BeginTransactionAsync` çağrısı riski taşıyordu).
+                return await TamamlaKaliciHataAyniTransactiondaAsync(
+                    tx, talep, kayit,
                     EBelgeArtifactIdempotencyConflictException.SafeErrorCode,
                     "Aynı benzersiz anahtar altında farklı içerikli veya soft-delete edilmiş bir artefakt zaten mevcut.",
                     cancellationToken);
@@ -246,7 +261,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             kayit.Durum = EBelgeKaydiDurumu.UnsignedUblHazir;
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            var tamamIdempotent = await _leaseTransitionService.TryCompleteAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+            var tamamIdempotent = await _leaseTransitionService.TryCompleteArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
             if (!tamamIdempotent)
             {
                 await tx.RollbackAsync(cancellationToken);
@@ -292,7 +307,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             return null;
         }
 
-        var completeEdildi = await _leaseTransitionService.TryCompleteAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+        var completeEdildi = await _leaseTransitionService.TryCompleteArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
         if (!completeEdildi)
         {
             // Lease, render + insert sırasında dolmuş/kaybedilmiş - TÜM transaction (artefakt +
@@ -319,26 +334,75 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     {
         await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        var sahip = await _leaseTransitionService.IsOwnedAsync(talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, cancellationToken);
+        var sahip = await _leaseTransitionService.IsOwnedForArtifactAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, cancellationToken);
         if (!sahip)
         {
             await tx.RollbackAsync(cancellationToken);
             return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
         }
 
+        EBelgeKaydi? kayit = null;
         if (kayitVarMi)
         {
-            var kayit = await _dbContext.Set<EBelgeKaydi>()
+            kayit = await _dbContext.Set<EBelgeKaydi>()
                 .FirstOrDefaultAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
-            if (kayit is not null)
-            {
-                kayit.Durum = EBelgeKaydiDurumu.UnsignedUblKaliciHata;
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
         }
 
-        var failEdildi = await _leaseTransitionService.TryFailAsync(
-            talep.OutboxMesajiId, talep.KurumId, talep.KilitToken, hataKodu, hataMesaji, retryDelay: null, cancellationToken);
+        return await TamamlaKaliciHataAyniTransactiondaAsync(tx, talep, kayit, hataKodu, hataMesaji, cancellationToken);
+    }
+
+    /// <summary>
+    /// Talep alanlarını (bkz. Faz 2B.6.2 görev md.5) doğrular ve `KilitToken`'ı kanonik forma
+    /// normalize eder. `KilitBitisZamaniUtc` yalnız BİLGİ amaçlıdır - hiçbir doğrulama/ownership
+    /// kararı bu alana DAYANMAZ; DB'deki gerçek `KilitBitisZamaniUtc` (SYSUTCDATETIME() ile
+    /// karşılaştırılan) OTORİTERDİR (bkz. IsOwnedForArtifactAsync SQL'i). İstemciden gelen bu
+    /// timestamp'e güvenilmez.
+    /// </summary>
+    private static EBelgeArtefaktOlusturmaTalebi ValidateTalepAndNormalize(EBelgeArtefaktOlusturmaTalebi talep)
+    {
+        if (talep.OutboxMesajiId <= 0)
+        {
+            throw new BaseException("OutboxMesajiId pozitif olmalıdır.", 400);
+        }
+
+        if (talep.KurumId <= 0)
+        {
+            throw new BaseException("KurumId pozitif olmalıdır.", 400);
+        }
+
+        if (talep.EBelgeKaydiId <= 0)
+        {
+            throw new BaseException("EBelgeKaydiId pozitif olmalıdır.", 400);
+        }
+
+        var normalizedToken = EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateKilitToken(talep.KilitToken);
+        return talep with { KilitToken = normalizedToken };
+    }
+
+    /// <summary>
+    /// Zaten AÇIK olan (ownership'i doğrulanmış) `tx` transaction'ı İÇİNDE, kalıcı hatayı
+    /// terminalize eder: `EBelgeKaydi.Durum = UnsignedUblKaliciHata` (kayit varsa) →
+    /// artifact-aware `TryFailArtifactAsync` → TEK commit. Yeni/ikinci bir transaction ASLA
+    /// AÇILMAZ (bkz. Faz 2B.6.2 görev md.3-4 - rollback edilmiş/dispose edilmemiş bir
+    /// transaction üzerinde ikinci `BeginTransactionAsync` çağrısı riskini YAPISAL olarak
+    /// ortadan kaldırır).
+    /// </summary>
+    private async Task<EBelgeArtefaktOlusturmaSonucu> TamamlaKaliciHataAyniTransactiondaAsync(
+        IDbContextTransaction tx,
+        EBelgeArtefaktOlusturmaTalebi talep,
+        EBelgeKaydi? kayit,
+        string hataKodu,
+        string hataMesaji,
+        CancellationToken cancellationToken)
+    {
+        if (kayit is not null)
+        {
+            kayit.Durum = EBelgeKaydiDurumu.UnsignedUblKaliciHata;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var failEdildi = await _leaseTransitionService.TryFailArtifactAsync(
+            talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, talep.KilitToken, hataKodu, hataMesaji, retryDelay: null, cancellationToken);
 
         if (!failEdildi)
         {

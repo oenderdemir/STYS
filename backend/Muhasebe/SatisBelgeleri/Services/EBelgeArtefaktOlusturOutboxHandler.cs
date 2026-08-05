@@ -7,6 +7,12 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 /// Claim ile gelen lease bilgisini (KilitToken/KilitBitisZamaniUtc) taşır - artefakt işleme
 /// servisinin, sonucu KENDİ atomik transaction'ında kaydetmeden ÖNCE ownership'i YENİDEN
 /// doğrulaması için gereklidir (bkz. Faz 2B.6.1 görev md.1-2). Token LOGLANMAZ.
+///
+/// <see cref="KilitBitisZamaniUtc"/> yalnız BİLGİ/gözlemlenebilirlik amaçlıdır - hiçbir
+/// ownership kararı bu alana dayanmaz. Otoriter (authoritative) lease bitiş zamanı HER ZAMAN
+/// DB'deki `EBelgeOutboxMesajlari.KilitBitisZamaniUtc` sütunudur; ownership kontrolü
+/// (`IsOwnedForArtifactAsync`) bunu SQL içinde `SYSUTCDATETIME()` ile karşılaştırır - istemciden
+/// gelen bu timestamp'e GÜVENİLMEZ (bkz. Faz 2B.6.2 görev md.5).
 /// </summary>
 public sealed record EBelgeArtefaktOlusturmaTalebi(
     int KurumId,

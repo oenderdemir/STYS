@@ -762,5 +762,40 @@ public class EBelgeOutboxMesajIslemeServiceTests
             OwnedCallCount++;
             return Task.FromResult(true);
         }
+
+        public Task<bool> IsOwnedForArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default)
+        {
+            OwnedCallCount++;
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> TryCompleteArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, CancellationToken cancellationToken = default)
+        {
+            CompleteCallCount++;
+            LastCompleteOutboxMesajiId = outboxMesajiId;
+            LastCompleteKurumId = kurumId;
+            LastCompleteKilitToken = kilitToken;
+            if (_completeException is not null)
+            {
+                throw _completeException;
+            }
+            return Task.FromResult(_completeResult);
+        }
+
+        public Task<bool> TryFailArtifactAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, string kilitToken, string sonHataKodu, string sonHataMesaji, TimeSpan? retryDelay, CancellationToken cancellationToken = default)
+        {
+            FailCallCount++;
+            LastFailOutboxMesajiId = outboxMesajiId;
+            LastFailKurumId = kurumId;
+            LastFailKilitToken = kilitToken;
+            LastFailHataKodu = sonHataKodu;
+            LastFailHataMesaji = sonHataMesaji;
+            LastFailRetryDelay = retryDelay;
+            if (_failException is not null)
+            {
+                throw _failException;
+            }
+            return Task.FromResult(_failResult);
+        }
     }
 }

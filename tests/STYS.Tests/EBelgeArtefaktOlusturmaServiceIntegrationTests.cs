@@ -13,6 +13,7 @@ using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using STYS.Tesisler.Entities;
+using TOD.Platform.SharedKernel.Exceptions;
 using Xunit;
 
 namespace STYS.Tests;
@@ -228,6 +229,41 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         }
     }
 
+    // ---- Talep doğrulaması (Faz 2B.6.2 görev md.5) ----
+
+    [IntegrationFact]
+    public async Task GecersizOutboxMesajiIdKurumIdVeyaEBelgeKaydiIdReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+        var service = CreateService(dbContext);
+        var gecerliToken = claim.KilitToken;
+
+        await Assert.ThrowsAsync<BaseException>(() => service.OlusturAsync(
+            new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, 0, gecerliToken, claim.KilitBitisZamaniUtc)));
+        await Assert.ThrowsAsync<BaseException>(() => service.OlusturAsync(
+            new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, -1, gecerliToken, claim.KilitBitisZamaniUtc)));
+        await Assert.ThrowsAsync<BaseException>(() => service.OlusturAsync(
+            new EBelgeArtefaktOlusturmaTalebi(0, eBelgeKaydiId, claim.OutboxMesajiId, gecerliToken, claim.KilitBitisZamaniUtc)));
+        await Assert.ThrowsAsync<BaseException>(() => service.OlusturAsync(
+            new EBelgeArtefaktOlusturmaTalebi(_kurumId, 0, claim.OutboxMesajiId, gecerliToken, claim.KilitBitisZamaniUtc)));
+    }
+
+    [IntegrationFact]
+    public async Task GecersizFormatliKilitTokenReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+        var service = CreateService(dbContext);
+
+        await Assert.ThrowsAsync<BaseException>(() => service.OlusturAsync(
+            new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, claim.OutboxMesajiId, "", claim.KilitBitisZamaniUtc)));
+        await Assert.ThrowsAsync<BaseException>(() => service.OlusturAsync(
+            new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, claim.OutboxMesajiId, "guid-degil", claim.KilitBitisZamaniUtc)));
+    }
+
     // ---- Başarılı akış (senaryo 1, 15) ----
 
     [IntegrationFact]
@@ -353,6 +389,42 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         await using var verifyCtx = CreateDbContext();
         var sayi = await verifyCtx.EBelgeArtifactlari.CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
         Assert.Equal(1, sayi);
+    }
+
+    // ---- Çapraz kayıt bağlama (Faz 2B.6.2 görev md.1-2, md.6 senaryo 1-4) ----
+
+    [IntegrationFact]
+    public async Task OutboxAninTokenIYanlisEBelgeKaydiIleKullanilamazHicbirKayitDegismezOutboxTerminalizeEdilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        // İKİ farklı, GERÇEK EBelgeKaydi - AYNI kurumda. Outbox A yalnız kaydiA'ya bağlı olarak
+        // claim edilir; talep KASITLI OLARAK kaydiB'yi hedefler (aynı kurum, doğru/geçerli token,
+        // yanlış EBelgeKaydiId) - bkz. görev md.1-2, senaryo 1-4.
+        var kaydiAId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var kaydiBId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claimA = await SeedAndClaimOutboxAsync(dbContext, kaydiAId);
+
+        var service = CreateService(dbContext);
+        var yanlisTalep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, kaydiBId, claimA.OutboxMesajiId, claimA.KilitToken, claimA.KilitBitisZamaniUtc);
+        var sonuc = await service.OlusturAsync(yanlisTalep);
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        // Ne kaydiA'ya (outbox'ın GERÇEK hedefi) ne kaydiB'ye (talebin YANLIŞ hedefi) artefakt oluşmadı.
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == kaydiAId));
+        Assert.False(await verifyCtx.EBelgeArtifactlari.AnyAsync(a => a.EBelgeKaydiId == kaydiBId));
+
+        var kaydiA = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == kaydiAId);
+        var kaydiB = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == kaydiBId);
+        Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kaydiA.Durum);
+        Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kaydiB.Durum);
+
+        // Outbox A hâlâ Isleniyor - YANLIŞ hedefli bir talep yüzünden terminalize EDİLMEDİ.
+        var outboxA = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claimA.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Isleniyor, outboxA.Durum);
+        Assert.NotNull(outboxA.KilitToken);
     }
 
     // ---- Lease sahipliği (senaryo 3, 4, 5, 6, 7) ----
@@ -557,14 +629,24 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
     [IntegrationFact]
     public async Task EBelgeKaydiBulunamazsaAtomikKaliciHataOlur()
     {
+        // Faz 2B.6.2 öncesi bu test, GERÇEK bir claim'in EBelgeKaydiId'sini KASITLI OLARAK var
+        // olmayan bir talep.EBelgeKaydiId ile eşleştirerek "bulunamadı" durumunu simüle ediyordu -
+        // ama artık ownership kontrolü EBelgeKaydiId'yi de doğruladığından (bkz. görev md.1), bu
+        // eşleşmeyen kombinasyon artık kayıt-arama aşamasına HİÇ ULAŞMADAN SahiplikKaybedildi ile
+        // reddediliyor (bkz. OutboxAninTokenIYanlisEBelgeKaydiIleKullanilamaz... testi). Ayrıca FK
+        // kısıtı (`FK_EBelgeOutboxMesajlari_EBelgeKayitlari_EBelgeKaydiId_KurumId`) bir outbox
+        // satırının hiç var olmayan bir EBelgeKaydiId'ye işaret etmesini zaten YAPISAL olarak
+        // engeller. Bu yüzden "kayıt bulunamadı" artık yalnız GERÇEKÇİ biçimde, doğru
+        // EBelgeKaydiId'li bir talep ile ama kaydın SOFT-DELETE edilmiş olmasıyla (global EF
+        // sorgu filtresi Faz 1 okumasını GÖRMEZ) üretilir.
         await using var dbContext = CreateDbContext();
         var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
-        // Herhangi geçerli bir claim - talepteki EBelgeKaydiId ise KASITLI olarak var OLMAYAN bir id.
         var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[EBelgeKayitlari] SET [IsDeleted] = 1 WHERE [Id] = {eBelgeKaydiId}");
 
         var service = CreateService(dbContext);
-        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, int.MaxValue - 1, claim.OutboxMesajiId, claim.KilitToken, claim.KilitBitisZamaniUtc);
-        var sonuc = await service.OlusturAsync(talep);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
 
         Assert.NotNull(sonuc);
         Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikKaliciHata, sonuc!.SonucTuru);
@@ -720,8 +802,10 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
 
         // Geçici hata yolu (Gecici) EBelgeKaydi'yı hiç DEĞİŞTİRMEDİĞİNDEN, atomik transaction/lease
         // sahiplik doğrulaması GEREKMEZ (bkz. görev md.5) - bu yüzden talep KASITLI OLARAK gerçek
-        // olmayan bir OutboxMesajiId/KilitToken taşır ve yine de aynı sonuca ulaşılmalıdır.
-        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, -1, "gecersiz-ama-kullanilmayacak-token", DateTime.UtcNow.AddMinutes(5));
+        // (claim edilmiş) OLMAYAN ama YİNE DE şekil olarak GEÇERLİ (pozitif OutboxMesajiId, GUID
+        // formatlı token - bkz. md.5 "talep modelini doğrula") bir OutboxMesajiId/KilitToken taşır
+        // ve yine de aynı sonuca ulaşılmalıdır - bu, ownership/DB'ye HİÇ dokunulmadığını kanıtlar.
+        var talep = new EBelgeArtefaktOlusturmaTalebi(_kurumId, eBelgeKaydiId, 999_999_999, Guid.NewGuid().ToString("D"), DateTime.UtcNow.AddMinutes(5));
         var sonuc = await service.OlusturAsync(talep);
 
         Assert.NotNull(sonuc);
@@ -772,6 +856,14 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         await using var verifyCtx = CreateDbContext();
         var sayi = await verifyCtx.EBelgeArtifactlari.CountAsync(a => a.EBelgeKaydiId == eBelgeKaydiId);
         Assert.Equal(1, sayi); // ikinci (rakip) satır EKLENMEDİ - yalnız orijinal "yabancı" satır kaldı
+
+        // AtomikKaliciHata sonucunun BAŞARIYLA dönmesi (exception FIRLATILMADAN), bu yolun ARTIK
+        // rollback edilmiş-ama-dispose-edilmemiş bir transaction üzerinde ikinci bir
+        // BeginTransactionAsync çağrısı YAPMADIĞINI da yapısal olarak kanıtlar - eski (hatalı)
+        // akışta bu senaryo bir InvalidOperationException riski taşıyordu (bkz. Faz 2B.6.2 görev
+        // md.3-4, senaryo 9).
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblKaliciHata, kayit.Durum);
     }
 
     [IntegrationFact]
@@ -821,5 +913,9 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
         Assert.Equal(EBelgeOutboxDurumu.Hata, outbox.Durum);
         Assert.Null(outbox.SonrakiDenemeZamaniUtc); // KALICI - geçici retry ATANMADI (senaryo 12)
+
+        // Outbox VE EBelgeKaydi, AYNI atomik transaction'da BİRLİKTE güncellenmiştir (senaryo 11).
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblKaliciHata, kayit.Durum);
     }
 }

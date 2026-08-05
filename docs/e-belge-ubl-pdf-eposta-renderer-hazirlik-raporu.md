@@ -1893,6 +1893,16 @@ sorunudur - bu turda DÜZELTİLMEDİ (kapsam dışı).
 
 **Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.12 koşulları — hepsi genuinely karşılandı).**
 
+> **ÖNEMLİ - Faz 2B.6.2'de İKİ EK açık tespit edildi ve düzeltildi (bkz. aşağıda "Faz 2B.6.2
+> sonuç bölümü"): (1) bu bölümdeki `IsOwnedAsync`/`TryCompleteAsync`/`TryFailAsync` çağrıları
+> `EBelgeKaydiId`'yi HİÇ doğrulamıyordu - doğru token+outbox ile ama YANLIŞ bir `EBelgeKaydiId`
+> taşıyan bir talep, BAŞKA bir e-belge kaydını hedefleyebilirdi (çapraz kayıt mutasyonu açığı).
+> (2) `DenemeBasariAtomikAsync`'in idempotency-conflict dalı, AÇIK bir transaction'ı rollback
+> ettikten SONRA, o transaction dispose EDİLMEDEN, AYNI DbContext üzerinde
+> `SonuclandirKaliciHataAtomikAsync` içinden İKİNCİ bir `BeginTransactionAsync` çağırıyordu -
+> kırılgan/riskli bir desendi. Aşağıdaki bölüm yalnız TARİHSEL bağlam için KORUNMUŞTUR - güncel,
+> doğru davranış için Faz 2B.6.2 bölümüne bakın.
+
 ### Neden gerekliydi
 
 Faz 2B.6'nın kod incelemesinde 5 gerçek açık tespit edildi:
@@ -2045,16 +2055,177 @@ raporunda zaten belgelenen, paylaşımlı yerel test container'ındaki BİRİKM�
 kaynaklanan, önceden var olan bir ortam sorunudur (bkz. yukarıda "Açık kalan teknik konular" md.3).
 Bu turda DÜZELTİLMEDİ (kapsam dışı, md.11).
 
-### Açık kalan teknik konular (Faz 2B.6.1 sonrası güncel liste)
+### Açık kalan teknik konular (Faz 2B.6.1 zamanındaki durum - bkz. Faz 2B.6.2 için güncel liste)
 
-1. Sürekli çalışan bir outbox worker/polling döngüsü YOK (bkz. Faz 2B.6 "Background worker
+1. ~~Ownership kontrolü `EBelgeKaydiId`'yi doğrulamıyor~~ - **Faz 2B.6.2'de DÜZELTİLDİ**.
+2. ~~Idempotency-conflict yolunda rollback edilmiş/dispose edilmemiş bir transaction üzerinde
+   ikinci `BeginTransactionAsync` riski~~ - **Faz 2B.6.2'de DÜZELTİLDİ**.
+3. Sürekli çalışan bir outbox worker/polling döngüsü YOK (bkz. Faz 2B.6 "Background worker
    kararı") - hâlâ kapsam dışı.
-2. Paylaşımlı yerel test SQL Server container'ındaki önceden var olan veri tutarsızlığı hâlâ
+4. Paylaşımlı yerel test SQL Server container'ındaki önceden var olan veri tutarsızlığı hâlâ
    temizlenmedi - ayrı bir bakım konusu.
-3. `IEBelgeArtifactService` için controller/download endpoint'i YOK (bilinçli - bkz. md.13).
-4. Render sırasında bir lease-renewal mekanizması YOK (Faz 2B.6'da bilinçli olarak ertelendi) -
+5. `IEBelgeArtifactService` için controller/download endpoint'i YOK (bilinçli - bkz. md.13).
+6. Render sırasında bir lease-renewal mekanizması YOK (Faz 2B.6'da bilinçli olarak ertelendi) -
    render'ın normalde kısa sürmesi ve şimdi eklenen yazma-anı ownership kontrolü nedeniyle risk
    düşük kabul edilir, ama çok uzun süren render senaryolarında hâlâ açık bir konu.
+
+## Faz 2B.6.2 sonuç bölümü — çapraz kayıt bağlama ve idempotency-conflict transaction düzeltmesi
+
+**Durum: TAMAMLANDI, commit/push YAPILDI (bkz. md.9 koşulları — hepsi genuinely karşılandı).**
+
+### Neden gerekliydi
+
+Faz 2B.6.1'in kod incelemesinde 2 gerçek açık tespit edildi:
+
+1. Lease ownership doğrulaması (`IsOwnedAsync`/`TryCompleteAsync`/`TryFailAsync`) yalnız
+   `Id + KurumId + KilitToken + KilitBitisZamaniUtc` doğruluyordu - outbox satırının
+   `EBelgeKaydiId` alanı HİÇ kontrol edilmiyordu. Doğru token + doğru kurum ama YANLIŞ bir
+   `EBelgeKaydiId` taşıyan bir talep, teorik olarak BAŞKA bir e-belge kaydını hedefleyebilirdi
+   (çapraz kayıt mutasyonu riski).
+2. `DenemeBasariAtomikAsync`'in idempotency-conflict dalında (`EslesiyorMu` false döndüğünde),
+   AÇIK olan `tx` transaction'ı rollback edildikten SONRA - `tx` DİSPOSE EDİLMEDEN - AYNI
+   `_dbContext` üzerinde `SonuclandirKaliciHataAtomikAsync` çağrılıyordu; bu metot da KENDİ
+   `BeginTransactionAsync()`'ini açıyordu. Bu, rollback edilmiş ama dispose edilmemiş bir
+   transaction üzerinde ikinci bir transaction başlatma riski taşıyan kırılgan bir DESENDİ.
+
+### Ownership sözleşmesinin tamamlanması (md.1-2)
+
+Ownership anahtarı artık **`OutboxId + KurumId + EBelgeKaydiId + IsTuru + Token + Expiry`**'dir.
+Mevcut genel `IsOwnedAsync`/`TryCompleteAsync`/`TryFailAsync` metotları (diğer, artifact-DIŞI
+handler'lar için) AYNEN korunmuştur - genel transition servisi baştan YAZILMADI. Bunların YANINA,
+AYNI özel `ExecuteTransitionAsync` ambient-transaction-reuse çekirdeğini yeniden kullanan 3 yeni,
+artifact-farkında metot eklendi (`EBelgeOutboxLeaseTransitionService`):
+
+- `IsOwnedForArtifactAsync(outboxMesajiId, kurumId, eBelgeKaydiId, kilitToken, ct)`
+- `TryCompleteArtifactAsync(outboxMesajiId, kurumId, eBelgeKaydiId, kilitToken, ct)`
+- `TryFailArtifactAsync(outboxMesajiId, kurumId, eBelgeKaydiId, kilitToken, sonHataKodu, sonHataMesaji, retryDelay, ct)`
+
+Üçü de AYNI SQL WHERE koşuluna `AND [EBelgeKaydiId] = @EBelgeKaydiId AND [IsTuru] = 1` ekler
+(`IsTuru = 1` = `ArtefaktOlustur` - bugün TEK desteklenen değer, ayrıca DB'de
+`CK_EBelgeOutboxMesajlari_IsTuru` check constraint'i ile de garanti altında). `EBelgeArtefaktOlusturmaService`,
+TÜM ownership/tamamlama/hata çağrılarını bu YENİ, artifact-farkında metotlara geçirmiştir.
+
+**Çapraz kayıt mutasyonu ARTIK YAPISAL OLARAK ENGELLENİR**: Outbox A'nın (EBelgeKaydi X'e bağlı)
+token'ıyla, talep.EBelgeKaydiId = Y (farklı bir kayıt) gönderilirse, `IsOwnedForArtifactAsync`
+satırın GERÇEK `EBelgeKaydiId`'sinin (X) talep'teki (Y) ile eşleşmediğini görür ve `false` döner -
+`SahiplikKaybedildi` sonucu üretilir; NE artefakt yazılır, NE hedeflenen yanlış kayıt (Y) NE de
+gerçek kayıt (X) değişir, NE de outbox A terminalize edilir (bkz.
+`OutboxAninTokenIYanlisEBelgeKaydiIleKullanilamaz...` testi - iki GERÇEK, aynı kurumdaki EBelgeKaydi
+ile kanıtlanmıştır).
+
+### Idempotency-conflict transaction düzeltmesi (md.3-4)
+
+`DenemeBasariAtomikAsync`'in idempotency-conflict dalı artık `tx.RollbackAsync()` +
+`SonuclandirKaliciHataAtomikAsync(...)` (yeni transaction) ÇAĞIRMAZ. Bunun yerine, ZATEN AÇIK ve
+ownership'i doğrulanmış olan `tx` transaction'ı İÇİNDE, paylaşılan yeni bir private helper
+(`TamamlaKaliciHataAyniTransactiondaAsync`) çağrılır: `EBelgeKaydi.Durum = UnsignedUblKaliciHata`
+→ artifact-aware `TryFailArtifactAsync` (AYNI `tx` ambient transaction'ını kullanarak) → **TEK**
+`tx.CommitAsync()`. Artefakt insert EDİLMEZ/değiştirilmez. Bu değişiklikle:
+
+- `SonuclandirKaliciHataAtomikAsync` de AYNI paylaşılan helper'ı çağıracak şekilde sadeleştirildi
+  (kod tekrarı YOK) - kendi `BeginTransactionAsync()`'ini AÇMAYA devam eder (bu, hiçbir zaman
+  başka bir açık transaction'ın İÇİNDEN çağrılmadığından güvenlidir - tek çağıran nokta artık
+  budur).
+- Bir `DbContext` üzerinde AYNI ANDA yalnız BİR aktif `IDbContextTransaction` bulunur invariantı
+  artık TÜM kod yollarında YAPISAL olarak KORUNUR (kod incelemesiyle doğrulanabilir - `BeginTransactionAsync`
+  çağrıları, kaynak dosyada TOPLAM 2 yerde bulunur: `DenemeBasariAtomikAsync` ve
+  `SonuclandirKaliciHataAtomikAsync`, ve BUNLAR ASLA iç içe çağrılmaz).
+
+Unique-violation retry yolu (`DbUpdateException` yakalanan blok) DEĞİŞMEDİ - zaten doğruydu:
+`await using var tx` C# dilinin garantisi gereği, `return null;` ile metottan çıkılırken `tx`
+TAM olarak dispose edilir (rollback SONRASI) - çağıran (`OlusturAsync`), `DenemeBasariAtomikAsync`'i
+İKİNCİ kez çağırdığında `_dbContext.Database.CurrentTransaction` zaten `null`'dır, bu yüzden yeni
+`BeginTransactionAsync()` çağrısı GÜVENLİDİR (bkz. `ChangeTracker.Clear()` de AYNI yerde -
+stale tracking riski de ayrıca ortadan kaldırılmıştır).
+
+### Talep doğrulaması (md.5)
+
+`OlusturAsync`, `talep`'i işlemeden ÖNCE `ValidateTalepAndNormalize` ile doğrular:
+`OutboxMesajiId > 0`, `KurumId > 0`, `EBelgeKaydiId > 0`, `KilitToken` geçerli GUID ("D") formatında
+(mevcut `EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateKilitToken` AYNEN yeniden
+kullanılır - yeni bir doğrulama yardımcısı YAZILMADI). `KilitBitisZamaniUtc` YALNIZ bilgi
+amaçlıdır - bu, hem `EBelgeArtefaktOlusturmaTalebi`'nin XML doc yorumunda hem bu raporda AÇIKÇA
+belgelenmiştir: hiçbir ownership kararı bu alana DAYANMAZ, otoriter (authoritative) lease bitiş
+zamanı HER ZAMAN DB'deki `EBelgeOutboxMesajlari.KilitBitisZamaniUtc` sütunudur ve
+`IsOwnedForArtifactAsync` SQL'i bunu `SYSUTCDATETIME()` ile karşılaştırır - istemciden gelen
+timestamp'e GÜVENİLMEZ.
+
+### Test kapsamı (md.6)
+
+Gerçek SQL Server ile (bazı senaryolar için gerçek sidecar dahil):
+
+- `OutboxAninTokenIYanlisEBelgeKaydiIleKullanilamazHicbirKayitDegismezOutboxTerminalizeEdilmez`
+  (senaryo 1-4: iki GERÇEK EBelgeKaydi, aynı kurum, doğru token + yanlış EBelgeKaydiId →
+  SahiplikKaybedildi; ne kayıt değişir NE outbox terminalize edilir).
+- `YanlisIsTuruTasiyanSatirArtifactGuardTarafindanReddedilir` (senaryo 5 - `IsTuru` bugün TEK
+  değerli bir CHECK constraint taşıdığından, senaryo TEK bir transaction içinde constraint'i
+  geçici olarak devre dışı bırakıp SONUNDA rollback ederek üretilir - paylaşımlı test
+  container'ında KALICI hiçbir iz BIRAKMAZ, DDL SQL Server'da transactional'dır).
+- `DogruEBelgeKaydiIdIleArtifactIsOwnedTrueDonerVeCompleteBasariliOlur`,
+  `DogruEBelgeKaydiIdIleArtifactFailTerminalHataUretir`,
+  `YanlisEBelgeKaydiIdIleArtifactIsOwnedCompleteFailYapilamazHicbirAlanDegismez` (senaryo 6-7 -
+  `IsOwnedForArtifactAsync`/`TryCompleteArtifactAsync`/`TryFailArtifactAsync`'in SQL guard'ının
+  `EBelgeKaydiId`'yi GERÇEKTEN içerdiğinin doğrudan, transition-servisi-seviyesinde kanıtı).
+- `FarkliHashliMevcutArtefaktAtomikIdempotencyConflictUretir` (senaryo 8 - artık AYRICA
+  `EBelgeKaydi.Durum == UnsignedUblKaliciHata` da doğrular) - başarıyla dönmesi (exception
+  FIRLATILMADAN), senaryo 9'un ("ikinci/nested transaction başlatılmaz") YAPISAL kanıtıdır.
+- `SoftDeleteEdilmisMevcutArtefaktAtomikIdempotencyConflictUretirTekrarDenemeAtanmaz` (senaryo
+  10-11 - artık outbox VE `EBelgeKaydi.Durum`'un AYNI atomik transaction'da BİRLİKTE
+  güncellendiğini de doğrular).
+- `EBelgeKaydiBulunamazsaAtomikKaliciHataOlur` (yeniden tasarlandı - artık FK kısıtı
+  (`FK_EBelgeOutboxMesajlari_EBelgeKayitlari_EBelgeKaydiId_KurumId`) bir outbox satırının hiç var
+  olmayan bir `EBelgeKaydiId`'ye işaret etmesini YAPISAL olarak engellediğinden, "bulunamadı"
+  senaryosu artık GERÇEKÇİ biçimde - doğru `EBelgeKaydiId`'li ama SOFT-DELETE edilmiş bir kayıtla
+  - üretilir; eski, artık geçersiz "kasıtlı yanlış EBelgeKaydiId" kurgusu KALDIRILDI, çünkü bu
+  KENDİSİ artık senaryo 1-4'ün (çapraz kayıt) bir örneğidir).
+- `GecersizOutboxMesajiIdKurumIdVeyaEBelgeKaydiIdReddedilir`, `GecersizFormatliKilitTokenReddedilir`
+  (senaryo md.5 - talep doğrulaması).
+- `SidecarErisilemiyorsaGeciciHataOlurArtefaktOlusmazVeSahiplikKontroluGerekmez` (güncellendi -
+  artık talep şekil olarak GEÇERLİ ama claim EDİLMEMİŞ bir OutboxMesajiId/GUID-formatlı token
+  taşır; -1/geçersiz-token gibi eski değerler yeni doğrulamayı GEÇEMEZDİ).
+- `TamOutboxAkisiClaimIslemeVeTamamlamaBirlikteCalisir` (senaryo 16, gerçek sidecar - regresyon).
+- Mevcut claim/lease/retry testleri (`EBelgeOutboxLeaseTransitionIntegrationTests`,
+  `EBelgeOutboxClaimLeaseServiceTests`, `EBelgeOutboxRetryPolicyTests`) - regresyon, DEĞİŞMEDEN
+  yeşil (senaryo 17).
+- Renderer/Schematron testleri (`EBelgeUblRenderer*`, `SaxonSidecar*`, `EBelgeSchematronSidecar*`) -
+  regresyon, DEĞİŞMEDEN yeşil (senaryo 18).
+
+**Senaryo 13 (unique-violation retry'sinde ilk transaction dispose edildikten sonra ikinci deneme
+yapılır) hakkında not**: Bu davranış C# `await using` dilinin GARANTİSİ ile YAPISAL olarak
+sağlanır (kod incelemesiyle doğrulanabilir - md.4). Genuine bir İKİ-FARKLI-outbox-mesajı yarışı
+ile bunu tetiklemek, `IX_EBelgeOutboxMesajlari_EBelgeKaydiId_IsTuru` benzersiz indeksinin (AYNI
+`EBelgeKaydiId`+`IsTuru` için birden fazla outbox satırını YAPISAL olarak engellemesi) VE
+`IsOwnedForArtifactAsync`'in `UPDLOCK`'unun (aynı satırda eşzamanlı denemeleri serileştirmesi)
+BİRLİKTE etkisiyle günümüz şemasında pratik olarak mümkün DEĞİLDİR - bu, Faz 2B.6.1'de "senaryo 2"
+için yapılan AYNI tespitle tutarlıdır. Fault-injection olmadan deterministik bir tetikleyici
+üretmek md.8'in ("genel outbox mimarisini genişletme") kapsamı DIŞINDA bırakılmıştır.
+
+### Çalıştırılan hedefli test komutları ve sonuçları
+
+```
+dotnet test --filter "FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturOutboxHandlerTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxClaimLeaseServiceTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests|FullyQualifiedName~EBelgeUblRenderer|FullyQualifiedName~EBelgeSchematronSidecar|FullyQualifiedName~EBelgeArtifactEntity|FullyQualifiedName~SaxonSidecar|FullyQualifiedName~EBelgeCanonicalSnapshot|FullyQualifiedName~EBelgeFaz1IntegrationTests"
+  → Passed: 213, Failed: 0, Total: 213 (gerçek SQL Server + gerçek Java Saxon sidecar ile)
+```
+
+Bu filtre, bu turun konusuyla İLGİLİ TÜM test sınıflarını (artifact/outbox/lease/renderer/sidecar/
+snapshot) kapsar ve `TicariBelgeIptalYarisKosuluIntegrationTests`/`FaturaNumaraIntegrationTests`
+gibi, Faz 2B.6 raporunda ZATEN belgelenen, önceden var olan/ilgisiz ortam sorununu taşıyan
+sınıfları BİLEREK dışarıda bırakır (bkz. görev md.6 - "önceden var olan ilgisiz testleri kabul
+kriterine dahil eden geniş filtre kullanma"). Bu iki sınıfın, bu turun HİÇBİR değişikliği
+olmadan da AYNI şekilde başarısız olduğu, geniş `FullyQualifiedName~EBelge` filtresiyle ayrıca
+doğrulanmıştır (Failed: 2, ikisi de bu turda dokunulmayan dosyalarda).
+
+### Açık kalan teknik konular (Faz 2B.6.2 sonrası güncel liste)
+
+1. Sürekli çalışan bir outbox worker/polling döngüsü YOK - hâlâ kapsam dışı.
+2. Paylaşımlı yerel test SQL Server container'ındaki önceden var olan veri tutarsızlığı hâlâ
+   temizlenmedi - ayrı bir bakım konusu.
+3. `IEBelgeArtifactService` için controller/download endpoint'i YOK (bilinçli).
+4. Render sırasında bir lease-renewal mekanizması YOK - risk düşük kabul edilir ama açık.
+5. `EBelgeOutboxIsTuru` bugün TEK değerli olduğundan, artifact-aware guard'ın `IsTuru` kısmı
+   şu an yalnız CHECK constraint ile dolaylı doğrulanabiliyor (bkz. senaryo 5 testinin geçici
+   constraint devre dışı bırakma tekniği) - ikinci bir iş türü eklendiğinde bu guard'ın gerçek
+   bir satırla DOĞRUDAN test edilmesi mümkün olacaktır.
 
 ### Sonraki faz
 

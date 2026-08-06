@@ -3916,6 +3916,92 @@ yalnız somut bir flaky belirti gözlemlenirse).
 
 ### Sonraki faz
 
+Faz 2B.9.1'e bakınız.
+
+## Faz 2B.9.1 sonuç bölümü — profil sözleşmelerinin ve bağımlılıklarının zorunlu kılınması
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+Faz 2B.9'da kurulan profil/trait sistemi, GERÇEK bir güvenlik/release kapısı haline getirildi. Tam
+detay: [docs/e-belge-test-stratejisi.md](e-belge-test-stratejisi.md).
+
+**Tek merkezi manifest**: `scripts/ebelge-test-profiles.json` - profil/`TestLevel`/dependency
+tanımları artık PowerShell/Bash arasında ELLE KOPYALANMIYOR. İki script AYNI manifesti okuyup 4
+profilin TAMAMINDA (`fast`/`integration`/`nightly`/`release`) BİREBİR AYNI `dotnet test` filtresini
+üretir - doğrudan karşılaştırmayla kanıtlandı. Bilinmeyen profil/`TestLevel`/`Dependency`,
+bulunamayan/bozuk manifest - hepsi fail-fast.
+
+**Otomatik trait sözleşmesi**: yeni `EBelgeTestMetadataContractTests` (22 test), derlenmiş
+assembly'yi reflection ile tarayıp TÜM e-belge testlerinin `Domain=EBelge` + tam olarak bir geçerli
+`TestLevel` taşıdığını, `Dependency`/`CriticalInvariant` değerlerinin whitelist içinde kaldığını, 10
+kritik invariantın HER BİRİNİN en az bir testle karşılandığını VE manifest JSON'ının bilinen
+liste'lerinin C# whitelist'iyle senkron kaldığını OTOMATİK doğrular. Sahte bir invariant adıyla
+yapılan kontrollü simülasyonla, kritik bir test eksik OLSAYDI bu sözleşmenin GERÇEKTEN başarısız
+olacağı KANITLANDI (gerçek bir test SİLİNEREK değil).
+
+**Dependency fail-closed**: `integration`/`nightly`/`release`, ana koşumdan ÖNCE SQL Server (gerçek
+`StysAppDbContext.Database.CanConnectAsync()` ile) VE Java sidecar (gerçek, kısa ömürlü
+`SchematronSidecarProcessFixture` boot+dispose ile) erişilebilirliğini KANITLAR; `release` AYRICA
+kritik invariant manifestini doğrular. Eksiklikte `dotnet test` HİÇ ÇALIŞTIRILMADAN non-zero exit -
+kontrollü negatif testlerle (SQL env değişkeni kaldırıldı, sidecar derlenmiş sınıfları geçici olarak
+taşındı, SONRA GERİ YÜKLENDİ) doğrulandı.
+
+**Sıfır-skip politikası**: script'ler artık TRX `<Counters>`'ı parse edip `notExecuted` (Skip)
+sayısını AYRICA kontrol eder - `dotnet test`'in "tüm testler skip edildi ama exit 0" YANILGISI
+`integration`/`nightly`/`release`'de profili BAŞARISIZ SAYAR.
+
+**Bash `set -e` düzeltmesi**: `dotnet test`'in normal bir test başarısızlığında script'i SESSİZCE
+sonlandırmaması için `set -e` KALDIRILDI, her `dotnet test` çağrısı açık `if/then/else` İÇİNE alındı
+- güvenli özet/TRX yolu/skip kontrolü artık HER DURUMDA çalışır.
+
+**Bulunan/düzeltilen gerçek zaman-bombası bug'ı** (bu turda, integration profili ilk koşumunda
+tespit edildi): `EBelgeUblImzalamaServiceIntegrationTests`'in `SignedExactByteHash` kritik invariant
+testi, gerçek duvar saatine göre üretilen bir test sertifikasına karşı SABİT bir takvim tarihi
+kullanıyordu - takvim bu tarihi geçince KESİN olarak başarısız olacaktı. Kök neden düzeltildi (test
+artık kendi çalıştığı anın gerçek zamanını kullanır) - assertion gevşetilmedi.
+
+**Gözlemlenen 1 flaky olay** (`nightly`, `EBelgeSchematronSidecarIntegrationTests.BuyukXmlLimitteReddedilir`,
+`ConnectionReset`): kök nedeni KESİN izole edilemedi (hedefli tekrar üretim denemeleri BAŞARISIZ -
+olay tekrar üretilemedi; TAM nightly koşumu hemen ardından TEMİZ geçti) - muhtemel neden, Faz 2B.9'da
+ZATEN dokümante edilen sidecar paralel-JVM kaynak rekabeti riskidir. Retry/skip/assertion gevşetme
+KULLANILMADI; tam kök-neden/tekrar-üretim raporu stratejı dokümanındadır.
+
+**Test komutu ve sonuçlar** (dört profil, hepsi `Failed: 0, Skipped: 0`):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 285, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 466, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 486, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 488, Failed: 0, Skipped: 0  (preflight: SQL+Java+kritik invariant GEÇTİ)
+```
+
+Bash script'i (`test-ebelge.sh`) ile `fast` VE `integration` profilleri de TAM koşumla doğrulandı -
+sonuçlar PowerShell ile BİREBİR AYNI (285/285, 466/466).
+
+Faz 2B.9'un 466 taban test sayısı, Faz 2B.9.1'in 22 yeni metadata contract testiyle **488**'e çıktı
+(2 yeni dependency-preflight testi `Domain=EBelge` sözleşmesine TABİ DEĞİLDİR, bu sayıya DAHİL
+DEĞİLDİR - bkz. strateji dokümanı).
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+Production e-belge davranışı (artifact/XAdES/Schematron/claim-lease/retry/activation/worker/outbox/
+signing/migration) HİÇBİR ŞEKİLDE DEĞİŞTİRİLMEDİ; test sayısı keyfi bir hedefe göre AZALTILMADI veya
+ARTIRILMADI (yalnız gerekçeli contract/preflight testleri EKLENDİ); kritik test SİLİNMEDİ;
+entegrasyon testi Unit olarak yeniden ETİKETLENMEDİ; gerçek SQL/Saxon/RSA testi mock İLE
+DEĞİŞTİRİLMEDİ; eksik dependency'de profil YEŞİL GÖSTERİLMEDİ; skip'ler başarılı SAYILMADI;
+PowerShell/Bash'te ayrı profil listesi TUTULMADI; yeni CI platformu KURULMADI; HSM/entegratör/PDF/
+e-posta/frontend GELİŞTİRİLMEDİ; tüm solution test paketi ÇALIŞTIRILMADI.
+
+### Açık kalan konular
+
+Faz 2B.9'un "Açık kalan konular" listesi AYNEN geçerlidir. Ek olarak: `BuyukXmlLimitteReddedilir`
+flaky olayının kök nedeni henüz KESİN izole edilemedi (tek, tekrar üretilemeyen bir kayıt) - eğer
+gelecekte daha sık gözlemlenirse, strateji dokümanındaki dosya-tabanlı process-kilidi önerisi
+uygulanmalıdır.
+
+### Sonraki faz
+
 Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir - artık HSM/mali mühür geliştirmesi
-`docs/e-belge-test-stratejisi.md`'de tanımlanan temiz test zemini (trait taksonomisi,
-`CryptoIntegration` katmanı, kritik invariant manifesti) üzerine inşa edilebilir.
+`docs/e-belge-test-stratejisi.md`'de tanımlanan temiz test zemini (trait taksonomisi, OTOMATİK
+sözleşme doğrulaması, `CryptoIntegration` katmanı, kritik invariant manifesti) üzerine inşa
+edilebilir.

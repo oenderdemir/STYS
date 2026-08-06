@@ -1,0 +1,71 @@
+{
+  "testProject": "tests/STYS.Tests/STYS.Tests.csproj",
+  "knownTestLevels": [
+    "Unit",
+    "Contract",
+    "SqlIntegration",
+    "SidecarIntegration",
+    "CryptoIntegration",
+    "WorkerEndToEnd",
+    "ReleaseGate"
+  ],
+  "knownDependencies": [
+    "SqlServer",
+    "JavaSidecar",
+    "Cryptography"
+  ],
+  "profiles": {
+    "fast": {
+      "testLevels": [
+        "Unit",
+        "Contract"
+      ],
+      "allDomainTests": false,
+      "requiredDependencies": [],
+      "requireCriticalInvariants": false,
+      "failOnSkippedTests": false
+    },
+    "integration": {
+      "testLevels": [
+        "Unit",
+        "Contract",
+        "SqlIntegration",
+        "CryptoIntegration"
+      ],
+      "allDomainTests": false,
+      "requiredDependencies": [
+        "SqlServer",
+        "JavaSidecar"
+      ],
+      "requireCriticalInvariants": false,
+      "failOnSkippedTests": true
+    },
+    "nightly": {
+      "testLevels": [
+        "Unit",
+        "Contract",
+        "SqlIntegration",
+        "SidecarIntegration",
+        "CryptoIntegration",
+        "WorkerEndToEnd"
+      ],
+      "allDomainTests": false,
+      "requiredDependencies": [
+        "SqlServer",
+        "JavaSidecar"
+      ],
+      "requireCriticalInvariants": false,
+      "failOnSkippedTests": true
+    },
+    "release": {
+      "testLevels": [],
+      "allDomainTests": true,
+      "requiredDependencies": [
+        "SqlServer",
+        "JavaSidecar"
+      ],
+      "requireCriticalInvariants": true,
+      "failOnSkippedTests": true
+    }
+  }
+}

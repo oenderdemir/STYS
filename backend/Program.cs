@@ -237,6 +237,22 @@ builder.Services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeUblImzalaOutboxHand
 // operasyonel çağırma (manuel/gelecekteki bir admin aracı) SONRAKİ bir faza bırakılmıştır.
 builder.Services.AddScoped<IEBelgeSigningBackfillService, EBelgeSigningBackfillService>();
 builder.Services.AddScoped<IEBelgeOutboxMesajIslemeService, EBelgeOutboxMesajIslemeService>();
+// Faz 2B.8: mevcut claim/lease/işleme servislerini ORKESTRE EDEN hosted outbox worker - kendi
+// claim/lease/retry mimarisini KURMAZ (bkz. görev md.1-2). Varsayılan (appsettings.json)
+// EBelgeProcessing.Enabled=false'DUR - üretimde worker, bir operatörün AÇIKÇA true'ya çevirmesi VE
+// 15 Eylül 2026 Europe/Istanbul tarih kapısını geçmesi olmadan ASLA mesaj claim etmez (bkz. görev
+// md.3/md.17). Registration KOŞULSUZDUR (worker KENDİSİ her tur gate kontrolü yapar) - bu, DI
+// grafiğinin config'ten BAĞIMSIZ, test edilebilir kalmasını sağlar (bkz. görev md.16).
+builder.Services.AddOptions<EBelgeProcessingOptions>()
+    .Bind(builder.Configuration.GetSection(EBelgeProcessingOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<EBelgeProcessingOptions>, EBelgeProcessingOptionsValidator>();
+builder.Services.AddSingleton<IEBelgeProcessingActivationGate, EBelgeProcessingActivationGate>();
+builder.Services.AddSingleton<IEBelgeOutboxWorkerDelay, TimeProviderEBelgeOutboxWorkerDelay>();
+builder.Services.AddSingleton<IEBelgeOutboxWorkerMetrics, EBelgeOutboxWorkerMetrics>();
+builder.Services.AddSingleton<IEBelgeOutboxWorkerHealthState, EBelgeOutboxWorkerHealthState>();
+builder.Services.AddHealthChecks().AddCheck<EBelgeOutboxWorkerHealthCheck>("ebelge-outbox-worker", tags: ["ready"]);
+builder.Services.AddHostedService<EBelgeOutboxWorker>();
 builder.Services.AddScoped<IEBelgeArtifactService, EBelgeArtifactService>();
 builder.Services.AddScoped<ITicariBelgeService, TicariBelgeService>();
 builder.Services.AddScoped<ITicariBelgeLookupService, TicariBelgeLookupService>();

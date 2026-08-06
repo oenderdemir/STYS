@@ -3148,6 +3148,286 @@ gönderim/PDF/e-posta/frontend/arka plan worker özelliği EKLENMEDİ; tüm çö
 
 Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
 
+### Sonraki faz (Faz 2B.7.3)
+
+Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.
+
+## Faz 2B.8 sonuç bölümü — üretim güvenli, çoklu instance destekli e-belge outbox worker
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+### Neden gerekliydi
+
+Faz 2B.5-2B.7.3'te tamamlanan e-belge altyapısı (canonical snapshot, deterministic renderer, gerçek
+XSD/Schematron doğrulaması, immutable Unsigned/SignedReady artefaktlar, lease-safe outbox, gerçek
+XAdES-BES imzalama, artifact/hash/metadata bütünlüğü, signing activation gate, backfill servisi)
+TAMDIR - ama outbox mesajlarını SÜREKLİ claim edip işleyen bir hosted worker HİÇ YOKTU (bkz.
+`backend/Program.cs`'teki Faz 2B.7.1 yorumu: "yalnız uygulama servisi kaydedilir - otomatik hosted
+worker/endpoint YOKTUR"). Faz 2B.8, MEVCUT claim/lease/işleme altyapısını ORKESTRE EDEN, üretim
+güvenli bir `BackgroundService` ekler - kendi claim/lease/retry mimarisini KURMAZ.
+
+### 1-2. Mevcut mimarinin yeniden kullanımı
+
+Worker (`EBelgeOutboxWorker`), YALNIZ şu mevcut servisleri kullanır - hiçbirini YENİDEN YAZMAZ:
+
+- **Claim**: `IEBelgeOutboxClaimLeaseService.TryClaimNextAsync` - GERÇEK lease token'ı, `WITH
+  (UPDLOCK, READPAST, ROWLOCK)` tabanlı SQL claim mekanizması, mevcut retry/terminal koşulları.
+  Bu servis YALNIZ TEK bir mesaj claim eder (batch API'si YOKTUR) - worker, `BatchSize` kadar
+  BOUNDED bir döngüde bu metodu TEKRAR TEKRAR çağırarak "batch" davranışını simüle eder (görev
+  md.4'ün AÇIKÇA izin verdiği yaklaşım - "Desteklemiyorsa... Worker, batch büyüklüğü kadar bounded
+  claim çağrısı yapabilir").
+- **İşleme**: `IEBelgeOutboxMesajIslemeService.IsleAsync` - handler seçimi (`IEBelgeOutboxIsTuruHandler`
+  - `EBelgeArtefaktOlusturOutboxHandler`/`EBelgeUblImzalaOutboxHandler`, YENİ bir handler
+  EKLENMEDİ), atomik complete/fail geçişleri, retry policy uygulaması TAMAMEN bu servisin
+  İÇİNDEDİR. Worker, dönen `EBelgeOutboxIslemeSonucuTuru`'nu (Tamamlandi/RetryPlanlandi/
+  TerminalHata/SahiplikKaybedildi) YALNIZ GÖZLEMLER - İKİNCİ bir complete/fail/retry/lease-release
+  çağrısı YAPMAZ (bkz. görev md.12). Bunun KANITI: worker'ın DI container'ında
+  `IEBelgeOutboxLeaseTransitionService`/`IEBelgeOutboxRetryPolicy` HİÇ enjekte EDİLMEZ (constructor
+  bağımlılığı YOKTUR) - worker'ın BUNLARA erişimi bile YOKTUR.
+
+Worker'ın KENDİSİ UBL XML üretmez, imzalamaz, artifact yazmaz, outbox durumunu doğrudan
+değiştirmez, handler seçmez, retry süresi hesaplamaz - bunların TAMAMI mevcut servislerde kalır.
+
+### 3. Genel aktivasyon kapısı
+
+Yeni `EBelgeProcessing` config bölümü (`EBelgeProcessingOptions`) + `IEBelgeProcessingActivationGate`
+eklendi - `EBelgeSigningOptions`/`IEBelgeSigningActivationGate`'İN (Faz 2B.7, yalnız "bir UblImzala
+mesajı OLUŞTURULSUN mu" sorusunu yanıtlayan) YERİNE GEÇMEZ, AYRI bir EK savunma katmanıdır: kuyrukta
+zaten var olan (yanlışlıkla/elle eklenmiş OLABİLECEK) `ArtefaktOlustur`/`UblImzala` mesajlarının
+worker TARAFINDAN CLAIM EDİLİP EDİLMEYECEĞİNİ kontrol eder. Varsayılan `appsettings.json`:
+
+```json
+"EBelgeProcessing": {
+  "Enabled": false,
+  "NotBeforeLocalDate": "2026-09-15",
+  "TimeZoneId": "Europe/Istanbul",
+  "PollIntervalSeconds": 10,
+  "IdlePollIntervalSeconds": 30,
+  "BatchSize": 10,
+  "LeaseDurationSeconds": 120,
+  "MaxParallelism": 1,
+  "ShutdownGracePeriodSeconds": 30
+}
+```
+
+`EBelgeProcessingActivationGate.ShouldProcess()`, `EBelgeSigningActivationGate` İLE AYNI, kanıtlanmış
+fail-closed desenini kullanır (`TimeProvider` üzerinden, server local timezone'a GÜVENMEDEN) - ama
+`TimeZoneId`'yi (Europe/Istanbul yerine) config'ten OKUR (genelleştirilmiş). **Kritik tasarım
+kararı**: tarih/timezone doğrulaması BİLİNÇLİ OLARAK startup-time validation'a DEĞİL, HER çağrıda
+çalışan bu runtime kontrolüne konuldu - görev md.3 AÇIKÇA "Config yanlışsa mesajları terminal hataya
+geçirme... Disabled veya tarih kapısı kapalıyken worker uygulamayı crash ettirmemeli" der; bir
+timezone/tarih hatasının UYGULAMA BAŞLANGICINI ENGELLEMESİ bu gereksinimle ÇELİŞİRDİ. Yapısal/sayısal
+alanlar (poll/idle/batch/lease/parallelism/shutdown-grace) İSE - dış bağımlılığı OLMAYAN saf aritmetik
+kontroller olduğundan - `EBelgeProcessingOptionsValidator` (`IValidateOptions<T>` +
+`.ValidateOnStart()`) İLE GÜVENLE startup'ta fail-fast edilir; bu validator `Enabled=false` OLSA
+BİLE KOŞULSUZ çalışır (bir operatör gelecekte `true`'ya çevirdiğinde config'in ZATEN geçerli
+olduğundan emin olmak için) - **AMA hiçbir I/O veya dış bağımlılık İÇERMEZ**, bu yüzden "worker
+disabled iken eksik dış bağımlılık nedeniyle TÜM API'nin başlamasının engellenmesi" riski YOKTUR
+(görev md.10'un açıkça istediği raporlama): validasyon yalnız `EBelgeProcessingOptions`'ın KENDİ
+sayısal alanlarını kontrol eder, hiçbir DB/HTTP/dosya çağrısı YAPMAZ.
+
+Gate, HER polling turunda YENİDEN değerlendirilir (önbelleklenmez) - bu, "gate kapalıyken belirli
+aralıklarla config durumunu tekrar kontrol edebilmeli" gereksinimini doğal olarak karşılar.
+
+### 4. Claim döngüsü ve batch
+
+`EBelgeOutboxWorker.BirTurCalistirAsync`, HER polling turunda: (1) aktivasyon kapısını kontrol
+eder - kapalıysa claim'e HİÇ GİTMEDEN döner (mesaj terminal hataya geçirilmez, deneme sayısı
+artırılmaz, lease alınmaz - bkz. görev md.17); (2) `BatchSize` kadar BOUNDED bir döngüde
+`TryClaimNextAsync` çağırır; (3) HER claim, `MaxParallelism` boyutlu bir `SemaphoreSlim` İLE
+sınırlı, AYRI bir DI scope İÇİNDE işlenir. Semafor, CLAIM denemesinden ÖNCE alınır (işlenmeden
+ÖNCE DEĞİL) - bu, `MaxParallelism=1` iken bir sonraki mesajın, ÖNCEKİ mesajın işlenmesi TAMAMEN
+BİTMEDEN claim EDİLMEMESİNİ sağlar; aksi halde lease süresi, mesaj yalnızca SIRADA BEKLERKEN (henüz
+işlenmeye BAŞLANMADAN) boşa akabilirdi.
+
+### 5. Çoklu instance güvenliği
+
+Worker, process-içi kilit/distributed lock EKLEMEZ, "tek pod çalışacak" varsayımı YAPMAZ - çoklu
+instance güvenliği TAMAMEN mevcut SQL `UPDLOCK/READPAST` claim mekanizmasından GELİR.
+`EBelgeOutboxWorkerIntegrationTests.IkiInstanceAyniMesajiIsleyemezVeLeaseSuresiDolduktanSonraIkinciWorkerTamamlar`,
+GERÇEK SQL Server'a karşı: Instance A bir mesajı KISA (2sn) bir lease İLE claim eder VE HİÇ
+İŞLEMEDEN "çöker"; Instance B (aktif lease SÜRERKEN) AYNI mesajı ALAMAZ (`null` döner); lease
+süresi GERÇEKTEN dolduktan SONRA, Instance B (gerçek bir `EBelgeOutboxWorker`) mesajı BAŞARIYLA
+tamamlar; SONUÇTA tam olarak 1 (duplicate OLMAYAN) artefakt oluşur. Instance A'nın eski token'la
+sonuç YAZAMAYACAĞI (`IsOwnedForJobAsync`/`TryCompleteJobAsync`/`TryFailJobAsync`'in token+iş
+türü+kurum+e-belge bağıyla koruması), Faz 2B.6/2B.6.2'de ZATEN kanıtlanmış olduğundan BURADA
+TEKRARLANMADI - yalnız worker-seviyesindeki UÇTAN UCA sonuç doğrulandı.
+
+### 6-7. Paralellik ve scope yönetimi
+
+Üretim varsayılanı `MaxParallelism=1`. Paralellik, BOUNDED bir `SemaphoreSlim` İLE kontrol edilir;
+`MaxParallelism<=0` config'i startup validation TARAFINDAN reddedilir (fail-fast), AYRICA worker
+KENDİSİ `Math.Clamp(_options.MaxParallelism, 1, MaxParallelismLimit)` İLE savunma amaçlı bir kez
+DAHA sınırlar. Worker singleton'dır - scoped servisler constructor'a DEĞİL, `IServiceScopeFactory`
+üzerinden enjekte edilir. HER claim İÇİN: `IEBelgeOutboxClaimLeaseService` KENDİ (kısa ömürlü, yalnız
+claim SQL'i süresince açık) scope'unda; sonucu (immutable bir DTO) `IEBelgeOutboxMesajIslemeService`
+BAŞKA, YENİ bir scope'ta işler - AYNI `DbContext`/scoped servis HİÇBİR ZAMAN birden fazla mesajda,
+paralel task'ta veya polling turunda PAYLAŞILMAZ (bkz.
+`EBelgeOutboxWorkerTests.HerMesajIcinAyriDiScopeOlusturulur`/`AyniScopedHandlerIkiParalelMesajdaPaylasilmaz`
+- her ikisi de her mesaj İÇİN AYRI bir `IEBelgeOutboxMesajIslemeService` instance'ı GÖRÜLDÜĞÜNÜ
+kanıtlar).
+
+### 8. Cancellation ve graceful shutdown
+
+`Task.Delay` yerine YENİ bir `IEBelgeOutboxWorkerDelay` abstraction'ı kullanılır (görev md.8'in
+İKİ önerdiği yaklaşımın İKİSİNİ BİRDEN karşılar: hem "test edilebilir bir zamanlama abstraction'ı"
+HEM "`TimeProvider` destekli delay" - üretim implementasyonu `TimeProviderEBelgeOutboxWorkerDelay`,
+`Task.Delay(TimeSpan, TimeProvider, CancellationToken)` overload'unu SARAR). `EBelgeOutboxWorker`,
+`BackgroundService.StopAsync`'i OVERRIDE EDER: `ShutdownGracePeriodSeconds`, host'un KENDİ genel
+kapanma süresinden BAĞIMSIZ bir yerel `CancellationTokenSource` İLE uygulanır - süre AŞILIRSA,
+çalışan mesaj(lar) ZORLA iptal EDİLMEZ, yalnız `StopAsync` beklemeyi BIRAKIR; lease'in DAHA SONRA
+süresi dolup BAŞKA bir worker TARAFINDAN yeniden claim edilmesine GÜVENİLİR. Host cancellation
+nedeniyle oluşan bir `OperationCanceledException`, hata/retry olarak KAYDEDİLMEZ (metrik/health
+state ETKİLENMEZ, warning/error seviyesinde LOGLANMAZ) - bkz.
+`EBelgeOutboxWorkerTests.HostCancellationHataVeyaRetryOlarakKaydedilmez`.
+
+### 9-10. Worker hata sınırı ve polling/backoff
+
+`ExecuteAsync`'in dış döngüsü, `catch (Exception ex) when (ex is not OutOfMemoryException)` İLE
+korunur - bir polling turu/tek mesaj exception ÜRETTİĞİNDE worker TAMAMEN ÖLMEZ, güvenli/PII
+içermeyen loglama + `IdlePollIntervalSeconds` kadar KONTROLLÜ (bounded) backoff + bir SONRAKİ turda
+DEVAM eder. `OutOfMemoryException` genel bir catch İLE GİZLENMEZ - `ExecuteTask`'a FAULTED olarak
+YANSIR (bkz. `EBelgeOutboxWorkerTests.FatalExceptionKoruKoruneYutulmaz`, reflection İLE
+`BackgroundService._executeTask`'ı doğrudan inceler). `StackOverflowException` zaten .NET'te
+YAKALANAMAZ. İki AYRI bekleme tipi (`PollIntervalSeconds`/`IdlePollIntervalSeconds`) VAR - en az
+BİR mesaj işlendiyse KISA (poll) aralık, kuyruk BOŞSA/gate KAPALIYSA/worker-seviyesi bir hata
+OLUŞTUYSA UZUN (idle) aralık kullanılır; her İKİ değer İÇİN de startup validation UYGULANIR
+(`PollIntervalSeconds>=1`, `IdlePollIntervalSeconds>=PollIntervalSeconds`, `BatchSize` [1,500],
+`LeaseDurationSeconds>=1`, `MaxParallelism` [1,32], `ShutdownGracePeriodSeconds>=0`).
+
+### 11. Lease renewal kararı: **Seçenek A (renewal EKLENMEDİ)**
+
+Mevcut handler'lar (`EBelgeArtefaktOlusturOutboxHandler`/`EBelgeUblImzalaOutboxHandler`'ın altında
+çalışan `EBelgeArtefaktOlusturmaService`/`EBelgeUblImzalamaService`) ZATEN, sonuç yazmadan ÖNCE
+`IsOwnedForJobAsync` İLE ownership'i YENİDEN doğrular (Faz 2B.6/2B.6.2'den KALICI bir mimari
+özellik) - lease aşılırsa sonuç `SahiplikKaybedildi` olur, SONRAKİ bir worker mesajı yeniden işler.
+Bu, Seçenek A'nın ÖN KOŞULUNU ZATEN karşılar. Üretim varsayılan `LeaseDurationSeconds=120`, GERÇEK
+renderer+sidecar+imzalama çağrılarının (yerel Java sidecar'a HTTP + test sertifikasıyla XAdES imza
+- ikisi de saniyeler MERTEBESİNDE, dakikalar DEĞİL) normal süresinden GÜVENLİ biçimde uzundur -
+gerçek entegrasyon testlerinde (bkz. §44-47) bu süreler GÖZLEMLENDİ, lease aşımına dair HİÇBİR
+BULGU YOKTUR. Renewal karmaşıklığı EKLENMEDİ.
+
+### 12. Mesaj sonuçlarının işlenmesi
+
+Bkz. §1-2 - worker, `IsleAsync`'in döndürdüğü sonucu YALNIZ GÖZLEMLER; ikinci bir complete/fail/
+retry/lease-release çağrısı YAPMAZ. Bu, hem KOD İNCELEMESİYLE (worker'ın
+`IEBelgeOutboxLeaseTransitionService`'e HİÇ erişimi YOK) hem TEST'LE (worker unit testlerinin DI
+container'ında bu servis HİÇ KAYITLI DEĞİL - worker YANLIŞLIKLA onu çözmeye ÇALIŞSAYDI TÜM testler
+DI hatasıyla PATLARDI; hepsinin BAŞARILI geçmesi dolaylı KANITTIR) doğrulanmıştır.
+
+### 13. Gözlemlenebilirlik
+
+`System.Diagnostics.Metrics` KULLANILDI - çözümde bu deseni kullanan İLK sınıf
+(`EBelgeOutboxWorkerMetrics`, yeni bir NuGet paketi GEREKMEDİ). Meter adı `STYS.EBelge.Outbox`;
+sayaçlar TAM OLARAK görevin istediği isimlerle: `stys_ebelge_outbox_claimed_total`,
+`_completed_total`, `_retry_scheduled_total`, `_terminal_error_total`, `_lease_lost_total`,
+`_processing_duration_ms` (histogram), `_poll_errors_total`, `_inflight` (up-down counter). Tag
+olarak YALNIZ `is_turu`/`sonuc_turu` (düşük cardinality, ≤4 farklı değer) kullanılır -
+`EBelgeOutboxWorkerMetricsTests`, GERÇEK bir `MeterListener` İLE HER ölçümün tag anahtarlarının bu
+ikisinden BAŞKA HİÇBİR ŞEY olmadığını doğrudan doğrular.
+
+### 14. PII-güvenli loglama
+
+Worker'ın TÜM log çağrıları yalnız Outbox ID/Kurum ID/EBelgeKaydi ID/iş türü/deneme sayısı/sonuç
+türü/işlem süresi/GÜVENLİ hata kodu İÇERİR - `EBelgeOutboxWorkerTests.LoglardaLeaseTokenBulunmaz`,
+GERÇEK bir capturing `ILoggerProvider` İLE, claim'in KilitToken'ının HİÇBİR log kaydında GEÇMEDİĞİNİ
+doğrudan doğrular. Boş kuyruk polling'i log spam ÜRETMEZ (`BosKuyrukPollingLogSpamUretmez` - 5+
+boş turda EN FAZLA 2 Information+ log kaydı - yalnız worker başlangıç/bitiş). Başarılı mesaj sonuçları
+`Information`, polling ayrıntıları için ayrı bir log YOKTUR (delay çağrıları LOGLANMAZ).
+
+### 15. Health check
+
+`EBelgeOutboxWorkerHealthState` (thread-safe, PII/token İÇERMEYEN durum) + `EBelgeOutboxWorkerHealthCheck`
+(`IHealthCheck`, `"ready"` tag'iyle KAYITLI - çözümdeki İLK bileşene-özel health check, sidecar'ın
+KENDİ health check'i TEKRARLANMADI, zaten YOKTU). Kararlar: `Enabled=false` → `Healthy` (KASITLI,
+beklenen); döngü HİÇ başlamadıysa → `Unhealthy`; döngü başladı AMA son başarılı poll ÇOK ESKİYSE
+(`Max(Poll,Idle)*5` eşiği) → `Degraded`; kuyruk BOŞ olması TEK BAŞINA asla unhealthy/degraded
+ÜRETMEZ; TEK bir mesajın terminal İŞ hatası health state'e HİÇ YANSIMAZ (yalnız worker-SEVİYESİ
+beklenmedik hatalar TUTULUR).
+
+### 16. Dependency injection
+
+Worker KOŞULSUZ olarak `AddHostedService<EBelgeOutboxWorker>()` İLE kaydedilir - worker'ın KENDİSİ
+HER polling turunda gate kontrolü yapar (Program.cs'teki `PosOdemeDurumTakipHostedService` İLE AYNI
+"disabled ise ExecuteAsync içinde erken dön" desenine BENZER, ama HER turda tekrarlanan bir kontrol
+- bir kerelik DEĞİL). Bu, DI grafiğinin config'ten BAĞIMSIZ/test edilebilir KALMASINI sağlar. Test
+sertifika sağlayıcısı/güven politikası (`EBelgeTestSertifikaSaglayici`/`EBelgeTestSertifikaGuvenPolicy`)
+YALNIZ test-only `ServiceCollection`'larda kullanılır - `backend/Program.cs`'in üretim registration'ları
+HİÇ DEĞİŞTİRİLMEDİ (fail-closed `EBelgeImzaKimligiYapilandirilmadiSaglayici`/
+`EBelgeSertifikaGuvenValidatoruYapilandirilmadi` AYNEN KORUNDU).
+
+### 17. Signing aktivasyon savunması
+
+15 Eylül 2026 Europe/Istanbul öncesinde, `ArtefaktOlustur` VEYA `UblImzala` mesajlarının HİÇBİRİ
+production worker TARAFINDAN claim EDİLMEZ - gate kapalıyken mesajlar terminal hataya GEÇİRİLMEZ,
+deneme sayısı ARTIRILMAZ, lease ALINMAZ, olduğu YERDE bekler (bkz. §3, `EBelgeProcessingActivationGate`
++ `EBelgeOutboxWorkerTests.GateKapaliykenClaimCagrilmazVeIdleGecikmesiKullanilir`/
+`GateKapaliykenMesajinDenemeSayisiDegismez`).
+
+### Test kapsamı ve çalıştırılan hedefli komut
+
+**Yeni test dosyaları (74 yeni test):**
+
+- `EBelgeProcessingActivationGateTests` (14 test) - Enabled/tarih kapısı/timezone/server-timezone-
+  bağımsızlığı/periyodik yeniden değerlendirme (görev md.18 senaryo 1-6).
+- `EBelgeProcessingOptionsValidatorTests` (16 test) - tüm sayısal alan sınırları, `Enabled=false`
+  iken bile doğrulama (görev md.18 senaryo 7, 35).
+- `EBelgeOutboxWorkerMetricsTests` (7 test) - GERÇEK `MeterListener` ile isim/tip/tag doğrulaması
+  (görev md.18 senaryo 37-41).
+- `EBelgeOutboxWorkerHealthCheckTests` (6 test) - disabled/başlamadı/boş-kuyruk-etkisiz/tek-hata-
+  etkisiz/stale-degraded/PII-yok.
+- `EBelgeOutboxWorkerTests` (26 test) - fake claim/işleme servisleriyle, GERÇEK bir
+  `IServiceScopeFactory` üzerinden: aktivasyon (senaryo 1, 7), polling (senaryo 8-12), scope
+  (senaryo 13-16), hata dayanıklılığı (senaryo 28-32), paralellik (senaryo 33-36, 41), mevcut iş
+  türleri dispatch/sonuç gözlemleme (senaryo 17-22), gözlemlenebilirlik (senaryo 37, 42-43). 3 KEZ
+  ardışık çalıştırılıp FLAKY OLMADIĞI doğrulandı.
+- `EBelgeOutboxWorkerIntegrationTests` (5 test) - GERÇEK SQL Server + GERÇEK sidecar + GERÇEK test
+  sertifikası: `ArtefaktOlustur` tamamlanır (senaryo 44-45), `UblImzala` tamamlanır (senaryo 46-47),
+  UÇTAN UCA zincirleme (ArtefaktOlustur→UblImzala→SignedReady, TEK worker'ın KENDİ polling
+  döngüsü üzerinden), worker yeniden başlatıldığında tamamlanmış mesaj TEKRAR işlenmez (senaryo
+  48), İKİ instance/lease devri/duplicate-yok (senaryo 23-27, 49).
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests|FullyQualifiedName~EBelgeUblImzalamaServiceIntegrationTests|FullyQualifiedName~EBelgeSigningBackfillServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeUblRendererEndToEndIntegrationTests|FullyQualifiedName~EBelgeSchematronSidecarIntegrationTests|FullyQualifiedName~EBelgeFaz1IntegrationTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests|FullyQualifiedName~EBelgeOutboxClaimLeaseIntegrationTests|FullyQualifiedName~EBelgeProcessingActivationGateTests|FullyQualifiedName~EBelgeProcessingOptionsValidatorTests|FullyQualifiedName~EBelgeOutboxWorkerMetricsTests|FullyQualifiedName~EBelgeOutboxWorkerHealthCheckTests|FullyQualifiedName~EBelgeOutboxWorkerTests|FullyQualifiedName~EBelgeOutboxWorkerIntegrationTests"
+  → Passed: 319, Failed: 0, Total: 319 (gerçek SQL Server + gerçek Java Saxon sidecar + gerçek test
+  sertifikasıyla). Not: aynı filtrenin İLK çalıştırmasında, bu listeye DAHİL OLMAYAN (Faz 2B.7.3'ten
+  KALMA, bu turda HİÇ DOKUNULMAMIŞ) `EBelgeSchematronSidecarIntegrationTests.BuyukXmlLimitteReddedilir`
+  testi, ARTAN paralel HTTP yükü altında (yeni worker integration testlerinin AYNI paylaşılan
+  sidecar process'ine EK yük bindirmesinden) BİR KEZ geçici bir bağlantı-sıfırlama hatasıyla
+  BAŞARISIZ oldu; YALNIZ BU test tek başına ÇALIŞTIRILDIĞINDA (14/14) VE TAM filtre TEKRAR
+  çalıştırıldığında (319/319) SORUNSUZ geçti - regresyon DEĞİL, paylaşılan test-sidecar process'i
+  üzerindeki geçici yük flakiness'idir.
+
+**Regresyon (Faz 2B.5/2B.6/2B.7 - hiçbiri değiştirilmedi, hepsi yukarıdaki filtreye DAHİLDİR ve
+BAŞARILIDIR):** `EBelgeArtefaktOlusturmaServiceIntegrationTests`, `EBelgeOutboxLeaseTransitionIntegrationTests`,
+`EBelgeOutboxMesajIslemeServiceTests`, `EBelgeOutboxRetryPolicyTests`, `EBelgeOutboxClaimLeaseIntegrationTests`,
+`EBelgeOutboxFaz2AIntegrationTests`, `EBelgeSigningBackfillServiceIntegrationTests`,
+`EBelgeUblImzalamaServiceIntegrationTests`, `EBelgeXmlImzalayiciTests`, `EBelgeSigningActivationGateTests`.
+
+### Üretimde HÂLÂ eksik olanlar
+
+Mali mühür/HSM - production'da HÂLÂ fail-closed `EBelgeImzaKimligiYapilandirilmadiSaglayici`/
+`EBelgeSertifikaGuvenValidatoruYapilandirilmadi` KULLANILIR, gerçek bir sağlayıcı BAĞLANMADI. Özel
+entegratöre gönderim, GİB web servisi, PAVO/başka sağlayıcı adapter'ı HİÇ YAPILMADI - worker YALNIZ
+`ArtefaktOlustur`/`UblImzala` işler, gönderim iş türü/handler'ı YOKTUR. PDF/e-posta/frontend HİÇ
+YAPILMADI. 15 Eylül 2026 öncesi production processing etkinleştirmesi YAPISAL olarak (hem
+`EBelgeSigning` hem YENİ `EBelgeProcessing` gate'i İLE ÇİFT KATMANLI) ENGELLENİR.
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+Yeni outbox tablosu OLUŞTURULMADI; claim/lease altyapısı BAŞTAN YAZILMADI; RabbitMQ/Kafka/broker
+EKLENMEDİ; worker İÇİNDE artifact üretme/imzalama mantığı YAZILMADI; worker İÇİNDE doğrudan outbox
+complete/fail işlemi YAPILMADI; aynı `DbContext` birden fazla mesajda PAYLAŞILMADI; unbounded
+paralellik KULLANILMADI; activation gate KALDIRILMADI/ERKENE ALINMADI; 15 Eylül 2026 öncesi
+production processing ETKİNLEŞTİRİLMEDİ; XML/lease token/sertifika/kişisel veri LOGLANMADI; gerçek
+sertifika/private key EKLENMEDİ; özel entegratör gönderimi/PDF/e-posta/frontend GELİŞTİRİLMEDİ; tüm
+çözüm test paketi ÇALIŞTIRILMADI (yalnız hedefli filtre); hiçbir test ATLANMADI/zayıflatılmadı.
+
+### Açık kalan konular
+
+Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir. EK olarak: gönderim/mali mühür/HSM
+entegrasyonu HENÜZ bir SONRAKİ fazın konusudur.
+
 ### Sonraki faz
 
 Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.

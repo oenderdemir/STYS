@@ -3428,6 +3428,246 @@ sertifika/private key EKLENMEDİ; özel entegratör gönderimi/PDF/e-posta/front
 Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir. EK olarak: gönderim/mali mühür/HSM
 entegrasyonu HENÜZ bir SONRAKİ fazın konusudur.
 
+### Sonraki faz (Faz 2B.8)
+
+Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.
+
+## Faz 2B.8.1 sonuç bölümü — worker task yaşam döngüsü, güvenli loglama ve activation-health sertleştirmesi
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+### Neden gerekliydi
+
+Faz 2B.8'in kod incelemesinde 6 gerçek açık tespit edildi: (1) `BirTurCalistirAsync`'te bir claim
+denemesi exception ÜRETTİĞİNDE, o ana kadar DİSPATCH edilmiş `ProcessClaimAsync` task'ları HİÇ await
+EDİLMEDEN metottan çıkılıyor, `using var semaphore` İSE bu task'lar HÂLÂ çalışırken dispose
+ediliyordu - bu, çalışan task'ların KENDİ `finally` bloklarında dispose EDİLMİŞ bir semaphore
+üzerinde `Release()` çağırıp `ObjectDisposedException` almasına VE bu exception'ın hiç await
+EDİLMEDİĞİ (unobserved) İÇİN sessizce KAYBOLMASINA yol açabilirdi; (2) BAŞLATILMIŞ ama SAHİPSİZ
+kalan task'lar nedeniyle "polling turları arasında toplam eşzamanlı mesaj sayısı `MaxParallelism`'i
+aşmaz" garantisi TEORİK olarak İHLAL edilebilirdi; (3) worker-seviyesi hatalar `_logger.LogError(ex,
+"...")` İLE loglanıyordu - GERÇEK bir loglama sağlayıcısı (bu çözümde ZATEN kullanılan Serilog
+console/file sink'leri GİBİ) exception NESNESİNİN `ToString()`'ini (mesaj + stack trace + inner
+exception'lar DAHİL) OTOMATİK render EDER; bu, SQL/XML/token/sertifika/VKN/parola GİBİ hassas
+içeriğin YANLIŞLIKLA production loguna SIZMASINA yol AÇABİLİRDİ (test logger'ı bunu YAKALAMIYORDU
+- exception nesnesini render ETMİYORDU, bu yüzden production davranışını SİMÜLE ETMİYORDU); (4)
+aktivasyon kapısı durumu (Enabled/tarih kapısı/geçersiz config) health check çıktısına HİÇ
+YANSIMIYORDU - operatör, worker'ın NEDEN mesaj işlemediğini health endpoint'İNDEN ANLAYAMIYORDU;
+(5) geçersiz tarih/timezone config'i HER polling turunda (10-30sn aralıkla) `Error` seviyesinde
+LOGLANIYOR - bu, kalıcı bir yanlış-config durumunda SÜREKLİ log spam'İNE yol AÇIYORDU.
+
+### 1-4. Claim ve task yaşam döngüsü
+
+`EBelgeOutboxWorker.BirTurCalistirAsync` YENİDEN yapılandırıldı - semaphore artık `using` İLE
+DEĞİL, açıkça yönetilen bir `try/catch/finally` bloğunda:
+
+```text
+try
+{
+    while (claimedCount < BatchSize)
+    {
+        await semaphore.WaitAsync(stoppingToken);   // burada FIRLARSA permit HİÇ alınmamıştır
+        var izinTaskaDevredildi = false;
+        try
+        {
+            claim = await ClaimAsync(...);           // null/exception -> izinTaskaDevredildi=false KALIR
+            if (claim is null) break;
+            tasks.Add(ProcessClaimAsync(claim, semaphore, stoppingToken));
+            izinTaskaDevredildi = true;               // YALNIZ BURADAN SONRA permit task'a AİTTİR
+        }
+        finally
+        {
+            if (!izinTaskaDevredildi) semaphore.Release();
+        }
+    }
+}
+catch (Exception ex) { turHatasi = ex; }              // exception BURADA YUTULMAZ, yalnız SAKLANIR
+finally
+{
+    if (tasks.Count > 0) await Task.WhenAll(tasks);   // MUTLAKA - hatasız/hatalı FARK ETMEZ
+    semaphore.Dispose();                              // yalnız TÜM task'lar bittikten SONRA
+}
+if (turHatasi is not null) ExceptionDispatchInfo.Capture(turHatasi).Throw();  // stack trace KORUNARAK yeniden fırlatılır
+```
+
+**Permit sözleşmesi** (görev md.1/md.4, KANITLANMIŞ): permit `semaphore.WaitAsync` TARAFINDAN
+alınır; İÇ `finally`, permit bir processing task'a DEVREDİLMEDİĞİ HER yolda (claim `null`/exception/
+cancellation, scope oluşturma hatası, DI çözümleme hatası) GERİ BIRAKIR; permit bir task'a
+devredildiyse (`izinTaskaDevredildi=true`) ARTIK YALNIZ o task'ın KENDİ `finally`'i (`ProcessClaimAsync`
+içinde, değişmedi) `Release()` çağırır - AYNI permit İKİ KEZ bırakılmaz. **Semaphore ÖMRÜ**: dispose
+EDİLMEDEN ÖNCE `Task.WhenAll(tasks)` İLE TÜM dispatch edilmiş task'lar (turun BAŞARIYLA/hatayla/
+cancellation İLE bitmesi FARK ETMEKSİZİN) MUTLAKA await edilir - bu, HEM "bir tur claim hatasıyla
+sonlanırsa ÖNCEKİ turun task'ları tamamlanmadan YENİ tur BAŞLAMAZ" (çünkü dış `ExecuteAsync` döngüsü
+BU metodun dönmesini/fırlatmasını BEKLER - turlar SIRALI çalışır, `BirTurCalistirAsync`'in KENDİSİ
+zaten AYRI bir semaphore/task kümesiyle başlar) HEM "polling turları ARASINDA toplam eşzamanlı mesaj
+sayısı `MaxParallelism`'i AŞMAZ" (görev md.3) HEM "unobserved task exception KALMAZ" (görev md.2)
+gereksinimlerini TEK bir mekanizma İLE sağlar - AYRI bir worker-ömürlü semaphore veya distributed
+lock GEREKMEDİ ("en sade güvenli çözümü seç" - görev md.3).
+
+### 5-6. Worker-level güvenli loglama
+
+`_logger.LogError(ex, "...")` KULLANIMLARI (hem `ExecuteAsync`'in tur-seviyesi hem
+`ProcessClaimAsync`'in mesaj-seviyesi catch blokları) KALDIRILDI - yerine yeni
+`LogWorkerLevelHataGuvenli` yardımcı metodu KULLANILIR:
+
+```csharp
+_logger.LogError(
+    "E-belge outbox worker hatası. Baglam={Baglam}, OutboxMesajiId={OutboxMesajiId}, IsTuru={IsTuru}, HataKodu={HataKodu}, ExceptionType={ExceptionType}",
+    baglam, claim.OutboxMesajiId, claim.IsTuru, safeErrorCode, ex.GetType().Name);
+```
+
+Exception NESNESİNİN KENDİSİ (`ex`) logger'a HİÇBİR ZAMAN parametre olarak GEÇİRİLMEZ - yalnız
+SABİT/type-safe alanlar: güvenli hata kodu (`WorkerLevelSafeErrorCode`, MEVCUT sabit eşleme -
+DEĞİŞMEDİ), exception TİP ADI (`ex.GetType().Name`), iş türü VE güvenli kimlik alanları (Outbox/
+Kurum/EBelgeKaydi ID - claim VARSA). Exception'ın KENDİ mesajı/inner exception'ı/`ToString()`'i -
+SQL statement/parametre, XML, lease token, sertifika/PFX/PEM, SignatureValue, VKN/TCKN, müşteri
+bilgisi, bağlantı parolası, URL query secret'ı TAŞIYABİLECEĞİNDEN - production logger'ına ASLA
+YAZILMAZ. "Mevcut güvenli merkezi exception/redaction altyapısı" ARAŞTIRILDI - çözümde YALNIZ bir
+mesaj-uzunluğu KIRPICISI (`GuvenliMesaj`, `EBelgeUblImzalamaService`/`EBelgeArtefaktOlusturmaService`'te)
+bulundu, GERÇEK bir redaction/scrubbing mekanizması YOK - bu yüzden EN GÜVENLİ yol, exception
+mesajını HİÇ KULLANMAMAKTIR (kırpma YETERLİ DEĞİLDİR - kırpılmış bir mesaj HÂLÂ token/XML İÇEREBİLİR).
+
+Aktivasyon kapısındaki (`EBelgeProcessingActivationGate`) geçersiz-config log çağrısı da AYNI
+disipline UYDURULDU - `TimeZoneNotFoundException`/tarih parse hatası NESNESİ logger'a
+GEÇİRİLMEZ, yalnız `ExceptionType` okunur (bu exception'ların mesajı PII TAŞIMASA da, worker alt
+sistemindeki TÜM loglama TUTARLI kalması İÇİN).
+
+**Test gerçekçiliği (görev md.6)**: `EBelgeOutboxWorkerTests`'teki test logger'ı, `formatter(state,
+exception) + exception?.ToString()` üretecek şekilde GÜNCELLENDİ - artık GERÇEK bir sağlayıcının
+(Serilog console/file sink) davranışına YAKIN. Kasıtlı bir test exception'ı (`"GIZLI-TOKEN-123
+<VKN>1234567890</VKN> Password=secret SignatureValue=secret"` mesajıyla) KULLANILARAK, worker log
+çıktısında BU değerlerden HİÇBİRİNİN (VE bir stack trace işaretinin, `"   at "`) BULUNMADIĞI - yalnız
+güvenli hata kodu VE exception tip adının BULUNDUĞU - doğrudan doğrulanır.
+
+### 7. Activation decision type-safe model
+
+`EBelgeProcessingActivationReason` enum'u (`Active`/`Disabled`/`BeforeActivationDate`/
+`InvalidDateConfiguration`/`InvalidTimeZoneConfiguration`) VE `EBelgeProcessingActivationDecision`
+record'u (`CanProcess`, `Reason`) eklendi. `IEBelgeProcessingActivationGate.Evaluate()`, YENİ birincil
+metot - `bool ShouldProcess()` GERİYE UYUMLULUK İÇİN korunur, `Evaluate().CanProcess` DÖNER (hiçbir
+mevcut ÇAĞIRAN DEĞİŞMEDİ - şu an worker'ın KENDİSİ `Evaluate()`'i kullanıyor, `ShouldProcess()`
+metodu type güvenliği/geriye-uyumluluk İÇİN halen mevcut ve test edilir). Worker, HER polling
+turunda TEK bir `Evaluate()` çağrısı yapar VE sonucu `IEBelgeOutboxWorkerHealthState.
+RecordActivationDecision(karar)` İLE health state'e YAZAR - health check KENDİSİ AYRICA gate'i
+DEĞERLENDİRMEZ, yalnız worker'ın YAZDIĞI SONUCU okur (görev md.7'nin AÇIKÇA istediği "worker ve
+health check aynı değerlendirme sonucunu kullanmalı").
+
+### 8. Activation config log spam engelleme
+
+`EBelgeProcessingActivationGate`, AYNI (neden, değer) çifti İÇİN yalnız İLK KEZ (veya ÖNCEKİ
+değerden FARKLI bir değere GEÇİŞTE) `Error` loglar - dahili, thread-safe bir "son loglanan
+geçersiz-config nedeni/değeri" durumu TUTAR. Config GEÇERLİ hale GELDİĞİNDE bu iz TEMİZLENİR -
+gelecekte YENİDEN bozulursa (AYNI VEYA farklı bir değerle) TEKRAR loglanabilir. Gate kapalıyken
+(hangi NEDENLE olursa olsun) mesajlar YİNE claim EDİLMEZ, terminal hataya GEÇİRİLMEZ, deneme sayısı
+ARTIRILMAZ - bu davranış Faz 2B.8'DEN DEĞİŞMEDİ, yalnız LOGLAMA sıklığı DÜZELDİ.
+
+### 9-10. Health state genişletmesi ve politika
+
+`EBelgeOutboxWorkerHealthSnapshot`, `WorkerEnabled`/`ActivationAllowed`/`ActivationReason`/
+`LoopStartedUtc` alanlarıyla GENİŞLETİLDİ (`LoopStarted`/`LastSuccessfulPollUtc`/`LastWorkerErrorUtc`/
+`LastWorkerErrorSafeCode`/`InflightCount` KORUNDU). `EBelgeOutboxWorkerHealthCheck`, YENİ bir
+reason-tabanlı politika UYGULAR:
+
+- **Healthy**: `Disabled` (kasıtlı) VEYA `BeforeActivationDate` (beklenen tarih kapısı) VEYA
+  (`Active` VE döngü ilerliyor VE son başarılı poll GÜNCEL).
+- **Degraded**: `InvalidDateConfiguration`/`InvalidTimeZoneConfiguration` (ARTIK sessizce Healthy
+  SAYILMAZ - GÖRÜNÜR) VEYA (`Active` VE son başarılı poll "Degraded eşiğini" - `Max(Poll,Idle)×5` -
+  AŞTI) VEYA (`Active` VE en son worker-seviyesi hata, en son başarılı polldan DAHA YENİ - görev
+  md.10, "en yeni olayın hangisi olduğuna göre karar ver").
+- **Unhealthy**: `Active` VE döngü HİÇ başlamamış (`LoopStarted=false`) VEYA `Active` VE son başarılı
+  poll "Unhealthy (kritik) eşiğini" - `Max(Poll,Idle)×20` - AŞTI (referans nokta `LastSuccessfulPollUtc`
+  yoksa `LoopStartedUtc`'ye DÜŞER - worker YENİ başlayıp HENÜZ ilk turunu BİTİRMEMİŞSE bu, KISA/normal
+  bir pencereyi temsil eder, HEMEN Unhealthy ÜRETMEZ).
+
+**Recovery kararı (görev md.10)**: `LastWorkerErrorUtc`/`LastWorkerErrorSafeCode`, BAŞARILI bir poll
+SONRASINDA TEMİZLENMEZ (BİLİNÇLİ karar) - hem "son hata" hem "son başarılı poll" zaman damgaları
+KALICI olarak SAKLANIR; health check, HANGİSİNİN daha YENİ OLDUĞUNA bakarak (`LastWorkerErrorUtc >
+LastSuccessfulPollUtc` mi) toparlanma/DEVAM-EDEN-sorun ayrımını KENDİSİ yapar - hata SONRASINDA
+(daha YENİ bir ZAMANDA) başarılı bir poll GERÇEKLEŞİRSE, worker "TOPARLANMIŞ" kabul edilir (Healthy),
+eski hata KAYITTA kalır AMA artık KARARI ETKİLEMEZ. Bir message-level TERMİNAL İŞ hatası (ör. XSD
+doğrulaması başarısız) `RecordWorkerError`'I HİÇ TETİKLEMEZ - yalnız `ProcessClaimAsync`'in KENDİ
+sözleşmesinin DIŞINDaki, GERÇEKTEN beklenmedik exception'lar (Faz 2B.8'den DEĞİŞMEDİ) worker-seviyesi
+sayılır. Kuyruk BOŞ olması (mesaj yokluğu) TEK BAŞINA HİÇBİR ZAMAN unhealthy/degraded ÜRETMEZ. Health
+output'una ham config değeri (`NotBeforeLocalDate`/`TimeZoneId`) veya PII EKLENMEZ - yalnız type-safe
+`activationReason` ENUM ADI raporlanır.
+
+### 11. Options erişimi ve config reload kararı
+
+**Karar: runtime hot-reload DESTEKLENMEZ (bilinçli, `IOptions<T>` KORUNDU - `IOptionsMonitor<T>`
+EKLENMEDİ).** Gerekçe: (1) çözümde `IOptionsMonitor<T>` KULLANAN HİÇBİR ÖRNEK YOK - bu, İLK örnek
+OLURDU, ekstra karmaşıklık (geçersiz reload'da fail-closed davranma, ÇALIŞAN worker'ı ÇÖKERTMEME,
+doğrulanmış SON options İLE geçersiz YENİ options'ı SESSİZCE KARIŞTIRMAMA) getirirdi; (2) BU
+karmaşıklığı HAKLI ÇIKARACAK somut bir OPERASYONEL ihtiyaç YOK - `Enabled` bayrağı DEĞİŞTİRİLDİĞİNDE
+zaten bir DEPLOYMENT/restart YAPILIYOR (config dosyası container image'INA GÖMÜLÜ), bu esnada
+worker DOĞAL olarak YENİDEN başlar. **AÇIKÇA belirtilen davranış (görev md.11'in istediği gibi,
+sessiz varsayım YOK)**:
+
+```text
+Enabled değişikliği deployment/restart gerektirir; tarih kapısı ise çalışan process içinde
+TimeProvider üzerinden otomatik olarak açılır.
+```
+
+Bu İKİNCİ kısım (tarih geçişinin restart GEREKTİRMEMESİ) ZATEN doğrudur ve DEĞİŞMEDİ: `Evaluate()`,
+HER çağrıda `_timeProvider.GetUtcNow()`'ı `_options.NotBeforeLocalDate`'İN (options SINGLETON olarak
+BİR KEZ okunur, AMA "şu anki zaman" HER SEFERİNDE YENİDEN okunur) sabit UTC karşılığıyla
+KARŞILAŞTIRIR - worker'ı YENİDEN BAŞLATMADAN, 15 Eylül 2026 Europe/Istanbul GÜN BAŞLANGICI
+GELDİĞİNDE bir SONRAKİ polling turunda KENDİLİĞİNDEN AÇILIR (görev md.11'in AÇIKÇA istediği,
+"restart GEREKTİRMEDEN otomatik açılma" davranışı KORUNUR).
+
+### Test kapsamı ve çalıştırılan hedefli komut
+
+**Güncellenen mevcut testler**: `EBelgeOutboxWorkerHealthCheckTests` (13 test - eski 6 testten 2'si,
+YENİ `RecordActivationDecision` çağrısı GEREKTİRDİĞİ için `Active` kararı EKLENEREK düzeltildi; diğer
+7'si YENİ eklendi - Disabled/BeforeActivationDate/InvalidDate/InvalidTimeZone/Unhealthy-loop-yok/
+recovery/critical-staleness/inflight/PII-yok senaryoları). Test logger'ı GERÇEKÇİ hale getirildi (bkz.
+§5-6).
+
+**Yeni testler (`EBelgeOutboxWorkerTests`'e eklendi, 18 test - görev md.12 senaryo 1-18)**:
+`IkinciClaimExceptionUretirseIlkTaskMutlakaAwaitEdilir`,
+`DisposeEdilmisSemaphoreUzerindeReleaseCagrilmazExceptionOlusmaz`, `UnobservedTaskExceptionOlusmaz`
+(`TaskScheduler.UnobservedTaskException` + `GC.Collect()`/`WaitForPendingFinalizers()` İLE gerçek
+GC-tetiklemeli kontrol), `OncekiTurunTasklariTamamlanmadanSonrakiTurBaslamaz` (olay zaman damgası
+SIRALAMASIYLA), `PollingTurlariArasindaToplamEsZamanliMesajSayisiMaxParallelismiAsmaz` (8 mesaj, 4
+tur BOYUNCA), `ClaimNullDondugundePermitGeriBirakilirVeSonrakiTurCalisir`,
+`ClaimCancellationOlusturuncaPermitGeriBirakilirVeWorkerDevamEder`,
+`ScopeVeyaDiCozumlemeHatasindaPermitGeriBirakilirVeWorkerDevamEder` (`IEBelgeOutboxClaimLeaseService`
+KASITLI OLARAK KAYITSIZ - TEKRARLANAN DI hatalarından SONRA bile İLERLEME kanıtlanır),
+`UcuncuClaimHataVersinIlkIkiTaskYineDeGozlemlenirVeAwaitEdilir`,
+`StopSirasindaClaimExceptionIleProcessingTaskYarisiDeadlockOlusturmaz`,
+`TurTamamlandigindaInflightVeSemaphorePermitBaslangicaDoner`,
+`WorkerLevelExceptionMesajindakiLeaseTokenLoglanmaz`, `WorkerLevelExceptionMesajindakiXmlVeVknLoglanmaz`,
+`WorkerLevelExceptionMesajindakiPasswordVeSignatureValueLoglanmaz`,
+`HamExceptionToStringProductionLoggeraVerilmez`, `GuvenliHataKoduVeExceptionTypeLoglanir`,
+`AktivasyonConfigHatasiHerTurdaLogSpamUretmez`. 3 KEZ ardışık çalıştırılıp FLAKY OLMADIĞI doğrulandı.
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests|FullyQualifiedName~EBelgeUblImzalamaServiceIntegrationTests|FullyQualifiedName~EBelgeSigningBackfillServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeUblRendererEndToEndIntegrationTests|FullyQualifiedName~EBelgeSchematronSidecarIntegrationTests|FullyQualifiedName~EBelgeFaz1IntegrationTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests|FullyQualifiedName~EBelgeOutboxClaimLeaseIntegrationTests|FullyQualifiedName~EBelgeProcessingActivationGateTests|FullyQualifiedName~EBelgeProcessingOptionsValidatorTests|FullyQualifiedName~EBelgeOutboxWorkerMetricsTests|FullyQualifiedName~EBelgeOutboxWorkerHealthCheckTests|FullyQualifiedName~EBelgeOutboxWorkerTests|FullyQualifiedName~EBelgeOutboxWorkerIntegrationTests"
+  → Passed: 343, Failed: 0, Total: 343 (gerçek SQL Server + gerçek Java Saxon sidecar + gerçek test
+  sertifikasıyla) - İKİ KEZ ardışık ÇALIŞTIRILDI, HER İKİSİNDE de 343/343.
+```
+
+**Regresyon (Faz 2B.5/2B.6/2B.7/2B.8 - hiçbiri kasıtlı DEĞİŞTİRİLMEDİ, hepsi yukarıdaki filtreye
+DAHİLDİR ve BAŞARILIDIR):** özellikle `EBelgeOutboxWorkerIntegrationTests`'in 5 GERÇEK (SQL Server +
+sidecar + test sertifikası) testi - çoklu instance/lease devri, gerçek `ArtefaktOlustur`/`UblImzala`
+worker akışı, worker restart - worker'ın claim/task yaşam döngüsü BAŞTAN AŞAĞI değiştiği İÇİN
+ÖZELLİKLE KRİTİK bir regresyon kontrolüdür; hepsi SORUNSUZ geçti.
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+Claim/lease altyapısı BAŞTAN YAZILMADI; yeni outbox tablosu OLUŞTURULMADI; RabbitMQ/Kafka
+EKLENMEDİ; handler/artifact iş mantığı worker'a TAŞINMADI; worker içinde İKİNCİ bir complete/fail/
+retry çağrısı YAPILMADI (Faz 2B.8'DEN DEĞİŞMEDİ); paralellik KALDIRILARAK hata yalnız
+`MaxParallelism=1` İLE GİZLENMEDİ (semaphore ÖMRÜ/sözleşmesi, HER `MaxParallelism` değeri İÇİN
+DOĞRUDUR - testler HEM 1 HEM 2 İLE doğrulanmıştır); claim exception'ı YUTULARAK başlatılmış task'lar
+sahipsiz BIRAKILMADI; ham exception mesajı production loguna YAZILMADI; activation tarihi (15 Eylül
+2026) DEĞİŞTİRİLMEDİ; production processing bu tarihten ÖNCE AÇILMADI; gerçek sertifika/private key
+EKLENMEDİ; entegratör gönderimi/PDF/e-posta/frontend GELİŞTİRİLMEDİ; tüm çözüm test paketi
+ÇALIŞTIRILMADI (yalnız hedefli filtre); hiçbir test ATLANMADI.
+
+### Açık kalan konular
+
+Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
+
 ### Sonraki faz
 
 Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.

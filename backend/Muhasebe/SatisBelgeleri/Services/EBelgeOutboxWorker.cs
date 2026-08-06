@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,6 +25,12 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 /// Çoklu instance güvenliği, process-içi kilit/distributed lock EKLEMEDEN, TAMAMEN mevcut SQL
 /// `UPDLOCK/READPAST` claim mekanizmasından GELİR (bkz. görev md.5) - bu worker, "tek pod
 /// çalışacak" varsayımı YAPMAZ; N tane instance AYNI ANDA çalışabilir.
+///
+/// Faz 2B.8.1 görev md.1-4 - bir polling turunda BAŞLATILAN her `ProcessClaimAsync` task'ı, tur
+/// başarıyla/hatayla/cancellation İLE bitse BİLE MUTLAKA await edilir (`BirTurCalistirAsync`'in
+/// `finally` bloğu) - semaphore, HİÇBİR çalışan task `Release()` çağırmadan dispose EDİLMEZ, permit
+/// bir processing task'a DEVREDİLMEDİĞİ HER yolda (null claim/claim exception/claim cancellation/
+/// scope hatası) İÇ `finally` bloğu TARAFINDAN geri BIRAKILIR.
 /// </summary>
 public sealed class EBelgeOutboxWorker : BackgroundService
 {
@@ -98,8 +105,9 @@ public sealed class EBelgeOutboxWorker : BackgroundService
                 // sonraki turda DEVAM. Fatal hatalar (OutOfMemoryException, StackOverflowException
                 // - İKİNCİSİ .NET'te ZATEN YAKALANAMAZ) genel bir catch İLE GİZLENMEZ.
                 _metrics.RecordPollError();
-                _healthState.RecordWorkerError(WorkerLevelSafeErrorCode(ex));
-                _logger.LogError(ex, "E-belge outbox worker turu sırasında beklenmeyen hata - kontrollü backoff sonrası devam edilecek.");
+                var safeErrorCode = WorkerLevelSafeErrorCode(ex);
+                _healthState.RecordWorkerError(safeErrorCode);
+                LogWorkerLevelHataGuvenli("PollingTuru", safeErrorCode, ex);
             }
 
             var bekleme = herhangiBirMesajIslendi
@@ -125,50 +133,97 @@ public sealed class EBelgeOutboxWorker : BackgroundService
     /// İÇİNDE işlenir (görev md.6-7). `true` döner YALNIZ en az bir mesaj GERÇEKTEN claim
     /// edildiyse - bu, dış döngünün normal `PollIntervalSeconds` mi (muhtemelen daha fazla iş VAR)
     /// yoksa `IdlePollIntervalSeconds` mi (kuyruk boş VEYA gate kapalı) kullanacağını belirler.
+    ///
+    /// Faz 2B.8.1 görev md.1/md.3 - bu turda BAŞLATILAN (semaphore permit'i DEVRALMIŞ) HER
+    /// `ProcessClaimAsync` task'ı, claim döngüsü İÇİNDE bir exception OLUŞSA/turu erken
+    /// SONLANDIRSA BİLE, `finally` bloğunda `Task.WhenAll` İLE MUTLAKA await edilir - semaphore
+    /// ANCAK bundan SONRA dispose edilir. Bu, hem "bir tur claim hatasıyla sonlanırsa ÖNCEKİ turun
+    /// task'ları tamamlanmadan YENİ tur başlamaz" (çünkü `ExecuteAsync`'in dış döngüsü BU metodun
+    /// dönmesini/fırlatmasını BEKLER) hem de "unobserved task exception KALMAZ" gereksinimlerini
+    /// (görev md.2-3) TEK bir mekanizma İLE sağlar.
     /// </summary>
     private async Task<bool> BirTurCalistirAsync(CancellationToken stoppingToken)
     {
+        // Faz 2B.8.1 görev md.7/md.9: worker VE health check AYNI değerlendirmeyi paylaşır -
+        // burada TEK bir `Evaluate()` çağrısı yapılır, sonucu health state'e YAZILIR.
+        var aktivasyonKarari = _activationGate.Evaluate();
+        _healthState.RecordActivationDecision(aktivasyonKarari);
+
         // Faz 2B.8 görev md.17: gate kapalıyken mesajlar terminal hataya geçirilmez, deneme
         // sayısı artırılmaz, lease alınmaz - claim'e HİÇ GİDİLMEDEN olduğu yerde beklenir.
-        if (!_activationGate.ShouldProcess())
+        if (!aktivasyonKarari.CanProcess)
         {
             return false;
         }
 
-        // Faz 2B.8 görev md.6: paralellik BOUNDED bir SemaphoreSlim İLE kontrol edilir - semafor,
-        // CLAIM denemesinden ÖNCE alınır, böylece MaxParallelism=1 iken bir sonraki claim, ÖNCEKİ
-        // mesajın işlenmesi TAMAMLANMADAN denenmez (lease'in, işlenmeyi BEKLERKEN boşa akmasını
-        // ÖNLER).
         var maxParalellik = Math.Clamp(_options.MaxParallelism, 1, EBelgeProcessingOptions.MaxParallelismLimit);
-        using var semaphore = new SemaphoreSlim(maxParalellik, maxParalellik);
+        var semaphore = new SemaphoreSlim(maxParalellik, maxParalellik);
         var tasks = new List<Task>();
         var claimedCount = 0;
+        Exception? turHatasi = null;
 
-        while (claimedCount < _options.BatchSize)
+        try
         {
-            await semaphore.WaitAsync(stoppingToken);
-
-            EBelgeOutboxClaimLeaseResultDto? claim;
-            using (var claimScope = _scopeFactory.CreateScope())
+            while (claimedCount < _options.BatchSize)
             {
-                var claimService = claimScope.ServiceProvider.GetRequiredService<IEBelgeOutboxClaimLeaseService>();
-                claim = await claimService.TryClaimNextAsync(TimeSpan.FromSeconds(_options.LeaseDurationSeconds), stoppingToken);
+                // BURADA (henüz İÇ try/finally'e girmeden) fırlayan bir cancellation, HİÇ permit
+                // ALINMADIĞI için release GEREKTİRMEZ.
+                await semaphore.WaitAsync(stoppingToken);
+                var izinTaskaDevredildi = false;
+
+                try
+                {
+                    EBelgeOutboxClaimLeaseResultDto? claim;
+                    using (var claimScope = _scopeFactory.CreateScope())
+                    {
+                        var claimService = claimScope.ServiceProvider.GetRequiredService<IEBelgeOutboxClaimLeaseService>();
+                        claim = await claimService.TryClaimNextAsync(TimeSpan.FromSeconds(_options.LeaseDurationSeconds), stoppingToken);
+                    }
+
+                    if (claim is null)
+                    {
+                        break;
+                    }
+
+                    claimedCount++;
+                    _metrics.RecordClaimed(claim.IsTuru);
+                    tasks.Add(ProcessClaimAsync(claim, semaphore, stoppingToken));
+                    izinTaskaDevredildi = true;
+                }
+                finally
+                {
+                    // Faz 2B.8.1 görev md.1/md.4: claim null/exception/cancellation VEYA scope/DI
+                    // çözümleme hatası - permit'in bir processing task'a DEVREDİLMEDİĞİ HER yol -
+                    // burada GERİ BIRAKILIR. Permit bir task'a devredildiyse (izinTaskaDevredildi),
+                    // artık YALNIZ o task (`ProcessClaimAsync`'in KENDİ finally'i) release eder -
+                    // aynı permit İKİ KEZ bırakılmaz.
+                    if (!izinTaskaDevredildi)
+                    {
+                        semaphore.Release();
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Faz 2B.8.1 görev md.1: tur BİR exception İLE sonlanıyor OLSA BİLE, BAŞLATILMIŞ
+            // task'lar sahipsiz BIRAKILMAZ - exception BURADA yutulmaz, yalnız `finally`
+            // TARAFINDAN tüm task'lar await EDİLDİKTEN SONRA yeniden fırlatılmak üzere SAKLANIR.
+            turHatasi = ex;
+        }
+        finally
+        {
+            if (tasks.Count > 0)
+            {
+                await Task.WhenAll(tasks);
             }
 
-            if (claim is null)
-            {
-                semaphore.Release();
-                break;
-            }
-
-            claimedCount++;
-            _metrics.RecordClaimed(claim.IsTuru);
-            tasks.Add(ProcessClaimAsync(claim, semaphore, stoppingToken));
+            semaphore.Dispose();
         }
 
-        if (tasks.Count > 0)
+        if (turHatasi is not null)
         {
-            await Task.WhenAll(tasks);
+            ExceptionDispatchInfo.Capture(turHatasi).Throw();
         }
 
         return claimedCount > 0;
@@ -213,11 +268,9 @@ public sealed class EBelgeOutboxWorker : BackgroundService
             // lease süresi doğal olarak dolar, mesaj BAŞKA bir worker TARAFINDAN (VEYA aynı worker
             // bir SONRAKİ turda) yeniden claim edilir.
             _metrics.RecordPollError();
-            _healthState.RecordWorkerError(WorkerLevelSafeErrorCode(ex));
-            _logger.LogError(
-                ex,
-                "E-belge outbox mesajı işlenirken beklenmeyen worker-seviyesi hata. OutboxMesajiId={OutboxMesajiId}, IsTuru={IsTuru}",
-                claim.OutboxMesajiId, claim.IsTuru);
+            var safeErrorCode = WorkerLevelSafeErrorCode(ex);
+            _healthState.RecordWorkerError(safeErrorCode);
+            LogWorkerLevelHataGuvenli("MesajIsleme", safeErrorCode, ex, claim);
         }
         finally
         {
@@ -233,6 +286,33 @@ public sealed class EBelgeOutboxWorker : BackgroundService
         _logger.LogInformation(
             "E-belge outbox mesajı işlendi. OutboxMesajiId={OutboxMesajiId}, KurumId={KurumId}, EBelgeKaydiId={EBelgeKaydiId}, IsTuru={IsTuru}, DenemeSayisi={DenemeSayisi}, SonucTuru={SonucTuru}, SureMs={SureMs}",
             claim.OutboxMesajiId, claim.KurumId, claim.EBelgeKaydiId, claim.IsTuru, claim.DenemeSayisi, sonuc.SonucTuru, sure.TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// Faz 2B.8.1 görev md.5/md.6 - worker-seviyesi bir exception'ı GÜVENLİ biçimde loglar.
+    /// Exception NESNESİ (`ex`) logger'a HİÇBİR ZAMAN GEÇİRİLMEZ - yalnız SABİT/type-safe alanlar:
+    /// güvenli hata kodu, exception TİP ADI (`ex.GetType().Name`), iş türü VE güvenli kimlik
+    /// alanları (Outbox/Kurum/EBelgeKaydi ID). Exception'ın KENDİ mesajı, inner exception'ı veya
+    /// `ToString()`'i - SQL statement/parametre, XML, lease token, sertifika/PFX/PEM,
+    /// SignatureValue, VKN/TCKN, müşteri bilgisi, bağlantı parolası, URL query secret'ı TAŞIYABİLİR
+    /// - production logger'ına ASLA YAZILMAZ (bkz. görev md.5). Serilog gibi GERÇEK sağlayıcılar,
+    /// `ILogger.LogError(ex, ...)` çağrısında exception NESNESİNİN `ToString()`'ini OTOMATİK olarak
+    /// render EDER - bu yüzden `ex` PARAMETRE OLARAK BİLE geçirilmez, yalnız türü/kodu okunur.
+    /// </summary>
+    private void LogWorkerLevelHataGuvenli(string baglam, string safeErrorCode, Exception ex, EBelgeOutboxClaimLeaseResultDto? claim = null)
+    {
+        if (claim is not null)
+        {
+            _logger.LogError(
+                "E-belge outbox worker hatası. Baglam={Baglam}, OutboxMesajiId={OutboxMesajiId}, IsTuru={IsTuru}, HataKodu={HataKodu}, ExceptionType={ExceptionType}",
+                baglam, claim.OutboxMesajiId, claim.IsTuru, safeErrorCode, ex.GetType().Name);
+        }
+        else
+        {
+            _logger.LogError(
+                "E-belge outbox worker hatası. Baglam={Baglam}, HataKodu={HataKodu}, ExceptionType={ExceptionType}",
+                baglam, safeErrorCode, ex.GetType().Name);
+        }
     }
 
     /// <summary>Bkz. görev md.14/md.15 - health state'e/loglara yazılan hata KODU her zaman SABİT, PII/exception-detayı İÇERMEYEN bir string olmalıdır.</summary>

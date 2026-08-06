@@ -114,6 +114,15 @@ public class EBelgeOutboxWorkerTests
         }
     }
 
+    /// <summary>
+    /// Faz 2B.8.1 görev md.6 - "Mevcut test logger'ı exception nesnesini çıktıya eklemediği için
+    /// production davranışını simüle ETMİYOR". Bu sürüm, `formatter(state, exception) +
+    /// exception?.ToString()` şeklinde - GERÇEK sağlayıcıların (Serilog console/file sink'leri gibi
+    /// - bu çözümde ZATEN kullanılan) davranışına YAKIN - çıktı üretir: `ILogger.LogError(ex,
+    /// "şablon")` çağrıldığında, exception NESNESİ logger'a GEÇİRİLMİŞSE, bu sınıf onun
+    /// `ToString()`'ini (mesaj + stack trace + inner exception'lar DAHİL) render EDİLMİŞ çıktıya
+    /// EKLER - tıpkı gerçek bir sağlayıcının yapacağı gibi.
+    /// </summary>
     private sealed class CapturingLoggerProvider : ILoggerProvider
     {
         public readonly ConcurrentBag<(LogLevel Level, string Message)> Kayitlar = new();
@@ -135,7 +144,13 @@ public class EBelgeOutboxWorkerTests
 
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             {
-                _owner.Kayitlar.Add((logLevel, formatter(state, exception)));
+                var renderedMesaj = formatter(state, exception);
+                if (exception is not null)
+                {
+                    renderedMesaj = renderedMesaj + Environment.NewLine + exception;
+                }
+
+                _owner.Kayitlar.Add((logLevel, renderedMesaj));
             }
 
             private sealed class NullScope : IDisposable
@@ -677,5 +692,401 @@ public class EBelgeOutboxWorkerTests
         await h.Worker.StopAsync(CancellationToken.None);
 
         Assert.Contains(h.Loglar.Kayitlar, k => k.Level == LogLevel.Information && k.Message.Contains("42", StringComparison.Ordinal));
+    }
+
+    // ---- Faz 2B.8.1: semaphore ve task yaşam döngüsü ----
+
+    [Fact]
+    public async Task IkinciClaimExceptionUretirseIlkTaskMutlakaAwaitEdilir()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 5));
+        h.State.ClaimsToOffer.Enqueue(Claim(1));
+        // Faz 2B.8.1 - FakeClaimLeaseService, kuyruktan `null` bir "exception" DEQUEUE ettiğinde
+        // (ex is not null KOŞULU false olduğundan) FIRLATMAZ - bu, İLK claim çağrısını (mesaj 1
+        // İÇİN) etkilemeyen bir "yer tutucu" olarak KULLANILIR; İKİNCİ çağrı GERÇEK exception'ı alır.
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("ikinci claim kasıtlı hata"));
+        var ilkTaskTamamlandi = new TaskCompletionSource();
+        h.State.IslemeOverride = async (claim, ct) =>
+        {
+            await Task.Delay(150, ct);
+            ilkTaskTamamlandi.TrySetResult();
+            return EBelgeOutboxIslemeSonucu.Tamamlandi();
+        };
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await ilkTaskTamamlandi.Task;
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        // İlk task GERÇEKTEN tamamlandı (await edildiği KANITI) - metriğe sonucu YAZDI.
+        Assert.Contains(1, h.State.IslenenOutboxIdler);
+        Assert.Single(h.Metrics.Results, r => r.SonucTuru == EBelgeOutboxIslemeSonucuTuru.Tamamlandi);
+        // İkinci (başarısız) claim, bir poll hatası olarak KAYDEDİLDİ - tur exception'ı YUTULMADI.
+        Assert.True(h.Metrics.PollErrorCount >= 1);
+    }
+
+    [Fact]
+    public async Task DisposeEdilmisSemaphoreUzerindeReleaseCagrilmazExceptionOlusmaz()
+    {
+        // Faz 2B.8.1 görev md.12 test 2 - önceki testle AYNI yarış senaryosu; burada özellikle
+        // `ObjectDisposedException` (semaphore ERKEN dispose edilseydi Release() bunu fırlatırdı)
+        // hiçbir logda GÖRÜNMEDİĞİNİ ve worker'ın normal şekilde DURDUĞUNU doğrular.
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 5));
+        h.State.ClaimsToOffer.Enqueue(Claim(1));
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("ikinci claim kasıtlı hata"));
+        var ilkTaskTamamlandi = new TaskCompletionSource();
+        h.State.IslemeOverride = async (claim, ct) =>
+        {
+            await Task.Delay(150, ct);
+            ilkTaskTamamlandi.TrySetResult();
+            return EBelgeOutboxIslemeSonucu.Tamamlandi();
+        };
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await ilkTaskTamamlandi.Task;
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(nameof(ObjectDisposedException), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UnobservedTaskExceptionOlusmaz()
+    {
+        var unobserved = new List<Exception>();
+        void Handler(object? sender, UnobservedTaskExceptionEventArgs args)
+        {
+            unobserved.Add(args.Exception);
+            args.SetObserved();
+        }
+
+        TaskScheduler.UnobservedTaskException += Handler;
+        try
+        {
+            await using (var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 5)))
+            {
+                h.State.ClaimsToOffer.Enqueue(Claim(1));
+                h.State.ClaimExceptions.Enqueue(null);
+                h.State.ClaimExceptions.Enqueue(new InvalidOperationException("ikinci claim kasıtlı hata"));
+
+                await h.Worker.StartAsync(CancellationToken.None);
+                await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Count >= 1);
+                await h.Worker.StopAsync(CancellationToken.None);
+            }
+
+            // Faz 2B.8.1 görev md.2 - tüm dispatch edilmiş task'lar `Task.WhenAll` İLE await
+            // edildiğinden, GC/finalization sırasında unobserved exception OLUŞMAMALIDIR.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= Handler;
+        }
+
+        Assert.Empty(unobserved);
+    }
+
+    [Fact]
+    public async Task OncekiTurunTasklariTamamlanmadanSonrakiTurBaslamaz()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 2));
+        for (var i = 1; i <= 4; i++)
+        {
+            h.State.ClaimsToOffer.Enqueue(Claim(i));
+        }
+
+        var olaylar = new ConcurrentQueue<(string Olay, int OutboxId, long Zaman)>();
+        var sw = Stopwatch.StartNew();
+        h.State.IslemeOverride = async (claim, ct) =>
+        {
+            await Task.Delay(80, ct);
+            olaylar.Enqueue(("TaskBitti", claim.OutboxMesajiId, sw.ElapsedTicks));
+            return EBelgeOutboxIslemeSonucu.Tamamlandi();
+        };
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => olaylar.Count >= 4, TimeSpan.FromSeconds(10));
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        // BatchSize=2 - ilk tur (1,2) mesajlarını, ikinci tur (3,4) mesajlarını claim eder. İlk
+        // turun İKİ task'ının da bitiş zamanı, İKİNCİ turun claim ettiği mesajların İŞLENME
+        // (task bitiş) zamanlarından ÖNCE olmalıdır (turlar SIRALI, iç içe GEÇMEZ).
+        var listeliOlaylar = olaylar.OrderBy(o => o.Zaman).ToList();
+        Assert.Equal(4, listeliOlaylar.Count);
+        var ilkIkiOutboxId = listeliOlaylar.Take(2).Select(o => o.OutboxId).ToHashSet();
+        var sonIkiOutboxId = listeliOlaylar.Skip(2).Select(o => o.OutboxId).ToHashSet();
+        Assert.Equal(new HashSet<int> { 1, 2 }, ilkIkiOutboxId);
+        Assert.Equal(new HashSet<int> { 3, 4 }, sonIkiOutboxId);
+    }
+
+    [Fact]
+    public async Task PollingTurlariArasindaToplamEsZamanliMesajSayisiMaxParallelismiAsmaz()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 2));
+        for (var i = 1; i <= 8; i++)
+        {
+            h.State.ClaimsToOffer.Enqueue(Claim(i));
+        }
+
+        h.State.IslemeOverride = async (claim, ct) =>
+        {
+            var simdi = Interlocked.Increment(ref h.State.CurrentConcurrent);
+            InterlockedMax(ref h.State.MaxConcurrentObserved, simdi);
+            await Task.Delay(25, ct);
+            Interlocked.Decrement(ref h.State.CurrentConcurrent);
+            return EBelgeOutboxIslemeSonucu.Tamamlandi();
+        };
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Count >= 8, TimeSpan.FromSeconds(15));
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.True(h.State.MaxConcurrentObserved <= 2, $"MaxParallelism=2, TÜM polling turları BOYUNCA aşılmamalıydı: {h.State.MaxConcurrentObserved}");
+    }
+
+    [Fact]
+    public async Task ClaimNullDondugundePermitGeriBirakilirVeSonrakiTurCalisir()
+    {
+        // BlockUntilCancelled=false (varsayılan) BIRAKILIR - boş kuyrukla BİRDEN FAZLA turun HIZLA
+        // geçmesine İZİN VERİR (delay ANINDA döner). Permit sızıntısı OLSAYDI, İLERLEYEN turlarda
+        // `semaphore.WaitAsync` SONSUZA dek bloke OLUR, worker asla YENİ eklenen mesajı claim
+        // EDEMEZDİ.
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 1));
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.State.ClaimCallCount >= 3); // en az birkaç boş tur GEÇSİN
+
+        h.State.ClaimsToOffer.Enqueue(Claim(99));
+
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Contains(99), TimeSpan.FromSeconds(10));
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.Contains(99, h.State.IslenenOutboxIdler);
+    }
+
+    [Fact]
+    public async Task ClaimCancellationOlusturuncaPermitGeriBirakilirVeWorkerDevamEder()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 1));
+        // Gerçek stoppingToken'a BAĞLI OLMAYAN, doğrudan fırlatılan bir OperationCanceledException -
+        // ExecuteAsync'in "host cancellation" filtresine UYMADIĞINDAN normal bir worker-seviyesi
+        // hata olarak İŞLENİR (bkz. görev md.12 test 8).
+        h.State.ClaimExceptions.Enqueue(new OperationCanceledException("sahte/gerçek olmayan iptal"));
+        h.State.ClaimsToOffer.Enqueue(Claim(7));
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Contains(7), TimeSpan.FromSeconds(10));
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.Contains(7, h.State.IslenenOutboxIdler);
+        Assert.True(h.Metrics.PollErrorCount >= 1);
+    }
+
+    [Fact]
+    public async Task ScopeVeyaDiCozumlemeHatasindaPermitGeriBirakilirVeWorkerDevamEder()
+    {
+        // Faz 2B.8.1 görev md.4/md.12 test 9 - `IEBelgeOutboxClaimLeaseService` KASITLI OLARAK
+        // KAYITLI DEĞİL - `GetRequiredService` her claim denemesinde `InvalidOperationException`
+        // fırlatır (gerçek bir DI çözümleme hatasını TEMSİL eder). Worker, bu hatayı TEKRAR TEKRAR
+        // (birden fazla tur boyunca) GÜVENLE atlatabilmelidir - bu, permit'in HİÇBİR turda
+        // SIZDIRILMADIĞININ dolaylı kanıtıdır (sızıntı olsaydı semaphore tükenir, İLERLEYEN
+        // turlarda `WaitAsync` SONSUZA dek bloke OLURDU).
+        var services = new ServiceCollection();
+        services.AddScoped<IEBelgeOutboxMesajIslemeService, FakeMesajIslemeService>();
+        services.AddSingleton(new SharedTestState());
+        var rootProvider = services.BuildServiceProvider();
+
+        var opts = HizliTestOptions();
+        var gate = new EBelgeProcessingActivationGate(Options.Create(opts), TimeProvider.System, NullLogger<EBelgeProcessingActivationGate>.Instance);
+        var metrics = new FakeMetrics();
+        var healthState = new EBelgeOutboxWorkerHealthState(TimeProvider.System);
+        var delay = new FakeDelay(); // BlockUntilCancelled=false - birden fazla turun HIZLA geçmesine İZİN VERİR.
+        var worker = new EBelgeOutboxWorker(
+            rootProvider.GetRequiredService<IServiceScopeFactory>(),
+            gate, metrics, healthState, delay, Options.Create(opts), NullLogger<EBelgeOutboxWorker>.Instance);
+
+        await worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => delay.RequestedDelays.Count >= 3, TimeSpan.FromSeconds(10));
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.True(metrics.PollErrorCount >= 3, $"Worker, TEKRARLANAN DI çözümleme hatalarından SONRA bile ilerlemeye devam edebilmeliydi (gözlemlenen hata sayısı: {metrics.PollErrorCount}).");
+
+        await rootProvider.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task UcuncuClaimHataVersinIlkIkiTaskYineDeGozlemlenirVeAwaitEdilir()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 3, batchSize: 5));
+        h.State.ClaimsToOffer.Enqueue(Claim(1));
+        h.State.ClaimsToOffer.Enqueue(Claim(2));
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("üçüncü claim kasıtlı hata"));
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Count >= 2, TimeSpan.FromSeconds(10));
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.Contains(1, h.State.IslenenOutboxIdler);
+        Assert.Contains(2, h.State.IslenenOutboxIdler);
+        Assert.Equal(2, h.Metrics.Results.Count(r => r.SonucTuru == EBelgeOutboxIslemeSonucuTuru.Tamamlandi));
+    }
+
+    [Fact]
+    public async Task StopSirasindaClaimExceptionIleProcessingTaskYarisiDeadlockOlusturmaz()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 5));
+        h.State.ClaimsToOffer.Enqueue(Claim(1));
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("ikinci claim kasıtlı hata"));
+        var islemeBasladi = new TaskCompletionSource();
+        h.State.IslemeOverride = async (claim, ct) =>
+        {
+            islemeBasladi.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct); // yalnız cancellation İLE biter
+            return EBelgeOutboxIslemeSonucu.Tamamlandi();
+        };
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await islemeBasladi.Task;
+
+        var sw = Stopwatch.StartNew();
+        await h.Worker.StopAsync(CancellationToken.None);
+        sw.Stop();
+
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"StopAsync {sw.Elapsed} sürdü - claim hatası/processing task yarışı DEADLOCK oluşturmuş OLABİLİR.");
+    }
+
+    [Fact]
+    public async Task TurTamamlandigindaInflightVeSemaphorePermitBaslangicaDoner()
+    {
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 5));
+        h.State.ClaimsToOffer.Enqueue(Claim(1));
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("ikinci claim kasıtlı hata"));
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Count >= 1, TimeSpan.FromSeconds(10));
+        // Bir SONRAKİ (temiz) turun da BAŞARIYLA claim/işleme YAPABİLDİĞİNİ doğrulayarak - semaphore
+        // permit'lerinin başlangıç değerine DÖNDÜĞÜNÜ (aksi halde İLERLEYEN turlar TIKANIRDI) dolaylı
+        // olarak KANITLAR.
+        h.State.ClaimsToOffer.Enqueue(Claim(2));
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Contains(2), TimeSpan.FromSeconds(10));
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(0, h.HealthState.GetSnapshot().InflightCount);
+    }
+
+    // ---- Faz 2B.8.1: güvenli loglama ----
+
+    [Fact]
+    public async Task WorkerLevelExceptionMesajindakiLeaseTokenLoglanmaz()
+    {
+        await using var h = CreateHarness();
+        const string gizliDeger = "GIZLI-TOKEN-123";
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException($"Bağlantı hatası - KilitToken={gizliDeger}"));
+        h.Delay.BlockUntilCancelled = true;
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliDeger, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkerLevelExceptionMesajindakiXmlVeVknLoglanmaz()
+    {
+        await using var h = CreateHarness();
+        const string gizliXml = "<VKN>1234567890</VKN>";
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException($"Doğrulama hatası: {gizliXml}"));
+        h.Delay.BlockUntilCancelled = true;
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliXml, StringComparison.Ordinal));
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("1234567890", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkerLevelExceptionMesajindakiPasswordVeSignatureValueLoglanmaz()
+    {
+        await using var h = CreateHarness();
+        const string gizliParola = "Password=secret";
+        const string gizliImza = "SignatureValue=secret";
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException($"Bağlantı: {gizliParola}; {gizliImza}"));
+        h.Delay.BlockUntilCancelled = true;
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliParola, StringComparison.Ordinal));
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliImza, StringComparison.Ordinal));
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("secret", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HamExceptionToStringProductionLoggeraVerilmez()
+    {
+        await using var h = CreateHarness();
+        const string gizliMesaj = "GIZLI-TOKEN-123 <VKN>1234567890</VKN> Password=secret SignatureValue=secret";
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException(gizliMesaj));
+        h.Delay.BlockUntilCancelled = true;
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        // Test logger'ı GERÇEKÇİDİR (formatter + exception?.ToString()) - bu yüzden ex NESNESİ
+        // logger'a GEÇİRİLSEYDİ, exception'ın MESAJI (gizli değerler DAHİL) VE bir stack trace
+        // işareti ("at ") BURADA GÖRÜNÜRDÜ. Worker'ın KENDİSİ `ex`'i logger'a hiç GEÇİRMEDİĞİ İÇİN
+        // (bkz. LogWorkerLevelHataGuvenli - yalnız `ex.GetType().Name` GÜVENLİ bir alan olarak
+        // loglanır, TAM exception/mesajı/ToString() DEĞİL) - bu ASLA olmaz. `ExceptionType=
+        // InvalidOperationException` GÜVENLİ/BEKLENEN bir alan olduğundan (yalnız TİP ADI, mesaj
+        // DEĞİL) BURADA reddedilmez - yalnız GİZLİ MESAJ İÇERİĞİ VE stack trace işareti kontrol
+        // edilir.
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliMesaj, StringComparison.Ordinal));
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("GIZLI-TOKEN-123", StringComparison.Ordinal));
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("   at ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GuvenliHataKoduVeExceptionTypeLoglanir()
+    {
+        await using var h = CreateHarness();
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("herhangi bir iç hata"));
+        h.Delay.BlockUntilCancelled = true;
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        Assert.Contains(h.Loglar.Kayitlar, k => k.Level == LogLevel.Error
+            && k.Message.Contains("EBELGE_OUTBOX_WORKER_BEKLENMEYEN_HATA", StringComparison.Ordinal)
+            && k.Message.Contains(nameof(InvalidOperationException), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AktivasyonConfigHatasiHerTurdaLogSpamUretmez()
+    {
+        var loglar = new CapturingLoggerProvider();
+        var loggerFactory = LoggerFactory.Create(b => b.AddProvider(loglar));
+        var logger = loggerFactory.CreateLogger<EBelgeProcessingActivationGate>();
+        var options = new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "gecersiz-tarih", TimeZoneId = "Europe/Istanbul" };
+        var gate = new EBelgeProcessingActivationGate(Options.Create(options), TimeProvider.System, logger);
+
+        for (var i = 0; i < 10; i++)
+        {
+            gate.Evaluate();
+        }
+
+        var hataLoglari = loglar.Kayitlar.Count(k => k.Level == LogLevel.Error);
+        Assert.Equal(1, hataLoglari);
     }
 }

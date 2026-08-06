@@ -161,6 +161,7 @@ public sealed class EBelgeOutboxWorker : BackgroundService
         var tasks = new List<Task>();
         var claimedCount = 0;
         Exception? turHatasi = null;
+        Exception? taskHatasi = null;
 
         try
         {
@@ -213,21 +214,94 @@ public sealed class EBelgeOutboxWorker : BackgroundService
         }
         finally
         {
-            if (tasks.Count > 0)
+            // Faz 2B.8.2 görev md.6: `Task.WhenAll(tasks)`'ın KENDİSİ bir exception ÜRETİRSE
+            // (worker altyapısından kaynaklanan, ör. bir task'ın KENDİSİ fatal bir hatayla
+            // faulted olması), `semaphore.Dispose()` YİNE de MUTLAKA çalışmalıdır - bu yüzden
+            // AYRI, İÇ bir try/catch/finally İLE dispose GÜVENCE altına alınır; `Task.WhenAll`'dan
+            // gelen hata AYRI bir değişkende (`taskHatasi`) saklanır, turHatasi'nin ÜZERİNE
+            // YAZILMAZ.
+            try
             {
-                await Task.WhenAll(tasks);
+                if (tasks.Count > 0)
+                {
+                    await Task.WhenAll(tasks);
+                }
             }
-
-            semaphore.Dispose();
+            catch (Exception ex)
+            {
+                taskHatasi = ex;
+            }
+            finally
+            {
+                semaphore.Dispose();
+            }
         }
 
-        if (turHatasi is not null)
-        {
-            ExceptionDispatchInfo.Capture(turHatasi).Throw();
-        }
+        RethrowTurVeTaskHatalariGuvenliSekilde(turHatasi, taskHatasi, stoppingToken);
 
         return claimedCount > 0;
     }
+
+    /// <summary>
+    /// Faz 2B.8.2 görev md.6 - claim/tur hatası (`turHatasi`) İLE `Task.WhenAll` hatası
+    /// (`taskHatasi`) AYNI turda OLUŞABİLİR; İKİSİ de KAYBOLMAMALI, biri diğerini SESSİZCE
+    /// EZMEMELİ. Açık öncelik politikası:
+    ///
+    /// 1. **Fatal** (`OutOfMemoryException` - doğrudan VEYA `Task.WhenAll`'ın ürettiği bir
+    ///    `AggregateException` İÇİNDE) HER ZAMAN ÖNCELİKLİDİR ve HİÇBİR sarmalayıcı OLMADAN,
+    ///    orijinal TİPİYLE yeniden fırlatılır - genel bir catch İLE ASLA gizlenmez.
+    /// 2. **Host cancellation** (`OperationCanceledException` VE `stoppingToken.
+    ///    IsCancellationRequested`) İKİNCİ önceliktir - `ExecuteAsync`'in ÖZEL cancellation
+    ///    filtresinin (normal shutdown olarak ele alması İÇİN) doğru TİPLE eşleşmesi GEREKİR, bu
+    ///    yüzden SARILMADAN yeniden fırlatılır.
+    /// 3. İKİSİ de VARSA VE İKİSİ de yukarıdaki İKİ kategoriye GİRMİYORSA - HİÇBİRİ sessizce
+    ///    EZİLMEZ; GÜVENLİ (SABİT, hiçbir ham exception metni İÇERMEYEN bir mesajla) bir
+    ///    `AggregateException` İÇİNDE İKİSİ DE gözlemlenebilir kalacak şekilde BİRLEŞTİRİLİR.
+    /// 4. Yalnız BİRİ VARSA, doğrudan (orijinal stack trace KORUNARAK) yeniden fırlatılır.
+    /// </summary>
+    private static void RethrowTurVeTaskHatalariGuvenliSekilde(Exception? turHatasi, Exception? taskHatasi, CancellationToken stoppingToken)
+    {
+        if (turHatasi is null && taskHatasi is null)
+        {
+            return;
+        }
+
+        var fatal = FindOutOfMemoryException(turHatasi) ?? FindOutOfMemoryException(taskHatasi);
+        if (fatal is not null)
+        {
+            ExceptionDispatchInfo.Capture(fatal).Throw();
+        }
+
+        if (IsHostCancellation(turHatasi, stoppingToken))
+        {
+            ExceptionDispatchInfo.Capture(turHatasi!).Throw();
+        }
+
+        if (IsHostCancellation(taskHatasi, stoppingToken))
+        {
+            ExceptionDispatchInfo.Capture(taskHatasi!).Throw();
+        }
+
+        if (turHatasi is not null && taskHatasi is not null)
+        {
+            throw new AggregateException(
+                "E-belge outbox worker polling turunda birden fazla hata oluştu (claim/tur hatası ve task hatası).",
+                turHatasi, taskHatasi);
+        }
+
+        ExceptionDispatchInfo.Capture((turHatasi ?? taskHatasi)!).Throw();
+    }
+
+    private static OutOfMemoryException? FindOutOfMemoryException(Exception? ex) => ex switch
+    {
+        null => null,
+        OutOfMemoryException oom => oom,
+        AggregateException agg => agg.InnerExceptions.OfType<OutOfMemoryException>().FirstOrDefault(),
+        _ => null,
+    };
+
+    private static bool IsHostCancellation(Exception? ex, CancellationToken stoppingToken) =>
+        ex is OperationCanceledException && stoppingToken.IsCancellationRequested;
 
     /// <summary>
     /// Faz 2B.8 görev md.7: HER claim için YENİ bir DI scope oluşturulur, işlenir, dispose edilir
@@ -315,11 +389,19 @@ public sealed class EBelgeOutboxWorker : BackgroundService
         }
     }
 
-    /// <summary>Bkz. görev md.14/md.15 - health state'e/loglara yazılan hata KODU her zaman SABİT, PII/exception-detayı İÇERMEYEN bir string olmalıdır.</summary>
+    /// <summary>
+    /// Bkz. görev md.14/md.15 - health state'e/loglara yazılan hata KODU her zaman SABİT, PII/
+    /// exception-detayı İÇERMEYEN bir string olmalıdır. Faz 2B.8.2 görev md.6 - claim/tur hatası
+    /// VE task hatası AYNI turda oluşup bir `AggregateException` İÇİNDE BİRLEŞTİRİLDİYSE
+    /// (`RethrowTurVeTaskHatalariGuvenliSekilde`), İÇ exception'lar İNCELENEREK YİNE GÜVENLİ/
+    /// type-safe bir sınıflandırma yapılır - ham metin OKUNMAZ.
+    /// </summary>
     private static string WorkerLevelSafeErrorCode(Exception ex) => ex switch
     {
         SqlException => "EBELGE_OUTBOX_WORKER_SQL_HATASI",
         TimeoutException => "EBELGE_OUTBOX_WORKER_ZAMAN_ASIMI",
+        AggregateException agg when agg.InnerExceptions.Any(inner => inner is SqlException) => "EBELGE_OUTBOX_WORKER_SQL_HATASI",
+        AggregateException agg when agg.InnerExceptions.Any(inner => inner is TimeoutException) => "EBELGE_OUTBOX_WORKER_ZAMAN_ASIMI",
         _ => "EBELGE_OUTBOX_WORKER_BEKLENMEYEN_HATA"
     };
 }

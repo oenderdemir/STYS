@@ -91,11 +91,27 @@ public class EBelgeOutboxWorkerTests
         public int InflightIncrements;
         public int InflightDecrements;
 
+        /// <summary>Faz 2B.8.2 görev md.6/md.12 testleri İÇİN - `ProcessClaimAsync`'in `try` BLOĞU içinden GERÇEKTEN worker-altyapısı KAYNAKLI bir exception (ör. `OutOfMemoryException`) FIRLATMASINI simüle eder.</summary>
+        public Action? IncrementInflightOverride;
+
+        /// <summary>Faz 2B.8.2 görev md.6/md.12 testleri İÇİN - `ProcessClaimAsync`'in `finally` BLOĞU içinden bir exception FIRLATMASINI simüle eder (bu, `Task.WhenAll`'ın KENDİSİNİN hata ÜRETMESİNİN TEK gerçekçi yoludur - `try/catch` zaten TÜM mesaj-seviyesi hataları YAKALAR).</summary>
+        public Action? DecrementInflightOverride;
+
         public void RecordClaimed(EBelgeOutboxIsTuru isTuru) => Interlocked.Increment(ref ClaimedCount);
         public void RecordResult(EBelgeOutboxIsTuru isTuru, EBelgeOutboxIslemeSonucuTuru sonucTuru, TimeSpan sure) => Results.Add((isTuru, sonucTuru, sure));
         public void RecordPollError() => Interlocked.Increment(ref PollErrorCount);
-        public void IncrementInflight() => Interlocked.Increment(ref InflightIncrements);
-        public void DecrementInflight() => Interlocked.Increment(ref InflightDecrements);
+
+        public void IncrementInflight()
+        {
+            Interlocked.Increment(ref InflightIncrements);
+            IncrementInflightOverride?.Invoke();
+        }
+
+        public void DecrementInflight()
+        {
+            Interlocked.Increment(ref InflightDecrements);
+            DecrementInflightOverride?.Invoke();
+        }
     }
 
     /// <summary>Bkz. görev md.8 - `Task.Delay` yerine TEST EDİLEBİLİR bir zamanlama abstraction'ı. `BlockUntilCancelled=true` iken, her tur TAM OLARAK bir delay çağrısında BLOKE OLUR (yalnız cancellation İLE kesilir) - bu, tek bir turu deterministik biçimde İNCELEMEYİ sağlar.</summary>
@@ -1088,5 +1104,90 @@ public class EBelgeOutboxWorkerTests
 
         var hataLoglari = loglar.Kayitlar.Count(k => k.Level == LogLevel.Error);
         Assert.Equal(1, hataLoglari);
+    }
+
+    // ---- Faz 2B.8.2 görev md.6/md.7: semaphore kesin disposal + claim/task hatası önceliği ----
+
+    [Fact]
+    public async Task TaskWhenAllExceptionUretseBileSemaphoreDisposeEdilirVeFatalExceptionYayilir()
+    {
+        var unobserved = new List<Exception>();
+        void Handler(object? sender, UnobservedTaskExceptionEventArgs args)
+        {
+            unobserved.Add(args.Exception);
+            args.SetObserved();
+        }
+
+        TaskScheduler.UnobservedTaskException += Handler;
+        try
+        {
+            await using (var h = CreateHarness(HizliTestOptions(maxParallelism: 1)))
+            {
+                h.State.ClaimsToOffer.Enqueue(Claim(1));
+                // Faz 2B.8.2 görev md.6 - `ProcessClaimAsync`'in `try` bloğu İÇİNDEN, worker
+                // ALTYAPISI kaynaklı (mesaj işleme İLE İLGİSİZ) GERÇEK bir `OutOfMemoryException` -
+                // `catch (Exception ex) when (ex is not OutOfMemoryException)` filtresi BUNU
+                // YAKALAMAZ, dispatch edilen TASK GERÇEKTEN faulted olur - `Task.WhenAll`
+                // `BirTurCalistirAsync`'in `finally` bloğunda BUNU fırlatır.
+                h.Metrics.IncrementInflightOverride = () => throw new OutOfMemoryException();
+
+                await h.Worker.StartAsync(CancellationToken.None);
+
+                var executeTask = GetExecuteTask(h.Worker);
+                // Faz 2B.8.2 görev md.6 kural 1 - fatal exception HİÇBİR sarmalayıcı OLMADAN,
+                // orijinal TİPİYLE yayılır (genel bir catch İLE GİZLENMEZ).
+                await Assert.ThrowsAsync<OutOfMemoryException>(() => executeTask!);
+            }
+
+            // Faz 2B.8.2 görev md.6/md.12 test 13 - `Task.WhenAll` İLE await edildiğinden, GC/
+            // finalization sırasında unobserved exception OLUŞMAMALIDIR (semaphore'un KENDİSİ İSE
+            // İÇ finally'de dispose EDİLMİŞTİR - C#'ın try/finally dil GARANTİSİ - bkz. görev
+            // md.6 kural, "semaphore.Dispose() İÇ finally'de, Task.WhenAll SONUCU NE OLURSA
+            // OLSUN çalışır").
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= Handler;
+        }
+
+        Assert.Empty(unobserved);
+    }
+
+    [Fact]
+    public async Task ClaimHatasiVeTaskAltyapiHatasiAyniTurdaOlusursaWorkerCokmezVeDevamEder()
+    {
+        // Faz 2B.8.2 görev md.6/md.7 test 14 - AYNI turda HEM bir claim hatası (İKİNCİ claim
+        // denemesi) HEM bir task-altyapısı hatası (`ProcessClaimAsync`'in `finally`'inden -
+        // `Task.WhenAll`'ın GERÇEKTEN hata ÜRETMESİNİN, mesaj-seviyesi try/catch'i BYPASS eden TEK
+        // gerçekçi yolu) OLUŞUR - HİÇBİRİ diğerini SESSİZCE EZMEZ (bkz.
+        // `RethrowTurVeTaskHatalariGuvenliSekilde`, "İKİSİ de VARSA VE İKİSİ de fatal/cancellation
+        // DEĞİLSE GÜVENLİ bir AggregateException İÇİNDE BİRLEŞTİRİLİR"). Worker BUNU bir POLL
+        // hatası olarak İŞLER (ExecuteTask FAULT ETMEZ) - bir SONRAKİ turda BAŞKA bir mesajı
+        // BAŞARIYLA claim/işleme YAPABİLDİĞİ GÖSTERİLEREK worker'ın ÇÖKMEDİĞİ KANITLANIR.
+        await using var h = CreateHarness(HizliTestOptions(maxParallelism: 2, batchSize: 5));
+        h.State.ClaimsToOffer.Enqueue(Claim(1));
+        h.State.ClaimExceptions.Enqueue(null);
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException("claim hatasi - ikinci deneme"));
+        h.Metrics.DecrementInflightOverride = () => throw new InvalidOperationException("task altyapisi hatasi");
+
+        await h.Worker.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => h.Metrics.PollErrorCount >= 1, TimeSpan.FromSeconds(10));
+
+        // Hata KAYNAĞI kaldırılır - worker'ın GERÇEKTEN İLERİDE de çalışabildiğini (çökmediğini)
+        // KANITLAMAK İçin.
+        h.Metrics.DecrementInflightOverride = null;
+        h.State.ClaimsToOffer.Enqueue(Claim(2));
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Contains(2), TimeSpan.FromSeconds(10));
+
+        await h.Worker.StopAsync(CancellationToken.None);
+
+        // Faz 2B.8.2 görev md.6 kural "ham exception loglanmamalı" - İKİ hatanın da METNİ HİÇBİR
+        // log kaydında GEÇMEZ (AggregateException'a SARILMIŞ olsalar BİLE, `LogWorkerLevelHataGuvenli`
+        // yalnız güvenli hata kodu/exception TİP adını loglar).
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("claim hatasi", StringComparison.Ordinal));
+        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("task altyapisi hatasi", StringComparison.Ordinal));
     }
 }

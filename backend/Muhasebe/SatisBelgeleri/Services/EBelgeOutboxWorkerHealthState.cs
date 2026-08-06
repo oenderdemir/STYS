@@ -1,16 +1,25 @@
 namespace STYS.Muhasebe.SatisBelgeleri.Services;
 
 /// <summary>
-/// Faz 2B.8/2B.8.1 görev md.9 - `EBelgeOutboxWorkerHealthCheck`'in okuduğu, PII/token İÇERMEYEN
-/// anlık worker durumu. `ActivationReason`/`ActivationAllowed`/`WorkerEnabled`, worker'ın HER
-/// polling turunda `IEBelgeProcessingActivationGate.Evaluate()`'DEN elde ettiği AYNI kararı
-/// yansıtır - health check KENDİSİ AYRICA gate'i DEĞERLENDİRMEZ (bkz. görev md.7, "worker ve
-/// health check aynı değerlendirme sonucunu kullanmalı").
+/// Faz 2B.8/2B.8.1/2B.8.2 görev md.9 - `EBelgeOutboxWorkerHealthCheck`'in okuduğu, PII/token
+/// İÇERMEYEN anlık worker durumu. `ActivationReason`/`ActivationAllowed`/`WorkerEnabled`, ya
+/// worker'ın HER polling turunda `IEBelgeProcessingActivationGate.Evaluate()`'DEN elde ettiği
+/// kararı YA DA - worker döngüsü HENÜZ hiç değerlendirme YAPMAMIŞSA - health check'in AYNI gate
+/// üzerinden yaptığı fallback değerlendirmeyi yansıtır (bkz. `EBelgeOutboxWorkerHealthCheck`, görev
+/// md.2 - "farklı bir aktivasyon algoritması YAZILMAZ").
+///
+/// Faz 2B.8.2 görev md.1 - `ActivationEvaluated=false` İKEN `ActivationReason` HENÜZ `null`dur -
+/// bu, GERÇEK bir `Disabled` kararıyla ASLA KARIŞTIRILMAZ (eski `?? Disabled()` varsayımı
+/// KALDIRILDI). `WorkerEnabled`/`ActivationAllowed`, henüz değerlendirme YOKKEN GÜVENLİ/tutucu
+/// `false` değerini TAŞIR - AMA bu durumda health check ZATEN `ActivationReason` yerine KENDİ
+/// TAZE `Evaluate()` sonucunu KULLANIR (BURADAKİ `false` değerleri yalnız DOĞRUDAN
+/// `GetSnapshot()` çağıran BAŞKA kod İÇİNDİR).
 /// </summary>
 public sealed record EBelgeOutboxWorkerHealthSnapshot(
+    bool ActivationEvaluated,
     bool WorkerEnabled,
     bool ActivationAllowed,
-    EBelgeProcessingActivationReason ActivationReason,
+    EBelgeProcessingActivationReason? ActivationReason,
     bool LoopStarted,
     DateTimeOffset? LoopStartedUtc,
     DateTimeOffset? LastSuccessfulPollUtc,
@@ -110,18 +119,18 @@ public sealed class EBelgeOutboxWorkerHealthState : IEBelgeOutboxWorkerHealthSta
     {
         lock (_lock)
         {
-            // Faz 2B.8.1 - `RecordActivationDecision` HENÜZ hiç çağrılmadıysa (döngü henüz İLK
-            // turunu TAMAMLAMADI) - GÜVENLİ/tutucu bir varsayılan: "devre dışı" GİBİ davran.
-            // `LoopStarted` AYRICA izlendiğinden, bu geçici pencere health check'in Unhealthy
-            // kararını YANLIŞ ETKİLEMEZ (bkz. EBelgeOutboxWorkerHealthCheck - Unhealthy yalnız
-            // ActivationReason=Active VE LoopStarted=false iken tetiklenir; henüz DEĞERLENDİRME
-            // YOKKEN ActivationReason bu varsayılanla Disabled görünür, Active DEĞİL).
-            var karar = _sonAktivasyonKarari ?? EBelgeProcessingActivationDecision.Disabled();
+            // Faz 2B.8.2 görev md.1 - `RecordActivationDecision` HENÜZ hiç çağrılmadıysa,
+            // "henüz değerlendirilmedi" GERÇEK bir `Disabled` kararıyla KARIŞTIRILMAZ - `null`
+            // olarak AÇIKÇA taşınır. Bu durumu YORUMLAMAK (fallback değerlendirme YAPMAK)
+            // `EBelgeOutboxWorkerHealthCheck`'in sorumluluğudur - health state'in KENDİSİ hiçbir
+            // VARSAYIM yapmaz.
+            var karar = _sonAktivasyonKarari;
 
             return new EBelgeOutboxWorkerHealthSnapshot(
-                WorkerEnabled: karar.Reason != EBelgeProcessingActivationReason.Disabled,
-                ActivationAllowed: karar.CanProcess,
-                ActivationReason: karar.Reason,
+                ActivationEvaluated: karar is not null,
+                WorkerEnabled: karar is not null && karar.Reason != EBelgeProcessingActivationReason.Disabled,
+                ActivationAllowed: karar?.CanProcess ?? false,
+                ActivationReason: karar?.Reason,
                 LoopStarted: _loopStarted,
                 LoopStartedUtc: _loopStartedUtc,
                 LastSuccessfulPollUtc: _lastSuccessfulPollUtc,

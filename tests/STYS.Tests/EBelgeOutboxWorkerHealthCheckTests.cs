@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using STYS.Muhasebe.SatisBelgeleri.Services;
 using Xunit;
@@ -6,11 +8,16 @@ using Xunit;
 namespace STYS.Tests;
 
 /// <summary>
-/// Faz 2B.8/2B.8.1 görev md.9/md.12 - worker health check'in aktivasyon-reason-tabanlı
+/// Faz 2B.8/2B.8.1/2B.8.2 görev md.9/md.12 - worker health check'in aktivasyon-reason-tabanlı
 /// Healthy/Degraded/Unhealthy politikasını doğrular. PII/token/ham config değeri İÇERMEZ.
-/// `IEBelgeOutboxWorkerHealthState.RecordActivationDecision`, GERÇEK worker'ın HER polling
-/// turunda çağırdığı ile AYNI - bu yüzden testler AÇIKÇA bu metodu çağırarak worker'ın davranışını
-/// simüle eder (bkz. görev md.7, "worker ve health check aynı değerlendirme sonucunu kullanmalı").
+///
+/// Faz 2B.8.2 - "Fresh" (worker loop'un HİÇ çalışmadığı) senaryolar İÇİN `RecordActivationDecision`
+/// KASITLI OLARAK ELLE ÇAĞRILMAZ (bkz. görev md.9, "production açığını gizlemek için activation
+/// kararını elle seed etme") - GERÇEK bir `EBelgeProcessingActivationGate` + GERÇEK `EBelgeProcessingOptions`
+/// kullanılır, health check'in KENDİSİNİN doğru fallback DEĞERLENDİRMESİ yaptığı DOĞRUDAN
+/// kanıtlanır. Yalnız "worker ZATEN değerlendirme YAPTI" senaryolarını (recovery/staleness/
+/// gereksiz-tekrar-değerlendirme-yok) test eden testler `RecordActivationDecision`'ı AÇIKÇA
+/// çağırır - bu, worker'ın KENDİ davranışını SİMÜLE eder, production açığını GİZLEMEZ.
 /// </summary>
 public class EBelgeOutboxWorkerHealthCheckTests
 {
@@ -29,67 +36,136 @@ public class EBelgeOutboxWorkerHealthCheckTests
         public override DateTimeOffset GetUtcNow() => _zaman;
     }
 
+    /// <summary>Bkz. görev md.8 - `Evaluate()`'in KAÇ KEZ çağrıldığını sayar (health check'in gereksiz ikinci değerlendirme YAPMADIĞINI kanıtlamak için).</summary>
+    private sealed class CountingActivationGate : IEBelgeProcessingActivationGate
+    {
+        private readonly IEBelgeProcessingActivationGate _inner;
+        public int EvaluateCallCount;
+        public CountingActivationGate(IEBelgeProcessingActivationGate inner) => _inner = inner;
+
+        public EBelgeProcessingActivationDecision Evaluate()
+        {
+            Interlocked.Increment(ref EvaluateCallCount);
+            return _inner.Evaluate();
+        }
+
+        public bool ShouldProcess() => Evaluate().CanProcess;
+    }
+
+    private sealed class ErrorCountingLoggerProvider : ILoggerProvider
+    {
+        public int ErrorCount;
+        public ILogger CreateLogger(string categoryName) => new CountingLogger(this);
+        public void Dispose()
+        {
+        }
+
+        private sealed class CountingLogger : ILogger
+        {
+            private readonly ErrorCountingLoggerProvider _owner;
+            public CountingLogger(ErrorCountingLoggerProvider owner) => _owner = owner;
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel == LogLevel.Error)
+                {
+                    Interlocked.Increment(ref _owner.ErrorCount);
+                }
+            }
+
+            private sealed class NullScope : IDisposable
+            {
+                public static readonly NullScope Instance = new();
+                public void Dispose()
+                {
+                }
+            }
+        }
+    }
+
     private static readonly DateTimeOffset Baslangic = new(2027, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-    private static EBelgeOutboxWorkerHealthCheck CreateCheck(
-        IEBelgeOutboxWorkerHealthState healthState, EBelgeProcessingOptions options, DateTimeOffset now)
-        => new(healthState, Options.Create(options), new FixedTimeProvider(now));
+    private static IEBelgeProcessingActivationGate CreateGate(EBelgeProcessingOptions options, TimeProvider timeProvider, ILogger<EBelgeProcessingActivationGate>? logger = null)
+        => new EBelgeProcessingActivationGate(Options.Create(options), timeProvider, logger ?? NullLogger<EBelgeProcessingActivationGate>.Instance);
 
-    private static EBelgeProcessingOptions Options_(bool enabled = true) => new()
+    private static EBelgeOutboxWorkerHealthCheck CreateCheck(
+        IEBelgeOutboxWorkerHealthState healthState, IEBelgeProcessingActivationGate gate, EBelgeProcessingOptions options, DateTimeOffset now)
+        => new(healthState, gate, Options.Create(options), new FixedTimeProvider(now));
+
+    private static EBelgeOutboxWorkerHealthCheck CreateCheck(
+        IEBelgeOutboxWorkerHealthState healthState, IEBelgeProcessingActivationGate gate, EBelgeProcessingOptions options, TimeProvider timeProvider)
+        => new(healthState, gate, Options.Create(options), timeProvider);
+
+    private static EBelgeProcessingOptions Options_(bool enabled = true, string? notBeforeLocalDate = "2020-01-01", string timeZoneId = "Europe/Istanbul") => new()
     {
         Enabled = enabled,
+        NotBeforeLocalDate = notBeforeLocalDate,
+        TimeZoneId = timeZoneId,
         PollIntervalSeconds = 10,
         IdlePollIntervalSeconds = 30,
     };
 
-    [Fact]
-    public async Task EnabledFalseIkenHealthyVeReasonDisabledGorunur()
-    {
-        var healthState = new EBelgeOutboxWorkerHealthState(new FixedTimeProvider(Baslangic));
-        healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Disabled());
+    // ---- Faz 2B.8.2 görev md.7 test senaryo 1-6: "fresh" state, ELLE seed YOK, GERÇEK gate ----
 
-        var check = CreateCheck(healthState, Options_(enabled: false), Baslangic);
+    [Fact]
+    public async Task FreshStateEnabledTrueTarihAcikLoopBaslamadiUnhealthy()
+    {
+        // Faz 2B.8.2 görev md.1/md.2 - worker loop HİÇ ÇALIŞMADI (`RecordActivationDecision`/
+        // `RecordLoopStarted` HİÇBİRİ çağrılmadı) - health check YİNE DE GERÇEK activation
+        // durumunu (Enabled=true + tarih AÇIK + loop YOK => Unhealthy) GÖREBİLMELİDİR.
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, notBeforeLocalDate: "2020-01-01"); // tarih ZATEN geçmiş
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+
+        var check = CreateCheck(healthState, gate, options, timeProvider);
+        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
+
+        Assert.Equal(HealthStatus.Unhealthy, sonuc.Status);
+        Assert.Equal(nameof(EBelgeProcessingActivationReason.Active), sonuc.Data["activationReason"]);
+    }
+
+    [Fact]
+    public async Task FreshStateEnabledFalseHealthyDisabled()
+    {
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: false);
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(HealthStatus.Healthy, sonuc.Status);
         Assert.Equal(nameof(EBelgeProcessingActivationReason.Disabled), sonuc.Data["activationReason"]);
-        Assert.Equal(false, sonuc.Data["workerEnabled"]);
     }
 
     [Fact]
-    public async Task TarihOncesiHealthyVeReasonBeforeActivationDateGorunur()
+    public async Task FreshStateTarihOncesiHealthyBeforeActivationDate()
     {
-        var healthState = new EBelgeOutboxWorkerHealthState(new FixedTimeProvider(Baslangic));
-        healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.BeforeActivationDate());
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, notBeforeLocalDate: "2030-01-01"); // gelecek tarih
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(HealthStatus.Healthy, sonuc.Status);
         Assert.Equal(nameof(EBelgeProcessingActivationReason.BeforeActivationDate), sonuc.Data["activationReason"]);
-        Assert.Equal(true, sonuc.Data["workerEnabled"]);
     }
 
     [Fact]
-    public async Task GecersizTimeZoneDegradedOlur()
+    public async Task FreshStateGecersizTarihDegraded()
     {
-        var healthState = new EBelgeOutboxWorkerHealthState(new FixedTimeProvider(Baslangic));
-        healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.InvalidTimeZoneConfiguration());
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, notBeforeLocalDate: "gecersiz-tarih");
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
-        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
-
-        Assert.Equal(HealthStatus.Degraded, sonuc.Status);
-        Assert.Equal(nameof(EBelgeProcessingActivationReason.InvalidTimeZoneConfiguration), sonuc.Data["activationReason"]);
-    }
-
-    [Fact]
-    public async Task GecersizTarihDegradedOlur()
-    {
-        var healthState = new EBelgeOutboxWorkerHealthState(new FixedTimeProvider(Baslangic));
-        healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.InvalidDateConfiguration());
-
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(HealthStatus.Degraded, sonuc.Status);
@@ -97,17 +173,130 @@ public class EBelgeOutboxWorkerHealthCheckTests
     }
 
     [Fact]
-    public async Task GateAcikFakatDonguHicBaslamadiysaUnhealthy()
+    public async Task FreshStateGecersizTimeZoneDegraded()
     {
-        var healthState = new EBelgeOutboxWorkerHealthState(new FixedTimeProvider(Baslangic));
-        healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
-        // RecordLoopStarted() KASITLI OLARAK çağrılmadı - başlangıç arızasını simüle eder.
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, timeZoneId: "Gecersiz/TimeZone-Kimligi");
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
-        Assert.Equal(HealthStatus.Unhealthy, sonuc.Status);
+        Assert.Equal(HealthStatus.Degraded, sonuc.Status);
+        Assert.Equal(nameof(EBelgeProcessingActivationReason.InvalidTimeZoneConfiguration), sonuc.Data["activationReason"]);
     }
+
+    // ---- Faz 2B.8.2 görev md.7 test senaryo 7-8: fallback yazımı + gereksiz ikinci değerlendirme YOK ----
+
+    [Fact]
+    public async Task HealthFallbackDegerlendirmesiStateYeTypeSafeKararYazar()
+    {
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: false);
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+
+        Assert.False(healthState.GetSnapshot().ActivationEvaluated);
+
+        var check = CreateCheck(healthState, gate, options, timeProvider);
+        await check.CheckHealthAsync(new HealthCheckContext());
+
+        var snapshotSonra = healthState.GetSnapshot();
+        Assert.True(snapshotSonra.ActivationEvaluated);
+        Assert.Equal(EBelgeProcessingActivationReason.Disabled, snapshotSonra.ActivationReason);
+    }
+
+    [Fact]
+    public async Task WorkerDegerlendirmeYaptiktanSonraHealthGereksizIkinciDegerlendirmeYapmaz()
+    {
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, notBeforeLocalDate: "2020-01-01");
+        var countingGate = new CountingActivationGate(CreateGate(options, timeProvider));
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+
+        // Worker'ın KENDİ turunun YAPACAĞI AKIŞ - `EBelgeOutboxWorker.BirTurCalistirAsync` İLE AYNI.
+        var workerKarari = countingGate.Evaluate();
+        healthState.RecordActivationDecision(workerKarari);
+        healthState.RecordLoopStarted();
+        healthState.RecordSuccessfulPoll();
+        Assert.Equal(1, countingGate.EvaluateCallCount);
+
+        var check = CreateCheck(healthState, countingGate, options, timeProvider);
+        await check.CheckHealthAsync(new HealthCheckContext());
+        await check.CheckHealthAsync(new HealthCheckContext());
+
+        // Health check, LoopStarted=true VE ActivationEvaluated=true GÖRDÜĞÜNDEN worker'ın SON
+        // kararını GÜVENİR - `Evaluate()` BİR KEZ BİLE TEKRAR ÇAĞRILMAZ.
+        Assert.Equal(1, countingGate.EvaluateCallCount);
+    }
+
+    // ---- Faz 2B.8.2 görev md.7 test senaryo 9: tarih sınırı, worker başlamadan health tarafından fark edilir ----
+
+    [Fact]
+    public async Task WorkerBaslamadanTarihSinirGecerseHealthBeforeActivationDatedenActiveUnhealthyGecer()
+    {
+        // Europe/Istanbul UTC+3 - "2026-09-15" yerel gün başlangıcı = 2026-09-14T21:00:00Z.
+        var oncesi = new DateTimeOffset(2026, 9, 14, 20, 0, 0, TimeSpan.Zero);
+        var sonrasi = new DateTimeOffset(2026, 9, 14, 22, 0, 0, TimeSpan.Zero);
+        var timeProvider = new MutableTimeProvider(oncesi);
+        var options = Options_(enabled: true, notBeforeLocalDate: "2026-09-15");
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
+
+        var ilkSonuc = await check.CheckHealthAsync(new HealthCheckContext());
+        Assert.Equal(HealthStatus.Healthy, ilkSonuc.Status);
+        Assert.Equal(nameof(EBelgeProcessingActivationReason.BeforeActivationDate), ilkSonuc.Data["activationReason"]);
+
+        // Zaman sınırı GEÇER - worker (RecordLoopStarted HİÇ çağrılmadı) HÂLÂ başlamamıştır.
+        timeProvider.SetUtcNow(sonrasi);
+
+        var ikinciSonuc = await check.CheckHealthAsync(new HealthCheckContext());
+
+        // Faz 2B.8.2 görev md.5 - eski `BeforeActivationDate` kararı SONSUZA dek CACHE'LENMEZ;
+        // loop HÂLÂ başlamadığından health, HER çağrıda TAZE değerlendirir.
+        Assert.Equal(nameof(EBelgeProcessingActivationReason.Active), ikinciSonuc.Data["activationReason"]);
+        Assert.Equal(HealthStatus.Unhealthy, ikinciSonuc.Status);
+    }
+
+    // ---- Faz 2B.8.2 görev md.7 test senaryo 10-11: log spam yok, ham config değeri yok ----
+
+    [Fact]
+    public async Task HealthEvaluationGecersizConfigLogSpamUretmez()
+    {
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, notBeforeLocalDate: "gecersiz-tarih");
+        var loglar = new ErrorCountingLoggerProvider();
+        var loggerFactory = LoggerFactory.Create(b => b.AddProvider(loglar));
+        var gate = CreateGate(options, timeProvider, loggerFactory.CreateLogger<EBelgeProcessingActivationGate>());
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
+
+        for (var i = 0; i < 5; i++)
+        {
+            await check.CheckHealthAsync(new HealthCheckContext());
+        }
+
+        Assert.Equal(1, loglar.ErrorCount);
+    }
+
+    [Fact]
+    public async Task FreshStateHealthOutputHamTarihVeyaTimezoneDegeriIcermez()
+    {
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, notBeforeLocalDate: "gecersiz-tarih", timeZoneId: "Europe/Istanbul");
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
+
+        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
+
+        var serileştirilmis = string.Join(" ", sonuc.Data.Select(kv => $"{kv.Key}={kv.Value}"));
+        Assert.DoesNotContain("gecersiz-tarih", serileştirilmis, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---- Mevcut (Faz 2B.8.1) senaryolar - "worker ZATEN değerlendirdi" durumunu simüle eder ----
 
     [Fact]
     public async Task KuyrukBosOlmasiTekBasinaUnhealthyUretmez()
@@ -115,12 +304,14 @@ public class EBelgeOutboxWorkerHealthCheckTests
         // Faz 2B.8 görev md.15 - "kuyruk boş diye unhealthy olmamalı": döngü başladı, YAKIN
         // zamanda başarılı bir poll KAYDETTİ (mesaj bulunsun/bulunmasın FARK ETMEZ) → Healthy.
         var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, timeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
         healthState.RecordSuccessfulPoll();
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(HealthStatus.Healthy, sonuc.Status);
@@ -133,6 +324,8 @@ public class EBelgeOutboxWorkerHealthCheckTests
         // BAŞARILI polldan DAHA YENİYSE (henüz bir sonraki tur BAŞARIYLA tamamlanmadıysa) - bu
         // GÖRÜNÜR olmalıdır (Degraded) - ama TEK bir hata, Unhealthy kadar CİDDİ SAYILMAZ.
         var timeProvider = new MutableTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, timeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
@@ -141,7 +334,7 @@ public class EBelgeOutboxWorkerHealthCheckTests
         timeProvider.SetUtcNow(Baslangic.AddSeconds(1));
         healthState.RecordWorkerError("EBELGE_OUTBOX_WORKER_SQL_HATASI");
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic.AddSeconds(1));
+        var check = CreateCheck(healthState, gate, options, Baslangic.AddSeconds(1));
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(HealthStatus.Degraded, sonuc.Status);
@@ -156,6 +349,8 @@ public class EBelgeOutboxWorkerHealthCheckTests
         // başarılı bir poll GERÇEKLEŞİRSE, worker "toparlanmış" kabul edilir - eski hata KAYITTA
         // KALIR (temizlenmez) ama artık health kararını ETKİLEMEZ.
         var timeProvider = new MutableTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, timeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
@@ -165,7 +360,7 @@ public class EBelgeOutboxWorkerHealthCheckTests
         timeProvider.SetUtcNow(Baslangic.AddSeconds(5));
         healthState.RecordSuccessfulPoll();
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic.AddSeconds(5));
+        var check = CreateCheck(healthState, gate, options, Baslangic.AddSeconds(5));
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(HealthStatus.Healthy, sonuc.Status);
@@ -177,6 +372,8 @@ public class EBelgeOutboxWorkerHealthCheckTests
     public async Task UzunSuredirIlerlemeyenDonguDegradedOlur()
     {
         var startTimeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, startTimeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(startTimeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
@@ -188,7 +385,7 @@ public class EBelgeOutboxWorkerHealthCheckTests
         // kullanmalıdır (60 dakika = 3600sn > 600sn Unhealthy eşiği bile OLURDU - AŞAĞIDAKİ süre
         // KASITLI OLARAK Degraded ile Unhealthy arasında SEÇİLİR: 150sn < 300sn < 600sn).
         var araSure = startTimeProvider.GetUtcNow().AddSeconds(300);
-        var check = CreateCheck(healthState, Options_(enabled: true), araSure);
+        var check = CreateCheck(healthState, gate, options, araSure);
 
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
@@ -199,6 +396,8 @@ public class EBelgeOutboxWorkerHealthCheckTests
     public async Task CokUzunSuredirIlerlemeyenDonguUnhealthyOlur()
     {
         var startTimeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, startTimeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(startTimeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
@@ -206,7 +405,7 @@ public class EBelgeOutboxWorkerHealthCheckTests
 
         // Unhealthy eşiği = 30sn * 20 = 600sn - AÇIKÇA aşan bir süre.
         var cokSonra = startTimeProvider.GetUtcNow().AddSeconds(1200);
-        var check = CreateCheck(healthState, Options_(enabled: true), cokSonra);
+        var check = CreateCheck(healthState, gate, options, cokSonra);
 
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
@@ -217,6 +416,8 @@ public class EBelgeOutboxWorkerHealthCheckTests
     public async Task InflightSayisiHealthCikitisindaDogruGorunur()
     {
         var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, timeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
@@ -225,7 +426,7 @@ public class EBelgeOutboxWorkerHealthCheckTests
         healthState.IncrementInflight();
         healthState.DecrementInflight();
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         Assert.Equal(1, sonuc.Data["inflight"]);
@@ -235,12 +436,14 @@ public class EBelgeOutboxWorkerHealthCheckTests
     public async Task HealthOutputPiiVeyaTokenIcermez()
     {
         var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true);
+        var gate = CreateGate(options, timeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.Active());
         healthState.RecordLoopStarted();
         healthState.RecordSuccessfulPoll();
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         var serileştirilmis = string.Join(
@@ -258,10 +461,13 @@ public class EBelgeOutboxWorkerHealthCheckTests
     [Fact]
     public async Task GecersizConfigHealthOutputundaHamDegerIcermezYalnizReasonIcerir()
     {
-        var healthState = new EBelgeOutboxWorkerHealthState(new FixedTimeProvider(Baslangic));
+        var timeProvider = new FixedTimeProvider(Baslangic);
+        var options = Options_(enabled: true, timeZoneId: "Gecersiz/TimeZone-Kimligi");
+        var gate = CreateGate(options, timeProvider);
+        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
         healthState.RecordActivationDecision(EBelgeProcessingActivationDecision.InvalidTimeZoneConfiguration());
 
-        var check = CreateCheck(healthState, Options_(enabled: true), Baslangic);
+        var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
         var serileştirilmis = string.Join(" ", sonuc.Data.Select(kv => $"{kv.Key}={kv.Value}"));

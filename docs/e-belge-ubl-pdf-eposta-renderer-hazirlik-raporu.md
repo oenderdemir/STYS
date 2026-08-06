@@ -3670,4 +3670,175 @@ Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
 
 ### Sonraki faz
 
+Faz 2B.8.2'ye bakınız.
+
+## Faz 2B.8.2 sonuç bölümü — worker activation-health başlangıç kör noktasının giderilmesi
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+### Neden gerekliydi
+
+Faz 2B.8.1'in `EBelgeOutboxWorkerHealthState.GetSnapshot()` uygulaması, `_sonAktivasyonKarari ??
+EBelgeProcessingActivationDecision.Disabled()` biçiminde bir varsayılan değer kullanıyordu - worker
+döngüsü HENÜZ hiç `RecordActivationDecision` çağırmadıysa (özellikle: döngü hiç BAŞLAMADIYSA - ör.
+host başlatma sırasında bir DI/config hatası nedeniyle `ExecuteAsync` hiç ilk turunu çalıştıramadıysa),
+bu "henüz değerlendirilmedi" durumu GERÇEK bir `Disabled` kararıyla KARIŞTIRILIYOR ve health check bunu
+`Healthy` olarak raporluyordu. Sonuç: `Enabled=true` VE aktivasyon tarihi AÇIK olduğu halde worker
+döngüsü hiç çalışmayan bir üretim arızası, health/readiness endpoint'İNDE görünmez KALIYORDU - tam da
+bu health check'in var olma amacına (operatörün worker'ın NEDEN mesaj işlemediğini/işleyip
+işlemediğini ANLAYABİLMESİ) aykırı bir kör noktaydı. Ayrıca `Task.WhenAll(tasks)`'ın kendisinin bir
+worker-altyapısı hatası ile fırlaması durumunda `semaphore.Dispose()`'un atlanma İHTİMALİ vardı (aynı
+`finally` bloğunda, `Dispose()`'dan ÖNCE gelen bir satırın kendisi FIRLARSA `Dispose()` hiç
+ÇALIŞMAZ).
+
+### 1-2. "Henüz değerlendirilmedi" durumunun açıkça modellenmesi
+
+`EBelgeOutboxWorkerHealthSnapshot`'a yeni bir `bool ActivationEvaluated` alanı eklendi;
+`ActivationReason` `EBelgeProcessingActivationReason?` (nullable) yapıldı. `GetSnapshot()`'taki `??
+Disabled()` varsayımı TAMAMEN KALDIRILDI - `RecordActivationDecision` hiç çağrılmadıysa
+`ActivationEvaluated=false` VE `ActivationReason=null` döner; bu durum ARTIK hiçbir şekilde gerçek
+`Disabled` kararıyla KARIŞTIRILAMAZ (bkz. [EBelgeOutboxWorkerHealthState.cs](../backend/Muhasebe/SatisBelgeleri/Services/EBelgeOutboxWorkerHealthState.cs)).
+Görevin sunduğu iki tasarım seçeneğinden (nullable reason + bool VS. yeni bir `NotEvaluated` enum
+değeri) BİRİNCİSİ seçildi, çünkü görevin KENDİ verdiği örnek record imzası zaten bu şekli
+kullanıyordu ve `EBelgeProcessingActivationReason` enum'unun ANLAMI ("hangi kural gate'i kapattı/açtı")
+ile "hiç değerlendirilmedi" durumu KAVRAMSAL olarak FARKLI eksenler - birini enum'a EKLEMEK bu iki
+ekseni KARIŞTIRIRDI.
+
+### 3-5. Health check'in aynı activation gate ile başlangıç fallback'i
+
+`EBelgeOutboxWorkerHealthCheck`'e, worker'ın ZATEN kullandığı AYNI singleton
+`IEBelgeProcessingActivationGate` enjekte edildi (4. constructor parametresi; `Program.cs`'te
+DEĞİŞİKLİK GEREKMEDİ, çünkü gate ZATEN singleton olarak kayıtlı ve `AddCheck<T>` DI container
+üzerinden çözülüyor). `CheckHealthAsync`, snapshot'ı okuduktan SONRA:
+
+```text
+if (!snapshot.LoopStarted || !snapshot.ActivationEvaluated)
+{
+    karar = _activationGate.Evaluate();      // AYNI Evaluate() sözleşmesi - ayrı algoritma YOK
+    _healthState.RecordActivationDecision(karar);
+}
+else
+{
+    karar = snapshot'tan türetilir;           // worker'ın SON kararı - gereksiz tekrar değerlendirme YOK
+}
+```
+
+Bu SAYEDE worker döngüsü hiç başlamamış OLSA BİLE health check gerçek aktivasyon durumunu görebilir:
+`Enabled=true` + tarih kapısı AÇIK + döngü hiç başlamamış → `Active` + `LoopStarted=false` →
+`Unhealthy`. Koşul BİLEREK `!snapshot.LoopStarted || !snapshot.ActivationEvaluated` (yalnız "hiç
+değerlendirilmedi" DEĞİL, "döngü henüz başlamadı" DA) seçildi - böylece tarih sınırı worker
+BAŞLAMADAN AŞILIRSA (görev md.5'in AÇIKÇA verdiği senaryo: ilk çağrı `BeforeActivationDate`/Healthy,
+saat `2026-09-15 00:00 Europe/Istanbul`'u geçer, worker HÂLÂ başlamamıştır), health check ESKİ
+`BeforeActivationDate` kararını SONSUZA dek "cache'lemez" - döngü başlamadığı SÜRECE HER health check
+çağrısı TAZE bir `Evaluate()` yapar. Döngü BAŞLADIKTAN sonra ise worker'ın kendi turunda yazdığı SON
+karar GÜVENİLİR kabul edilir - ayrı bir "evaluation timestamp" alanı EKLEMEYE gerek KALMADI (görevin
+sunduğu iki alternatiften BASİT olanı seçildi). Aktivasyon gate'İNİN log-spam-bastırma durumu AYNI
+singleton örnekte YAŞADIĞI için, worker'ın turdaki `Evaluate()` çağrısı İLE health check'in fallback
+`Evaluate()` çağrısı DOĞAL olarak TEK bir log-dedup durumunu PAYLAŞIR - health check EK bir log spam'e
+yol AÇMAZ (bkz. [EBelgeOutboxWorkerHealthCheck.cs](../backend/Muhasebe/SatisBelgeleri/Services/EBelgeOutboxWorkerHealthCheck.cs)).
+
+Karar politikası (Disabled/BeforeActivationDate → Healthy, InvalidDate/InvalidTimeZone → Degraded,
+Active+LoopStarted=false → Unhealthy, Active+LoopStarted=true → staleness/recovery eşiklerine göre)
+Faz 2B.8.1'DEN DEĞİŞMEDİ - yalnız `karar`ın KAYNAĞI (artık ya taze fallback ya da worker'ın son kararı)
+DEĞİŞTİ. `BuildGuvenliData` artık HEM snapshot HEM güncel `karar`ı alır - `workerEnabled`/
+`activationAllowed`/`activationReason` çıktısı HER ZAMAN güncel `karar`ı yansıtır (fallback
+tetiklendiyse çıktı BUNU yansıtır); ham `NotBeforeLocalDate`/`TimeZoneId` DEĞERLERİ health output'una
+HİÇ EKLENMEDİ (Faz 2B.8.1'DEN DEĞİŞMEDİ).
+
+### 6. Task.WhenAll hatasında garantili semaphore dispose'u
+
+`BirTurCalistirAsync`'in dış `finally` bloğu, `Task.WhenAll(tasks)`'ı KENDİ iç `try/catch/finally`'İNE
+ALACAK şekilde yeniden yapılandırıldı:
+
+```text
+finally
+{
+    try { if (tasks.Count > 0) await Task.WhenAll(tasks); }
+    catch (Exception ex) { taskHatasi = ex; }
+    finally { semaphore.Dispose(); }   // Task.WhenAll SONUCU NE OLURSA OLSUN, dil garantisiyle çalışır
+}
+
+RethrowTurVeTaskHatalariGuvenliSekilde(turHatasi, taskHatasi, stoppingToken);
+```
+
+`semaphore.Dispose()` artık C#'ın try/finally dil garantisi SAYESİNDE `Task.WhenAll` FIRLASA BİLE
+ÇALIŞIR. Olası İKİ hata (`turHatasi`: claim/tur seviyesi, `taskHatasi`: `Task.WhenAll` seviyesi) İÇİN
+AÇIK bir öncelik politikası uygulandı (`RethrowTurVeTaskHatalariGuvenliSekilde`):
+
+1. İkisinden BİRİ (doğrudan veya bir `AggregateException` İÇİNDE) `OutOfMemoryException` İSE, bu
+   HİÇBİR sarmalayıcı OLMADAN, orijinal TİPİYLE ÖNCELİKLE fırlatılır (fatal ASLA gizlenmez).
+2. Değilse, `turHatasi` host cancellation'I (`OperationCanceledException` + `stoppingToken.
+   IsCancellationRequested`) TEMSİL EDİYORSA, bu doğrudan fırlatılır (`ExecuteAsync`'in ÖZEL
+   `catch (OperationCanceledException) when (...)` filtresinin YAKALAYABİLMESİ için sarmalanmadan).
+3. Aynı kontrol `taskHatasi` İÇİN de yapılır.
+4. İKİSİ de KALDIYSA VE hiçbiri fatal/cancellation DEĞİLSE, GÜVENLİ SABİT bir mesajla bir
+   `AggregateException(SABIT_MESAJ, turHatasi, taskHatasi)` İÇİNDE BİRLEŞTİRİLİR - hiçbiri
+   SESSİZCE KAYBOLMAZ/EZİLMEZ.
+5. Yalnız BİRİ VARSA, `ExceptionDispatchInfo.Capture(...).Throw()` İLE orijinal stack trace
+   KORUNARAK doğrudan fırlatılır.
+
+`WorkerLevelSafeErrorCode`, artık `AggregateException`'ı da `InnerExceptions`'INI inceleyerek
+(`SqlException`/`TimeoutException` İçeriyorsa buna göre) SINIFLANDIRIR - ham exception İÇERİĞİ HİÇBİR
+DALDA loglanmaz (bkz. [EBelgeOutboxWorker.cs](../backend/Muhasebe/SatisBelgeleri/Services/EBelgeOutboxWorker.cs)).
+
+### Test kapsamı ve çalıştırılan hedefli komut
+
+**`EBelgeOutboxWorkerHealthCheckTests` YENİDEN YAZILDI (18 test)** - `EBelgeProcessingActivationGate`
+GERÇEK örneği (fake DEĞİL) + `TimeProvider` İLE, health state'e HİÇBİR manuel `RecordActivationDecision`
+seed'İ YAPILMADAN (görev md.9'un AÇIKÇA yasakladığı "production açığını testte gizleme" TUZAĞINDAN
+kaçınmak İÇİN) şu senaryolar doğrulandı: taze state + `Enabled=true` + tarih açık + döngü başlamadı →
+`Unhealthy`; taze state + `Enabled=false` → `Healthy`/`Disabled`; taze state + tarih henüz gelmedi →
+`Healthy`/`BeforeActivationDate`; taze state + geçersiz tarih/timezone → `Degraded`; health fallback
+değerlendirmesi state'e type-safe kararı YAZAR; worker ZATEN değerlendirme yaptıktan SONRA
+(`CountingActivationGate` İLE `EvaluateCallCount` SAYILARAK) health GEREKSİZ ikinci bir değerlendirme
+YAPMAZ; tarih sınırı worker BAŞLAMADAN AŞILDIĞINDA (`MutableTimeProvider` İLE) health
+`BeforeActivationDate`'DEN `Active`/`Unhealthy`'YE geçer; geçersiz config'te (`ErrorCountingLoggerProvider`
+İLE 5 ardışık health çağrısında) log spam ÜRETİLMEZ; health output'unda ham tarih/timezone değeri
+BULUNMAZ; MEVCUT recovery/staleness/PII-yok testleri KORUNDU.
+
+**`EBelgeOutboxWorkerTests`'e 2 YENİ test eklendi**:
+`TaskWhenAllExceptionUretseBileSemaphoreDisposeEdilirVeFatalExceptionYayilir` (`FakeMetrics.
+IncrementInflightOverride` İLE `ProcessClaimAsync`'in `try` bloğu İÇİNDEN GERÇEK bir `OutOfMemoryException`
+fırlatılır - `TaskScheduler.UnobservedTaskException` + `GC.Collect()`/`WaitForPendingFinalizers()` İLE
+hem fatal exception'IN yayıldığı HEM hiçbir unobserved task exception KALMADIĞI doğrulanır) ve
+`ClaimHatasiVeTaskAltyapiHatasiAyniTurdaOlusursaWorkerCokmezVeDevamEder` (`FakeMetrics.
+DecrementInflightOverride` İLE `ProcessClaimAsync`'in `finally` bloğundan bir task-altyapısı hatası,
+AYNI turda İKİNCİ bir claim hatasıyla BİRLİKTE ÜRETİLİR - worker'ın ÇÖKMEDİĞİ, hata kaynağı
+kaldırıldıktan SONRA BAŞKA bir mesajı BAŞARIYLA işlemeye DEVAM ETTİĞİ VE hiçbir ham hata metninin
+loglanmadığı doğrulanır - `AggregateException` `ExecuteAsync`'in genel `catch` filtresi TARAFINDAN
+YAKALANDIĞI için worker BURADA fault ETMEZ, bu yüzden black-box davranış doğrulaması TERCİH EDİLDİ).
+Host cancellation'ın normal shutdown OLARAK KALDIĞI, Faz 2B.8.1'İN MEVCUT
+`HostCancellationHataVeyaRetryOlarakKaydedilmez` testiyle ZATEN doğrulanmaktadır (yeni bir test
+GEREKMEDİ).
+
+```
+dotnet test tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~EBelgeXmlImzalayiciTests|FullyQualifiedName~EBelgeSigningActivationGateTests|FullyQualifiedName~EBelgeUblImzalamaServiceIntegrationTests|FullyQualifiedName~EBelgeSigningBackfillServiceIntegrationTests|FullyQualifiedName~EBelgeArtefaktOlusturmaServiceIntegrationTests|FullyQualifiedName~EBelgeOutboxLeaseTransitionIntegrationTests|FullyQualifiedName~EBelgeOutboxMesajIslemeServiceTests|FullyQualifiedName~EBelgeUblRendererEndToEndIntegrationTests|FullyQualifiedName~EBelgeSchematronSidecarIntegrationTests|FullyQualifiedName~EBelgeFaz1IntegrationTests|FullyQualifiedName~EBelgeOutboxFaz2AIntegrationTests|FullyQualifiedName~EBelgeOutboxRetryPolicyTests|FullyQualifiedName~EBelgeOutboxClaimLeaseIntegrationTests|FullyQualifiedName~EBelgeProcessingActivationGateTests|FullyQualifiedName~EBelgeProcessingOptionsValidatorTests|FullyQualifiedName~EBelgeOutboxWorkerMetricsTests|FullyQualifiedName~EBelgeOutboxWorkerHealthCheckTests|FullyQualifiedName~EBelgeOutboxWorkerTests|FullyQualifiedName~EBelgeOutboxWorkerIntegrationTests"
+  → Passed: 350, Failed: 0, Total: 350 (gerçek SQL Server + gerçek Java Saxon sidecar + gerçek test
+  sertifikasıyla).
+```
+
+**Regresyon (Faz 2B.5/2B.6/2B.7/2B.8/2B.8.1 - hiçbiri kasıtlı DEĞİŞTİRİLMEDİ, hepsi yukarıdaki
+filtreye DAHİLDİR ve BAŞARILIDIR):** özellikle `EBelgeOutboxWorkerIntegrationTests`'in 5 GERÇEK (SQL
+Server + sidecar + test sertifikası) testi - çoklu instance/lease devri, gerçek `ArtefaktOlustur`/
+`UblImzala` worker akışı, gerçek RSA SignedReady worker akışı - SORUNSUZ geçti.
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+Worker/claim/lease/task yaşam döngüsü mimarisi BAŞTAN YAZILMADI (yalnız 4 dar madde DÜZELTİLDİ);
+health check İÇİNDE AYRI bir aktivasyon algoritması YAZILMADI (AYNI singleton
+`IEBelgeProcessingActivationGate.Evaluate()` PAYLAŞILDI); "henüz değerlendirilmedi" durumu HİÇBİR
+KOD YOLUNDA `Disabled` OLARAK YORUMLANMADI; health testlerinde production açığını GİZLEMEK İçin
+aktivasyon kararı ELLE SEED EDİLMEDİ (yeni testlerin TAMAMI gerçek gate + gerçek options İLE
+çalışır); runtime options hot-reload EKLENMEDİ (`Enabled`/config DEĞİŞİKLİĞİ HÂLÂ deployment/restart
+gerektirir - Faz 2B.8.1'DEN DEĞİŞMEDİ); ham exception İÇERİĞİ HİÇBİR DALDA loglanmadı; activation
+tarihi (15 Eylül 2026) DEĞİŞTİRİLMEDİ; production processing bu tarihten ÖNCE AÇILMADI; entegratör
+gönderimi/HSM/PDF/e-posta/frontend GELİŞTİRİLMEDİ; tüm çözüm test paketi ÇALIŞTIRILMADI (yalnız
+hedefli filtre); hiçbir test ATLANMADI.
+
+### Açık kalan konular
+
+Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
+
+### Sonraki faz
+
 Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.

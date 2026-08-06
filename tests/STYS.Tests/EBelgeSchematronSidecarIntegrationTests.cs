@@ -11,6 +11,9 @@ namespace STYS.Tests;
 /// JSON KULLANILMAZ - HttpClient gerçek bir yerel HTTP sunucusuna bağlanır (bkz. görev md.14).
 /// </summary>
 [Collection(SchematronSidecarCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SidecarIntegration")]
+[Trait("Dependency", "JavaSidecar")]
 public class EBelgeSchematronSidecarIntegrationTests
 {
     private const string RuleSetId = "GIB-UBL-TR-1.2.1/2026-09-14/EARSIV";
@@ -159,6 +162,7 @@ public class EBelgeSchematronSidecarIntegrationTests
 
     // 7. Uygun XML sıfır failed-assert döndürür.
     [Fact]
+    [Trait("CriticalInvariant", "SchematronRealSidecar")]
     public async Task UygunXmlSifirFailedAssertDoner()
     {
         SidecarHazirDegilseBasarisizOl();

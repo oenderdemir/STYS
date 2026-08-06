@@ -11,6 +11,8 @@ namespace STYS.Tests;
 /// eder. TAMAMEN `TimeProvider` ile sabitlenir - `DateTime.Now`/`UtcNow` KULLANILMAZ, DB/sidecar
 /// GEREKMEZ (bkz. `EBelgeSigningActivationGateTests` ile AYNI desen).
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeProcessingActivationGateTests
 {
     private sealed class FixedTimeProvider : TimeProvider
@@ -48,6 +50,7 @@ public class EBelgeProcessingActivationGateTests
     }
 
     [Fact]
+    [Trait("CriticalInvariant", "ActivationNotBefore20260915")]
     public void OnBesEylulYerelGunBaslangicindaVeSonrasindaIslemeYapilabilir()
     {
         // 2026-09-15 00:00:00 Europe/Istanbul (UTC+3) = 2026-09-14T21:00:00Z (bkz. görev md.18

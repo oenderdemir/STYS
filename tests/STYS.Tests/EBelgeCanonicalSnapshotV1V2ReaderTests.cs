@@ -15,6 +15,8 @@ namespace STYS.Tests;
 /// V1 ve V2 için TEK bir object/dynamic dispatcher yoktur - bkz.
 /// IEBelgeCanonicalSnapshotV1Reader/IEBelgeCanonicalSnapshotV2Reader (EBelgeCanonicalSnapshotV2.cs).
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Contract")]
 public class EBelgeCanonicalSnapshotV1V2ReaderTests
 {
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()

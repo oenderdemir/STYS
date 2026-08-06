@@ -10,6 +10,8 @@ namespace STYS.Tests;
 /// kapısını ve fail-closed config davranışını test eder. TAMAMEN `TimeProvider` ile
 /// sabitlenir - `DateTime.Now`/`UtcNow` KULLANILMAZ, DB/sidecar GEREKMEZ.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeSigningActivationGateTests
 {
     private sealed class FixedTimeProvider : TimeProvider

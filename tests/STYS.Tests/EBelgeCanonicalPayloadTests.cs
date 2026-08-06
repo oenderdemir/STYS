@@ -9,6 +9,8 @@ namespace STYS.Tests;
 /// Faz 2B.4.2: EBelgeCanonicalPayload'ın "exact UTF-8 byte + tek seferlik hash + kaynak
 /// mutasyonuna karşı bağışıklık" sözleşmesini doğrular.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeCanonicalPayloadTests
 {
     [Fact]

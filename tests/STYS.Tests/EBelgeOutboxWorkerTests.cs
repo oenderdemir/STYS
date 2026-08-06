@@ -19,6 +19,8 @@ namespace STYS.Tests;
 /// GERÇEK bir `IServiceScopeFactory` (küçük bir `ServiceCollection` üzerinden) kullanarak test
 /// eder. Çoklu-instance/gerçek-artifact senaryoları `EBelgeOutboxWorkerIntegrationTests`'tedir.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeOutboxWorkerTests
 {
     private sealed class FixedTimeProvider : TimeProvider
@@ -996,55 +998,36 @@ public class EBelgeOutboxWorkerTests
         Assert.Equal(0, h.HealthState.GetSnapshot().InflightCount);
     }
 
-    // ---- Faz 2B.8.1: güvenli loglama ----
+    // ---- Faz 2B.8.1/2B.9: güvenli loglama ----
+    // Üç ayrı [Fact] (lease token / XML+VKN / password+SignatureValue) AYNI kod yolunu (claim
+    // exception -> worker-seviyesi güvenli loglama) ve AYNI dependency seviyesini (in-memory fake
+    // harness) çalıştırıyordu; yalnız exception mesajındaki gizli değer(ler) DEĞİŞİYORDU. Tek bir
+    // [Theory]'e birleştirildi - hiçbir senaryo/assertion KAYBOLMADI (üçüncü senaryonun İKİ gizli
+    // değeri AYNI mesajda BİRLİKTE test edilmesi de KORUNDU).
 
-    [Fact]
-    public async Task WorkerLevelExceptionMesajindakiLeaseTokenLoglanmaz()
+    public static IEnumerable<object[]> LoglanmamasiGerekenGizliDegerSenaryolari() => new[]
+    {
+        new object[] { "Bağlantı hatası - KilitToken=GIZLI-TOKEN-123", new[] { "GIZLI-TOKEN-123" } },
+        new object[] { "Doğrulama hatası: <VKN>1234567890</VKN>", new[] { "<VKN>1234567890</VKN>", "1234567890" } },
+        new object[] { "Bağlantı: Password=secret; SignatureValue=secret", new[] { "Password=secret", "SignatureValue=secret", "secret" } },
+    };
+
+    [Theory]
+    [MemberData(nameof(LoglanmamasiGerekenGizliDegerSenaryolari))]
+    public async Task WorkerLevelExceptionMesajindakiGizliDegerLogaSizmaz(string exceptionMesaji, string[] gizliDegerler)
     {
         await using var h = CreateHarness();
-        const string gizliDeger = "GIZLI-TOKEN-123";
-        h.State.ClaimExceptions.Enqueue(new InvalidOperationException($"Bağlantı hatası - KilitToken={gizliDeger}"));
+        h.State.ClaimExceptions.Enqueue(new InvalidOperationException(exceptionMesaji));
         h.Delay.BlockUntilCancelled = true;
 
         await h.Worker.StartAsync(CancellationToken.None);
         await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
         await h.Worker.StopAsync(CancellationToken.None);
 
-        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliDeger, StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task WorkerLevelExceptionMesajindakiXmlVeVknLoglanmaz()
-    {
-        await using var h = CreateHarness();
-        const string gizliXml = "<VKN>1234567890</VKN>";
-        h.State.ClaimExceptions.Enqueue(new InvalidOperationException($"Doğrulama hatası: {gizliXml}"));
-        h.Delay.BlockUntilCancelled = true;
-
-        await h.Worker.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
-        await h.Worker.StopAsync(CancellationToken.None);
-
-        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliXml, StringComparison.Ordinal));
-        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("1234567890", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task WorkerLevelExceptionMesajindakiPasswordVeSignatureValueLoglanmaz()
-    {
-        await using var h = CreateHarness();
-        const string gizliParola = "Password=secret";
-        const string gizliImza = "SignatureValue=secret";
-        h.State.ClaimExceptions.Enqueue(new InvalidOperationException($"Bağlantı: {gizliParola}; {gizliImza}"));
-        h.Delay.BlockUntilCancelled = true;
-
-        await h.Worker.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
-        await h.Worker.StopAsync(CancellationToken.None);
-
-        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliParola, StringComparison.Ordinal));
-        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliImza, StringComparison.Ordinal));
-        Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains("secret", StringComparison.Ordinal));
+        foreach (var gizliDeger in gizliDegerler)
+        {
+            Assert.DoesNotContain(h.Loglar.Kayitlar, k => k.Message.Contains(gizliDeger, StringComparison.Ordinal));
+        }
     }
 
     [Fact]

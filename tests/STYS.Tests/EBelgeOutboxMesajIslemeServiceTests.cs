@@ -6,6 +6,8 @@ using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Tests;
 
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeOutboxMesajIslemeServiceTests
 {
     private static readonly Guid TestToken = Guid.Parse("aabbccdd-eeff-aabb-ccdd-eeffaabbccdd");

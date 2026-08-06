@@ -34,6 +34,9 @@ namespace STYS.Tests;
 
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SqlIntegration")]
+[Trait("Dependency", "SqlServer")]
 public class EBelgeOutboxFaz2AIntegrationTests : IAsyncLifetime
 {
     private const string TestMarker = "EBO-2A";

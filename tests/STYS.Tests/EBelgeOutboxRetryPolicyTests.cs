@@ -3,6 +3,8 @@ using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Tests;
 
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeOutboxRetryPolicyTests
 {
     private readonly IEBelgeOutboxRetryPolicy _policy = new EBelgeOutboxRetryPolicy();

@@ -19,6 +19,8 @@ namespace STYS.Tests;
 /// gereksiz-tekrar-değerlendirme-yok) test eden testler `RecordActivationDecision`'ı AÇIKÇA
 /// çağırır - bu, worker'ın KENDİ davranışını SİMÜLE eder, production açığını GİZLEMEZ.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeOutboxWorkerHealthCheckTests
 {
     private sealed class FixedTimeProvider : TimeProvider
@@ -107,84 +109,39 @@ public class EBelgeOutboxWorkerHealthCheckTests
         IdlePollIntervalSeconds = 30,
     };
 
-    // ---- Faz 2B.8.2 görev md.7 test senaryo 1-6: "fresh" state, ELLE seed YOK, GERÇEK gate ----
+    // ---- Faz 2B.9 - "fresh" state, ELLE seed YOK, GERÇEK gate - aktivasyon health karar matrisi ----
+    // Bu 5 senaryo öncesinde ayrı [Fact]'lerdi; hepsi AYNI kod yolunu (health check'in kendi fallback
+    // Evaluate() değerlendirmesini), AYNI dependency seviyesini (in-memory, gerçek gate + gerçek
+    // options) çalıştırıyor - yalnız options/beklenen sonuç DEĞİŞİYORDU. Hata teşhisi ZAYIFLAMADI:
+    // xUnit her satırı kendi parametreleriyle ayrı ayrı raporlar.
 
-    [Fact]
-    public async Task FreshStateEnabledTrueTarihAcikLoopBaslamadiUnhealthy()
+    public static IEnumerable<object[]> AktivasyonHealthMatrisSenaryolari() => new[]
     {
-        // Faz 2B.8.2 görev md.1/md.2 - worker loop HİÇ ÇALIŞMADI (`RecordActivationDecision`/
-        // `RecordLoopStarted` HİÇBİRİ çağrılmadı) - health check YİNE DE GERÇEK activation
-        // durumunu (Enabled=true + tarih AÇIK + loop YOK => Unhealthy) GÖREBİLMELİDİR.
+        new object[] { true, "2020-01-01", "Europe/Istanbul", HealthStatus.Unhealthy, EBelgeProcessingActivationReason.Active },
+        new object[] { false, "2020-01-01", "Europe/Istanbul", HealthStatus.Healthy, EBelgeProcessingActivationReason.Disabled },
+        new object[] { true, "2030-01-01", "Europe/Istanbul", HealthStatus.Healthy, EBelgeProcessingActivationReason.BeforeActivationDate },
+        new object[] { true, "gecersiz-tarih", "Europe/Istanbul", HealthStatus.Degraded, EBelgeProcessingActivationReason.InvalidDateConfiguration },
+        new object[] { true, "2020-01-01", "Gecersiz/TimeZone-Kimligi", HealthStatus.Degraded, EBelgeProcessingActivationReason.InvalidTimeZoneConfiguration },
+    };
+
+    [Theory]
+    [MemberData(nameof(AktivasyonHealthMatrisSenaryolari))]
+    public async Task FreshStateAktivasyonKarariBeklenenHealthSonucunuUretir(
+        bool enabled, string notBeforeLocalDate, string timeZoneId, HealthStatus beklenenDurum, EBelgeProcessingActivationReason beklenenNeden)
+    {
+        // Worker loop HİÇ ÇALIŞMADI (`RecordActivationDecision`/`RecordLoopStarted` HİÇBİRİ
+        // çağrılmadı) - health check YİNE DE GERÇEK activation durumunu KENDİSİ değerlendirip
+        // GÖREBİLMELİDİR (üretim açığını gizleyen elle seed YOK).
         var timeProvider = new FixedTimeProvider(Baslangic);
-        var options = Options_(enabled: true, notBeforeLocalDate: "2020-01-01"); // tarih ZATEN geçmiş
+        var options = Options_(enabled: enabled, notBeforeLocalDate: notBeforeLocalDate, timeZoneId: timeZoneId);
         var gate = CreateGate(options, timeProvider);
         var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
 
         var check = CreateCheck(healthState, gate, options, timeProvider);
         var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
 
-        Assert.Equal(HealthStatus.Unhealthy, sonuc.Status);
-        Assert.Equal(nameof(EBelgeProcessingActivationReason.Active), sonuc.Data["activationReason"]);
-    }
-
-    [Fact]
-    public async Task FreshStateEnabledFalseHealthyDisabled()
-    {
-        var timeProvider = new FixedTimeProvider(Baslangic);
-        var options = Options_(enabled: false);
-        var gate = CreateGate(options, timeProvider);
-        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
-
-        var check = CreateCheck(healthState, gate, options, timeProvider);
-        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
-
-        Assert.Equal(HealthStatus.Healthy, sonuc.Status);
-        Assert.Equal(nameof(EBelgeProcessingActivationReason.Disabled), sonuc.Data["activationReason"]);
-    }
-
-    [Fact]
-    public async Task FreshStateTarihOncesiHealthyBeforeActivationDate()
-    {
-        var timeProvider = new FixedTimeProvider(Baslangic);
-        var options = Options_(enabled: true, notBeforeLocalDate: "2030-01-01"); // gelecek tarih
-        var gate = CreateGate(options, timeProvider);
-        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
-
-        var check = CreateCheck(healthState, gate, options, timeProvider);
-        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
-
-        Assert.Equal(HealthStatus.Healthy, sonuc.Status);
-        Assert.Equal(nameof(EBelgeProcessingActivationReason.BeforeActivationDate), sonuc.Data["activationReason"]);
-    }
-
-    [Fact]
-    public async Task FreshStateGecersizTarihDegraded()
-    {
-        var timeProvider = new FixedTimeProvider(Baslangic);
-        var options = Options_(enabled: true, notBeforeLocalDate: "gecersiz-tarih");
-        var gate = CreateGate(options, timeProvider);
-        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
-
-        var check = CreateCheck(healthState, gate, options, timeProvider);
-        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
-
-        Assert.Equal(HealthStatus.Degraded, sonuc.Status);
-        Assert.Equal(nameof(EBelgeProcessingActivationReason.InvalidDateConfiguration), sonuc.Data["activationReason"]);
-    }
-
-    [Fact]
-    public async Task FreshStateGecersizTimeZoneDegraded()
-    {
-        var timeProvider = new FixedTimeProvider(Baslangic);
-        var options = Options_(enabled: true, timeZoneId: "Gecersiz/TimeZone-Kimligi");
-        var gate = CreateGate(options, timeProvider);
-        var healthState = new EBelgeOutboxWorkerHealthState(timeProvider);
-
-        var check = CreateCheck(healthState, gate, options, timeProvider);
-        var sonuc = await check.CheckHealthAsync(new HealthCheckContext());
-
-        Assert.Equal(HealthStatus.Degraded, sonuc.Status);
-        Assert.Equal(nameof(EBelgeProcessingActivationReason.InvalidTimeZoneConfiguration), sonuc.Data["activationReason"]);
+        Assert.Equal(beklenenDurum, sonuc.Status);
+        Assert.Equal(beklenenNeden.ToString(), sonuc.Data["activationReason"]);
     }
 
     // ---- Faz 2B.8.2 görev md.7 test senaryo 7-8: fallback yazımı + gereksiz ikinci değerlendirme YOK ----

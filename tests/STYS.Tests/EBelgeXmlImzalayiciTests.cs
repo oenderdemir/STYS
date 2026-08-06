@@ -15,6 +15,9 @@ namespace STYS.Tests;
 /// GERÇEK renderer kullanılır, bu sınıf başına BİR KEZ - bkz. InitializeAsync); imza motoru/
 /// doğrulayıcı testleri DB veya sidecar'a HİÇ İHTİYAÇ DUYMAZ.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "CryptoIntegration")]
+[Trait("Dependency", "Cryptography")]
 public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
 {
     private ImmutableArray<byte> _unsignedUblUtf8;
@@ -102,6 +105,7 @@ public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("CriticalInvariant", "DuplicateXmlIdRejected")]
     public async Task YinelenenIdIcerenUnsignedXmlReddedilir()
     {
         // Senaryo 8: signature-wrapping sertleştirmesi - imzalama ÖNCESİNDE zaten bir "Id"
@@ -134,6 +138,7 @@ public sealed class EBelgeXmlImzalayiciTests : IAsyncLifetime
     }
 
     [Fact]
+    [Trait("CriticalInvariant", "SignatureTamperRejected")]
     public async Task TekByteDegisikligiImzayiBozar()
     {
         using var saglayici = new EBelgeTestSertifikaSaglayici();

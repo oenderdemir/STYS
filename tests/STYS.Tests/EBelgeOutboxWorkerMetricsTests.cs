@@ -12,6 +12,8 @@ namespace STYS.Tests;
 /// ID/Kurum ID/EBelgeKaydi ID/hata mesajı/hash/token gibi YÜKSEK cardinality kimliklerin HİÇ tag
 /// olarak EKLENMEDİĞİNİ kanıtlar.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeOutboxWorkerMetricsTests : IDisposable
 {
     private readonly EBelgeOutboxWorkerMetrics _metrics = new();

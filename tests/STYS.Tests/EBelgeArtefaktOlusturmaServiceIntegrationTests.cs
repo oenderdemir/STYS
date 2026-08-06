@@ -37,6 +37,10 @@ namespace STYS.Tests;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SqlIntegration")]
+[Trait("Dependency", "SqlServer")]
+[Trait("Dependency", "JavaSidecar")]
 public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IClassFixture<SchematronSidecarProcessFixture>
 {
     private const string TestMarker = "EBO-2B6";
@@ -465,6 +469,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
     }
 
     [IntegrationFact]
+    [Trait("CriticalInvariant", "StaleWorkerCannotWrite")]
     public async Task ReclaimEdilmisMesajdaEskiWorkerYazamazSadeceYeniSahipYazar()
     {
         await using var seedCtx = CreateDbContext();

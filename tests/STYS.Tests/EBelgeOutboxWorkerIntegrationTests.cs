@@ -28,6 +28,10 @@ namespace STYS.Tests;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("Dependency", "SqlServer")]
+[Trait("Dependency", "JavaSidecar")]
+[Trait("Dependency", "Cryptography")]
 public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<SchematronSidecarProcessFixture>
 {
     private const string TestMarker = "EBO-2B8";
@@ -294,6 +298,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
     }
 
     [IntegrationFact]
+    [Trait("TestLevel", "WorkerEndToEnd")]
     public async Task GercekWorkerArtefaktOlusturMesajiniClaimEdipTamamlarVeUnsignedArtifactOlusur()
     {
         int eBelgeKaydiId;
@@ -328,6 +333,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
     }
 
     [IntegrationFact]
+    [Trait("TestLevel", "WorkerEndToEnd")]
     public async Task GercekWorkerUblImzalaMesajiniClaimEdipTamamlarVeSignedReadyArtifactOlusur()
     {
         int eBelgeKaydiId;
@@ -362,6 +368,8 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
     }
 
     [IntegrationFact]
+    [Trait("TestLevel", "ReleaseGate")]
+    [Trait("CriticalInvariant", "WorkerEndToEndSignedReady")]
     public async Task GercekWorkerArtefaktOlusturdanUblImzalayaZincirlemeTamamlarUctanUcaSignedReadyUretir()
     {
         // Faz 2B.8 görev md.18 senaryo 44-47 - TEK bir worker, ÖNCE ArtefaktOlustur mesajını
@@ -404,6 +412,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
     }
 
     [IntegrationFact]
+    [Trait("TestLevel", "WorkerEndToEnd")]
     public async Task WorkerKapatilipYenidenBaslatildigindaTamamlanmisMesajTekrarIslenmez()
     {
         int eBelgeKaydiId;
@@ -454,6 +463,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
     }
 
     [IntegrationFact]
+    [Trait("TestLevel", "WorkerEndToEnd")]
     public async Task IkiInstanceAyniMesajiIsleyemezVeLeaseSuresiDolduktanSonraIkinciWorkerTamamlar()
     {
         // Faz 2B.8 görev md.5/md.18 senaryo 23-27/49 - "Instance A claim eder, Instance B aynı

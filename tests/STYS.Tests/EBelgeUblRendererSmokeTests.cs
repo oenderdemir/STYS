@@ -9,6 +9,8 @@ namespace STYS.Tests;
 /// Faz 2B.5 keşif/duman testleri. Üçü de bilinen, raporda belgelenmiş TEK birer bulguyu
 /// kilitler - başka hiçbir yapısal hata veya regresyon sessizce eklenirse bu testler kırılır.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeUblRendererSmokeTests
 {
     private const string MinimalInvoiceXml = """

@@ -32,6 +32,9 @@ namespace STYS.Tests;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SqlIntegration")]
+[Trait("Dependency", "SqlServer")]
 public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
 {
     private const string TestMarker = "EBF-CUT";

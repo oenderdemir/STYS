@@ -12,6 +12,8 @@ namespace STYS.Tests;
 /// sidecar ile yapılır); burada yalnız HTTP hata sınıflandırması izole test edilir (bkz. görev
 /// md.14 - "Mock testler yalnız .NET HTTP client hata eşlemesi için kullanılabilir").
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class SaxonSidecarEBelgeSchematronValidatorTests
 {
     private static readonly ImmutableArray<byte> OrnekXml = ImmutableArray.Create(Encoding.UTF8.GetBytes("<x/>"));

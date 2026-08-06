@@ -4,6 +4,8 @@ using Xunit;
 namespace STYS.Tests;
 
 /// <summary>Faz 2B.8 görev md.10/md.18 - `EBelgeProcessingOptions` startup-time yapısal doğrulaması. Yalnız saf aritmetik kontroller (I/O YOK) - `Enabled` bayrağından BAĞIMSIZ çalışır.</summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeProcessingOptionsValidatorTests
 {
     private static EBelgeProcessingOptions GecerliVarsayilanlar() => new()

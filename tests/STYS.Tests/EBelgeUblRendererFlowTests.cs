@@ -5,6 +5,8 @@ using Xunit;
 namespace STYS.Tests;
 
 /// <summary>Hızlı, ağ bağımsız renderer akış testleri - sahte (stub) IEBelgeSchematronValidator kullanır (gerçek sidecar ile tam akış EBelgeSchematronSidecarIntegrationTests'te ayrıca doğrulanır).</summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Unit")]
 public class EBelgeUblRendererFlowTests
 {
     private sealed class SahteSchematronValidator : IEBelgeSchematronValidator

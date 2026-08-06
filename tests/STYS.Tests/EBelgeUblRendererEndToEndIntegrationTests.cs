@@ -12,6 +12,8 @@ namespace STYS.Tests;
 /// ihlaliyle doğrulanır - Faz 2B.5'in tamamlanma kriteri budur.
 /// </summary>
 [Collection(SchematronSidecarCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("Dependency", "JavaSidecar")]
 public class EBelgeUblRendererEndToEndIntegrationTests
 {
     private readonly SchematronSidecarProcessFixture _fixture;
@@ -49,6 +51,7 @@ public class EBelgeUblRendererEndToEndIntegrationTests
 
     // §7: geçerli e-Arşiv snapshot -> XSD (yalnız bilinen bulgu) -> gerçek sidecar -> valid=true, violations=[] -> başarılı sonuç, ArtifactStage=Unsigned.
     [Fact]
+    [Trait("TestLevel", "ReleaseGate")]
     public async Task GercekEArsivRendererCiktisiSifirSchematronIhlaliyleBasariylaSonuclanir()
     {
         var renderer = CreateRealRenderer(out _);
@@ -64,6 +67,7 @@ public class EBelgeUblRendererEndToEndIntegrationTests
 
     // Negatif test 2: ProfileID yanlışsa (e-Arşiv kapsamı dışı bir değer) gerçek Schematron ihlali verir.
     [Fact]
+    [Trait("TestLevel", "SidecarIntegration")]
     public async Task YanlisProfileIdGercekSchematronIhlaliUretir()
     {
         if (_fixture.BaseUrl is null)
@@ -98,6 +102,7 @@ public class EBelgeUblRendererEndToEndIntegrationTests
 
     // Negatif test 4: e-Fatura profil id'si (henüz desteklenmeyen ruleset suffix'i) ilk dalgada reddedilir.
     [Fact]
+    [Trait("TestLevel", "SidecarIntegration")]
     public async Task EFaturaRuleSetIdIlkDalgadaReddedilir()
     {
         if (_fixture.BaseUrl is null)

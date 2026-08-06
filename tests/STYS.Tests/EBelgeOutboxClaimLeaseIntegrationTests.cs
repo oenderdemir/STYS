@@ -28,6 +28,9 @@ namespace STYS.Tests;
 
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SqlIntegration")]
+[Trait("Dependency", "SqlServer")]
 public class EBelgeOutboxClaimLeaseIntegrationTests : IAsyncLifetime
 {
     private const string TestMarker = "EBO-2A2";
@@ -447,6 +450,7 @@ public class EBelgeOutboxClaimLeaseIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    [Trait("CriticalInvariant", "LeaseTakeover")]
     public async Task LeaseSuresiDolmusIsleniyorKaydiYenidenClaimEdilir()
     {
         var cut = await CreateAndCutOutgoingInvoiceAsync();

@@ -25,6 +25,11 @@ namespace STYS.Tests;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "CryptoIntegration")]
+[Trait("Dependency", "SqlServer")]
+[Trait("Dependency", "JavaSidecar")]
+[Trait("Dependency", "Cryptography")]
 public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFixture<SchematronSidecarProcessFixture>
 {
     private const string TestMarker = "EBI-2B7";
@@ -207,13 +212,23 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
     // ---- Başarılı akış: gerçek imza + sıfır-tolerans XSD/Schematron + hash zinciri ----
 
     [IntegrationFact]
+    [Trait("CriticalInvariant", "SignedExactByteHash")]
     public async Task GecerliImzaTamAtomikBasariylaSignedReadyArtefaktUretirVeHashZinciriDogrulanir()
     {
         await using var dbContext = CreateDbContext();
         var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
         var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
 
-        var sabitZaman = new DateTimeOffset(2026, 8, 5, 10, 0, 0, TimeSpan.Zero);
+        // Faz 2B.9 - ÖNCEDEN sabit bir takvim tarihi (2026-08-05) kullanılıyordu; test sertifikası
+        // (EBelgeTestSertifikaSaglayici) İSE varsayılan olarak GERÇEK duvar saatine göre
+        // (`UtcNow.AddDays(-1)`) notBefore alır - takvim GERÇEKTEN o tarihi geçtiğinde sabit
+        // değer sertifikanın notBefore'undan ÖNCEYE düşüp "henüz geçerlilik tarihine ulaşmadı"
+        // hatasıyla ZAMAN İÇİNDE kaçınılmaz biçimde bozulan bir test üretiyordu (flaky/time-bomb -
+        // bkz. docs/e-belge-test-stratejisi.md "Flaky test politikası"). Testin AMACI belirli bir
+        // takvim tarihini doğrulamak DEĞİL, imzalama zamanının `TimeProvider`'dan GELDİĞİNİ ve
+        // AYNEN saklandığını kanıtlamaktır - bu yüzden artık test ÇALIŞTIĞI ANIN GERÇEK zamanı
+        // kullanılır (sertifikanın notBefore/notAfter penceresiyle HER ZAMAN uyumludur).
+        var sabitZaman = DateTimeOffset.UtcNow;
         var service = CreateService(dbContext, new FixedTimeProvider(sabitZaman));
         var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
 

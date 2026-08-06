@@ -10,6 +10,8 @@ namespace STYS.Tests;
 /// (saf EBelgeUblPreCutContext) olarak doğrular. Entegrasyon seviyesindeki kanal/V2-üretim/yan
 /// etki testleri için bkz. EBelgeUblPreCutIntegrationTests.
 /// </summary>
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Contract")]
 public class EBelgeUblPreCutValidatorTests
 {
     private static readonly EBelgeUblPreCutSatirContext GecerliSatir = new(

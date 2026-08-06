@@ -3841,4 +3841,81 @@ Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir.
 
 ### Sonraki faz
 
-Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir.
+Faz 2B.9'a bakınız.
+
+## Faz 2B.9 sonuç bölümü — test profillerinin ve kritik test kümelerinin organizasyonu
+
+**Durum: TAMAMLANDI, commit/push YAPILDI.**
+
+Bu faz YENİ bir e-Belge davranışı EKLEMEDİ (görev md.20 kısıtı) - yalnız MEVCUT 466 e-Belge testini
+envanterledi, trait-tabanlı katmanlara ayırdı, GERÇEKTEN aynı invariantı tekrarlayan 8 testi kanıtlı
+biçimde 2 `[Theory]`'e birleştirdi, bir kritik invariant manifesti oluşturdu ve `fast`/`integration`/
+`nightly`/`release` profillerini tanımlayan `scripts/test-ebelge.ps1`/`.sh` script çiftini ekledi.
+Tam detay: [docs/e-belge-test-stratejisi.md](e-belge-test-stratejisi.md).
+
+**Envanter**: 31 test sınıfı, 466 test (`dotnet test --list-tests --filter "Domain=EBelge"` GERÇEK
+keşfiyle doğrulandı - tahmin EDİLMEDİ). `TestLevel` dağılımı: Unit 217, Contract 46, SqlIntegration
+112, SidecarIntegration 16, CryptoIntegration 69, WorkerEndToEnd 4, ReleaseGate 2.
+
+**Birleştirme**: health karar matrisi (5 `[Fact]` -> 1 `[Theory]`, 5 `MemberData` satırı) ve güvenli
+loglama (3 `[Fact]` -> 1 `[Theory]`, 3 `MemberData` satırı) - TOPLAM çalışan test SENARYOSU sayısı
+DEĞİŞMEDİ (8 senaryo öncesi/sonrası), yalnız kaynak kod metod sayısı 8'den 2'ye indi. Eşdeğerlik
+kanıtı ve gerekçe dokümanda tablo halinde.
+
+**Kritik invariant manifesti**: 10 test (`TenantIsolation`, `StaleWorkerCannotWrite`,
+`LeaseTakeover`, `UnsignedExactByteHash`, `SignedExactByteHash`, `SignatureTamperRejected`,
+`DuplicateXmlIdRejected`, `SchematronRealSidecar`, `ActivationNotBefore20260915`,
+`WorkerEndToEndSignedReady`) `[Trait("CriticalInvariant", "...")]` ile işaretlendi; 10/10'u
+discovery ile doğrulandı.
+
+**Bulunan ve düzeltilen gerçek zaman-bombası bug'ı**: `EBelgeUblImzalamaServiceIntegrationTests`'in
+`SignedExactByteHash` kritik invariant testi, imzalama zamanı için SABİT bir takvim tarihi
+(`2026-08-05T10:00:00Z`) kullanıyordu; test sertifikasının VARSAYILAN geçerlilik başlangıcı İSE
+GERÇEK duvar saatine göre (`UtcNow - 1 gün`) hesaplanıyordu - takvim bu tarihi GERÇEKTEN geçtiğinde
+(bu turda tam olarak gerçekleşti) sabit değer sertifikanın `notBefore`'undan ÖNCEYE düşüp KESİN
+olarak başarısız olacaktı. Kök neden düzeltildi (sabit takvim tarihi yerine test-anı gerçek zamanı
+kullanılır) - assertion GEVŞETİLMEDİ, retry/skip EKLENMEDİ (bkz. görev md.15/md.24 flaky-test
+kısıtı). Doküman içinde tam kök-neden/tekrar-üretim raporu mevcut.
+
+**Sidecar/SQL izolasyonu**: mevcut `SchematronSidecarCollection`/`SqlServerIntegrationCollection`
+altyapısı incelendi; xUnit'in "bir sınıf yalnız tek collection'a üye olabilir" kısıtı nedeniyle 5
+sidecar-bağımlı sınıfı TEK bir collection'da birleştirmek ya SQL deadlock korumasını KAYBETTİRİR ya
+da gereksiz solution-geneli serileştirme YARATIR - bu yüzden yapı DEĞİŞTİRİLMEDİ, risk analizi ve
+(gerekirse ileride uygulanacak) dosya-kilidi önerisi dokümante edildi. 4 tam profil koşumu boyunca
+hiçbir sidecar/SQL kaynaklı flaky davranış GÖZLEMLENMEDİ.
+
+**CI**: repository'de ÖNCEDEN hiçbir CI workflow'u YOKTU (`.github/workflows` yok) - bu turda da
+EKLENMEDİ (görev md.13/md.24 kısıtı, "yeni ve geniş kapsamlı CI platformu kurma"); yalnız script'ler
+ve önerilen bağlanma tasarımı dokümante edildi.
+
+**Test komutu ve sonuçlar** (dört profil, hepsi `Failed: 0`):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 263, Failed: 0  (~3 sn, SQL/sidecar YOK)
+./scripts/test-ebelge.ps1 integration   -> Passed: 444, Failed: 0  (~126 sn, gerçek SQL+RSA)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 464, Failed: 0  (~128 sn, + gerçek sidecar + worker E2E)
+./scripts/test-ebelge.ps1 release       -> Passed: 466, Failed: 0  (~127 sn, + ReleaseGate)
+```
+
+### Kasıtlı olarak YAPILMAYANLAR (görev kapsam sınırları)
+
+Production davranışı (artifact üretimi/XAdES/Schematron kuralları/claim-lease SQL'i/retry policy/
+worker activation/polling/outbox durumları/signing provider/migration) HİÇBİR ŞEKİLDE
+DEĞİŞTİRİLMEDİ - `EBelgeUblImzalamaServiceIntegrationTests` düzeltmesi dahil TÜM değişiklikler test
+dosyalarıyla SINIRLIDIR; activation tarihi (15 Eylül 2026) DEĞİŞMEDİ; keyfi bir test-sayısı hedefi
+KULLANILMADI (bkz. görev md.5 kısıtı); kritik güvenlik testi SİLİNMEDİ; gerçek SQL/Saxon/RSA testi
+mock/fake İLE DEĞİŞTİRİLMEDİ; hiçbir test SKIP/quarantine EDİLMEDİ; flaky test retry İLE
+GİZLENMEDİ; yeni CI platformu KURULMADI; HSM/entegratör/PDF/e-posta/frontend GELİŞTİRİLMEDİ; tüm
+solution test paketi ÇALIŞTIRILMADI (yalnız e-Belge profilleri).
+
+### Açık kalan konular
+
+Faz 2B.7.1'in "Açık kalan konular" listesi AYNEN geçerlidir. Ek olarak: sidecar paralel-JVM CPU
+kaynak rekabeti riski dokümante edildi ama koda YANSITILMADI (öneri: dosya-tabanlı process kilidi,
+yalnız somut bir flaky belirti gözlemlenirse).
+
+### Sonraki faz
+
+Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir - artık HSM/mali mühür geliştirmesi
+`docs/e-belge-test-stratejisi.md`'de tanımlanan temiz test zemini (trait taksonomisi,
+`CryptoIntegration` katmanı, kritik invariant manifesti) üzerine inşa edilebilir.

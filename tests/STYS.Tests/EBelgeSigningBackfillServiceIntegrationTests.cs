@@ -21,6 +21,9 @@ namespace STYS.Tests;
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SqlIntegration")]
+[Trait("Dependency", "SqlServer")]
 public class EBelgeSigningBackfillServiceIntegrationTests : IAsyncLifetime
 {
     private const string TestMarker = "EBI-2B71-BF";

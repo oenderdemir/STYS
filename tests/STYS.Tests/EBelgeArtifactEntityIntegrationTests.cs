@@ -16,6 +16,9 @@ namespace STYS.Tests;
 /// <summary>Faz 2B.6 - EBelgeArtifact entity/migration invariantlarını (immutability, benzersizlik, cross-tenant FK, Restrict delete) GERÇEK SQL Server'a karşı doğrular.</summary>
 [Trait("Category", "Integration")]
 [Collection(SqlServerIntegrationCollection.Name)]
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "SqlIntegration")]
+[Trait("Dependency", "SqlServer")]
 public class EBelgeArtifactEntityIntegrationTests : IAsyncLifetime
 {
     private const string TestMarker = "EBO-2B6-ENT";
@@ -139,6 +142,7 @@ public class EBelgeArtifactEntityIntegrationTests : IAsyncLifetime
     };
 
     [IntegrationFact]
+    [Trait("CriticalInvariant", "UnsignedExactByteHash")]
     public async Task ArtefaktBasariylaKaydedilirVeByteBirebirKorunur()
     {
         await using var dbContext = CreateDbContext();
@@ -200,6 +204,7 @@ public class EBelgeArtifactEntityIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    [Trait("CriticalInvariant", "TenantIsolation")]
     public async Task CrossTenantArtifactFkDbTarafindanReddedilir()
     {
         await using var dbContext = CreateDbContext();

@@ -11,6 +11,8 @@ using Xunit;
 
 namespace STYS.Tests;
 
+[Trait("Domain", "EBelge")]
+[Trait("TestLevel", "Contract")]
 public class EBelgeCanonicalSnapshotReaderTests
 {
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()

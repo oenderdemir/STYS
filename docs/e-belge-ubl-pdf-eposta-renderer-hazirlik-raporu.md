@@ -4005,3 +4005,76 @@ Faz 2B.7.1'in "Sonraki faz" listesi AYNEN geçerlidir - artık HSM/mali mühür 
 `docs/e-belge-test-stratejisi.md`'de tanımlanan temiz test zemini (trait taksonomisi, OTOMATİK
 sözleşme doğrulaması, `CryptoIntegration` katmanı, kritik invariant manifesti) üzerine inşa
 edilebilir.
+
+## Faz 2B.10: Kurum Bazlı E-Belge Politikası ve İşlem Yönlendirme Katmanı
+
+Faz 2B.9.1'in test altyapısı üzerine, global e-belge kapılarının (Sep-15-2026 aktivasyon,
+14.09.2026 UBL ön-kesim kapısı) **arkasına** kurum bazlı, fail-closed, denetlenebilir bir
+yönlendirme katmanı eklendi. Tam tasarım için bkz.
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md`; kurum bazlı bilgi toplama şablonu
+için bkz. `docs/e-belge-kurum-surec-analizi-sablonu.md`.
+
+**Eklenen entity'ler/migration**: `KurumEBelgePolitikasi` (kurum başına en fazla bir aktif/pasif
+politika satırı), `SatisBelgesiEBelgeKarari` (satış belgesi başına immutable karar snapshot'ı),
+`KurumEBelgePolitikaRevizyonu` (immutable audit revizyonu). Migration hiçbir kurum için aktif
+politika seed ETMEDİ, mevcut e-belge kayıtlarına yöntem ATAMADI, mevcut outbox/artefakt
+verisine DOKUNMADI.
+
+**Yöntem yetenek matrisi**: `IEBelgeYontemYetenekSaglayici`/`EBelgeYontemYetenekleri` — TEK,
+merkezi, type-safe kaynak. Production'da aktive edilebilen yöntemler: `Kullanilmayacak`,
+`HariciMuhasebeSistemi` (yalnız karar kaydı, dış sistem çağrısı bu fazda YOK), `GibPortal`
+(yerel snapshot+unsigned UBL, ASLA yerel imza). `OzelEntegrator`/`DogrudanGib` enum'da mevcut
+ama gerçek adaptör olmadan `OperasyonelMi=false` — production'da aktive EDİLEMEZ.
+
+**Satış akışı entegrasyon noktası**: `SatisBelgesiService.FaturaKesAsync`, mevcut UBL/cutover
+kapılarından SONRA `IEBelgeKurumPolitikaServisi.DegerlendirAsync` çağırır (mevcut
+`IEBelgeProcessingActivationGate` YENİDEN KULLANILIR, ayrı bir algoritma yazılmadı). Fail-closed
+nedenler (`PolitikaYapilandirilmadi`/`PolitikaPasif`/`KurumAktivasyonTarihiGelmedi`/
+`YontemHenuzDesteklenmiyor`/`PolitikaGecersiz`) `EBelgeKurumPolitikaEngelliException` fırlatır ve
+TÜM işlemi (resmi fatura no dahil) rollback eder; `Kullanilmayacak`/`HariciMuhasebeSistemi` HATA
+DEĞİLDİR — satış normal tamamlanır ama immutable karar kaydı HER ZAMAN yazılır.
+
+**Outbox/imzalama yönlendirmesi**: `UblImzala` mesajı yalnız immutable kararın
+`YerelImzaOlustur=true`'su + global imzalama kapısı + kurumun O ANDA hâlâ aktif politikası ÜÇÜ
+BİRDEN sağlandığında oluşturulur. Worker/handler savunma katmanı
+(`IEBelgeKurumPolitikaServisi.IslemHalaIzinliMiAsync`), claim SONRASI mevcut lease-transition
+altyapısı (`TryFailAsync`) yeniden kullanılarak politika kapanmasını güvenli biçimde ele alır -
+yeni bir transition metodu EKLENMEDİ. Signing backfill artık yalnız `YerelImzaOlustur=true`
+immutable kararı olan kayıtları seçer; karar kaydı olmayan (legacy) kayıtlar backfill'e
+ASLA dahil edilmez ve OTOMATİK `DogrudanGib` varsayılmaz.
+
+**Kill switch / audit**: Aktif→Pasif her zaman izinli (pending iş olsa bile); yöntem değişimi
+devam eden işler varken engellenir (`EBELGE_KURUM_POLICY_CHANGE_BLOCKED`); her anlamlı değişiklik
+`KurumEBelgePolitikaRevizyonu`'na (eski/yeni değerler + actor `CreatedBy`'dan otomatik) yazılır.
+
+**Yönetim API'si**: `KurumEBelgePolitikasiController` (`ui/kurumlar/{kurumId}/e-belge-politikasi`)
+mevcut `KurumController` yetkilendirme desenini (SuperAdmin/KurumAdmin, mevcut
+`StructurePermissions.MuhasebeSatisBelgeleriYonetimi`) YENİDEN kullanır - yeni rol İCAT EDİLMEDİ.
+RowVersion optimistic concurrency ile korunur; cross-tenant erişim 403 ile reddedilir.
+
+**Eklenen kritik invariant'lar**: `InstitutionPolicyFailClosed` (kurum politikası tam aktif olsa
+bile global kapı kapalıyken karar HER ZAMAN fail-closed), `InstitutionPolicyTenantIsolation`
+(kurum A politikası kurum B kararına sızmaz — servis VE DB katmanında test edilir),
+`PortalRouteNeverSignsLocally` (GibPortal ASLA yerel imza mesajı oluşturmaz).
+
+**Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; Faz 2B.9.1'in 488 taban sayısı,
+Faz 2B.10'un yeni Unit/SqlIntegration testleriyle 552'ye çıktı):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 304, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 530, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 550, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 552, Failed: 0, Skipped: 0  (preflight: SQL+Java+25 kritik invariant testi GEÇTİ)
+```
+
+**Kasıtlı olarak YAPILMAYANLAR**: HSM/PKCS#11/mali mühür entegrasyonu, gerçek GİB çağrıları,
+özel entegratör/harici muhasebe adaptörü, VKN'nin ikinci kez saklanması, çelişebilen config
+boolean'ları, politika eksikken sessiz "Kullanilmayacak" varsayımı, desteklenmeyen yöntemlerin
+production'da aktif kabul edilmesi, mevcut global aktivasyon kapılarının kaldırılması/gevşetilmesi,
+2026-09-15 tarihinin değiştirilmesi, legacy kayıtların otomatik `DogrudanGib` ataması, kritik test
+silinmesi/atlanması, frontend/PDF/e-posta geliştirmesi.
+
+**Açık kalan konular**: `HariciMuhasebeSistemi` için gerçek dış sistem adaptörü henüz YOK (yalnız
+karar kaydı); `OzelEntegrator`/`DogrudanGib` için gerçek adaptör/HSM entegrasyonu gerekiyor;
+Faz 2B.10 öncesi (legacy) `EBelgeKaydi` kayıtları için açık bir backfill/migrasyon kararı henüz
+alınmadı — bu operasyonel bir sonraki adımdır, kod tarafında OTOMATİK bir varsayım YAPILMADI.

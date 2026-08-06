@@ -67,6 +67,12 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         _ilId = il.Id;
         _tesisId = tesis.Id;
 
+        // Faz 2B.10 - bu testler EBelgeKaydi/outbox'ı SatisBelgesiService'in normal akışını
+        // (dolayısıyla kurum politikası kararını) KULLANMADAN DOĞRUDAN seed eder - yeni
+        // politika-tabanlı fail-closed kapıların bu MEVCUT testleri BOZMAMASI için aktif bir
+        // test-only politika seed edilir (bkz. EBelgeKurumPolitikaTestSupport).
+        await EBelgeKurumPolitikaTestSupport.SeedAktifDogrudanGibPolitikaAsync(dbContext, _kurumId);
+
         var musteriHesap = SatisBelgesiMuhasebeTestSupport.BuildHesap(_uniqueSuffix, "MUS", _tesisId);
         dbContext.MuhasebeHesapPlanlari.Add(musteriHesap);
         await dbContext.SaveChangesAsync();
@@ -159,6 +165,10 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         });
         await seedCtx.SaveChangesAsync();
 
+        // Faz 2B.10 - bu EBelgeKaydi SatisBelgesiService'in normal akışı DIŞINDA DOĞRUDAN seed
+        // edildiğinden, eşlik eden immutable karar da BURADA seed edilir (bkz. InitializeAsync).
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(seedCtx, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
+
         return eBelgeKaydi.Id;
     }
 
@@ -210,6 +220,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!),
             new EBelgeOutboxLeaseTransitionService(dbContext),
             signingActivationGate ?? FakeSigningActivationGate.Kapali,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext, timeProvider),
             timeProvider ?? TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
     }
@@ -718,6 +729,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             new HashBozanRendererDecorator(gercekRenderer),
             new EBelgeOutboxLeaseTransitionService(dbContext),
             FakeSigningActivationGate.Kapali,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
@@ -760,7 +772,9 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         var transitionService = new EBelgeOutboxLeaseTransitionService(workCtx);
         var retryPolicy = new EBelgeOutboxRetryPolicy();
         var islemeService = new EBelgeOutboxMesajIslemeService(
-            [handler], retryPolicy, transitionService, NullLogger<EBelgeOutboxMesajIslemeService>.Instance);
+            [handler], retryPolicy, transitionService,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(workCtx),
+            NullLogger<EBelgeOutboxMesajIslemeService>.Instance);
 
         var sonuc = await islemeService.IsleAsync(claim);
 
@@ -903,7 +917,8 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         var renderer = new EBelgeUblRenderer(kuralSeti, xsdValidator, schematronValidator);
         var service = new EBelgeArtefaktOlusturmaService(
             dbContext, new EBelgeCanonicalSnapshotV2Reader(), renderer,
-            new EBelgeOutboxLeaseTransitionService(dbContext), FakeSigningActivationGate.Kapali, TimeProvider.System,
+            new EBelgeOutboxLeaseTransitionService(dbContext), FakeSigningActivationGate.Kapali,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext), TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
         // Geçici hata yolu (Gecici) EBelgeKaydi'yı hiç DEĞİŞTİRMEDİĞİNDEN, atomik transaction/lease

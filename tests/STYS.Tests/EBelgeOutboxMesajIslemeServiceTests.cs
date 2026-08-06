@@ -565,6 +565,69 @@ public class EBelgeOutboxMesajIslemeServiceTests
         Assert.Equal(1, sut.Transition.FailCallCount);
     }
 
+    // ---- Faz 2B.10 görev md.14 - claim SONRASI kurum politikası savunma katmanı ----
+
+    [Fact]
+    public async Task PolitikaIzinliDegilseHandlerHicCagrilmazVeGuvenliRetryPlanlanir()
+    {
+        var handler = new FakeHandler(EBelgeOutboxIsTuru.UblImzala, _ => EBelgeOutboxHandlerSonucu.Basarili());
+        var politika = new FakePolitikaServisi { IzinliMi = false };
+        var transition = new FakeTransitionService();
+        var service = CreateService(new[] { handler }, transition: transition, kurumPolitikaServisi: politika);
+
+        var sonuc = await service.IsleAsync(CreateClaim(isTuru: EBelgeOutboxIsTuru.UblImzala));
+
+        Assert.Equal(0, handler.CallCount);
+        Assert.Equal(EBelgeOutboxIslemeSonucuTuru.RetryPlanlandi, sonuc.SonucTuru);
+        Assert.Equal(TimeSpan.FromMinutes(5), sonuc.RetryGecikmesi);
+        Assert.Equal(1, transition.FailCallCount);
+        Assert.Equal(0, transition.CompleteCallCount);
+        Assert.StartsWith("EBELGE_KURUM_POLICY", transition.LastFailHataKodu);
+    }
+
+    [Fact]
+    public async Task PolitikaIzinliDegilseVeGuvenliRetryBasarisizsaSahiplikKaybedildiDoner()
+    {
+        var handler = new FakeHandler(EBelgeOutboxIsTuru.UblImzala, _ => EBelgeOutboxHandlerSonucu.Basarili());
+        var politika = new FakePolitikaServisi { IzinliMi = false };
+        var transition = new FakeTransitionService(failResult: false);
+        var service = CreateService(new[] { handler }, transition: transition, kurumPolitikaServisi: politika);
+
+        var sonuc = await service.IsleAsync(CreateClaim(isTuru: EBelgeOutboxIsTuru.UblImzala));
+
+        Assert.Equal(0, handler.CallCount);
+        Assert.Equal(EBelgeOutboxIslemeSonucuTuru.SahiplikKaybedildi, sonuc.SonucTuru);
+    }
+
+    [Fact]
+    public async Task PolitikaIzinliIseNormalAkisHicEtkilenmez()
+    {
+        var handler = new FakeHandler(EBelgeOutboxIsTuru.ArtefaktOlustur, _ => EBelgeOutboxHandlerSonucu.Basarili());
+        var politika = new FakePolitikaServisi { IzinliMi = true };
+        var service = CreateService(new[] { handler }, kurumPolitikaServisi: politika);
+
+        var sonuc = await service.IsleAsync(CreateClaim());
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(1, politika.IslemHalaIzinliMiCagriSayisi);
+        Assert.Equal(EBelgeOutboxIslemeSonucuTuru.Tamamlandi, sonuc.SonucTuru);
+    }
+
+    [Fact]
+    public async Task PolitikaKontroluClaimAlanlariIleDogruCagrilir()
+    {
+        var handler = new FakeHandler(EBelgeOutboxIsTuru.UblImzala, _ => EBelgeOutboxHandlerSonucu.Basarili());
+        var politika = new FakePolitikaServisi { IzinliMi = true };
+        var service = CreateService(new[] { handler }, kurumPolitikaServisi: politika);
+        var claim = CreateClaim(kurumId: 42, eBelgeKaydiId: 7, isTuru: EBelgeOutboxIsTuru.UblImzala);
+
+        await service.IsleAsync(claim);
+
+        Assert.Equal(42, politika.LastKurumId);
+        Assert.Equal(7, politika.LastEBelgeKaydiId);
+        Assert.Equal(EBelgeOutboxIsTuru.UblImzala, politika.LastIsTuru);
+    }
+
     private static (EBelgeOutboxMesajIslemeService Service, FakeTransitionService Transition, FakePolicy Policy, FakeHandler Handler) CreateSut(
         FakeHandler handler,
         FakePolicy? policy = null,
@@ -581,11 +644,13 @@ public class EBelgeOutboxMesajIslemeServiceTests
     private static EBelgeOutboxMesajIslemeService CreateService(
         IEnumerable<IEBelgeOutboxIsTuruHandler> handlers,
         IEBelgeOutboxRetryPolicy? policy = null,
-        IEBelgeOutboxLeaseTransitionService? transition = null)
+        IEBelgeOutboxLeaseTransitionService? transition = null,
+        IEBelgeKurumPolitikaServisi? kurumPolitikaServisi = null)
         => new(
             handlers,
             policy ?? new EBelgeOutboxRetryPolicy(),
             transition ?? new FakeTransitionService(),
+            kurumPolitikaServisi ?? new FakePolitikaServisi(),
             NullLogger<EBelgeOutboxMesajIslemeService>.Instance);
 
     private static EBelgeOutboxClaimLeaseResultDto CreateClaim(
@@ -676,6 +741,32 @@ public class EBelgeOutboxMesajIslemeServiceTests
                 throw _exception;
             }
             return _result;
+        }
+    }
+
+    /// <summary>Faz 2B.10 - saf in-memory fake (gerçek DbContext GEREKTİRMEZ) - varsayılan olarak HER işlemi izinli sayar; `IzinliMi=false` ile "claim sonrası politika bloklu" senaryosu simüle edilir.</summary>
+    private sealed class FakePolitikaServisi : IEBelgeKurumPolitikaServisi
+    {
+        public bool IzinliMi { get; set; } = true;
+
+        public int IslemHalaIzinliMiCagriSayisi { get; private set; }
+
+        public int? LastKurumId { get; private set; }
+
+        public int? LastEBelgeKaydiId { get; private set; }
+
+        public EBelgeOutboxIsTuru? LastIsTuru { get; private set; }
+
+        public Task<EBelgeKurumPolitikaKarari> DegerlendirAsync(int kurumId, DateTime belgeTarihi, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Bu fake yalnız IslemHalaIzinliMiAsync'i destekler.");
+
+        public Task<bool> IslemHalaIzinliMiAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default)
+        {
+            IslemHalaIzinliMiCagriSayisi++;
+            LastKurumId = kurumId;
+            LastEBelgeKaydiId = eBelgeKaydiId;
+            LastIsTuru = isTuru;
+            return Task.FromResult(IzinliMi);
         }
     }
 

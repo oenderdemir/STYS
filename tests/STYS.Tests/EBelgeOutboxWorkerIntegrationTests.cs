@@ -66,6 +66,11 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         dbContext.CariKartlar.Add(musteriKart);
         await dbContext.SaveChangesAsync();
         _musteriKartId = musteriKart.Id;
+
+        // Faz 2B.10 - bu testler EBelgeKaydi/outbox'ı SatisBelgesiService'in fatura-kesme akışını
+        // (dolayısıyla kurum politikası kararını) KULLANMADAN DOĞRUDAN seed eder - aktif bir
+        // test-only politika seed edilir (bkz. EBelgeKurumPolitikaTestSupport).
+        await EBelgeKurumPolitikaTestSupport.SeedAktifDogrudanGibPolitikaAsync(dbContext, _kurumId);
     }
 
     public async Task DisposeAsync()
@@ -142,6 +147,8 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         });
         await dbContext.SaveChangesAsync();
 
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
+
         return eBelgeKaydi.Id;
     }
 
@@ -180,6 +187,8 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         };
         dbContext.EBelgeArtifactlari.Add(unsigned);
         await dbContext.SaveChangesAsync();
+
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
 
         return (eBelgeKaydi.Id, unsigned);
     }
@@ -245,6 +254,11 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         services.AddSingleton<IEBelgeCanonicalSnapshotV2Reader, EBelgeCanonicalSnapshotV2Reader>();
         services.AddSingleton<IEBelgeUblRenderer>(_ => RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!));
         services.AddSingleton<IEBelgeSigningActivationGate>(_ => signingGateAcik ? FakeSigningActivationGate.Acik : FakeSigningActivationGate.Kapali);
+        // Faz 2B.10 - TEST-ONLY yetenek sağlayıcısı (DogrudanGib TAM operasyonel) - production
+        // DI'da (backend/Program.cs) HİÇBİR ZAMAN kaydedilmez, yalnız bu gerçek XAdES/SignedReady
+        // E2E test container'ında (bkz. EBelgeKurumPolitikaTestSupport).
+        services.AddSingleton<IEBelgeYontemYetenekSaglayici>(EBelgeTestYontemYetenekSaglayici.Instance);
+        services.AddScoped<IEBelgeKurumPolitikaServisi, EBelgeKurumPolitikaServisi>();
         services.AddScoped<IEBelgeArtefaktOlusturmaService, EBelgeArtefaktOlusturmaService>();
         services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeArtefaktOlusturOutboxHandler>();
 

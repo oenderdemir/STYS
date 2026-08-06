@@ -139,7 +139,9 @@ public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
             NullLogger<SatisBelgesiService>.Instance,
             new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger(),
             timeProvider,
-            Options.Create(new EBelgeUblOptions { Enabled = ubloptionsEnabled }));
+            Options.Create(new EBelgeUblOptions { Enabled = ubloptionsEnabled }),
+            // Faz 2B.10 - bkz. SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService XML doc'u.
+            kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext, timeProvider));
     }
 
     private static StysAppDbContext CreateDbContext(int? currentKurumId = null, bool isSuperAdmin = true)

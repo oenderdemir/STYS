@@ -48,6 +48,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     private readonly IEBelgeUblRenderer _renderer;
     private readonly IEBelgeOutboxLeaseTransitionService _leaseTransitionService;
     private readonly IEBelgeSigningActivationGate _signingActivationGate;
+    private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EBelgeArtefaktOlusturmaService> _logger;
 
@@ -57,6 +58,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         IEBelgeUblRenderer renderer,
         IEBelgeOutboxLeaseTransitionService leaseTransitionService,
         IEBelgeSigningActivationGate signingActivationGate,
+        IEBelgeKurumPolitikaServisi kurumPolitikaServisi,
         TimeProvider timeProvider,
         ILogger<EBelgeArtefaktOlusturmaService> logger)
     {
@@ -65,6 +67,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         _renderer = renderer;
         _leaseTransitionService = leaseTransitionService;
         _signingActivationGate = signingActivationGate;
+        _kurumPolitikaServisi = kurumPolitikaServisi;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -294,12 +297,17 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         _dbContext.Add(yeniArtifact);
         kayit.Durum = EBelgeKaydiDurumu.UnsignedUblHazir;
 
-        // Faz 2B.7 görev md.18: unsigned artifact İLK KEZ başarıyla oluşturulduğunda, signing
-        // aktivasyon kapısı AÇIKSA (Enabled=true VE Europe/Istanbul tarih kapısı geçilmiş) AYNI
-        // transaction içinde TEK bir UblImzala outbox mesajı oluşturulur. İdempotent-eşleşme
-        // dalında (yukarıda) BUNU YAPMAYIZ - aksi halde (EBelgeKaydiId, IsTuru) benzersizlik
-        // indeksini ihlal eder (bkz. görev md.18 - kapı yalnız İLK başarılı oluşturmada değerlendirilir).
-        if (_signingActivationGate.ShouldCreateSigningMessage())
+        // Faz 2B.7 görev md.18 + Faz 2B.10 görev md.12: unsigned artifact İLK KEZ başarıyla
+        // oluşturulduğunda, ÜÇ koşulun HEPSİ sağlanırsa AYNI transaction içinde TEK bir UblImzala
+        // outbox mesajı oluşturulur: (1) immutable satış e-belge kararı YerelImzaOlustur=true
+        // (ör. GibPortal İÇİN bu HER ZAMAN false'dur - "son durum UnsignedUblHazir" beklenir, bu
+        // HATA DEĞİLDİR), (2) global signing aktivasyon kapısı AÇIK, (3) GÜNCEL kurum politikası
+        // hâlâ aktif (karar anından SONRA pasife alınmış OLABİLİR). Herhangi biri false ise
+        // unsigned artifact YİNE DE atomik olarak TAMAMLANIR - yalnız UblImzala mesajı
+        // OLUŞTURULMAZ. İdempotent-eşleşme dalında (yukarıda) BUNU YAPMAYIZ - aksi halde
+        // (EBelgeKaydiId, IsTuru) benzersizlik indeksini ihlal eder (kapı yalnız İLK başarılı
+        // oluşturmada değerlendirilir).
+        if (await ImzalamaMesajiOlusturulmaliMiAsync(talep, cancellationToken))
         {
             _dbContext.Add(new EBelgeOutboxMesaji
             {
@@ -432,6 +440,34 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
 
         await tx.CommitAsync(cancellationToken);
         return EBelgeArtefaktOlusturmaSonucu.AtomikKaliciHata(hataKodu, hataMesaji);
+    }
+
+    /// <summary>
+    /// Faz 2B.10 görev md.12 - üç koşulun HEPSİNİ kontrol eder: (1) immutable karar
+    /// YerelImzaOlustur=true, (2) global signing aktivasyon kapısı açık, (3) GÜNCEL kurum
+    /// politikası hâlâ aktif. Karar kaydı BULUNAMAZSA (legacy/karar-öncesi kayıt) fail-closed
+    /// olarak `false` döner - imzalama mesajı OLUŞTURULMAZ (bkz. `EBelgeSigningBackfillService`,
+    /// AYNI invariantı backfill İÇİN de uygular).
+    /// </summary>
+    private async Task<bool> ImzalamaMesajiOlusturulmaliMiAsync(EBelgeArtefaktOlusturmaTalebi talep, CancellationToken cancellationToken)
+    {
+        if (!_signingActivationGate.ShouldCreateSigningMessage())
+        {
+            return false;
+        }
+
+        var karar = await _dbContext.Set<SatisBelgesiEBelgeKarari>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(k => k.EBelgeKaydiId == talep.EBelgeKaydiId && k.KurumId == talep.KurumId, cancellationToken);
+
+        if (karar is null || !karar.YerelImzaOlustur)
+        {
+            return false;
+        }
+
+        var buguneTrt = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(_timeProvider.GetUtcNow().UtcDateTime);
+        var guncelKarar = await _kurumPolitikaServisi.DegerlendirAsync(talep.KurumId, buguneTrt, cancellationToken);
+        return guncelKarar.Yetenekler.YerelImzaOlustur;
     }
 
     private static bool EslesiyorMu(EBelgeArtifact mevcutArtifact, EBelgeUblRenderSonucu renderSonuc, string snapshotHash) =>

@@ -31,8 +31,16 @@ public class EBelgeTestMetadataContractTests
     /// <summary>Sınıf adında "EBelge" geçtiği halde domain trait sözleşmesine TABİ OLMAYAN, açık allowlist.</summary>
     private static readonly string[] DomainSozlesmesiIstisnalari = ["EBelgeSqlSidecarPreflightTests"];
 
-    /// <summary>Bilinçli olarak birden fazla teste uygulanması KABUL EDİLEN CriticalInvariant değerleri (şu an boş - yeni bir tane gerekiyorsa buraya gerekçesiyle eklenir).</summary>
-    private static readonly string[] KasitliCriticalInvariantTekrarlari = [];
+    /// <summary>Bilinçli olarak birden fazla teste uygulanması KABUL EDİLEN CriticalInvariant değerleri.</summary>
+    private static readonly string[] KasitliCriticalInvariantTekrarlari =
+    [
+        // Faz 2B.10 - kurum tenant izolasyonu İKİ AYRI KATMANDA doğrulanır: karar SERVİSİ
+        // düzeyinde (EBelgeKurumPolitikaServisiIntegrationTests - kurum A politikası kurum B
+        // kararına sızmaz) VE DB composite-FK/unique-index düzeyinde (SatisBelgesiEBelgeKarariSaleFlowIntegrationTests -
+        // karar başka kurumun satış belgesine bağlanamaz). Her ikisi de AYNI invariant'ı FARKLI
+        // savunma katmanlarında kanıtladığından bilinçli bir tekrardır.
+        "InstitutionPolicyTenantIsolation",
+    ];
 
     private static List<(Type Type, MethodInfo Method)> TumEBelgeTestMetodlari()
     {

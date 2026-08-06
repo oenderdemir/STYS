@@ -121,7 +121,11 @@ public static class SatisBelgesiMuhasebeTestSupport
             null!, // IMuhasebeFisService: yalnızca fiş iptali akışında kullanılır, bu testlerde hiç çağrılmaz
             new FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
-            new NoOpDomainOperationLogger());
+            new NoOpDomainOperationLogger(),
+            // Faz 2B.10 - bkz. SeedKurumIlTesisAsync XML doc'u: bu fabrikanın VARSAYILANI, ONU
+            // KULLANAN MEVCUT (2B.10 öncesi) testlerin EBelgeKaydi/snapshot/outbox davranışını
+            // KORUR - "her zaman aktif" test-only karar servisi.
+            kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext));
     }
 
     /// <summary>
@@ -156,7 +160,9 @@ public static class SatisBelgesiMuhasebeTestSupport
             muhasebeFisService,
             new FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
-            new NoOpDomainOperationLogger());
+            new NoOpDomainOperationLogger(),
+            // Faz 2B.10 - bkz. CreateSatisBelgesiService XML doc'u.
+            kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext));
 
         return (satisBelgesiService, muhasebeFisService);
     }
@@ -240,6 +246,17 @@ public static class SatisBelgesiMuhasebeTestSupport
         };
         dbContext.Tesisler.Add(tesis);
         await dbContext.SaveChangesAsync();
+
+        // Faz 2B.10 - bu depodaki TÜM SatisBelgesiService tabanlı testler (yalnız e-belgeye özgü
+        // OLANLAR değil) `FaturaKesAsync`'in artık kurum e-belge politikasını değerlendirdiği
+        // gerçeğiyle karşılaşır. MEVCUT testlerin (Faz 2B.10 ÖNCESİ yazılmış - EBelgeKaydi/
+        // snapshot/outbox'ın KOŞULSUZ oluştuğunu varsayan) davranışını KORUMAK için, burada
+        // OLUŞTURULAN her test kurumuna otomatik olarak aktif bir test-only politika seed edilir
+        // (bkz. EBelgeKurumPolitikaTestSupport) - `CreateSatisBelgesiService` de VARSAYILAN olarak
+        // buna karşılık gelen "her zaman aktif" karar servisini kullanır. Faz 2B.10'un KENDİ
+        // negatif/fail-closed testleri, bu varsayılanı AÇIKÇA geçersiz kılar (politika HİÇ
+        // seed etmeyen ayrı bir kurum kullanarak veya "her zaman bloklu" bir fake enjekte ederek).
+        await EBelgeKurumPolitikaTestSupport.SeedAktifDogrudanGibPolitikaAsync(dbContext, kurum.Id);
 
         return (kurum, il, tesis);
     }
@@ -349,6 +366,17 @@ public static class SatisBelgesiMuhasebeTestSupport
             .Select(x => x.Id)
             .ToListAsync();
 
+        // Faz 2B.10 - SatisBelgesiEBelgeKararlari, EBelgeKayitlari VE SatisBelgeleri'ne Restrict FK
+        // ile bağlıdır (bilinçli tasarım - bkz. görev md.10 "karar oluştuktan sonra update/delete
+        // edilmez", ama TEST temizliği İÇİN AYRIK olarak silinebilir) - HER İKİSİNDEN de ÖNCE silinir.
+        if (belgeIds.Count > 0)
+        {
+            await dbContext.Set<STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesiEBelgeKarari>()
+                .IgnoreQueryFilters()
+                .Where(x => belgeIds.Contains(x.SatisBelgesiId))
+                .ExecuteDeleteAsync();
+        }
+
         if (eBelgeKaydiIds.Count > 0)
         {
             await dbContext.EBelgeSnapshots
@@ -421,6 +449,28 @@ public static class SatisBelgesiMuhasebeTestSupport
 
         if (kurumId.HasValue)
         {
+            // Faz 2B.10 - KurumEBelgePolitikalari, Kurumlar'a Restrict FK ile bağlıdır;
+            // KurumEBelgePolitikaRevizyonlari İSE KurumEBelgePolitikalari'na - bu yüzden İKİSİ de
+            // Kurumlar'dan ÖNCE (revizyon -> politika sırasıyla) silinir.
+            var politikaIds = await dbContext.Set<STYS.Muhasebe.SatisBelgeleri.Entities.KurumEBelgePolitikasi>()
+                .IgnoreQueryFilters()
+                .Where(x => x.KurumId == kurumId.Value)
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            if (politikaIds.Count > 0)
+            {
+                await dbContext.Set<STYS.Muhasebe.SatisBelgeleri.Entities.KurumEBelgePolitikaRevizyonu>()
+                    .IgnoreQueryFilters()
+                    .Where(x => politikaIds.Contains(x.KurumEBelgePolitikasiId))
+                    .ExecuteDeleteAsync();
+
+                await dbContext.Set<STYS.Muhasebe.SatisBelgeleri.Entities.KurumEBelgePolitikasi>()
+                    .IgnoreQueryFilters()
+                    .Where(x => x.KurumId == kurumId.Value)
+                    .ExecuteDeleteAsync();
+            }
+
             await dbContext.Kurumlar.Where(x => x.Id == kurumId.Value).ExecuteDeleteAsync();
         }
     }

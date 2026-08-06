@@ -190,6 +190,9 @@ public class StysAppDbContext : DbContext
     public DbSet<EBelgeSnapshot> EBelgeSnapshots => Set<EBelgeSnapshot>();
     public DbSet<EBelgeOutboxMesaji> EBelgeOutboxMesajlari => Set<EBelgeOutboxMesaji>();
     public DbSet<EBelgeArtifact> EBelgeArtifactlari => Set<EBelgeArtifact>();
+    public DbSet<KurumEBelgePolitikasi> KurumEBelgePolitikalari => Set<KurumEBelgePolitikasi>();
+    public DbSet<SatisBelgesiEBelgeKarari> SatisBelgesiEBelgeKararlari => Set<SatisBelgesiEBelgeKarari>();
+    public DbSet<KurumEBelgePolitikaRevizyonu> KurumEBelgePolitikaRevizyonlari => Set<KurumEBelgePolitikaRevizyonu>();
     public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
@@ -3072,6 +3075,174 @@ public class StysAppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<KurumEBelgePolitikasi>(entity =>
+        {
+            entity.ToTable("KurumEBelgePolitikalari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_KurumEBelgePolitikalari_EntegrasyonYontemi",
+                    "[EntegrasyonYontemi] IN (0, 1, 2, 3, 4, 5)");
+
+                t.HasCheckConstraint(
+                    "CK_KurumEBelgePolitikalari_PolitikaSurumu",
+                    "[PolitikaSurumu] >= 1");
+            });
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.EntegrasyonYontemi)
+                .IsRequired();
+
+            entity.Property(x => x.AktifMi)
+                .IsRequired();
+
+            entity.Property(x => x.HariciSistemKodu)
+                .HasMaxLength(64);
+
+            entity.Property(x => x.PolitikaSurumu)
+                .IsRequired();
+
+            entity.Property(x => x.RowVersion)
+                .IsRowVersion();
+
+            // Faz 2B.10 görev md.6 - "Bir kurumun en fazla bir aktif politika kaydı olabilir.
+            // Tercihen KurumId üzerinde tekil ilişki kullan" - kurum başına TEK satır (asla
+            // soft-delete+yeniden-oluştur DEĞİL, DAİMA AYNI satır güncellenir; geçmiş, ayrı
+            // KurumEBelgePolitikaRevizyonu kayıtlarında tutulur).
+            entity.HasIndex(x => x.KurumId)
+                .IsUnique();
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany()
+                .HasForeignKey(x => x.KurumId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasAlternateKey(x => new { x.Id, x.KurumId });
+        });
+
+        modelBuilder.Entity<SatisBelgesiEBelgeKarari>(entity =>
+        {
+            entity.ToTable("SatisBelgesiEBelgeKararlari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_SatisBelgesiEBelgeKararlari_EntegrasyonYontemi",
+                    "[EntegrasyonYontemi] IN (0, 1, 2, 3, 4, 5)");
+
+                t.HasCheckConstraint(
+                    "CK_SatisBelgesiEBelgeKararlari_KararNedeni",
+                    "[KararNedeni] IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
+
+                t.HasCheckConstraint(
+                    "CK_SatisBelgesiEBelgeKararlari_PolitikaSurumu",
+                    "[PolitikaSurumu] IS NULL OR [PolitikaSurumu] >= 1");
+            });
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.SatisBelgesiId)
+                .IsRequired();
+
+            entity.Property(x => x.EntegrasyonYontemi)
+                .IsRequired();
+
+            entity.Property(x => x.KararNedeni)
+                .IsRequired();
+
+            entity.Property(x => x.YerelSnapshotOlustur)
+                .IsRequired();
+
+            entity.Property(x => x.YerelUnsignedUblOlustur)
+                .IsRequired();
+
+            entity.Property(x => x.YerelImzaOlustur)
+                .IsRequired();
+
+            entity.Property(x => x.OtomatikGonderimYap)
+                .IsRequired();
+
+            entity.Property(x => x.KararZamaniUtc)
+                .IsRequired();
+
+            // Faz 2B.10 görev md.10 - "(KurumId, SatisBelgesiId) tekil olmalı" - AYNI satış
+            // belgesi için ikinci bir karar OLUŞTURULAMAZ (bkz. görev md.19 idempotency - mevcut
+            // karar döner/conflict verir, ikinci satır asla eklenmez). Bilinçli olarak
+            // FİLTRESİZ (soft-delete edilmiş bir karar bile rezervasyonu KORUR - md.10 son madde).
+            entity.HasIndex(x => new { x.KurumId, x.SatisBelgesiId })
+                .IsUnique();
+
+            entity.HasIndex(x => new { x.EBelgeKaydiId, x.KurumId });
+
+            entity.HasAlternateKey(x => new { x.Id, x.KurumId });
+
+            // Başka kurumun satış belgesine BAĞLANAMAZ (görev md.10/md.20) - tenant-aware composite FK.
+            entity.HasOne(x => x.SatisBelgesi)
+                .WithMany()
+                .HasForeignKey(x => new { x.SatisBelgesiId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Başka kurumun politika kaydına BAĞLANAMAZ (görev md.10/md.20) - tenant-aware
+            // composite FK; NULL olabilir (ör. PolitikaYapilandirilmadi kararında politika satırı
+            // hiç YOKTUR).
+            entity.HasOne(x => x.KurumEBelgePolitikasi)
+                .WithMany()
+                .HasForeignKey(x => new { x.KurumEBelgePolitikasiId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
+
+            // EBelgeKaydiId yalnız AYNI kurum ve satış belgesine ait kayıtla ilişkilendirilebilir
+            // (görev md.10) - tenant-aware composite FK; NULL olabilir (yerel pipeline
+            // gerekmeyen Kullanilmayacak/HariciMuhasebeSistemi kararlarında).
+            entity.HasOne(x => x.EBelgeKaydi)
+                .WithMany()
+                .HasForeignKey(x => new { x.EBelgeKaydiId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired(false);
+        });
+
+        modelBuilder.Entity<KurumEBelgePolitikaRevizyonu>(entity =>
+        {
+            entity.ToTable("KurumEBelgePolitikaRevizyonlari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_KurumEBelgePolitikaRevizyonlari_EskiYontem",
+                    "[EskiYontem] IN (0, 1, 2, 3, 4, 5)");
+
+                t.HasCheckConstraint(
+                    "CK_KurumEBelgePolitikaRevizyonlari_YeniYontem",
+                    "[YeniYontem] IN (0, 1, 2, 3, 4, 5)");
+
+                t.HasCheckConstraint(
+                    "CK_KurumEBelgePolitikaRevizyonlari_Surumler",
+                    "[EskiSurum] >= 0 AND [YeniSurum] >= 1");
+            });
+
+            entity.Property(x => x.KurumId)
+                .IsRequired();
+
+            entity.Property(x => x.KurumEBelgePolitikasiId)
+                .IsRequired();
+
+            entity.Property(x => x.DegisiklikZamaniUtc)
+                .IsRequired();
+
+            entity.Property(x => x.DegisiklikNedeni)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.HasIndex(x => new { x.KurumEBelgePolitikasiId, x.YeniSurum });
+
+            entity.HasOne(x => x.KurumEBelgePolitikasi)
+                .WithMany()
+                .HasForeignKey(x => new { x.KurumEBelgePolitikasiId, x.KurumId })
+                .HasPrincipalKey(x => new { x.Id, x.KurumId })
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<KurumFaturaNumaraSayaci>(entity =>
         {
             entity.ToTable("KurumFaturaNumaraSayaclari", muhasebeSchema, t =>
@@ -3244,6 +3415,23 @@ public class StysAppDbContext : DbContext
                 (originalState == EntityState.Modified || originalState == EntityState.Deleted))
             {
                 throw new BaseException("EBelgeArtifact oluşturulduktan sonra güncellenemez veya silinemez.", 400);
+            }
+
+            // Faz 2B.10 görev md.10 - immutable karar snapshot'ı: kurum politikası SONRADAN
+            // değişse bile, GEÇMİŞ satış belgelerinin e-belge kararı YENİDEN YORUMLANMAZ/
+            // DEĞİŞTİRİLMEZ (EBelgeSnapshot/EBelgeArtifact İLE AYNI immutability deseni).
+            if (entity is STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesiEBelgeKarari &&
+                (originalState == EntityState.Modified || originalState == EntityState.Deleted))
+            {
+                throw new BaseException("SatisBelgesiEBelgeKarari oluşturulduktan sonra güncellenemez veya silinemez.", 400);
+            }
+
+            // Faz 2B.10 görev md.16 - politika audit revizyonu, tanım gereği GEÇMİŞ bir
+            // değişikliğin KAYDIDIR - oluşturulduktan sonra değiştirilemez/silinemez.
+            if (entity is STYS.Muhasebe.SatisBelgeleri.Entities.KurumEBelgePolitikaRevizyonu &&
+                (originalState == EntityState.Modified || originalState == EntityState.Deleted))
+            {
+                throw new BaseException("KurumEBelgePolitikaRevizyonu oluşturulduktan sonra güncellenemez veya silinemez.", 400);
             }
 
             switch (entry.State)

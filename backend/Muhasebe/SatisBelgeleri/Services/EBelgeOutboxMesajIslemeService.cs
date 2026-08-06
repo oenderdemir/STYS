@@ -140,15 +140,21 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
     private const string BeklenmeyenHataKodu = "EBEKLENMEYENISLEMHATASI";
     private const string BeklenmeyenHataMesaji = "E-belge outbox işi işlenirken beklenmeyen bir hata oluştu.";
 
+    private const string PolitikaBlokluHataKodu = "EBELGE_KURUM_POLICY_BLOCKED_AT_CLAIM";
+    private const string PolitikaBlokluHataMesaji = "Kurum e-belge politikası bu işlem için artık izin vermiyor; işlem güvenli şekilde yeniden bekleme durumuna alındı.";
+    private static readonly TimeSpan PolitikaBlokluRetryGecikmesi = TimeSpan.FromMinutes(5);
+
     private readonly IReadOnlyDictionary<EBelgeOutboxIsTuru, IEBelgeOutboxIsTuruHandler> _handlers;
     private readonly IEBelgeOutboxRetryPolicy _retryPolicy;
     private readonly IEBelgeOutboxLeaseTransitionService _transitionService;
+    private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
     private readonly ILogger<EBelgeOutboxMesajIslemeService> _logger;
 
     public EBelgeOutboxMesajIslemeService(
         IEnumerable<IEBelgeOutboxIsTuruHandler> handlers,
         IEBelgeOutboxRetryPolicy retryPolicy,
         IEBelgeOutboxLeaseTransitionService transitionService,
+        IEBelgeKurumPolitikaServisi kurumPolitikaServisi,
         ILogger<EBelgeOutboxMesajIslemeService> logger)
     {
         var handlerList = handlers.ToList();
@@ -163,6 +169,7 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
             .ToDictionary(x => x.Key, x => SelectUniqueHandler(x.Key, x.ToList()));
         _retryPolicy = retryPolicy;
         _transitionService = transitionService;
+        _kurumPolitikaServisi = kurumPolitikaServisi;
         _logger = logger;
     }
 
@@ -171,6 +178,25 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
         CancellationToken cancellationToken = default)
     {
         var normalizedToken = ValidateClaimAndGetNormalizedToken(claim);
+
+        // Faz 2B.10 görev md.14 - claim SONRASI, pahalı dış işlemden (sidecar/imza) ÖNCE, mümkün
+        // olan EN ERKEN noktada kurum politikası YENİDEN doğrulanır. Outbox mesajının DAHA ÖNCE
+        // oluşturulmuş olması TEK BAŞINA işlemin HÂLÂ izinli olduğu anlamına GELMEZ - politika
+        // claim SONRASINDA pasife alınmış/değiştirilmiş OLABİLİR. Blokluysa: artifact/imza
+        // sonucu KALICILAŞTIRILMAZ (handler'a HİÇ girilmez), SignedReady OLUŞTURULMAZ, işlem
+        // GÜVENLİ şekilde yeniden bekleme durumuna alınır (terminalize EDİLMEZ), ham hata
+        // LOGLANMAZ - mevcut lease transition altyapısı (`TryFailAsync` + retry gecikmesi) YENİDEN
+        // KULLANILIR, yeni bir transition metodu EKLENMEZ.
+        if (!await _kurumPolitikaServisi.IslemHalaIzinliMiAsync(claim.KurumId, claim.EBelgeKaydiId, claim.IsTuru, cancellationToken))
+        {
+            var geriAlindi = await _transitionService.TryFailAsync(
+                claim.OutboxMesajiId, claim.KurumId, normalizedToken,
+                PolitikaBlokluHataKodu, PolitikaBlokluHataMesaji, PolitikaBlokluRetryGecikmesi, cancellationToken);
+
+            return geriAlindi
+                ? EBelgeOutboxIslemeSonucu.RetryPlanlandi(PolitikaBlokluRetryGecikmesi)
+                : EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+        }
 
         if (!_handlers.TryGetValue(claim.IsTuru, out var handler))
         {

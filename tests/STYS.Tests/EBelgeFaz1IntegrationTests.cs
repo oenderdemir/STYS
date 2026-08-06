@@ -135,7 +135,9 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             null!,
             new SatisBelgesiMuhasebeTestSupport.FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
-            new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger());
+            new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger(),
+            // Faz 2B.10 - bkz. SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService XML doc'u.
+            kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext));
     }
 
     private static StysAppDbContext CreateDbContext(

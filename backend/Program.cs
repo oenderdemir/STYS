@@ -248,6 +248,13 @@ builder.Services.AddOptions<EBelgeProcessingOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<EBelgeProcessingOptions>, EBelgeProcessingOptionsValidator>();
 builder.Services.AddSingleton<IEBelgeProcessingActivationGate, EBelgeProcessingActivationGate>();
+// Faz 2B.10: kurum bazlı e-belge politikası ve işlem yönlendirme katmanı. Yetenek matrisi
+// (OzelEntegrator/DogrudanGib = OperasyonelMi=false, gerçek adapter EKLENMEDEN) PRODUCTION
+// implementasyonudur - test-only alternatif (gerçek XAdES/SignedReady E2E testleri için)
+// SADECE test assembly'sinde tanımlıdır, BURADA ASLA kaydedilmez (bkz. görev md.7).
+builder.Services.AddSingleton<IEBelgeYontemYetenekSaglayici, EBelgeYontemYetenekSaglayici>();
+builder.Services.AddScoped<IEBelgeKurumPolitikaServisi, EBelgeKurumPolitikaServisi>();
+builder.Services.AddScoped<IEBelgeKurumPolitikaYonetimServisi, EBelgeKurumPolitikaYonetimServisi>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerDelay, TimeProviderEBelgeOutboxWorkerDelay>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerMetrics, EBelgeOutboxWorkerMetrics>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerHealthState, EBelgeOutboxWorkerHealthState>();

@@ -291,7 +291,9 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         var transitionService = new EBelgeOutboxLeaseTransitionService(workCtx);
         var retryPolicy = new EBelgeOutboxRetryPolicy();
         var islemeService = new EBelgeOutboxMesajIslemeService(
-            [handler], retryPolicy, transitionService, NullLogger<EBelgeOutboxMesajIslemeService>.Instance);
+            [handler], retryPolicy, transitionService,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(workCtx),
+            NullLogger<EBelgeOutboxMesajIslemeService>.Instance);
 
         var sonuc = await islemeService.IsleAsync(claim);
 

@@ -67,7 +67,12 @@ public sealed class EBelgeSigningBackfillService : IEBelgeSigningBackfillService
         }
 
         // Adaylar: Durum=UnsignedUblHazir, SignedReady artefaktı YOK, UblImzala outbox mesajı YOK
-        // - kurum sınırında (bkz. görev md.7).
+        // - kurum sınırında (bkz. görev md.7). Faz 2B.10 görev md.13: AYRICA immutable
+        // SatisBelgesiEBelgeKarari.YerelImzaOlustur=true OLMASI ZORUNLUDUR - Kullanilmayacak/
+        // HariciMuhasebeSistemi/GibPortal/desteklenmeyen OzelEntegrator-DogrudanGib kararları VE
+        // karar kaydı hiç OLMAYAN (karar-öncesi/legacy) kayıtlar backfill'e SESSİZCE dahil
+        // EDİLMEZ - hiçbiri OTOMATİK olarak DogrudanGib/başka bir yönteme VARSAYILMAZ (bkz. görev
+        // md.13, "otomatik veri varsayımı yapma").
         var adayEBelgeKaydiIdleri = await _dbContext.Set<EBelgeKaydi>()
             .Where(k => k.KurumId == kurumId && k.Durum == EBelgeKaydiDurumu.UnsignedUblHazir)
             .Where(k => !_dbContext.Set<EBelgeArtifact>().IgnoreQueryFilters().Any(a =>
@@ -79,6 +84,10 @@ public sealed class EBelgeSigningBackfillService : IEBelgeSigningBackfillService
                 o.KurumId == kurumId &&
                 o.EBelgeKaydiId == k.Id &&
                 o.IsTuru == EBelgeOutboxIsTuru.UblImzala))
+            .Where(k => _dbContext.Set<SatisBelgesiEBelgeKarari>().Any(karar =>
+                karar.KurumId == kurumId &&
+                karar.EBelgeKaydiId == k.Id &&
+                karar.YerelImzaOlustur))
             .Select(k => k.Id)
             .ToListAsync(cancellationToken);
 

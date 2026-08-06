@@ -41,6 +41,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
     private readonly EBelgeUblOptions _eBelgeUblOptions;
 
     private readonly IEBelgeUblPreCutValidator _ublPreCutValidator;
+    private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
 
     /// <summary>Satış belgesi satırlarında desteklenen KDV uygulama tipleri.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -95,7 +96,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         IDomainOperationLogger domainLogger,
         TimeProvider? timeProvider = null,
         IOptions<EBelgeUblOptions>? eBelgeUblOptions = null,
-        IEBelgeUblPreCutValidator? ublPreCutValidator = null)
+        IEBelgeUblPreCutValidator? ublPreCutValidator = null,
+        IEBelgeKurumPolitikaServisi? kurumPolitikaServisi = null)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
@@ -108,6 +110,22 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         _timeProvider = timeProvider ?? TimeProvider.System;
         _ublPreCutValidator = ublPreCutValidator ?? new EBelgeUblPreCutValidator();
         _eBelgeUblOptions = eBelgeUblOptions?.Value ?? new EBelgeUblOptions();
+
+        // Faz 2B.10 - açıkça enjekte edilmediğinde (DI'da her zaman GERÇEK kayıt edilir - bkz.
+        // Program.cs), production-safe VARSAYILAN: EBelgeProcessingOptions.Enabled=false ile
+        // kurulmuş bir gate - global kapı KAPALI sayılır (fail-closed) VE bu, mevcut
+        // testlerin/çağıranların e-belge işlemleri ile İLGİLENMEDİĞİ durumlarda YENİ bir
+        // production davranışı GEREKTİRMEDEN (GlobalKapali -> yerel e-belge pipeline'ı
+        // OLUŞTURULMAZ, HATA da FIRLATILMAZ) çalışmaya devam etmesini sağlar - `_ublPreCutValidator
+        // ??= new EBelgeUblPreCutValidator()` İLE AYNI desendir.
+        _kurumPolitikaServisi = kurumPolitikaServisi ?? new EBelgeKurumPolitikaServisi(
+            _db,
+            new EBelgeProcessingActivationGate(
+                Options.Create(new EBelgeProcessingOptions()),
+                _timeProvider,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<EBelgeProcessingActivationGate>.Instance),
+            new EBelgeYontemYetenekSaglayici(),
+            _timeProvider);
     }
 
     // ── Satirları include eden yardımcı ──
@@ -1148,6 +1166,14 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             EnsureCutoverTarihGecerli(belge, planlananKesimZamaniUtc);
 
+            // Faz 2B.10 - kurum e-belge politikası, GLOBAL kapılardan (yukarıdaki
+            // EnsureCutoverTarihGecerli/EBelgeUblOptions) SONRA ama sayaç sorgusundan/kilidinden
+            // ÖNCE değerlendirilir - henüz hiçbir kalıcı yan etki (sayaç artışı, resmî numara)
+            // YOKTUR. Karar servisi KENDİ İÇİNDE AYRICA global işlem kapısını (EBelgeProcessingActivationGate)
+            // da değerlendirir - kurum politikası bu kapıyı HİÇBİR ZAMAN AÇAMAZ (görev md.3).
+            var politikaKarari = await _kurumPolitikaServisi.DegerlendirAsync(belge.KurumId, planlananKesimTarihiTrt, cancellationToken);
+            EnsurePolitikaEngelDegil(politikaKarari);
+
             var aktifSatirlar = belge.Satirlar.Where(x => !x.IsDeleted).ToList();
 
             // Tam kesim öncesi UBL hazırlık kapısı - yalnız EBelgeUblOptions.Enabled açıkken
@@ -1226,54 +1252,96 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 TicariBelgeMuhasebeDurumu.Onaylandi,
                 TicariBelgeFaturalamaDurumu.Kesildi);
 
-            var eBelgeKaydi = new EBelgeKaydi
+            // Faz 2B.10 görev md.10/md.11 - immutable karar snapshot'ı YÖNTEMDEN BAĞIMSIZ HER
+            // ZAMAN oluşturulur (davranış matrisi md.11 - "Karar kaydı oluştur" HER dalda ilk
+            // adımdır). Persist edilen bool alanlar kullanıcı config'i DEĞİLDİR - karar anında
+            // type-safe yöntem matrisinden TÜRETİLMİŞ, immutable bir plan snapshot'ıdır.
+            var eBelgeKarari = new SatisBelgesiEBelgeKarari
             {
                 KurumId = belge.KurumId,
                 SatisBelgesiId = belge.Id,
                 SatisBelgesi = belge,
-                EBelgeUuid = Guid.NewGuid().ToString("D"),
-                EBelgeKanali = eBelgeKanali,
-                Durum = EBelgeKaydiDurumu.SnapshotHazir
+                KurumEBelgePolitikasiId = politikaKarari.PolitikaId,
+                PolitikaSurumu = politikaKarari.PolitikaSurumu,
+                EntegrasyonYontemi = politikaKarari.EntegrasyonYontemi,
+                KararNedeni = politikaKarari.Neden,
+                YerelSnapshotOlustur = politikaKarari.Yetenekler.YerelSnapshotOlustur,
+                YerelUnsignedUblOlustur = politikaKarari.Yetenekler.YerelUnsignedUblOlustur,
+                YerelImzaOlustur = politikaKarari.Yetenekler.YerelImzaOlustur,
+                OtomatikGonderimYap = politikaKarari.Yetenekler.OtomatikGonderimYap,
+                KararZamaniUtc = politikaKarari.KararZamaniUtc,
             };
+            _db.Add(eBelgeKarari);
 
-            // Feature açıkken (ve yukarıdaki kapıdan geçmiş belgeler için) gerçek, typed V2
-            // snapshot üretilir; kapalıyken V1 üretim yolu AYNEN korunur (bkz. görev sonuç
-            // raporu, "V1 üretim yolunu kaldırma veya değiştirme").
-            var snapshot = _eBelgeUblOptions.Enabled
-                ? EBelgeSnapshotFactory.CreateSnapshotV2(
-                    eBelgeKaydi,
-                    belge,
-                    tesis.Kurum,
-                    tesis,
-                    cariKart,
-                    faturaKesimZamaniUtc)
-                : EBelgeSnapshotFactory.CreateSnapshot(
-                    eBelgeKaydi,
-                    belge,
-                    tesis.Kurum,
-                    tesis,
-                    cariKart,
-                    faturaKesimZamaniUtc);
-
-            eBelgeKaydi.Snapshot = snapshot;
-            _db.EBelgeKayitlari.Add(eBelgeKaydi);
-
-            var outboxMesaji = new EBelgeOutboxMesaji
+            // Faz 2B.10 görev md.11 davranış matrisi - yerel e-belge pipeline'ı (EBelgeKaydi +
+            // Snapshot + ArtefaktOlustur outbox) YALNIZ politika kararı bunu AÇIKÇA
+            // gerektiriyorsa (GibPortal - şu an tek operasyonel yöntem) kurulur. Kullanilmayacak/
+            // HariciMuhasebeSistemi/GlobalKapali/GlobalAktivasyonTarihiGelmedi İÇİN HİÇBİRİ
+            // OLUŞTURULMAZ - satış NORMAL akışla (resmî numara verilmiş halde) tamamlanır.
+            if (politikaKarari.Yetenekler.YerelSnapshotOlustur)
             {
-                KurumId = belge.KurumId,
-                EBelgeKaydi = eBelgeKaydi,
-                IsTuru = EBelgeOutboxIsTuru.ArtefaktOlustur,
-                Durum = EBelgeOutboxDurumu.Bekliyor,
-                DenemeSayisi = 0
-            };
+                var eBelgeKaydi = new EBelgeKaydi
+                {
+                    KurumId = belge.KurumId,
+                    SatisBelgesiId = belge.Id,
+                    SatisBelgesi = belge,
+                    EBelgeUuid = Guid.NewGuid().ToString("D"),
+                    EBelgeKanali = eBelgeKanali,
+                    Durum = EBelgeKaydiDurumu.SnapshotHazir
+                };
 
-            eBelgeKaydi.OutboxMesajlari.Add(outboxMesaji);
+                // Feature açıkken (ve yukarıdaki kapıdan geçmiş belgeler için) gerçek, typed V2
+                // snapshot üretilir; kapalıyken V1 üretim yolu AYNEN korunur (bkz. görev sonuç
+                // raporu, "V1 üretim yolunu kaldırma veya değiştirme").
+                var snapshot = _eBelgeUblOptions.Enabled
+                    ? EBelgeSnapshotFactory.CreateSnapshotV2(
+                        eBelgeKaydi,
+                        belge,
+                        tesis.Kurum,
+                        tesis,
+                        cariKart,
+                        faturaKesimZamaniUtc)
+                    : EBelgeSnapshotFactory.CreateSnapshot(
+                        eBelgeKaydi,
+                        belge,
+                        tesis.Kurum,
+                        tesis,
+                        cariKart,
+                        faturaKesimZamaniUtc);
+
+                eBelgeKaydi.Snapshot = snapshot;
+                _db.EBelgeKayitlari.Add(eBelgeKaydi);
+                eBelgeKarari.EBelgeKaydi = eBelgeKaydi;
+
+                if (politikaKarari.Yetenekler.YerelUnsignedUblOlustur)
+                {
+                    var outboxMesaji = new EBelgeOutboxMesaji
+                    {
+                        KurumId = belge.KurumId,
+                        EBelgeKaydi = eBelgeKaydi,
+                        IsTuru = EBelgeOutboxIsTuru.ArtefaktOlustur,
+                        Durum = EBelgeOutboxDurumu.Bekliyor,
+                        DenemeSayisi = 0
+                    };
+
+                    eBelgeKaydi.OutboxMesajlari.Add(outboxMesaji);
+                }
+            }
 
             try
             {
                 // Sayaç artışı VE belge güncellemesi AYNI SaveChangesAsync/transaction'da -
                 // biri başarısız olursa (ör. unique index çakışması) ikisi de rollback olur.
                 await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (IsEBelgeKarariBenzersizlikIhlali(ex))
+            {
+                // Faz 2B.10 görev md.19 - aynı satış belgesi için ikinci bir karar oluşturulmaya
+                // çalışıldı (idempotent tekrar/yarış durumu) - (KurumId, SatisBelgesiId) benzersiz
+                // indeksi bunu reddeder; ham SQL hatası SIZDIRILMAZ. `IsUniqueConflict`'TEN (genel,
+                // fatura numarası odaklı mesaj üreten) ÖNCE kontrol edilir - index'e ÖZGÜ bir eşleşmedir.
+                throw new BaseException(
+                    "Bu satış belgesi için e-belge kararı zaten mevcut.", errorCode: 409);
             }
             catch (DbUpdateException ex) when (IsUniqueConflict(ex))
             {
@@ -1344,6 +1412,28 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
         if (belgeTarihi < EBelgeUblGoLive.Trt || planlananKesimTarihiTrt < EBelgeUblGoLive.Trt)
         {
             throw new EBelgeInvoiceDateBeforeGoLiveException(belgeTarihi, planlananKesimTarihiTrt, EBelgeUblGoLive.Trt);
+        }
+    }
+
+    /// <summary>
+    /// Faz 2B.10 görev md.9 - global e-belge süreci aktif olduktan SONRA, kurum politikasının
+    /// fail-closed nedenlerinden (politika yok/yapılandırılmadı, pasif, kurum aktivasyon tarihi
+    /// gelmedi, yöntem henüz desteklenmiyor, politika geçersiz) HİÇBİRİ satış akışını SESSİZCE
+    /// tamamlatmaz - güvenli bir istisna fırlatılır. `GlobalKapali`/`GlobalAktivasyonTarihiGelmedi`
+    /// (production HENÜZ genel olarak açık DEĞİLKEN) VE `YontemKullanilmayacak`/`HariciSistemSorumlu`
+    /// (açıkça HATA OLMAYAN durumlar) satışı ENGELLEMEZ - yerel e-belge pipeline'ı yalnız
+    /// OLUŞTURULMAZ.
+    /// </summary>
+    private static void EnsurePolitikaEngelDegil(EBelgeKurumPolitikaKarari karari)
+    {
+        switch (karari.Neden)
+        {
+            case EBelgeKurumPolitikaKararNedeni.PolitikaYapilandirilmadi:
+            case EBelgeKurumPolitikaKararNedeni.PolitikaPasif:
+            case EBelgeKurumPolitikaKararNedeni.KurumAktivasyonTarihiGelmedi:
+            case EBelgeKurumPolitikaKararNedeni.YontemHenuzDesteklenmiyor:
+            case EBelgeKurumPolitikaKararNedeni.PolitikaGecersiz:
+                throw new EBelgeKurumPolitikaEngelliException(karari.Neden);
         }
     }
 
@@ -1455,6 +1545,16 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                (sqlEx.Number == 2601 || sqlEx.Number == 2627) &&
                sqlEx.Message.Contains(
                    "IX_SatisBelgeleri_KurumId_CariKartId_KarsiTarafFaturaNo",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Faz 2B.10 görev md.10/md.19 - (KurumId, SatisBelgesiId) benzersizliğini ihlal eden 2601/2627 hatalarını, index adına göre ÖZGÜ olarak tanır.</summary>
+    private static bool IsEBelgeKarariBenzersizlikIhlali(DbUpdateException ex)
+    {
+        return ex.InnerException is SqlException sqlEx &&
+               (sqlEx.Number == 2601 || sqlEx.Number == 2627) &&
+               sqlEx.Message.Contains(
+                   "IX_SatisBelgesiEBelgeKararlari_KurumId_SatisBelgesiId",
                    StringComparison.OrdinalIgnoreCase);
     }
 

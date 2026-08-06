@@ -93,7 +93,7 @@ public class EBelgeSigningBackfillServiceIntegrationTests : IAsyncLifetime
         return created.Id!.Value;
     }
 
-    private async Task<int> SeedEBelgeKaydiAsync(StysAppDbContext dbContext, EBelgeKaydiDurumu durum)
+    private async Task<int> SeedEBelgeKaydiAsync(StysAppDbContext dbContext, EBelgeKaydiDurumu durum, bool kararSeedEt = true)
     {
         var satisBelgesiId = await CreateSatisBelgesiIdAsync(dbContext);
         var eBelgeKaydi = new EBelgeKaydi
@@ -106,6 +106,17 @@ public class EBelgeSigningBackfillServiceIntegrationTests : IAsyncLifetime
         };
         dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
         await dbContext.SaveChangesAsync();
+
+        // Faz 2B.10 görev md.13 - backfill artık yalnız YerelImzaOlustur=true olan immutable
+        // kararlara ait kayıtları seçer; bu testler SatisBelgesiService'in fatura-kesme akışını
+        // KULLANMADAN DOĞRUDAN seed ettiğinden eşlik eden karar BURADA seed edilir (bkz.
+        // EBelgeKurumPolitikaTestSupport). `kararSeedEt=false` İLE "karar-öncesi/legacy kayıt
+        // backfill tarafından işlenmez" senaryosu (görev md.13/md.22 test 23) test edilebilir.
+        if (kararSeedEt)
+        {
+            await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
+        }
+
         return eBelgeKaydi.Id;
     }
 
@@ -284,5 +295,55 @@ public class EBelgeSigningBackfillServiceIntegrationTests : IAsyncLifetime
         await using var verifyCtx = CreateDbContext();
         var sayi = await verifyCtx.EBelgeOutboxMesajlari.CountAsync(o => o.EBelgeKaydiId == eBelgeKaydiId && o.IsTuru == EBelgeOutboxIsTuru.UblImzala);
         Assert.Equal(1, sayi);
+    }
+
+    // ---- Faz 2B.10 görev md.13 - immutable karar kaydı olmayan (karar-öncesi/legacy) kayıtlar
+    // BACKFILL tarafından ASLA DogrudanGib varsayılarak imzalama zincirine dahil edilmez. ----
+
+    [IntegrationFact]
+    public async Task KararKaydiOlmayanLegacyKayitBackfillTarafindanIslenmez()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiAsync(dbContext, EBelgeKaydiDurumu.UnsignedUblHazir, kararSeedEt: false);
+
+        var service = CreateService(dbContext, gateAcik: true);
+        var sonuc = await service.BackfillAsync(_kurumId, CancellationToken.None);
+
+        Assert.Equal(0, sonuc);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeOutboxMesajlari.AnyAsync(o => o.EBelgeKaydiId == eBelgeKaydiId));
+    }
+
+    // ---- Karar kaydı VAR ama YerelImzaOlustur=false (ör. GibPortal) - imzalama zincirine dahil edilmez ----
+
+    [IntegrationFact]
+    public async Task KararindaYerelImzaOlusturFalseOlanKayitBackfillTarafindanIslenmez()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiAsync(dbContext, EBelgeKaydiDurumu.UnsignedUblHazir, kararSeedEt: false);
+
+        var eBelgeKaydi = await dbContext.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        dbContext.Add(new SatisBelgesiEBelgeKarari
+        {
+            KurumId = _kurumId,
+            SatisBelgesiId = eBelgeKaydi.SatisBelgesiId,
+            EntegrasyonYontemi = EBelgeEntegrasyonYontemi.GibPortal,
+            KararNedeni = EBelgeKurumPolitikaKararNedeni.Aktif,
+            YerelSnapshotOlustur = true,
+            YerelUnsignedUblOlustur = true,
+            YerelImzaOlustur = false,
+            KararZamaniUtc = DateTime.UtcNow,
+            EBelgeKaydiId = eBelgeKaydiId,
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, gateAcik: true);
+        var sonuc = await service.BackfillAsync(_kurumId, CancellationToken.None);
+
+        Assert.Equal(0, sonuc);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeOutboxMesajlari.AnyAsync(o => o.EBelgeKaydiId == eBelgeKaydiId));
     }
 }

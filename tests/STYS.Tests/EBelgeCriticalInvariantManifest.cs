@@ -21,5 +21,8 @@ public static class EBelgeCriticalInvariantManifest
         "SchematronRealSidecar",
         "ActivationNotBefore20260915",
         "WorkerEndToEndSignedReady",
+        "InstitutionPolicyFailClosed",
+        "InstitutionPolicyTenantIsolation",
+        "PortalRouteNeverSignsLocally",
     ];
 }

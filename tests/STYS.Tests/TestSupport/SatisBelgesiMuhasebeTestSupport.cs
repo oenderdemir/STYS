@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using STYS.AccessScope;
 using STYS.Iller.Entities;
 using STYS.Infrastructure.EntityFramework;
@@ -20,6 +21,7 @@ using STYS.Muhasebe.MuhasebeFisleri.Repositories;
 using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Mapping;
@@ -122,6 +124,13 @@ public static class SatisBelgesiMuhasebeTestSupport
             new FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
             new NoOpDomainOperationLogger(),
+            timeProvider: null,
+            // Faz 2B.11.1 - bkz. SeedKurumIlTesisAsync XML doc'u: AYNI "MEVCUT davranışı koru"
+            // prensibi, yeni UBL feature flag runtime fail-closed guard'ına da (bkz.
+            // SatisBelgesiService.EnsureUblFeatureAcikYerelUblGerekliyse) uzanır - `Enabled=true`,
+            // bu fabrikayı kullanan (2B.11.1 ÖNCESİ yazılmış, UBL flag semantiğiyle İLGİLENMEYEN)
+            // testlerin EBelgeKaydi/snapshot/outbox'ının KOŞULSUZ oluşmaya devam etmesini sağlar.
+            eBelgeUblOptions: Options.Create(new EBelgeUblOptions { Enabled = true }),
             // Faz 2B.10 - bkz. SeedKurumIlTesisAsync XML doc'u: bu fabrikanın VARSAYILANI, ONU
             // KULLANAN MEVCUT (2B.10 öncesi) testlerin EBelgeKaydi/snapshot/outbox davranışını
             // KORUR - "her zaman aktif" test-only karar servisi.
@@ -161,6 +170,9 @@ public static class SatisBelgesiMuhasebeTestSupport
             new FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
             new NoOpDomainOperationLogger(),
+            timeProvider: null,
+            // Faz 2B.11.1 - bkz. CreateSatisBelgesiService XML doc'u.
+            eBelgeUblOptions: Options.Create(new EBelgeUblOptions { Enabled = true }),
             // Faz 2B.10 - bkz. CreateSatisBelgesiService XML doc'u.
             kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext));
 

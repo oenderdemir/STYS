@@ -76,7 +76,8 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
         Guid? currentUserId = null,
         TimeProvider? timeProvider = null,
         EBelgeProcessingOptions? processingOptions = null,
-        IEBelgeSigningActivationGate? signingGate = null) =>
+        IEBelgeSigningActivationGate? signingGate = null,
+        EBelgeUblOptions? ublOptions = null) =>
         new(
             new EBelgeKurumPolitikaYonetimServisi(
                 dbContext,
@@ -92,7 +93,10 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
                     Microsoft.Extensions.Logging.Abstractions.NullLogger<EBelgeProcessingActivationGate>.Instance),
                 signingGate ?? new AlwaysKapaliSigningGate(),
                 timeProvider ?? TimeProvider.System,
-                Options.Create(processingOptions ?? new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" })),
+                Options.Create(processingOptions ?? new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }),
+                // Faz 2B.11.1 - testlerde VARSAYILAN "kapalı" (production varsayımıyla TUTARLI, bkz.
+                // görev md.17); UBL-spesifik readiness testleri BU parametreyi AÇIKÇA override eder.
+                Options.Create(ublOptions ?? new EBelgeUblOptions { Enabled = false })),
             dbContext,
             identityDbContext,
             new FakeCurrentUserAccessor(currentUserId ?? Guid.NewGuid()),
@@ -399,7 +403,10 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
         await using var dbContext = CreateDbContext();
         await using var identityDbContext = CreateIdentityDbContext();
         await SetKurumSellerFieldsAsync();
-        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        // UBL feature flag AÇIKÇA açılır - bu test satıcı/aktivasyon/global-kapı koşullarını
+        // kapsar, UBL flag'i AYRICA (bkz. aşağıdaki UblFeatureKapali* testleri) kapsanır.
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            ublOptions: new EBelgeUblOptions { Enabled = true });
         await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
 
         var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
@@ -417,8 +424,10 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
         await using var identityDbContext = CreateIdentityDbContext();
         await SetKurumSellerFieldsAsync();
         // CreateController varsayılanı ZATEN "her zaman kapalı" bir signing gate kullanır (bkz.
-        // AlwaysKapaliSigningGate) - bu test bunu AÇIKÇA doğrular.
-        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        // AlwaysKapaliSigningGate) - bu test bunu AÇIKÇA doğrular. UBL feature flag AÇIKÇA açılır -
+        // bu testin amacı SIGNING gate'in etkisiz olduğunu kanıtlamaktır, UBL flag'in etkisi DEĞİL.
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            ublOptions: new EBelgeUblOptions { Enabled = true });
         await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
 
         var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
@@ -427,6 +436,81 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
         Assert.False(readiness.SigningGateUygulanabilirMi); // GibPortal yerel imza GEREKTİRMEZ
         Assert.True(readiness.IslemeHazirMi);
         Assert.DoesNotContain(EBelgeKurumReadinessKodlari.SigningGateKapali, readiness.BlokajNedenleri);
+    }
+
+    // ---- Faz 2B.11.1 görev md.6 - UBL feature flag readiness davranışı ----
+
+    [IntegrationFact]
+    public async Task GibPortalUblDisabledIkenIslemeHazirDegilVeUblFeatureKapaliKoduDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            processingOptions: new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" },
+            ublOptions: new EBelgeUblOptions { Enabled = false });
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.True(readiness.SaticiAnaVerileriHazirMi);
+        Assert.True(readiness.GlobalProcessingAktifMi);
+        Assert.True(readiness.UblFeatureUygulanabilirMi);
+        Assert.False(readiness.UblFeatureAktifMi);
+        Assert.False(readiness.IslemeHazirMi);
+        Assert.Contains(EBelgeKurumReadinessKodlari.UblFeatureKapali, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalUblEnabledIkenAyniKosullardaIslemeHazirOlabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            processingOptions: new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" },
+            ublOptions: new EBelgeUblOptions { Enabled = true });
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.True(readiness.UblFeatureUygulanabilirMi);
+        Assert.True(readiness.UblFeatureAktifMi);
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.DoesNotContain(EBelgeKurumReadinessKodlari.UblFeatureKapali, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task KullanilmayacakUblDisabledIkenEtkilenmezVeHazirSayilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            ublOptions: new EBelgeUblOptions { Enabled = false });
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.Kullanilmayacak, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.False(readiness.UblFeatureUygulanabilirMi); // yerel UBL bu yöntemde N/A
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.DoesNotContain(EBelgeKurumReadinessKodlari.UblFeatureKapali, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task HariciMuhasebeSistemiUblDisabledIkenEtkilenmezVeHazirSayilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            ublOptions: new EBelgeUblOptions { Enabled = false });
+        var dto = Dto(EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi, true, new DateTime(2020, 1, 1));
+        await controller.Update(_kurumId, dto with { HariciSistemKodu = "ERP-1" }, CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.False(readiness.UblFeatureUygulanabilirMi); // yerel UBL bu yöntemde N/A
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.DoesNotContain(EBelgeKurumReadinessKodlari.UblFeatureKapali, readiness.BlokajNedenleri);
     }
 
     [IntegrationFact]
@@ -489,7 +573,8 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
         await using var identityDbContext = CreateIdentityDbContext();
         await SetKurumSellerFieldsAsync();
         var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
-            processingOptions: new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" });
+            processingOptions: new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" },
+            ublOptions: new EBelgeUblOptions { Enabled = true });
         await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
 
         var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;

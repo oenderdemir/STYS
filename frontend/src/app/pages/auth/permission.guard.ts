@@ -36,6 +36,16 @@ const GUVENLI_FALLBACK_ROTA = '/notfound';
  * defaultRoute yanlışlıkla '/notfound' olarak yapılandırılmışsa) hedefle AYNIYSA döngüyü kesin
  * olarak kırmak için navigasyon tamamen ENGELLENİR (false).
  */
+function redirectAwayFromRoute(router: Router, authService: AuthService, hedefUrl: string) {
+    const defaultRoute = authService.getLandingRoute();
+
+    if (defaultRoute === hedefUrl) {
+        return GUVENLI_FALLBACK_ROTA === hedefUrl ? false : router.createUrlTree([GUVENLI_FALLBACK_ROTA]);
+    }
+
+    return router.createUrlTree([defaultRoute]);
+}
+
 export function permissionGuard(permission: string): CanActivateFn {
     return (_route, state) => {
         const authService = inject(AuthService);
@@ -45,13 +55,27 @@ export function permissionGuard(permission: string): CanActivateFn {
             return true;
         }
 
-        const hedefUrl = state.url;
-        const defaultRoute = authService.getLandingRoute();
+        return redirectAwayFromRoute(router, authService, state.url);
+    };
+}
 
-        if (defaultRoute === hedefUrl) {
-            return GUVENLI_FALLBACK_ROTA === hedefUrl ? false : router.createUrlTree([GUVENLI_FALLBACK_ROTA]);
+/**
+ * Faz 2B.11.1 görev md.13 - `permissionGuard` YALNIZ `AuthService.hasPermission` bakar; bu,
+ * `[Permission(X, SuperAdminPermission)]` (OR semantiği) İLE korunan backend endpoint'lerinin
+ * ÇOĞUNUN aksine, SuperAdmin'i domain-spesifik bir izne SAHİP OLMAYA ZORLAR (bkz. görev md.12).
+ * Bu guard, `permissionGuard`'ın YERİNE GEÇMEZ (mevcut çağıranların DAVRANIŞI DEĞİŞMEDİ) - yalnız
+ * backend'in `View/Manage OR SuperAdmin` sözleşmesini birebir taşıyan rotalar İÇİN hedefli bir
+ * alternatiftir.
+ */
+export function permissionOrSuperAdminGuard(permission: string): CanActivateFn {
+    return (_route, state) => {
+        const authService = inject(AuthService);
+        const router = inject(Router);
+
+        if (authService.isSuperAdminUser() || authService.hasPermission(permission)) {
+            return true;
         }
 
-        return router.createUrlTree([defaultRoute]);
+        return redirectAwayFromRoute(router, authService, state.url);
     };
 }

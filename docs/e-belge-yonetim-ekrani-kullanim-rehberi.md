@@ -32,7 +32,7 @@ görselleştirmesidir — kartlardan hiçbiri frontend'de ayrıca hesaplanmaz:
 | Kurum Politikası | `politikaYapilandirilmisMi`/`politikaAktifMi` | Politika hiç yok / var-pasif / var-aktif |
 | Entegrasyon Yöntemi | `entegrasyonYontemi`/`yontemOperasyonelMi` | Seçili yöntem ve production'da desteklenip desteklenmediği |
 | Satıcı Bilgileri | `saticiAnaVerileriHazirMi` | Yerel UBL üretimi gerektiren yöntemlerde Kurum ana verisinin tamlığı |
-| UBL Üretimi | `islemeHazirMi` | Yerel snapshot/UBL üretimi için TÜM koşulların sağlanıp sağlanmadığı |
+| UBL Üretimi | `ublFeatureUygulanabilirMi`/`ublFeatureAktifMi`/`islemeHazirMi` | Aşağıdaki dört duruma bkz. — Faz 2B.11.1 |
 | İmzalama | `signingGateUygulanabilirMi`/`signingSuAnMumkunMu` | Yalnız yerel imza gerektiren yöntemlerde (bugün: hiçbiri production'da) anlamlıdır |
 | Otomatik Gönderim | `otomatikGonderimGerekliMi` | Bugün hiçbir production yöntemi otomatik gönderim yapmaz |
 
@@ -40,6 +40,25 @@ Kart renkleri (severity) PrimeNG'nin standart `success`/`warn`/`danger`/`seconda
 kullanır — sabit hex renk kodu YOKTUR. Durum yalnız renkle DEĞİL, aynı zamanda metinle de ifade
 edilir (ör. "Hazır" / "Eksik" / "Uygulanamaz") — renk körlüğü erişilebilirlik gereksinimini
 karşılamak için.
+
+### UBL Üretimi kartı — dört durum (Faz 2B.11.1)
+
+`EBelgeUbl.Enabled` global feature flag'i (bkz. `docs/e-belge-ubl-pdf-eposta-renderer-hazirlik-raporu.md`,
+"Kesin ürün kararı: devreye alma tarihi") de readiness'e katılır — ama YALNIZ yöntem GERÇEKTEN
+yerel unsigned UBL GEREKTİRİYORSA (`ublFeatureUygulanabilirMi`, bugün yalnız GİB Portal). Frontend
+bu flag'in DEĞERİNİ kendisi TAHMİN ETMEZ — her zaman backend'den okunan `ublFeatureAktifMi` alanına
+bakar:
+
+| Durum | Koşul | Kart |
+|---|---|---|
+| Uygulanamaz | Yerel UBL bu yöntemde N/A (`ublFeatureUygulanabilirMi=false` — Kullanılmayacak/Harici Muhasebe Sistemi) | secondary |
+| Kapalı | Yerel UBL gerekli AMA `EBelgeUbl.Enabled=false` | danger |
+| Bekliyor | Yerel UBL gerekli, flag açık, ama BAŞKA bir readiness blokajı var (ör. satıcı verisi eksik) | warn |
+| Hazır | TÜM koşullar sağlanmış | success |
+
+"Kapalı" durumunda `blokajNedenleri` içinde `EBELGE_UBL_FEATURE_DISABLED` kodu (Türkçe etiket:
+"UBL üretimi devre dışı") görünür ve `islemeHazirMi=false` olur — GİB Portal politikası aktif,
+satıcı verisi tam, aktivasyon tarihi gelmiş olsa BİLE.
 
 Bir yöntem yerel imza/snapshot gerektirmiyorsa (ör. `GİB Portal` imza istemez, `Kullanılmayacak`/
 `Harici Muhasebe Sistemi` hiçbirini istemez) ilgili kart "Uygulanamaz" gösterir — kırmızı bir
@@ -68,6 +87,15 @@ YOKTUR):
 Devre dışı bırakma kararı TAMAMEN backend'in `operasyonelMi` alanından gelir — frontend hangi
 yöntemlerin desteklendiğini kendi başına hardcode ETMEZ; yeni bir yöntem ileride production'da
 aktive edilirse ekranda KOD DEĞİŞİKLİĞİ GEREKMEZ.
+
+**Faz 2B.11.1 düzeltmesi**: "Harici Sistem Kodu" alanının ne zaman ZORUNLU olduğu bilgisi de
+(`hariciSistemKoduGerekliMi`) artık AYNI `yontemler` dizisinden, seçili yönteme karşılık gelen
+`EBelgeYontemReadinessModel` kaydından okunur (`secilenYontemCapability` getter'ı üzerinden) —
+ÖNCEKİ sürüm bunu `entegrasyonYontemi === HariciMuhasebeSistemi` biçiminde component içinde
+YENİDEN hesaplıyordu (backend'in ZATEN döndürdüğü bir business kuralının frontend'de İKİNCİ bir
+kopyası). Aynı prensip operasyonel/disabled, snapshot, unsigned UBL, imza, otomatik gönderim gibi
+TÜM capability alanları için geçerlidir — component hiçbirini yöntem enum'una göre YENİDEN
+TÜRETMEZ, yalnız backend'in döndürdüğü değeri okur.
 
 ## Politika aktivasyonu
 
@@ -116,6 +144,17 @@ gösterir (kullanıcının o ekranı görme izni varsa). Kurum bilgileri güncel
 readiness'in yeniden yüklenmesiyle uyarı otomatik kalkar — ekran kendi başına "tamam" varsayımı
 YAPMAZ, her zaman backend'e yeniden sorar.
 
+## Runtime güvenlik garantisi (Faz 2B.11.1)
+
+Bu ekranın readiness kartı bir GÜVENLİK KONTROLÜ DEĞİLDİR — yalnız GÖRÜNTÜLEME amaçlıdır.
+Backend'in KENDİSİ (`SatisBelgesiService.FaturaKesAsync`) de fail-closed'dır: politika yerel
+unsigned UBL üretimini gerektiriyorsa (bugün yalnız GİB Portal) ve `EBelgeUbl.Enabled=false`
+ise, satış kesimi resmî fatura numarası verilmeden/sayaç tüketilmeden/immutable karar
+yazılmadan REDDEDİLİR (`EBELGE_UBL_FEATURE_DISABLED`, HTTP 503) — ekran "Kapalı" gösterse de
+göstermese de, kullanıcı readiness'i hiç görmeden doğrudan API'yi çağırsa bile AYNI kural
+uygulanır. Kullanılmayacak/Harici Muhasebe Sistemi gibi yerel UBL gerektirmeyen yöntemler bu
+kontrolden hiç etkilenmez.
+
 ## Cari kart e-belge bilgileri
 
 Bu ekranın kapsamı DIŞINDA olsa da ilişkili bir düzeltme: **Cari Kartlar** ekranındaki
@@ -159,6 +198,26 @@ Frontend'deki bu ayrım YALNIZ kullanıcı deneyimi içindir — gerçek yetki k
 backend'de (`EnsureCanAccessKurumAsync`/`EnsureCanManageKurumAsync`) yapılır; bir kullanıcı UI'ı
 atlayıp doğrudan API'yi çağırsa bile aynı kısıtlamalarla karşılaşır.
 
+**SuperAdmin — Faz 2B.11.1 düzeltmesi**: backend sözleşmesi `View/Manage OR SuperAdmin`
+(`[Permission(View, SuperAdminPermission)]` — OR semantiği) iken, ekranın ÖNCEKİ (Faz 2B.11)
+`canView`/`canManage` mantığı SuperAdmin'i de domain-spesifik `.View`/`.Manage` iznine SAHİP
+OLMAYA ZORLUYORDU (yanlışlıkla AND semantiği). Bu düzeltildi: `isSuperAdminUser()` artık HER
+İKİ getter'da da domain izin kontrolünden ÖNCE, koşulsuz olarak `true` döner — tıpkı backend'in
+davranışı gibi. Rota koruması da (`app.routes.ts`) AYNI sözleşmeyi taşıyan, bu rotaya ÖZGÜ
+`permissionOrSuperAdminGuard('MuhasebeSatisBelgeleriYonetimi.View')` kullanır — uygulamanın
+GENELİNDEKİ `permissionGuard` (yalnız `hasPermission` bakan, SuperAdmin'i AYRI DEĞERLENDİRMEYEN)
+davranışı DEĞİŞTİRİLMEDİ, yan etki yaratmaması için.
+
+**UserManagement bağımsızlığı — Faz 2B.11.1 düzeltmesi**: ekranın kurum bağlamı (aktif kurum adı,
+SuperAdmin kurum seçici) ARTIK `KurumService.getAll()`/`getById()` (ikisi de backend'de
+`UserManagement.View` GEREKTİRİR) KULLANMAZ — bunun yerine yalnız kimlik doğrulama gerektiren,
+tenant-scope'a göre ZATEN erişilebilir kurumları döndüren `GET .../kurum/benim-kurumlarim`
+(`KurumService.getMyKurumlar()`) kullanılır. Bu sayede salt e-belge Viewer/Manager izni olan,
+`UserManagement` izni OLMAYAN bir kullanıcı ekranı TAM olarak kullanabilir. "Satıcı bilgilerini
+tamamla" kısayolu (Kurum Yönetimi ekranına gider) HÂLÂ `UserManagement.Manage OR SuperAdmin`
+gerektirir — ama bu, yalnız O BUTONUN görünürlüğünü etkiler, sayfanın KENDİSİNİN
+görüntülenmesini ETKİLEMEZ.
+
 ## Sık görülen readiness blokajları
 
 `blokajNedenleri` dizisindeki güvenli kodların Türkçe karşılıkları:
@@ -172,6 +231,7 @@ atlayıp doğrudan API'yi çağırsa bile aynı kısıtlamalarla karşılaşır.
 | `EBELGE_GLOBAL_PROCESSING_DISABLED` | Global e-belge işleme kapısı kapalı — kurum politikası ne olursa olsun beklenmelidir, bu KURUM DIŞI bir kapıdır |
 | `EBELGE_KURUM_POLICY_SELLER_DATA_INCOMPLETE` | Kurum'un VKN/Vergi Dairesi/Adres/İlçe/İl bilgilerinden biri veya birkaçı eksik — bkz. "Satıcı ana verileri" |
 | `EBELGE_SIGNING_GATE_DISABLED` | Yerel imza gerektiren bir yöntem seçili ama global imzalama kapısı kapalı |
+| `EBELGE_UBL_FEATURE_DISABLED` | Yerel unsigned UBL gerektiren bir yöntem seçili ama `EBelgeUbl.Enabled` global flag'i kapalı — bkz. "UBL Üretimi kartı" |
 
 Bu kodlar HİÇBİR ZAMAN VKN/TCKN/adres gibi ham kişisel/kurumsal veri İÇERMEZ — yalnız hangi
 alanın/kapının eksik/kapalı olduğunu işaret eden sabit birer işarettir.

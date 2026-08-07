@@ -45,6 +45,8 @@ describe('EBelgeYonetimiService', () => {
             globalProcessingDurumu: 'Active',
             yerelSnapshotGerekliMi: true,
             yerelUnsignedUblGerekliMi: true,
+            ublFeatureUygulanabilirMi: true,
+            ublFeatureAktifMi: true,
             yerelImzaGerekliMi: false,
             otomatikGonderimGerekliMi: false,
             saticiAnaVerileriHazirMi: true,

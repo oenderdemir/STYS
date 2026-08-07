@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kurumlar.Entities;
@@ -18,6 +19,7 @@ using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Mapping;
 using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
@@ -67,6 +69,15 @@ public class EBelgeSnapshotUblHazirlikIntegrationTests : IAsyncLifetime
         _kurumVergiDairesi = kurum.VergiDairesi!;
         _kurumAdres = kurum.Adres!;
 
+        // Faz 2B.11.1 - bu dosya artık EBelgeUblOptions.Enabled=true ile çalıştığından (bkz.
+        // CreateService XML doc'u), kesim öncesi UBL kapısı (IEBelgeUblPreCutValidator) TAM olarak
+        // değerlendirilir - satıcı yapısal adresi (ilçe/il) ZORUNLUDUR. Bu, dosyanın KENDİ
+        // VergiNo/VergiDairesi/Adres eksik senaryolarını (EnsureUblHazirlikKaynaklari, pre-cut
+        // validator'DAN ÖNCE çalışır) ETKİLEMEZ - o kontroller Ilce/Il'DAN BAĞIMSIZDIR.
+        kurum.Ilce = "Kadıköy";
+        kurum.Il = "İstanbul";
+        await dbContext.SaveChangesAsync();
+
         var musteriHesap = SatisBelgesiMuhasebeTestSupport.BuildHesap(_uniqueSuffix, "MUS", _tesisId);
         var tedarikciHesap = SatisBelgesiMuhasebeTestSupport.BuildHesap(_uniqueSuffix, "TED", _tesisId);
         var gelirHesap = SatisBelgesiMuhasebeTestSupport.BuildAnaKodHesap(_uniqueSuffix, MuhasebeAnaHesapKodlari.GelirSatis, "GELIR", _tesisId);
@@ -79,6 +90,12 @@ public class EBelgeSnapshotUblHazirlikIntegrationTests : IAsyncLifetime
         var musteriKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "MUS", CariKartTipleri.Musteri, _tesisId, musteriHesap.Id);
         musteriKart.EArsivKapsamindaMi = true;
         musteriKart.VergiNoTckn = "1111111111";
+        // Faz 2B.11.1 - CariKartTipleri.Musteri "gerçek kişi" olarak ele alınır - kesim öncesi UBL
+        // kapısı ayrı ad/soyad + yapısal adres (ilçe/il) ister (VergiNoTckn zaten yukarıda var).
+        musteriKart.Ad = "SnapshotUbl";
+        musteriKart.Soyad = "Musteri " + _uniqueSuffix;
+        musteriKart.Ilce = "Beşiktaş";
+        musteriKart.Il = "İstanbul";
         var tedarikciKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "TED", CariKartTipleri.Tedarikci, _tesisId, tedarikciHesap.Id);
         tedarikciKart.VergiNoTckn = "2222222222";
         tedarikciKart.EFaturaMukellefiMi = true;
@@ -141,6 +158,16 @@ public class EBelgeSnapshotUblHazirlikIntegrationTests : IAsyncLifetime
         return config.CreateMapper();
     }
 
+    /// <summary>Faz 2B.11.1 - bkz. EBelgeFaz1IntegrationTests.SafeKesimZamani XML doc'u.</summary>
+    private static readonly DateTimeOffset SafeKesimZamani = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
+
+    private sealed class FakeTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _zaman;
+        public FakeTimeProvider(DateTimeOffset zaman) => _zaman = zaman;
+        public override DateTimeOffset GetUtcNow() => _zaman;
+    }
+
     private static ISatisBelgesiService CreateService(StysAppDbContext dbContext)
     {
         var mapper = CreateMapper();
@@ -155,6 +182,14 @@ public class EBelgeSnapshotUblHazirlikIntegrationTests : IAsyncLifetime
             new SatisBelgesiMuhasebeTestSupport.FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
             new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger(),
+            timeProvider: new FakeTimeProvider(SafeKesimZamani),
+            // Faz 2B.11.1 - bu dosyanın testleri snapshot İÇERİĞİNİ (VergiNo/Adres/ParaBirimi/Kur
+            // gibi alanların doğru yazıldığını) doğrular, UBL feature flag semantiğini test ETMEZ -
+            // `Enabled=true`, EBelgeKaydi/snapshot/outbox'ın (SeedKurumIlTesisAsync'in seed ettiği
+            // aktif DogrudanGib test politikasıyla) KOŞULSUZ oluştuğu ÖNCEKİ davranışı KORUR;
+            // aksi halde yeni runtime fail-closed guard'ı (bkz.
+            // SatisBelgesiService.EnsureUblFeatureAcikYerelUblGerekliyse) bu testleri BOZAR.
+            eBelgeUblOptions: Options.Create(new EBelgeUblOptions { Enabled = true }),
             // Faz 2B.10 - bkz. SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService XML doc'u.
             kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext));
     }
@@ -185,7 +220,7 @@ public class EBelgeSnapshotUblHazirlikIntegrationTests : IAsyncLifetime
             BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
             TesisId = _tesisId,
             CariKartId = _musteriKartId,
-            BelgeTarihi = new DateTime(2026, 3, 1),
+            BelgeTarihi = new DateTime(2026, 9, 20),
             VadeTarihi = _vadeTarihi,
             MusteriUnvan = "Snapshot Musteri " + _uniqueSuffix,
             MusteriAdSoyad = "Snapshot Musteri Ad Soyad " + _uniqueSuffix,

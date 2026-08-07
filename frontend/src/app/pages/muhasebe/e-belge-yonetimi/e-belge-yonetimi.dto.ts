@@ -48,7 +48,8 @@ export const EBELGE_BLOKAJ_NEDENI_LABELS: Readonly<Record<string, string>> = {
     EBELGE_KURUM_POLICY_METHOD_NOT_IMPLEMENTED: 'Yöntem desteklenmiyor',
     EBELGE_GLOBAL_PROCESSING_DISABLED: 'Genel işlem kapısı kapalı',
     EBELGE_KURUM_POLICY_SELLER_DATA_INCOMPLETE: 'Satıcı ana verileri eksik',
-    EBELGE_SIGNING_GATE_DISABLED: 'İmzalama kapısı kapalı'
+    EBELGE_SIGNING_GATE_DISABLED: 'İmzalama kapısı kapalı',
+    EBELGE_UBL_FEATURE_DISABLED: 'UBL üretimi devre dışı'
 };
 
 export function blokajNedeniLabel(kod: string): string {
@@ -110,6 +111,10 @@ export interface KurumEBelgeReadinessModel {
     globalProcessingDurumu: string;
     yerelSnapshotGerekliMi: boolean;
     yerelUnsignedUblGerekliMi: boolean;
+    /** Faz 2B.11.1 - yöntemin yerel unsigned UBL GEREKTİRİP gerektirmediği (`yerelUnsignedUblGerekliMi` ile AYNI değer) - `ublFeatureAktifMi` İLE birlikte "UBL Üretimi" kartının 4 durumunu (Uygulanamaz/Kapalı/Bekliyor/Hazır) belirlemek için kullanılır. */
+    ublFeatureUygulanabilirMi: boolean;
+    /** Faz 2B.11.1 - `EBelgeUbl.Enabled` global feature flag'inin ham değeri. Frontend BU DEĞERİ KENDİSİ TAHMİN ETMEZ - her zaman backend'den okunur. */
+    ublFeatureAktifMi: boolean;
     yerelImzaGerekliMi: boolean;
     otomatikGonderimGerekliMi: boolean;
     saticiAnaVerileriHazirMi: boolean;

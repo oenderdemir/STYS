@@ -108,6 +108,9 @@ export class EBelgeYonetimi implements OnInit {
     superAdminKurumSecimiGerekli = false;
     erisimYok = false;
 
+    /** Faz 2B.11.1 görev md.10 - `GetMyKurumlar`'dan (`benim-kurumlarim`) yüklenen, kullanıcının ERİŞEBİLDİĞİ kurumlar - yalnız güvenli görüntüleme adı/selector kaynağıdır, `UserManagement.View` GEREKTİRMEZ. */
+    private kurumlarim: KurumModel[] = [];
+
     politika: KurumEBelgePolitikasiModel | null = null;
     readiness: KurumEBelgeReadinessModel | null = null;
     revizyonlar: KurumEBelgePolitikaRevizyonuModel[] = [];
@@ -125,20 +128,14 @@ export class EBelgeYonetimi implements OnInit {
         this.resolveKurumContext();
     }
 
+    /**
+     * Faz 2B.11.1 görev md.12 - backend sözleşmesiyle (`[Permission(View, SuperAdminPermission)]`
+     * + `EnsureCanAccessKurumAsync`) BİREBİR eşleşir: SuperAdmin domain-spesifik `.View` iznine
+     * SAHİP OLMAK ZORUNDA DEĞİLDİR - ÖNCEKİ sürüm SuperAdmin'i de `hasPermission` kontrolüne tabi
+     * tutuyordu (yanlış AND semantiği), bu turda düzeltildi.
+     */
     get canView(): boolean {
         if (!this.kurumId) {
-            return false;
-        }
-
-        if (this.authService.isSuperAdminUser()) {
-            return this.authService.hasPermission('MuhasebeSatisBelgeleriYonetimi.View');
-        }
-
-        return this.authService.hasPermission('MuhasebeSatisBelgeleriYonetimi.View') && this.authService.getKurumIds().includes(this.kurumId);
-    }
-
-    get canManage(): boolean {
-        if (!this.kurumId || !this.authService.hasPermission('MuhasebeSatisBelgeleriYonetimi.Manage')) {
             return false;
         }
 
@@ -146,7 +143,29 @@ export class EBelgeYonetimi implements OnInit {
             return true;
         }
 
-        return this.authService.getAktifKurumId() === this.kurumId && this.authService.isKurumAdminFor(this.kurumId);
+        return this.authService.hasPermission('MuhasebeSatisBelgeleriYonetimi.View') && this.authService.getKurumIds().includes(this.kurumId);
+    }
+
+    /**
+     * Faz 2B.11.1 görev md.12 - backend sözleşmesiyle (`[Permission(Manage, SuperAdminPermission)]`
+     * + `EnsureCanManageKurumAsync`: SuperAdmin OR (IsKurumAdmin AND aktif kurum eşleşiyor)) BİREBİR
+     * eşleşir. ÖNCEKİ sürüm, SuperAdmin kontrolünden ÖNCE `hasPermission('...Manage')` şartını
+     * ZORUNLU kılıyordu - SuperAdmin domain-spesifik Manage iznine SAHİP OLMASA bile erişebilmelidir.
+     */
+    get canManage(): boolean {
+        if (!this.kurumId) {
+            return false;
+        }
+
+        if (this.authService.isSuperAdminUser()) {
+            return true;
+        }
+
+        return (
+            this.authService.hasPermission('MuhasebeSatisBelgeleriYonetimi.Manage') &&
+            this.authService.getAktifKurumId() === this.kurumId &&
+            this.authService.isKurumAdminFor(this.kurumId)
+        );
     }
 
     /** Görev md.27 - "Kurum Yönetimi" sayfasına yönlendiren buton, YALNIZ kullanıcının o sayfayı görebildiği durumda gösterilir. */
@@ -173,7 +192,12 @@ export class EBelgeYonetimi implements OnInit {
             return;
         }
 
-        this.selectKurum(kurumId);
+        const eslesen = this.kurumlarim.find((k) => k.id === kurumId);
+        if (!eslesen) {
+            return;
+        }
+
+        this.selectKurum(eslesen);
     }
 
     navigateToKurumYonetimi(): void {
@@ -221,10 +245,21 @@ export class EBelgeYonetimi implements OnInit {
             severity: !yerelUblGerekli ? 'secondary' : (r.saticiAnaVerileriHazirMi ? 'success' : 'danger')
         });
 
+        // Faz 2B.11.1 görev md.16 - dört durum, TAMAMEN backend alanlarından türetilir; frontend
+        // `EBelgeUbl.Enabled`'ı KENDİSİ TAHMİN ETMEZ. Yerel UBL bu yöntemde N/A ise (Kullanilmayacak/
+        // HariciMuhasebeSistemi) diğer üç durumdan HİÇBİRİ değerlendirilmez.
+        const ublKartDurumu: { durum: string; severity: EBelgeStatusSeverity } = !r.ublFeatureUygulanabilirMi
+            ? { durum: 'Uygulanamaz', severity: 'secondary' }
+            : !r.ublFeatureAktifMi
+              ? { durum: 'Kapalı', severity: 'danger' }
+              : !r.islemeHazirMi
+                ? { durum: 'Bekliyor', severity: 'warn' }
+                : { durum: 'Hazır', severity: 'success' };
+
         cards.push({
             baslik: 'UBL Üretimi',
-            durum: !yerelUblGerekli ? 'Uygulanamaz' : (r.islemeHazirMi ? 'Hazır' : 'Bekliyor'),
-            severity: !yerelUblGerekli ? 'secondary' : (r.islemeHazirMi ? 'success' : 'warn')
+            durum: ublKartDurumu.durum,
+            severity: ublKartDurumu.severity
         });
 
         cards.push({
@@ -262,8 +297,18 @@ export class EBelgeYonetimi implements OnInit {
         }));
     }
 
+    /**
+     * Faz 2B.11.1 görev md.8 - seçili yöntemin backend'den gelen TAM capability plan'ı. Component
+     * içinde İKİNCİ bir capability matrix (yöntem enum'una göre if/switch) OLUŞTURULMAZ - operasyonel/
+     * disabled, snapshot, unsigned UBL, imza, otomatik gönderim gibi TÜM capability değerleri BURADAN
+     * okunur (bkz. `yontemSecenekleri`'nin ZATEN `y.operasyonelMi`'yi aynı prensiple kullanması).
+     */
+    get secilenYontemCapability(): EBelgeYontemReadinessModel | null {
+        return this.readiness?.yontemler.find((y) => y.yontem === this.formDraft.entegrasyonYontemi) ?? null;
+    }
+
     get hariciSistemKoduGerekliMi(): boolean {
-        return this.formDraft.entegrasyonYontemi === EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi;
+        return this.secilenYontemCapability?.hariciSistemKoduGerekliMi ?? false;
     }
 
     get formYontemAciklamasi(): string {
@@ -410,17 +455,25 @@ export class EBelgeYonetimi implements OnInit {
 
     // ──────────────────────────── Yükleme ────────────────────────────
 
+    /**
+     * Faz 2B.11.1 görev md.10/md.11 - kurum bağlamı ARTIK `KurumService.getAll()`/`getById()`
+     * (ikisi de backend'de `UserManagement.View` GEREKTİRİR) kullanmaz - salt-okunur bir e-belge
+     * Viewer'ın bu ekranı kullanmak için UserManagement izni GEREKTİRMEMESİ için TEK, güvenli
+     * `GetMyKurumlar` (`GET .../benim-kurumlarim`, yalnız kimlik doğrulama gerektirir) endpoint'i
+     * kullanılır - bu, tenant scope'una göre ZATEN erişilebilir kurumları döner.
+     */
     private resolveKurumContext(): void {
         const aktifKurumId = this.authService.getAktifKurumId();
         if (aktifKurumId !== null) {
-            this.selectKurum(aktifKurumId);
+            this.loadAktifKurumBaglami(aktifKurumId);
             return;
         }
 
         if (this.authService.isSuperAdminUser()) {
             this.superAdminKurumSecimiGerekli = true;
-            this.kurumService.getAll().subscribe({
+            this.kurumService.getMyKurumlar().subscribe({
                 next: (kurumlar) => {
+                    this.kurumlarim = kurumlar;
                     this.superAdminKurumSecenekleri = [...kurumlar]
                         .sort((left, right) => left.ad.localeCompare(right.ad, 'tr'))
                         .map((k) => ({ label: k.ad, value: k.id }));
@@ -431,21 +484,36 @@ export class EBelgeYonetimi implements OnInit {
             return;
         }
 
+        // Normal kullanıcının aktif bir kurumu YOKSA fail-closed: salt-okunur erişim hatası
+        // gösterilir, sayfaya özgü BAŞKA bir kurum seçici SUNULMAZ (görev md.11).
         this.erisimYok = true;
     }
 
-    private selectKurum(kurumId: number): void {
-        this.kurumId = kurumId;
-        this.erisimYok = false;
-        this.kurumService.getById(kurumId).subscribe({
-            next: (kurum: KurumModel) => {
-                this.kurumAdi = kurum.ad;
-                this.cdr.detectChanges();
+    /** Görev md.11 - aktif kurum HER ZAMAN otoriterdir; yalnız kullanıcının ZATEN erişebildiği kurumlar listesinden (`getMyKurumlar`) güvenli görüntüleme adı ALINIR - aktif kurum bu listede YOKSA fail-closed erişim hatası gösterilir. */
+    private loadAktifKurumBaglami(kurumId: number): void {
+        this.kurumService.getMyKurumlar().subscribe({
+            next: (kurumlar) => {
+                this.kurumlarim = kurumlar;
+                const eslesen = kurumlar.find((k) => k.id === kurumId);
+                if (!eslesen) {
+                    this.erisimYok = true;
+                    this.cdr.detectChanges();
+                    return;
+                }
+
+                this.selectKurum(eslesen);
             },
-            error: () => {
-                this.kurumAdi = `Kurum #${kurumId}`;
+            error: (error: unknown) => {
+                this.erisimYok = true;
+                this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: this.resolveErrorMessage(error) });
             }
         });
+    }
+
+    private selectKurum(kurum: KurumModel): void {
+        this.kurumId = kurum.id;
+        this.kurumAdi = kurum.ad;
+        this.erisimYok = false;
         this.refreshAll();
     }
 

@@ -665,6 +665,101 @@ rol/izin icadı, frontend'de backend capability matrix'inin ikinci bir kopyası,
 herhangi bir kurumun politikasının otomatik seed edilmesi, Kurum Yönetimi/Cari Kart ekranlarının
 baştan yazılması, VKN/TCKN/PII'nin readiness yanıtına/loglara eklenmesi.
 
+## Faz 2B.11.1: E-Belge Readiness ve Frontend Authorization Sertleştirmesi
+
+Faz 2B.11, readiness ekranını ve API'sini kurdu, ama üç kök problem KALDI: (1) readiness hesabı
+`EBelgeUbl.Enabled` global feature flag'ini HİÇ değerlendirmiyordu — GİB Portal politikası aktif +
+satıcı verisi tam olduğunda, UBL flag KAPALI olsa bile "Hazır" görünüyordu; (2) runtime'ın KENDİSİ
+(satış akışı) bu durumda fail-closed DEĞİLDİ — V1 snapshot'a SESSİZCE geriler, yanlış artifact
+tüketilebilirdi; (3) frontend bazı yöntem kurallarını (`hariciSistemKoduGerekliMi`) backend
+capability'sinden OKUMAK yerine kendi içinde YENİDEN hesaplıyordu; (4) E-Belge Yönetimi ekranı
+gereksiz yere `UserManagement.View`/`Manage` bağımlılığı taşıyordu ve SuperAdmin frontend'de
+domain-spesifik izne SAHİP OLMAYA zorlanıyordu (backend'in `View/Manage OR SuperAdmin`
+sözleşmesiyle TUTARSIZ). Bu tur küçük ve hedeflidir — Faz 2B.11 ekranlarının/mimarisinin HİÇBİRİ
+yeniden yazılmadı, yalnız bu dört problem kapatıldı.
+
+### UBL feature flag readiness'e dahil edildi
+
+`EBelgeKurumReadinessService` artık `IOptions<EBelgeUblOptions>` bağımlılığı alır. Readiness DTO'ya
+iki YENİ, güvenli (VKN/secret İÇERMEYEN) alan eklendi: `UblFeatureUygulanabilirMi` (=
+`YerelUnsignedUblOlustur` — yöntemin yerel unsigned UBL GEREKTİRİP gerektirmediği) ve
+`UblFeatureAktifMi` (= `EBelgeUblOptions.Enabled`'ın ham değeri). Semantik: yöntem yerel UBL
+GEREKTİRMİYORSA (Kullanilmayacak/HariciMuhasebeSistemi) bu bayrağın değeri readiness'i HİÇ
+ETKİLEMEZ ("Uygulanamaz"); GEREKTİRİYORSA (bugün yalnız GibPortal) VE flag KAPALIYSA, YENİ bir
+güvenli kod (`EBELGE_UBL_FEATURE_DISABLED` — mevcut, runtime'da ZATEN kullanılan
+`EBelgeUblFeatureDisabledException.SafeErrorCode` İLE BİREBİR AYNI, İKİNCİ bir kod İCAT
+EDİLMEDİ) `BlokajNedenleri`'ne eklenir ve `IslemeHazirMi=false` olur — GİB Portal politikası aktif,
+satıcı verisi tam, aktivasyon tarihi gelmiş olsa BİLE.
+
+### Runtime'ın kendisi de fail-closed
+
+Readiness bir GÜVENLİK KONTROLÜ DEĞİLDİR. `SatisBelgesiService.FaturaKesAsync`'e YENİ bir kontrol
+eklendi (`EnsureUblFeatureAcikYerelUblGerekliyse`): politika kararı `YerelUnsignedUblOlustur=true`
+DİYORSA (bugün yalnız GibPortal) ve `EBelgeUblOptions.Enabled=false` İSE, mevcut, güvenli
+`EBelgeUblFeatureDisabledException` (HTTP 503) fırlatılır — YENİ bir exception İCAT EDİLMEDİ. Bu
+kontrol, kurum politikası değerlendirmesinden HEMEN SONRA ama sayaç satırı henüz sorgulanmadan/
+kilitlenmeden ÖNCE çalışır: resmî fatura numarası verilmez, sayaç TÜKETİLMEZ, immutable karar
+YAZILMAZ, `EBelgeKaydi`/snapshot/outbox OLUŞTURULMAZ — TÜM transaction rollback olur. Non-local
+yöntemler (`YerelUnsignedUblOlustur=false`) bu kontrolden HİÇ ETKİLENMEZ; satış normal akışıyla
+tamamlanmaya devam eder.
+
+Mevcut `_eBelgeUblOptions.Enabled ? CreateSnapshotV2(...) : CreateSnapshot(...)` (V1/V2 seçim)
+ternary'si BİLİNÇLİ olarak DEĞİŞTİRİLMEDİ — V1 üretim yolu (legacy/non-local senaryolar için)
+sistemden KALDIRILMADI. Ama YENİ guard'ın DOLAYLI bir sonucu olarak: `YerelUnsignedUblOlustur=true`
+olan HERHANGİ bir politika için bu satıra ulaşıldığında `EBelgeUblOptions.Enabled` ARTIK HER ZAMAN
+`true`'dur (aksi halde guard ZATEN önceden fırlatmıştır) — bu yüzden V2 üretimi bu route için
+DETERMİNİSTİK hale gelir, ayrı bir kod değişikliği GEREKMEDEN.
+
+### Frontend capability tek kaynak
+
+E-Belge Yönetimi ekranındaki `hariciSistemKoduGerekliMi` getter'ı ÖNCEDEN
+`entegrasyonYontemi === HariciMuhasebeSistemi` biçiminde component içinde YENİDEN hesaplanıyordu —
+backend'in ZATEN `yontemler[].hariciSistemKoduGerekliMi` olarak döndürdüğü bir business kuralının
+frontend'de İKİNCİ bir kopyası. Yeni `secilenYontemCapability` getter'ı, seçili yöntemin backend'den
+gelen TAM `EBelgeYontemReadinessModel` kaydını bulur; `hariciSistemKoduGerekliMi` (ve dolaylı olarak
+operasyonel/disabled, snapshot, unsigned UBL, imza, otomatik gönderim gibi TÜM capability alanları)
+ARTIK yalnız BURADAN okunur — component İKİNCİ bir capability matrix OLUŞTURMAZ. Label/açıklama
+metinleri (`EBELGE_YONTEM_LABELS`/`EBELGE_YONTEM_ACIKLAMALARI`) frontend'de KALIR — bunlar business
+capability DEĞİLDİR, salt görüntüleme metnidir.
+
+### UserManagement bağımsızlığı
+
+E-Belge Yönetimi ekranının kurum bağlamı (aktif kurum adı, SuperAdmin kurum seçici) ÖNCEDEN
+`KurumService.getAll()`/`getById()` kullanıyordu — backend'de İKİSİ de `UserManagement.View`
+GEREKTİRİR (bkz. `KurumController`). Bu, salt e-belge Viewer/Manager izni olan ama
+`UserManagement` izni OLMAYAN bir kullanıcının ekranı KULLANAMAMASINA yol açıyordu — Faz 2B.11'in
+KENDİ hedefiyle (görev md.5: "muhasebe/e-belge yetkisine sahip kullanıcının UserManagement.View
+gerektirmeden kullanabilmesi") ÇELİŞEN bir bağımlılıktı. Çözüm: kurum bağlamı ARTIK TEK, güvenli
+`GET .../kurum/benim-kurumlarim` (`[Permission]` — yalnız kimlik doğrulama gerektirir,
+`KurumController.GetMyKurumlar`) endpoint'ini kullanır; bu ZATEN tenant scope'una göre erişilebilir
+kurumları döner (SuperAdmin için TÜM aktif kurumlar, normal kullanıcı için kendi erişilebilir
+kurumları — `GetAccessibleKurumlarAsync`'in AYNI yolu). Aktif kurum bu listede YOKSA (teorik olarak
+imkânsız ama fail-closed ele alınır) ekran "erişim yok" gösterir; SuperAdmin'in aktif kurumu YOKSA
+sayfaya özgü selector `getMyKurumlar()`'dan doldurulur — YENİ bir global tenant selector İCAT
+EDİLMEDİ. "Satıcı bilgilerini tamamla" kısayolu (`UserManagement.Manage OR SuperAdmin`) DEĞİŞMEDİ —
+bu yalnız O BUTONUN görünürlüğünü etkiler, sayfanın KENDİSİNİ ETKİLEMEZ.
+
+### SuperAdmin frontend/backend authorization eşleşmesi
+
+Backend sözleşmesi HER İKİ endpoint için de OR semantiğidir: `[Permission(View, SuperAdminPermission)]`
++ `EnsureCanAccessKurumAsync`/`EnsureCanManageKurumAsync` (SuperAdmin domain-spesifik izne
+GEREKSİNİM DUYMAZ). Frontend'in ÖNCEKİ `canView`/`canManage` getter'ları SuperAdmin'i de
+`hasPermission('...View'/'...Manage')` kontrolüne TABİ TUTUYORDU (yanlış AND semantiği) —
+domain-spesifik izni OLMAYAN "saf" bir SuperAdmin kullanıcı ekranı GÖREMİYORDU. Düzeltme:
+`isSuperAdminUser()` artık HER İKİ getter'da da domain izin kontrolünden ÖNCE, koşulsuz `true`
+döner. Route guard İÇİN, uygulama genelindeki `permissionGuard` (yalnız `hasPermission` bakar)
+DEĞİŞTİRİLMEDİ (yan etki riski — onlarca rota bu davranışa GÜVENİR) — bunun yerine hedefli, YENİDEN
+KULLANILABİLİR bir `permissionOrSuperAdminGuard(permission)` eklendi (`hasPermission(permission) ||
+isSuperAdminUser()`), yalnız `/muhasebe/e-belge-yonetimi` rotasında kullanılır.
+
+### Kasıtlı olarak YAPILMAYANLAR
+
+Faz 2B.11 ekranlarının/mimarisinin baştan yazılması, `EBelgeProcessing`/`EBelgeSigning`/`EBelgeUbl`
+global kapılarının flip edilmesi veya `NotBeforeLocalDate` değişikliği, `permissionGuard`'ın GENEL
+semantiğinin değiştirilmesi (yan etki riski), V1 snapshot üretim yolunun sistemden kaldırılması,
+yeni bir DB migration'ı/tablo/sonuç türü icadı, `TryReleasePolicyBlockedAsync` gibi mevcut paylaşılan
+mekanizmaların yeniden yazılması, test skip etme, tüm solution test paketini çalıştırma.
+
 ## Kurum Süreç Analiz Şablonu
 
 Kurum bazlı bilgi toplama için bkz. `docs/e-belge-kurum-surec-analizi-sablonu.md` — bu şablon

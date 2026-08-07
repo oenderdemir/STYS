@@ -7,6 +7,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kurumlar.Entities;
@@ -19,6 +20,7 @@ using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Mapping;
 using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
@@ -63,6 +65,13 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         _ilId = il.Id;
         _tesisId = tesis.Id;
 
+        // Faz 2B.11.1 - bu dosya artık EBelgeUblOptions.Enabled=true ile çalıştığından (bkz.
+        // CreateService XML doc'u), kesim öncesi UBL kapısı (IEBelgeUblPreCutValidator) TAM olarak
+        // değerlendirilir - satıcı yapısal adresi (ilçe/il) ZORUNLUDUR.
+        kurum.Ilce = "Kadıköy";
+        kurum.Il = "İstanbul";
+        await dbContext.SaveChangesAsync();
+
         var musteriHesap = SatisBelgesiMuhasebeTestSupport.BuildHesap(_uniqueSuffix, "MUS", _tesisId);
         var tedarikciHesap = SatisBelgesiMuhasebeTestSupport.BuildHesap(_uniqueSuffix, "TED", _tesisId);
         var gelirHesap = SatisBelgesiMuhasebeTestSupport.BuildAnaKodHesap(_uniqueSuffix, MuhasebeAnaHesapKodlari.GelirSatis, "GELIR", _tesisId);
@@ -74,6 +83,14 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
 
         var musteriKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "MUS", CariKartTipleri.Musteri, _tesisId, musteriHesap.Id);
         musteriKart.EArsivKapsamindaMi = true;
+        // Faz 2B.11.1 - CariKartTipleri.Musteri, SatisBelgesiService.ApplyCariSnapshot tarafından
+        // "gerçek kişi" olarak ele alınır - kesim öncesi UBL kapısı ayrı ad/soyad/TCKN + yapısal
+        // adres (ilçe/il) ister (bkz. EBelgeCutoverGateIntegrationTests'in AYNI deseni).
+        musteriKart.VergiNoTckn = "1111111111";
+        musteriKart.Ad = "Faz1";
+        musteriKart.Soyad = "Musteri " + _uniqueSuffix;
+        musteriKart.Ilce = "Beşiktaş";
+        musteriKart.Il = "İstanbul";
         var tedarikciKart = SatisBelgesiMuhasebeTestSupport.BuildCariKart(_uniqueSuffix, "TED", CariKartTipleri.Tedarikci, _tesisId, tedarikciHesap.Id);
         tedarikciKart.VergiNoTckn = "1111111111";
         tedarikciKart.EFaturaMukellefiMi = true;
@@ -122,6 +139,16 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
         return config.CreateMapper();
     }
 
+    /// <summary>Faz 2B.11.1 - UBL flag `Enabled=true` OLDUĞUNDA <c>EnsureCutoverTarihGecerli</c> (Faz 2B.4.1, DEĞİŞTİRİLMEDİ) go-live tarihini de değerlendirir; bu dosyanın testleri GERÇEK sistem saatiyle (bugün go-live ÖNCESİ) çalıştığından, kesim anı SABİT bir post-go-live ana çakılır - yalnız BU testler İÇİN, production davranışı ETKİLENMEZ.</summary>
+    private static readonly DateTimeOffset SafeKesimZamani = new(2026, 9, 20, 9, 0, 0, TimeSpan.Zero);
+
+    private sealed class FakeTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _zaman;
+        public FakeTimeProvider(DateTimeOffset zaman) => _zaman = zaman;
+        public override DateTimeOffset GetUtcNow() => _zaman;
+    }
+
     private static ISatisBelgesiService CreateService(StysAppDbContext dbContext)
     {
         var mapper = CreateMapper();
@@ -136,6 +163,13 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             new SatisBelgesiMuhasebeTestSupport.FakeUserAccessScopeService(),
             NullLogger<SatisBelgesiService>.Instance,
             new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger(),
+            timeProvider: new FakeTimeProvider(SafeKesimZamani),
+            // Faz 2B.11.1 - bu dosyanın testleri UBL feature flag semantiğini DEĞİL, EBelgeKaydi/
+            // snapshot/outbox'ın (SeedKurumIlTesisAsync'in seed ettiği aktif DogrudanGib test
+            // politikasıyla) KOŞULSUZ oluştuğunu doğrular - `Enabled=true` bu ÖNCEKİ (Faz 2B.11.1
+            // ÖNCESİ) davranışı KORUR; aksi halde yeni runtime fail-closed guard'ı (bkz.
+            // SatisBelgesiService.EnsureUblFeatureAcikYerelUblGerekliyse) bu testleri BOZAR.
+            eBelgeUblOptions: Options.Create(new EBelgeUblOptions { Enabled = true }),
             // Faz 2B.10 - bkz. SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService XML doc'u.
             kurumPolitikaServisi: EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext));
     }
@@ -167,7 +201,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             TesisId = _tesisId,
             CariKartId = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? _tedarikciKartId : _musteriKartId,
             KarsiTarafFaturaNo = belgeTipi == SatisBelgesiTipi.AlisFaturasi ? TruncateToMax($"KTF-{_uniqueSuffix}", 40) : null,
-            BelgeTarihi = new DateTime(2026, 3, 1),
+            BelgeTarihi = new DateTime(2026, 9, 20),
             Satirlar =
             [
                 new CreateSatisBelgesiSatiriRequest
@@ -213,7 +247,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
             BelgeTipi = SatisBelgesiTipi.SatisFaturasi,
             TesisId = _tesisId,
             CariKartId = _musteriKartId,
-            BelgeTarihi = new DateTime(2026, 3, 1),
+            BelgeTarihi = new DateTime(2026, 9, 20),
             Satirlar = tersSirali ? [satir2, satir1] : [satir1, satir2]
         };
     }
@@ -496,7 +530,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
                 FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Kesildi,
                 TesisId = _tesisId,
                 CariKartId = _musteriKartId,
-                BelgeTarihi = new DateTime(2026, 3, 1),
+                BelgeTarihi = new DateTime(2026, 9, 20),
                 FaturaKesimTarihi = DateTime.UtcNow,
                 ResmiFaturaNo = resmiFaturaNo
             };
@@ -521,7 +555,7 @@ public class EBelgeFaz1IntegrationTests : IAsyncLifetime
                 FaturalamaDurumu = TicariBelgeFaturalamaDurumu.Kesildi,
                 TesisId = _tesisId,
                 CariKartId = _musteriKartId,
-                BelgeTarihi = new DateTime(2026, 3, 1),
+                BelgeTarihi = new DateTime(2026, 9, 20),
                 FaturaKesimTarihi = DateTime.UtcNow
             };
             uuidCtx.SatisBelgeleri.Add(ikinciBelge);

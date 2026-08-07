@@ -51,6 +51,8 @@ describe('EBelgeYonetimi', () => {
             globalProcessingDurumu: 'Active',
             yerelSnapshotGerekliMi: true,
             yerelUnsignedUblGerekliMi: true,
+            ublFeatureUygulanabilirMi: true,
+            ublFeatureAktifMi: true,
             yerelImzaGerekliMi: false,
             otomatikGonderimGerekliMi: false,
             saticiAnaVerileriHazirMi: true,
@@ -81,7 +83,7 @@ describe('EBelgeYonetimi', () => {
         TestBed.configureTestingModule({
             providers: [
                 { provide: EBelgeYonetimiService, useValue: serviceStub },
-                { provide: KurumService, useValue: { getById: () => of({ id: 7, ad: 'Test Kurum' }), getAll: () => of([]) } },
+                { provide: KurumService, useValue: { getMyKurumlar: () => of([{ id: 7, ad: 'Test Kurum' }]) } },
                 {
                     provide: AuthService,
                     useValue: {
@@ -105,6 +107,49 @@ describe('EBelgeYonetimi', () => {
         return fixture.debugElement.injector.get(MessageService);
     }
 
+    interface AuthStubOverrides {
+        getAktifKurumId?: () => number | null;
+        isSuperAdminUser?: () => boolean;
+        hasPermission?: (perm: string) => boolean;
+        getKurumIds?: () => number[];
+        isKurumAdminFor?: (kurumId: number) => boolean;
+    }
+
+    /** Faz 2B.11.1 görev md.14 - yetkilendirme regresyon testleri için, gerçekçi bir AuthService/KurumService bağlamı kuran yardımcı. */
+    function createComponentWithContext(options: {
+        authOverrides: AuthStubOverrides;
+        kurumlarim?: { id: number; ad: string }[];
+        readiness?: KurumEBelgeReadinessModel;
+    }): EBelgeYonetimi {
+        serviceStub = {
+            getPolitika: jasmine.createSpy('getPolitika').and.returnValue(of(null)),
+            getReadiness: jasmine.createSpy('getReadiness').and.returnValue(of(options.readiness ?? ornekReadiness())),
+            getRevizyonlar: jasmine.createSpy('getRevizyonlar').and.returnValue(of([])),
+            updatePolitika: jasmine.createSpy('updatePolitika').and.returnValue(of({}))
+        };
+
+        const defaultAuth: Required<AuthStubOverrides> = {
+            getAktifKurumId: () => 7,
+            isSuperAdminUser: () => false,
+            hasPermission: () => true,
+            getKurumIds: () => [7],
+            isKurumAdminFor: () => true
+        };
+
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: EBelgeYonetimiService, useValue: serviceStub },
+                { provide: KurumService, useValue: { getMyKurumlar: () => of(options.kurumlarim ?? [{ id: 7, ad: 'Test Kurum' }]) } },
+                { provide: AuthService, useValue: { ...defaultAuth, ...options.authOverrides } },
+                { provide: Router, useValue: { navigate: jasmine.createSpy('navigate') } }
+            ]
+        });
+        fixture = TestBed.createComponent(EBelgeYonetimi);
+        component = fixture.componentInstance;
+        component.ngOnInit();
+        return component;
+    }
+
     it('desteklenmeyen yontemler (OzelEntegrator/DogrudanGib) secenek listesinde disabled gorunur', () => {
         createComponent();
 
@@ -117,13 +162,42 @@ describe('EBelgeYonetimi', () => {
         expect(gibPortal?.disabled).toBe(false);
     });
 
-    it('HariciMuhasebeSistemi disinda hariciSistemKoduGerekliMi false doner', () => {
+    it('HariciMuhasebeSistemi disinda hariciSistemKoduGerekliMi false doner (normal senaryo)', () => {
         createComponent();
 
         component.formDraft.entegrasyonYontemi = EBelgeEntegrasyonYontemi.GibPortal;
         expect(component.hariciSistemKoduGerekliMi).toBe(false);
 
         component.formDraft.entegrasyonYontemi = EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi;
+        expect(component.hariciSistemKoduGerekliMi).toBe(true);
+    });
+
+    it('hariciSistemKoduGerekliMi backend capability degerinden gelir, yontem enumundan BAGIMSIZDIR (capability regresyon testi)', () => {
+        // Faz 2B.11.1 görev md.9 - bu fixture BİLİNÇLİ olarak GERÇEK production değerlerinin
+        // TERSİNİ verir (HariciMuhasebeSistemi=false, GibPortal=true) - component bunu yöntem
+        // enum'una göre DEĞİL, doğrudan backend'in `yontemler[].hariciSistemKoduGerekliMi`
+        // alanından okumalıdır; aksi halde bu test BAŞARISIZ olur.
+        const readiness = ornekReadiness({
+            yontemler: [
+                yontem({ yontem: EBelgeEntegrasyonYontemi.Kullanilmayacak, operasyonelMi: true }),
+                yontem({ yontem: EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi, operasyonelMi: true, hariciSistemKoduGerekliMi: false }),
+                yontem({
+                    yontem: EBelgeEntegrasyonYontemi.GibPortal,
+                    operasyonelMi: true,
+                    yerelSnapshotOlustur: true,
+                    yerelUnsignedUblOlustur: true,
+                    hariciSistemKoduGerekliMi: true
+                }),
+                yontem({ yontem: EBelgeEntegrasyonYontemi.OzelEntegrator, operasyonelMi: false }),
+                yontem({ yontem: EBelgeEntegrasyonYontemi.DogrudanGib, operasyonelMi: false })
+            ]
+        });
+        createComponent(readiness);
+
+        component.formDraft.entegrasyonYontemi = EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi;
+        expect(component.hariciSistemKoduGerekliMi).toBe(false);
+
+        component.formDraft.entegrasyonYontemi = EBelgeEntegrasyonYontemi.GibPortal;
         expect(component.hariciSistemKoduGerekliMi).toBe(true);
     });
 
@@ -177,7 +251,7 @@ describe('EBelgeYonetimi', () => {
         TestBed.configureTestingModule({
             providers: [
                 { provide: EBelgeYonetimiService, useValue: serviceStub },
-                { provide: KurumService, useValue: { getById: () => of({ id: 7, ad: 'Test Kurum' }), getAll: () => of([]) } },
+                { provide: KurumService, useValue: { getMyKurumlar: () => of([{ id: 7, ad: 'Test Kurum' }]) } },
                 {
                     provide: AuthService,
                     useValue: {
@@ -201,5 +275,67 @@ describe('EBelgeYonetimi', () => {
 
         expect(component.canManage).toBe(false);
         expect(serviceStub.updatePolitika).not.toHaveBeenCalled();
+    });
+
+    // ---- Faz 2B.11.1 görev md.14 - yetkilendirme regresyon testleri ----
+
+    it('SuperAdmin domain View iznine SAHIP OLMASA bile E-Belge sayfasina erisebilir', () => {
+        createComponentWithContext({
+            authOverrides: {
+                isSuperAdminUser: () => true,
+                hasPermission: () => false // domain-spesifik izin HİÇ YOK
+            }
+        });
+
+        expect(component.kurumId).toBe(7);
+        expect(component.canView).toBe(true);
+    });
+
+    it('normal kullanici UserManagement.View OLMADAN sayfayi kullanabilir - kurum adi gorunur, policy/readiness/revizyonlar okunur', () => {
+        createComponentWithContext({
+            authOverrides: {
+                isSuperAdminUser: () => false,
+                // UserManagement.View burada HİÇ YOK - yalnız domain View.
+                hasPermission: (perm) => perm === 'MuhasebeSatisBelgeleriYonetimi.View',
+                getKurumIds: () => [7]
+            }
+        });
+
+        expect(component.erisimYok).toBe(false);
+        expect(component.kurumId).toBe(7);
+        expect(component.kurumAdi).toBe('Test Kurum');
+        expect(serviceStub.getPolitika).toHaveBeenCalledWith(7);
+        expect(serviceStub.getReadiness).toHaveBeenCalledWith(7);
+        expect(serviceStub.getRevizyonlar).toHaveBeenCalledWith(7);
+    });
+
+    it('Manage izni + aktif kurum admin ise canManage true doner (kaydetme MUMKUN)', () => {
+        createComponentWithContext({
+            authOverrides: {
+                isSuperAdminUser: () => false,
+                hasPermission: (perm) => perm === 'MuhasebeSatisBelgeleriYonetimi.View' || perm === 'MuhasebeSatisBelgeleriYonetimi.Manage',
+                getAktifKurumId: () => 7,
+                isKurumAdminFor: (kurumId) => kurumId === 7
+            }
+        });
+
+        expect(component.canManage).toBe(true);
+    });
+
+    it('SuperAdmin aktif kurumu yokken erisilemeyen bir kurum id secilirse SECIM YAPILMAZ (backend 403 korunur, frontend baska kurumu LISTELEMEZ)', () => {
+        createComponentWithContext({
+            authOverrides: {
+                getAktifKurumId: () => null,
+                isSuperAdminUser: () => true
+            },
+            kurumlarim: [{ id: 7, ad: 'Test Kurum' }]
+        });
+
+        expect(component.superAdminKurumSecimiGerekli).toBe(true);
+        expect(component.kurumId).toBeNull();
+
+        component.onSuperAdminKurumSecildi(999); // kurumlarim listesinde YOK
+
+        expect(component.kurumId).toBeNull();
     });
 });

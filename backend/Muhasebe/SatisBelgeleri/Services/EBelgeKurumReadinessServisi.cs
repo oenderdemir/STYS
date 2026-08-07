@@ -31,6 +31,7 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
     private readonly IEBelgeSigningActivationGate _signingGate;
     private readonly TimeProvider _timeProvider;
     private readonly EBelgeProcessingOptions _processingOptions;
+    private readonly EBelgeUblOptions _ublOptions;
 
     private static readonly EBelgeEntegrasyonYontemi[] TumYontemler =
     [
@@ -47,7 +48,8 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
         IEBelgeProcessingActivationGate globalGate,
         IEBelgeSigningActivationGate signingGate,
         TimeProvider timeProvider,
-        IOptions<EBelgeProcessingOptions> processingOptions)
+        IOptions<EBelgeProcessingOptions> processingOptions,
+        IOptions<EBelgeUblOptions> ublOptions)
     {
         _dbContext = dbContext;
         _yetenekSaglayici = yetenekSaglayici;
@@ -55,6 +57,7 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
         _signingGate = signingGate;
         _timeProvider = timeProvider;
         _processingOptions = processingOptions.Value;
+        _ublOptions = ublOptions.Value;
     }
 
     public async Task<KurumEBelgeReadinessDto> GetirAsync(int kurumId, CancellationToken cancellationToken = default)
@@ -101,10 +104,17 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
         var signingGateUygulanabilirMi = yetenekler.YerelImzaOlustur;
         var signingSuAnMumkunMu = _signingGate.CanSignNow();
 
+        // Faz 2B.11.1 görev md.1 - UBL feature flag'i (EBelgeUblOptions.Enabled), signing gate İLE
+        // AYNI desende: yalnız yöntem GERÇEKTEN yerel unsigned UBL GEREKTİRİYORSA (bugün yalnız
+        // GibPortal) readiness'e KATILIR. Kullanilmayacak/HariciMuhasebeSistemi gibi yerel UBL
+        // GEREKTİRMEYEN yöntemlerde bu bayrağın değeri readiness'i HİÇ ETKİLEMEZ.
+        var ublFeatureUygulanabilirMi = yetenekler.YerelUnsignedUblOlustur;
+        var ublFeatureAktifMi = _ublOptions.Enabled;
+
         var (islemeHazirMi, blokajNedenleri) = DegerlendirIslemeHazirlik(
             politikaYapilandirilmisMi, politikaAktifMi, entegrasyonYontemi, yetenekler,
             globalKarar.CanProcess, kurumAktivasyonTarihiGelmisMi, saticiAnaVerileriHazirMi,
-            signingGateUygulanabilirMi, signingSuAnMumkunMu);
+            ublFeatureUygulanabilirMi, ublFeatureAktifMi, signingGateUygulanabilirMi, signingSuAnMumkunMu);
 
         return new KurumEBelgeReadinessDto
         {
@@ -119,6 +129,8 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
             GlobalProcessingDurumu = globalKarar.Reason.ToString(),
             YerelSnapshotGerekliMi = yetenekler.YerelSnapshotOlustur,
             YerelUnsignedUblGerekliMi = yetenekler.YerelUnsignedUblOlustur,
+            UblFeatureUygulanabilirMi = ublFeatureUygulanabilirMi,
+            UblFeatureAktifMi = ublFeatureAktifMi,
             YerelImzaGerekliMi = yetenekler.YerelImzaOlustur,
             OtomatikGonderimGerekliMi = yetenekler.OtomatikGonderimYap,
             SaticiAnaVerileriHazirMi = saticiAnaVerileriHazirMi,
@@ -141,7 +153,8 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
     private static (bool IslemeHazirMi, IReadOnlyList<string> BlokajNedenleri) DegerlendirIslemeHazirlik(
         bool politikaYapilandirilmisMi, bool politikaAktifMi, EBelgeEntegrasyonYontemi entegrasyonYontemi,
         EBelgeYontemYetenekleri yetenekler, bool globalProcessingAktifMi, bool kurumAktivasyonTarihiGelmisMi,
-        bool saticiAnaVerileriHazirMi, bool signingGateUygulanabilirMi, bool signingSuAnMumkunMu)
+        bool saticiAnaVerileriHazirMi, bool ublFeatureUygulanabilirMi, bool ublFeatureAktifMi,
+        bool signingGateUygulanabilirMi, bool signingSuAnMumkunMu)
     {
         var nedenler = new List<string>();
         bool islemeHazirMi;
@@ -189,8 +202,16 @@ public sealed class EBelgeKurumReadinessService : IEBelgeKurumReadinessService
                         nedenler.Add(EBelgeKurumReadinessKodlari.SaticiAnaVerileriEksik);
                     }
 
-                    // Görev md.28/md.30 - signing gate GİB Portal readiness'ini BLOKE ETMEZ; bu
+                    // Faz 2B.11.1 görev md.2 - UBL feature flag (EBelgeUblOptions.Enabled) kapalıyken
+                    // GİB Portal ASLA "Hazır" görünmemeli; runtime'ın (SatisBelgesiService.FaturaKesAsync)
+                    // AYNI durumda fail-closed reddettiği İLE TUTARLI (bkz. "Runtime da fail-closed
+                    // olmalı"). Görev md.2 - signing gate GİB Portal readiness'ini BLOKE ETMEZ; bu
                     // yöntem yerel imza YAPMAZ (YerelImzaOlustur=false).
+                    if (ublFeatureUygulanabilirMi && !ublFeatureAktifMi)
+                    {
+                        nedenler.Add(EBelgeKurumReadinessKodlari.UblFeatureKapali);
+                    }
+
                     islemeHazirMi = nedenler.Count == 0;
                     break;
 

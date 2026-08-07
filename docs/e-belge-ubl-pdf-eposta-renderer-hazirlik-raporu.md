@@ -4388,3 +4388,93 @@ kopyası, `EBelgeProcessing`/`EBelgeSigning`/`EBelgeUbl` global kapılarının f
 Yönetimi/Cari Kart ekranlarının baştan yazılması, VKN/TCKN/PII'nin readiness yanıtına/loglara
 eklenmesi, yeni bir DB migration'ı (Ad/Soyad/adres sütunları zaten mevcuttu), test skip etme, tüm
 solution test paketini çalıştırma.
+
+## Faz 2B.11.1: E-Belge Readiness ve Frontend Authorization Sertleştirmesi
+
+Faz 2B.11'in readiness ekranı/API'si kurulduktan sonra üç kök problem kaldı: (1) readiness hesabı
+`EBelgeUbl.Enabled` global flag'ini hiç değerlendirmiyordu (GİB Portal + UBL kapalıyken "Hazır"
+görünüyordu), (2) runtime'ın kendisi bu durumda fail-closed DEĞİLDİ, (3) frontend bazı yöntem
+kurallarını backend capability'sinden okumak yerine kendi içinde yeniden hesaplıyordu, (4) E-Belge
+Yönetimi ekranı gereksiz `UserManagement` bağımlılığı taşıyordu ve SuperAdmin frontend'de
+domain-spesifik izne zorlanıyordu. Bu tur küçük ve hedeflidir - Faz 2B.11 mimarisi/ekranları YENİDEN
+YAZILMADI. Tam tasarım gerekçesi için bkz. `docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md`
+"Faz 2B.11.1" bölümü; ekran kullanım detayları için bkz.
+`docs/e-belge-yonetim-ekrani-kullanim-rehberi.md`.
+
+**1. UBL feature flag readiness'e dahil edildi**: `EBelgeKurumReadinessService` artık
+`IOptions<EBelgeUblOptions>` alır; readiness DTO'ya `UblFeatureUygulanabilirMi`/`UblFeatureAktifMi`
+eklendi. Yöntem yerel UBL gerektirmiyorsa (Kullanilmayacak/HariciMuhasebeSistemi) etkilenmez;
+gerektiriyorsa (GibPortal) VE flag kapalıysa, mevcut `EBelgeUblFeatureDisabledException.SafeErrorCode`
+İLE BİREBİR AYNI güvenli kod (`EBELGE_UBL_FEATURE_DISABLED`) blokaj nedenlerine eklenir,
+`IslemeHazirMi=false` olur.
+
+**2. Runtime da fail-closed**: `SatisBelgesiService.FaturaKesAsync`'e yeni
+`EnsureUblFeatureAcikYerelUblGerekliyse` kontrolü eklendi - politika `YerelUnsignedUblOlustur=true`
+diyorsa ve UBL flag kapalıysa, sayaç sorgulanmadan/kilitlenmeden ÖNCE mevcut, güvenli
+`EBelgeUblFeatureDisabledException` (HTTP 503) fırlatılır - resmî numara/sayaç tüketimi/immutable
+karar/EBelgeKaydi/snapshot/outbox HİÇBİRİ oluşmaz, TÜM transaction rollback olur. Non-local yöntemler
+etkilenmez. Mevcut V1/V2 snapshot seçim ternary'si DEĞİŞTİRİLMEDİ (V1 üretim yolu KALDIRILMADI) -
+ama yeni guard'ın dolaylı sonucu olarak, `YerelUnsignedUblOlustur=true` olan HERHANGİ bir route için
+bu satıra ulaşıldığında UBL flag ARTIK HER ZAMAN açıktır, bu yüzden V2 üretimi DETERMİNİSTİK hale
+gelir.
+
+**3. Frontend capability tek kaynak**: `hariciSistemKoduGerekliMi` getter'ı ÖNCEDEN
+`entegrasyonYontemi === HariciMuhasebeSistemi` biçiminde component içinde YENİDEN hesaplanıyordu.
+Yeni `secilenYontemCapability` getter'ı, seçili yöntemin backend'den gelen TAM
+`EBelgeYontemReadinessModel` kaydını bulur; TÜM capability alanları (hariciSistemKoduGerekliMi dahil)
+ARTIK yalnız BURADAN okunur - component İKİNCİ bir capability matrix OLUŞTURMAZ.
+
+**4. UserManagement bağımsızlığı**: E-Belge Yönetimi ekranının kurum bağlamı ÖNCEDEN
+`KurumService.getAll()`/`getById()` (backend'de `UserManagement.View` GEREKTİRİR) kullanıyordu - Faz
+2B.11'in KENDİ hedefiyle (UserManagement izni olmadan e-belge ekranını kullanabilme) ÇELİŞEN bir
+bağımlılıktı. Artık TEK, güvenli `GET .../kurum/benim-kurumlarim` (yalnız kimlik doğrulama
+gerektirir) kullanılır - aktif kurum otoriterdir, bu listede yoksa fail-closed erişim hatası
+gösterilir; SuperAdmin'in aktif kurumu yoksa sayfaya özgü selector AYNI endpoint'ten doldurulur.
+
+**5. SuperAdmin frontend/backend authorization eşleşmesi**: `canView`/`canManage` getter'ları
+ÖNCEDEN SuperAdmin'i de `hasPermission(...)` kontrolüne tabi tutuyordu (backend'in `View/Manage OR
+SuperAdmin` OR semantiğiyle TUTARSIZ AND semantiği). Düzeltildi: `isSuperAdminUser()` artık koşulsuz
+`true` döner. Route guard için, uygulama genelindeki `permissionGuard` DEĞİŞTİRİLMEDİ (yan etki
+riski) - bunun yerine hedefli, yeniden kullanılabilir `permissionOrSuperAdminGuard` eklendi, yalnız
+`/muhasebe/e-belge-yonetimi` rotasında kullanılır.
+
+**Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; 615 → 623):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 316, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 601, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 621, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 623, Failed: 0, Skipped: 0  (preflight: SQL+Java+31 kritik invariant testi GEÇTİ)
+```
+
+Not: `nightly` profilinin ilk koşumunda bu turun kapsamı DIŞINDaki (schematron sidecar ile İLGİSİZ,
+ÖNCEDEN VAR OLAN) `SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur` timing'e
+duyarlı bir sebeple flaky biçimde başarısız oldu; izole koşumda VE tam profil YENİDEN koşumunda
+(621/621) sorunsuz geçti - dosyada HİÇBİR değişiklik yapılmadı, test atlanmadı/gevşetilmedi.
+
+Bu turda YENİ UBL flag runtime fail-closed guard'ı, `SeedKurumIlTesisAsync`'in TÜM
+`SatisBelgesiService` tabanlı e-belge testleri için otomatik seed ettiği aktif test-only DogrudanGib
+politikasıyla (bkz. Faz 2B.10 bölümü) etkileşime girdiğinden, 6 ÖNCEDEN VAR OLAN dosyanın (paylaşılan
+`SatisBelgesiMuhasebeTestSupport` fabrikaları + `EBelgeFaz1IntegrationTests`/
+`EBelgeOutboxClaimLeaseIntegrationTests`/`EBelgeOutboxFaz2AIntegrationTests`/
+`EBelgeOutboxLeaseTransitionIntegrationTests`/`EBelgeSnapshotUblHazirlikIntegrationTests`) test
+fixture'ları `EBelgeUblOptions.Enabled=true` + sabit post-go-live `FakeTimeProvider` + tam kesim
+öncesi UBL kapısını (satıcı/alıcı yapısal adres, ad/soyad) karşılayacak biçimde TAMAMLANDI - bu
+dosyaların TEST EDİLEN davranışı (outbox claim/lease/completion mekaniği, snapshot alan içeriği)
+DEĞİŞMEDİ, yalnız artık gerçekten aktif olan UBL flag'inin gerektirdiği fixture eksiksizliği
+sağlandı. `EBelgeCutoverGateIntegrationTests.FeatureFlagKapaliysaGoLiveOncesiTarihteKesimSerbesttir`
+testi, UBL flag kapalıyken go-live kapısının YEREL PIPELINE GEREKTİRMEYEN satışları bloke ETMEDİĞİNİ
+kanıtlamak amacıyla artık `Kullanilmayacak` politikası kullanır (ÖNCEDEN DogrudanGib kullanıyordu -
+bu kombinasyon artık YENİ runtime guard'ı tarafından haklı olarak reddedilir, testin ASIL amacıyla
+İLGİSİZ bir nedenle).
+
+Frontend: `npm run build` (production) başarıyla tamamlandı (aynı, bu turdan ÖNCEKİ initial-bundle
+budget uyarısı DIŞINDA hata/uyarı yok). Hedefli Karma/Jasmine testleri (`e-belge-yonetimi.spec.ts`,
+`e-belge-yonetimi.service.spec.ts`, `permission.guard.spec.ts`) dahil TÜM proje testleri (126/126)
+ChromeHeadless altında geçti - permission guard paylaşılan altyapı olduğundan tam suite çalıştırıldı.
+
+**Kasıtlı olarak YAPILMAYANLAR**: Faz 2B.11 ekranlarının/mimarisinin baştan yazılması,
+`EBelgeProcessing`/`EBelgeSigning`/`EBelgeUbl` global kapılarının flip edilmesi veya
+`NotBeforeLocalDate` değişikliği, uygulama genelindeki `permissionGuard`'ın semantiğinin
+değiştirilmesi, V1 snapshot üretim yolunun sistemden kaldırılması, yeni bir DB migration'ı/tablo/
+sonuç türü icadı, test skip etme, tüm solution test paketini çalıştırma.

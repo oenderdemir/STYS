@@ -30,6 +30,14 @@ public static class EBelgeKurumReadinessKodlari
     public const string GlobalIslemKapisiKapali = "EBELGE_GLOBAL_PROCESSING_DISABLED";
     public const string SaticiAnaVerileriEksik = "EBELGE_KURUM_POLICY_SELLER_DATA_INCOMPLETE";
     public const string SigningGateKapali = "EBELGE_SIGNING_GATE_DISABLED";
+
+    /// <summary>
+    /// Faz 2B.11.1 görev md.1 - mevcut, runtime'da da kullanılan
+    /// <see cref="EBelgeUblFeatureDisabledException.SafeErrorCode"/> İLE BİREBİR AYNI değer -
+    /// readiness YENİ bir kod İCAT ETMEZ, runtime'ın ZATEN fırlattığı güvenli hata koduyla
+    /// tutarlı kalır (bkz. "Runtime da fail-closed olmalı").
+    /// </summary>
+    public const string UblFeatureKapali = EBelgeUblFeatureDisabledException.SafeErrorCode;
 }
 
 /// <summary>
@@ -85,6 +93,12 @@ public sealed record KurumEBelgeReadinessDto
     public required bool YerelSnapshotGerekliMi { get; init; }
 
     public required bool YerelUnsignedUblGerekliMi { get; init; }
+
+    /// <summary>Faz 2B.11.1 görev md.1 - <see cref="YerelUnsignedUblGerekliMi"/> ile AYNI değer (yöntemin yerel unsigned UBL GEREKTİRİP gerektirmediği) - ayrı bir isimle taşınır çünkü <see cref="UblFeatureAktifMi"/> İLE birlikte okunduğunda "bu alan neden readiness'e katılıyor/katılmıyor" anlamını taşır. Non-local yöntemlerde (Kullanilmayacak/HariciMuhasebeSistemi) false'tur - bu durumda <see cref="UblFeatureAktifMi"/> readiness'i HİÇ ETKİLEMEZ (UBL Üretimi = Uygulanamaz).</summary>
+    public required bool UblFeatureUygulanabilirMi { get; init; }
+
+    /// <summary>Faz 2B.11.1 görev md.1 - <c>EBelgeUblOptions.Enabled</c> global feature flag'inin ham değeri (VKN/secret İÇERMEZ, salt bir bool). <see cref="UblFeatureUygulanabilirMi"/>=false iken bu değer readiness SONUCUNU etkilemez - yalnız GÖRÜNTÜLEME amaçlıdır.</summary>
+    public required bool UblFeatureAktifMi { get; init; }
 
     public required bool YerelImzaGerekliMi { get; init; }
 

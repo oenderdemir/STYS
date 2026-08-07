@@ -127,7 +127,7 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>GERÇEK EBelgeKurumPolitikaServisi (global kapı HER ZAMAN aktif - uzak geçmiş tarih) - kurum politikasının GERÇEK yönlendirme etkisini test eder.</summary>
-    private static ISatisBelgesiService CreateService(StysAppDbContext dbContext, DateTimeOffset kesimZamani, bool globalAktif = true)
+    private static ISatisBelgesiService CreateService(StysAppDbContext dbContext, DateTimeOffset kesimZamani, bool globalAktif = true, bool ublEnabled = true)
     {
         var mapper = CreateMapper();
         var satisBelgesiRepository = new SatisBelgesiRepository(dbContext, mapper);
@@ -151,7 +151,7 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
             NullLogger<SatisBelgesiService>.Instance,
             new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger(),
             timeProvider,
-            Options.Create(new EBelgeUblOptions { Enabled = true }),
+            Options.Create(new EBelgeUblOptions { Enabled = ublEnabled }),
             kurumPolitikaServisi: kurumPolitikaServisi);
     }
 
@@ -292,6 +292,102 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
             .ToListAsync();
         Assert.Contains(EBelgeOutboxIsTuru.ArtefaktOlustur, isTurleri);
         Assert.DoesNotContain(EBelgeOutboxIsTuru.UblImzala, isTurleri);
+    }
+
+    // ---- Faz 2B.11.1 görev md.4/md.7 - UBL feature flag runtime fail-closed garantisi ----
+
+    [IntegrationFact]
+    public async Task GibPortalUblDisabledIkenFaturaKesAsyncFailClosedReddederYanEtkiOlusmaz()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.GibPortal);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var sayacOncesiCtx = CreateDbContext();
+        var sayacOncesi = await sayacOncesiCtx.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
+
+        await using var dbContext = CreateDbContext();
+        // Faz 2B.11.1 görev md.4/md.7 - GibPortal politikası YerelUnsignedUblOlustur=true İSTER,
+        // ama EBelgeUblOptions.Enabled BURADA kapalı - runtime fail-closed reddetmelidir.
+        var service = CreateService(dbContext, KesimZamani, ublEnabled: false);
+
+        await Assert.ThrowsAsync<EBelgeUblFeatureDisabledException>(
+            () => service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None));
+
+        await using var verifyCtx = CreateDbContext();
+        var belge = await verifyCtx.SatisBelgeleri.AsNoTracking().SingleAsync(x => x.Id == belgeId);
+        Assert.Null(belge.ResmiFaturaNo);
+
+        var sayacSonrasi = await verifyCtx.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
+        Assert.Equal(sayacOncesi.SonNumara, sayacSonrasi.SonNumara); // sayaç TÜKETİLMEDİ
+
+        Assert.False(await verifyCtx.SatisBelgesiEBelgeKararlari.IgnoreQueryFilters().AnyAsync(x => x.SatisBelgesiId == belgeId));
+        Assert.False(await verifyCtx.EBelgeKayitlari.IgnoreQueryFilters().AnyAsync(x => x.SatisBelgesiId == belgeId));
+        Assert.False(await verifyCtx.EBelgeSnapshots.IgnoreQueryFilters().AnyAsync(x => x.KurumId == _kurumId));
+        Assert.False(await verifyCtx.EBelgeOutboxMesajlari.IgnoreQueryFilters().AnyAsync(x => x.KurumId == _kurumId));
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalUblEnabledIkenV2SnapshotVeOutboxUretmeyeDevamEder()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.GibPortal);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext, KesimZamani, ublEnabled: true);
+        var sonuc = await service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.NotNull(sonuc.ResmiFaturaNo);
+
+        await using var verifyCtx = CreateDbContext();
+        var eBelgeKaydi = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.SatisBelgesiId == belgeId);
+        var snapshot = await verifyCtx.EBelgeSnapshots.AsNoTracking().SingleAsync(x => x.EBelgeKaydiId == eBelgeKaydi.Id);
+        Assert.Equal("2", snapshot.SnapshotSchemaVersion); // V1 fallback DEĞİL - deterministik V2
+
+        var isTurleri = await verifyCtx.EBelgeOutboxMesajlari.IgnoreQueryFilters()
+            .Where(x => x.EBelgeKaydiId == eBelgeKaydi.Id)
+            .Select(x => x.IsTuru)
+            .ToListAsync();
+        Assert.Contains(EBelgeOutboxIsTuru.ArtefaktOlustur, isTurleri);
+    }
+
+    // ---- Faz 2B.11.1 görev md.7 - non-local yöntemler UBL flag'inden ETKİLENMEZ (regresyon) ----
+
+    [IntegrationFact]
+    public async Task KullanilmayacakUblDisabledIkenNormalSatisAkisiniSurdurur()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.Kullanilmayacak);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext, KesimZamani, ublEnabled: false);
+        var sonuc = await service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.NotNull(sonuc.ResmiFaturaNo);
+
+        await using var verifyCtx = CreateDbContext();
+        var karar = await verifyCtx.SatisBelgesiEBelgeKararlari.AsNoTracking().SingleAsync(x => x.SatisBelgesiId == belgeId);
+        Assert.False(karar.YerelSnapshotOlustur);
+        Assert.False(await verifyCtx.EBelgeKayitlari.IgnoreQueryFilters().AnyAsync(x => x.SatisBelgesiId == belgeId));
+    }
+
+    [IntegrationFact]
+    public async Task HariciMuhasebeSistemiUblDisabledIkenNormalSatisAkisiniSurdurur()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi, hariciSistemKodu: "ERP-42");
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var dbContext = CreateDbContext();
+        var service = CreateService(dbContext, KesimZamani, ublEnabled: false);
+        var sonuc = await service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.NotNull(sonuc.ResmiFaturaNo);
+
+        await using var verifyCtx = CreateDbContext();
+        var karar = await verifyCtx.SatisBelgesiEBelgeKararlari.AsNoTracking().SingleAsync(x => x.SatisBelgesiId == belgeId);
+        Assert.False(karar.YerelSnapshotOlustur);
+        Assert.False(await verifyCtx.EBelgeKayitlari.IgnoreQueryFilters().AnyAsync(x => x.SatisBelgesiId == belgeId));
     }
 
     // ---- Faz 2B.10.1 görev md.9 - yerel pipeline GEREKTİRMEYEN yöntemlerde ikinci FaturaKesAsync idempotent döner ----

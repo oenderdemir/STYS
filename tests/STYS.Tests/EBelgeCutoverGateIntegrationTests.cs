@@ -330,7 +330,15 @@ public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
     }
 
     // Feature flag kapalıysa mevcut (bu fazdan önceki) davranış hiç değişmez: go-live öncesi
-    // tarihte dahi kesim serbesttir.
+    // tarihte dahi kesim serbesttir - AMA yalnız yerel UBL GEREKTİRMEYEN bir yöntem İÇİN (Faz
+    // 2B.11.1 görev md.4 - politika yerel unsigned UBL gerektiriyorsa VE UBL flag kapalıysa,
+    // runtime ARTIK fail-closed reddeder - bkz. SatisBelgesiService.
+    // EnsureUblFeatureAcikYerelUblGerekliyse; bu davranış SatisBelgesiEBelgeKarariSaleFlowIntegration
+    // Tests.GibPortalUblDisabledIkenFaturaKesAsyncFailClosedReddederYanEtkiOlusmaz ile AYRICA
+    // doğrulanır). Bu testin seed ettiği politika (SeedKurumIlTesisAsync -> aktif DogrudanGib,
+    // YerelUnsignedUblOlustur=true) BU YÜZDEN açıkça `Kullanilmayacak`'a (yerel pipeline
+    // GEREKTİRMEYEN bir yöntem) çevrilir - testin ASIL amacı (go-live kapısının UBL flag
+    // kapalıyken yerel pipeline GEREKTİRMEYEN satışları BLOKE ETMEDİĞİ) böylece KORUNUR.
     [IntegrationFact]
     public async Task FeatureFlagKapaliysaGoLiveOncesiTarihteKesimSerbesttir()
     {
@@ -338,6 +346,13 @@ public class EBelgeCutoverGateIntegrationTests : IAsyncLifetime
         // ile uyumlu kalması için 2026 içinde ama açıkça go-live (14.09.2026) ÖNCESİ seçilir.
         var kesimUtc = new DateTimeOffset(2026, 1, 10, 9, 0, 0, TimeSpan.Zero);
         var belgeId = await PrepareReadyInvoiceAsync(new DateTime(2026, 1, 10));
+
+        await using (var policyCtx = CreateDbContext())
+        {
+            var policy = await policyCtx.Set<KurumEBelgePolitikasi>().IgnoreQueryFilters().SingleAsync(p => p.KurumId == _kurumId);
+            policy.EntegrasyonYontemi = EBelgeEntegrasyonYontemi.Kullanilmayacak;
+            await policyCtx.SaveChangesAsync();
+        }
 
         await using var cutCtx = CreateDbContext();
         var cutService = CreateService(cutCtx, new FakeTimeProvider(kesimUtc), ubloptionsEnabled: false);

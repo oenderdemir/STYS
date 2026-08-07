@@ -1201,6 +1201,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             var politikaKarari = await _kurumPolitikaServisi.DegerlendirAsync(belge.KurumId, planlananKesimTarihiTrt, cancellationToken);
             EnsurePolitikaEngelDegil(politikaKarari);
 
+            // Faz 2B.11.1 görev md.4 - readiness ekranı bir GÜVENLİK KONTROLÜ DEĞİLDİR; runtime'ın
+            // KENDİSİ de fail-closed olmalıdır. Politika yerel unsigned UBL üretimini AÇIKÇA
+            // GEREKTİRİYORSA (bugün yalnız GibPortal) ama EBelgeUblOptions.Enabled KAPALIYSA, sayaç
+            // HENÜZ sorgulanmadan/kilitlenmeden reddedilir - gerçek artifact consumer HER ZAMAN V2
+            // canonical snapshot bekler, kapalıyken üretilecek V1 snapshot'ı TÜKETEMEZ. Non-local
+            // yöntemler (Kullanilmayacak/HariciMuhasebeSistemi, YerelUnsignedUblOlustur=false) BU
+            // kontrolden HİÇ ETKİLENMEZ.
+            EnsureUblFeatureAcikYerelUblGerekliyse(politikaKarari.Yetenekler);
+
             // Faz 2B.10.2 görev md.8/md.9 - yukarıdaki `DegerlendirAsync` KENDİ İÇİNDE unlocked
             // (READ COMMITTED) bir SELECT ile karar verir; bu, "aynı transaction içinde okundu"
             // olması bile TEK BAŞINA bir serileştirme GARANTİSİ VERMEZ - başka bir oturum, bu an
@@ -1523,6 +1532,23 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
             case EBelgeKurumPolitikaKararNedeni.YontemHenuzDesteklenmiyor:
             case EBelgeKurumPolitikaKararNedeni.PolitikaGecersiz:
                 throw new EBelgeKurumPolitikaEngelliException(karari.Neden);
+        }
+    }
+
+    /// <summary>
+    /// Faz 2B.11.1 görev md.4 - immutable karar <c>YerelUnsignedUblOlustur=true</c> DİYORSA (bugün
+    /// yalnız GibPortal), <see cref="EBelgeUblOptions.Enabled"/> kapalıyken sayaç/karar/EBelgeKaydi/
+    /// snapshot/outbox HİÇBİRİ oluşturulmadan reddeder. Mevcut, güvenli
+    /// <see cref="EBelgeUblFeatureDisabledException"/> REUSE edilir - yeni bir hata sınıfı İCAT
+    /// EDİLMEZ (bu istisna zaten <see cref="EnsureCutoverTarihGecerli"/>'nin KARDEŞİ olarak aynı
+    /// dosyada tanımlıdır). Non-local yöntemlerde (<c>YerelUnsignedUblOlustur=false</c>) bu kontrol
+    /// HİÇ TETİKLENMEZ.
+    /// </summary>
+    private void EnsureUblFeatureAcikYerelUblGerekliyse(EBelgeYontemYetenekleri yetenekler)
+    {
+        if (yetenekler.YerelUnsignedUblOlustur && !_eBelgeUblOptions.Enabled)
+        {
+            throw new EBelgeUblFeatureDisabledException();
         }
     }
 

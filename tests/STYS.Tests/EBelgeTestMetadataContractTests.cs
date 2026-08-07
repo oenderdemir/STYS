@@ -34,12 +34,31 @@ public class EBelgeTestMetadataContractTests
     /// <summary>Bilinçli olarak birden fazla teste uygulanması KABUL EDİLEN CriticalInvariant değerleri.</summary>
     private static readonly string[] KasitliCriticalInvariantTekrarlari =
     [
-        // Faz 2B.10 - kurum tenant izolasyonu İKİ AYRI KATMANDA doğrulanır: karar SERVİSİ
-        // düzeyinde (EBelgeKurumPolitikaServisiIntegrationTests - kurum A politikası kurum B
-        // kararına sızmaz) VE DB composite-FK/unique-index düzeyinde (SatisBelgesiEBelgeKarariSaleFlowIntegrationTests -
-        // karar başka kurumun satış belgesine bağlanamaz). Her ikisi de AYNI invariant'ı FARKLI
-        // savunma katmanlarında kanıtladığından bilinçli bir tekrardır.
+        // Faz 2B.10 - kurum tenant izolasyonu ÜÇ AYRI KATMANDA doğrulanır: karar SERVİSİ düzeyinde
+        // (EBelgeKurumPolitikaServisiIntegrationTests - kurum A politikası kurum B kararına
+        // sızmaz), DB composite-FK/unique-index düzeyinde (SatisBelgesiEBelgeKarariSaleFlowIntegrationTests -
+        // karar başka kurumun satış belgesine bağlanamaz) VE claim SQL düzeyinde
+        // (EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests - başka kurumun aktif
+        // politikası claim uygunluğuna sızmaz). Üçü de AYNI invariant'ı FARKLI savunma
+        // katmanlarında kanıtladığından bilinçli bir tekrardır.
         "InstitutionPolicyTenantIsolation",
+
+        // Faz 2B.10.1 - kill switch'in commit'i engellediği İKİ AYRI outbox iş türünde
+        // (ArtefaktOlustur - EBelgeArtefaktOlusturmaServiceIntegrationTests VE UblImzala -
+        // EBelgeUblImzalamaServiceIntegrationTests) AYRI AYRI kanıtlanır - aynı invariant, iki
+        // farklı pre-commit kontrol noktası.
+        "PolicyKillSwitchPreventsCommit",
+
+        // Faz 2B.10.1 - legacy (karar-öncesi) kayıtların hiç işlenmediği İKİ AYRI katmanda
+        // doğrulanır: runtime uygunluk değerlendirmesi (EBelgeKurumPolitikaServisiIntegrationTests)
+        // VE claim SQL'in KENDİSİ (EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests).
+        "LegacyDecisionNeverProcesses",
+
+        // Faz 2B.9'dan beri var olan lease-takeover invariantı (EBelgeOutboxClaimLeaseIntegrationTests),
+        // Faz 2B.10.1'in politika-join'li claim SQL'i İLE de AYRICA kanıtlanır
+        // (EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests) - yeni JOIN'lerin mevcut
+        // UPDLOCK/READPAST çoklu-worker güvenliğini BOZMADIĞINI doğrulamak İÇİN bilinçli bir tekrar.
+        "LeaseTakeover",
     ];
 
     private static List<(Type Type, MethodInfo Method)> TumEBelgeTestMetodlari()

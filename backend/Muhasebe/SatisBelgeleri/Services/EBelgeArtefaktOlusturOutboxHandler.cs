@@ -34,7 +34,15 @@ public enum EBelgeArtefaktOlusturmaSonucuTuru
     AtomikBasarili = 1,
     GeciciHata = 2,
     AtomikKaliciHata = 3,
-    SahiplikKaybedildi = 4
+    SahiplikKaybedildi = 4,
+
+    /// <summary>
+    /// Faz 2B.10.1 görev md.7 - commit ÖNCESİ kurum politikası yeniden doğrulamasında UYGUNSUZ
+    /// bulundu; servis KENDİ atomik transaction'ında outboxu `TryReleasePolicyBlockedAsync` ile
+    /// GÜVENLİ bekleme durumuna ALDI (terminalize ETMEDİ) - artifact/EBelgeKaydi değişikliği
+    /// hiç YAPILMADI. Çağıran (handler) İKİNCİ bir DB geçişi YAPMAMALIDIR.
+    /// </summary>
+    AtomikPolitikaBloklu = 5
 }
 
 public sealed record EBelgeArtefaktOlusturmaSonucu
@@ -74,6 +82,9 @@ public sealed record EBelgeArtefaktOlusturmaSonucu
 
     public static EBelgeArtefaktOlusturmaSonucu SahiplikKaybedildi()
         => new(EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi, null, null);
+
+    public static EBelgeArtefaktOlusturmaSonucu AtomikPolitikaBloklu()
+        => new(EBelgeArtefaktOlusturmaSonucuTuru.AtomikPolitikaBloklu, null, null);
 }
 
 public interface IEBelgeArtefaktOlusturmaService
@@ -133,6 +144,8 @@ public sealed class EBelgeArtefaktOlusturOutboxHandler : IEBelgeOutboxIsTuruHand
                 => EBelgeOutboxHandlerSonucu.AtomikTerminalHata(),
             EBelgeArtefaktOlusturmaSonucuTuru.SahiplikKaybedildi
                 => EBelgeOutboxHandlerSonucu.SahiplikKaybedildi(),
+            EBelgeArtefaktOlusturmaSonucuTuru.AtomikPolitikaBloklu
+                => EBelgeOutboxHandlerSonucu.AtomikPolitikaBloklu(),
             _ => throw new InvalidOperationException("Bilinmeyen artefakt sonucu.")
         };
     }

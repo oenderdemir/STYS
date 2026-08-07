@@ -49,7 +49,15 @@ public enum EBelgeOutboxHandlerSonucTuru
     Basarisiz = 4,
 
     /// <summary>Handler, işlem sırasında (kendi ownership kontrolüyle) lease'in ARTIK bu çağırana ait OLMADIĞINI tespit etti - IsleAsync BAŞKA HİÇBİR DB çağrısı yapmadan SahiplikKaybedildi döner.</summary>
-    SahiplikKaybedildi = 5
+    SahiplikKaybedildi = 5,
+
+    /// <summary>
+    /// Faz 2B.10.1 görev md.7/md.8 - handler, commit ÖNCESİ kurum politikası yeniden
+    /// doğrulamasında UYGUNSUZ bulundu ve outbox'ı KENDİ transaction'ında ZATEN
+    /// `TryReleasePolicyBlockedAsync` ile güvenli bekleme durumuna ALDI (terminalize ETMEDİ,
+    /// teknik hata İŞARETLEMEDİ) - IsleAsync BAŞKA HİÇBİR DB geçişi yapmadan RetryPlanlandi döner.
+    /// </summary>
+    AtomikPolitikaBloklu = 6
 }
 
 public sealed record EBelgeOutboxHandlerSonucu
@@ -84,6 +92,9 @@ public sealed record EBelgeOutboxHandlerSonucu
 
     public static EBelgeOutboxHandlerSonucu SahiplikKaybedildi()
         => new(EBelgeOutboxHandlerSonucTuru.SahiplikKaybedildi, null, null, null);
+
+    public static EBelgeOutboxHandlerSonucu AtomikPolitikaBloklu()
+        => new(EBelgeOutboxHandlerSonucTuru.AtomikPolitikaBloklu, null, null, null);
 
     public static EBelgeOutboxHandlerSonucu Basarisiz(EBelgeOutboxHataSinifi hataSinifi, string hataKodu, string hataMesaji)
     {
@@ -140,8 +151,7 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
     private const string BeklenmeyenHataKodu = "EBEKLENMEYENISLEMHATASI";
     private const string BeklenmeyenHataMesaji = "E-belge outbox işi işlenirken beklenmeyen bir hata oluştu.";
 
-    private const string PolitikaBlokluHataKodu = "EBELGE_KURUM_POLICY_BLOCKED_AT_CLAIM";
-    private const string PolitikaBlokluHataMesaji = "Kurum e-belge politikası bu işlem için artık izin vermiyor; işlem güvenli şekilde yeniden bekleme durumuna alındı.";
+    /// <summary>Yalnız DÖNÜŞ değerindeki `RetryGecikmesi` alanı İÇİN (gözlemlenebilirlik/metrik amaçlı bir TAHMİN) - DB'deki gerçek yeniden-uygunluk, `TryReleasePolicyBlockedAsync`'in KENDİSİ tarafından, bir gecikme SAYACI DEĞİL, claim sorgusunun politika join'i ÜZERİNDEN belirlenir.</summary>
     private static readonly TimeSpan PolitikaBlokluRetryGecikmesi = TimeSpan.FromMinutes(5);
 
     private readonly IReadOnlyDictionary<EBelgeOutboxIsTuru, IEBelgeOutboxIsTuruHandler> _handlers;
@@ -179,19 +189,21 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
     {
         var normalizedToken = ValidateClaimAndGetNormalizedToken(claim);
 
-        // Faz 2B.10 görev md.14 - claim SONRASI, pahalı dış işlemden (sidecar/imza) ÖNCE, mümkün
-        // olan EN ERKEN noktada kurum politikası YENİDEN doğrulanır. Outbox mesajının DAHA ÖNCE
-        // oluşturulmuş olması TEK BAŞINA işlemin HÂLÂ izinli olduğu anlamına GELMEZ - politika
-        // claim SONRASINDA pasife alınmış/değiştirilmiş OLABİLİR. Blokluysa: artifact/imza
-        // sonucu KALICILAŞTIRILMAZ (handler'a HİÇ girilmez), SignedReady OLUŞTURULMAZ, işlem
-        // GÜVENLİ şekilde yeniden bekleme durumuna alınır (terminalize EDİLMEZ), ham hata
-        // LOGLANMAZ - mevcut lease transition altyapısı (`TryFailAsync` + retry gecikmesi) YENİDEN
-        // KULLANILIR, yeni bir transition metodu EKLENMEZ.
-        if (!await _kurumPolitikaServisi.IslemHalaIzinliMiAsync(claim.KurumId, claim.EBelgeKaydiId, claim.IsTuru, cancellationToken))
+        // Faz 2B.10.1 görev md.6 - claim SONRASI, pahalı dış işlemden (sidecar/imza) ÖNCE, mümkün
+        // olan EN ERKEN noktada kurum politikası YENİDEN doğrulanır (zengin, type-safe sonuçla -
+        // bkz. `EBelgeIslemPolitikaUygunlukSonucu`). Outbox mesajının DAHA ÖNCE oluşturulmuş
+        // olması TEK BAŞINA işlemin HÂLÂ izinli olduğu anlamına GELMEZ - politika claim
+        // SONRASINDA pasife alınmış/değiştirilmiş OLABİLİR. Bloklu ise: artifact/imza sonucu
+        // KALICILAŞTIRILMAZ (handler'a HİÇ girilmez), SignedReady OLUŞTURULMAZ, işlem GÜVENLİ
+        // şekilde yeniden bekleme durumuna alınır - politika engeli NORMAL bir teknik hata
+        // DEĞİLDİR, bu yüzden genel `TryFailAsync` (Durum=Hata, retry-with-backoff) DEĞİL, ÖZEL
+        // `TryReleasePolicyBlockedAsync` (Durum=Bekliyor, terminalize EDİLMEZ, tüketilen deneme
+        // GERİ ALINIR) kullanılır - bkz. görev md.6.
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(claim.KurumId, claim.EBelgeKaydiId, claim.IsTuru, cancellationToken);
+        if (!uygunluk.UygunMu)
         {
-            var geriAlindi = await _transitionService.TryFailAsync(
-                claim.OutboxMesajiId, claim.KurumId, normalizedToken,
-                PolitikaBlokluHataKodu, PolitikaBlokluHataMesaji, PolitikaBlokluRetryGecikmesi, cancellationToken);
+            var geriAlindi = await _transitionService.TryReleasePolicyBlockedAsync(
+                claim.OutboxMesajiId, claim.KurumId, claim.EBelgeKaydiId, claim.IsTuru, normalizedToken, cancellationToken);
 
             return geriAlindi
                 ? EBelgeOutboxIslemeSonucu.RetryPlanlandi(PolitikaBlokluRetryGecikmesi)
@@ -238,6 +250,12 @@ public sealed class EBelgeOutboxMesajIslemeService : IEBelgeOutboxMesajIslemeSer
 
             case EBelgeOutboxHandlerSonucTuru.SahiplikKaybedildi:
                 return EBelgeOutboxIslemeSonucu.SahiplikKaybedildi();
+
+            case EBelgeOutboxHandlerSonucTuru.AtomikPolitikaBloklu:
+                // Handler, commit ÖNCESİ politika kontrolünde outbox'ı KENDİ transaction'ında
+                // ZATEN güvenli bekleme durumuna aldı - burada İKİNCİ bir transition çağrısı
+                // YAPILMAZ (bkz. görev md.7/md.8).
+                return EBelgeOutboxIslemeSonucu.RetryPlanlandi(PolitikaBlokluRetryGecikmesi);
 
             case EBelgeOutboxHandlerSonucTuru.Basarili:
                 var completeEdildi = await _transitionService.TryCompleteAsync(

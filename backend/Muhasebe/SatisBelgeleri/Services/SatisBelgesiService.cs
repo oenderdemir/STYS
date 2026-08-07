@@ -933,6 +933,15 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 .Include(x => x.Snapshot)
                 .FirstOrDefaultAsync(x => x.SatisBelgesiId == id, cancellationToken);
 
+            // Faz 2B.10.1 görev md.9 - idempotent tekrar kontrolü ARTIK immutable
+            // SatisBelgesiEBelgeKarari üzerinden yapılır: yöntemi yerel pipeline GEREKTİRMEYEN
+            // (Kullanilmayacak/HariciMuhasebeSistemi/global henüz açık değil) kararlarda EBelgeKaydi
+            // HİÇ OLUŞMAZ - bu, önceki bir "EBelgeKaydi bulunamadı" veri-tutarsızlığı hatasına
+            // YOL AÇMAMALIDIR (bkz. görev md.4).
+            var mevcutEBelgeKarari = await _db.Set<SatisBelgesiEBelgeKarari>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.SatisBelgesiId == id, cancellationToken);
+
             if (resmiNumaraDoluMu && !faturalamaKesildiMi)
             {
                 throw new BaseException(
@@ -958,47 +967,70 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
             if (faturalamaKesildiMi)
             {
-                if (mevcutEBelgeKaydi is null)
+                if (mevcutEBelgeKarari is null)
                 {
-                    throw new BaseException(
-                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeKaydi bulunamadı; canlı verilerden yeni snapshot üretilemez. (Id: {id})",
-                        errorCode: 500);
+                    // Faz 2B.10 ÖNCESİ (legacy) kesilmiş bir belge OLABİLİR - otomatik
+                    // yorumlanmaz/varsayılmaz (bkz. görev md.3/md.9); manuel inceleme + kontrollü
+                    // backfill gerekir.
+                    throw new EBelgeKurumPolitikaKararBulunamadiException(
+                        $"Belge FaturalamaDurumu 'Kesildi' ancak e-belge kararı (SatisBelgesiEBelgeKarari) bulunamadı; " +
+                        $"Faz 2B.10 öncesi kesilmiş bir belge olabilir - manuel inceleme ve kontrollü backfill gerekir. (Id: {id})");
                 }
 
-                if (mevcutEBelgeKaydi.Snapshot is null)
+                if (mevcutEBelgeKarari.YerelSnapshotOlustur)
                 {
-                    throw new BaseException(
-                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeSnapshot bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
-                        errorCode: 500);
+                    if (mevcutEBelgeKaydi is null)
+                    {
+                        throw new BaseException(
+                            $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeKaydi bulunamadı; canlı verilerden yeni snapshot üretilemez. (Id: {id})",
+                            errorCode: 500);
+                    }
+
+                    if (mevcutEBelgeKaydi.Snapshot is null)
+                    {
+                        throw new BaseException(
+                            $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeSnapshot bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                            errorCode: 500);
+                    }
+
+                    var mevcutOutboxMesaji = await _db.EBelgeOutboxMesajlari
+                        .IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(
+                            x => x.EBelgeKaydiId == mevcutEBelgeKaydi.Id
+                                 && x.KurumId == belge.KurumId
+                                 && x.IsTuru == EBelgeOutboxIsTuru.ArtefaktOlustur,
+                            cancellationToken);
+
+                    if (mevcutOutboxMesaji is null)
+                    {
+                        throw new BaseException(
+                            $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeOutboxMesaji bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                            errorCode: 500);
+                    }
+
+                    if (mevcutOutboxMesaji.IsDeleted)
+                    {
+                        throw new BaseException(
+                            $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeOutboxMesaji soft-delete edilmiş; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                            errorCode: 500);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(belge.EBelgeUuid)
+                        && !string.Equals(belge.EBelgeUuid, mevcutEBelgeKaydi.EBelgeUuid, StringComparison.Ordinal))
+                    {
+                        throw new BaseException(
+                            $"Belgenin legacy EBelgeUuid değeri ({belge.EBelgeUuid}) ile EBelgeKaydi değeri ({mevcutEBelgeKaydi.EBelgeUuid}) uyuşmuyor; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                            errorCode: 500);
+                    }
                 }
-
-                var mevcutOutboxMesaji = await _db.EBelgeOutboxMesajlari
-                    .IgnoreQueryFilters()
-                    .FirstOrDefaultAsync(
-                        x => x.EBelgeKaydiId == mevcutEBelgeKaydi.Id
-                             && x.KurumId == belge.KurumId
-                             && x.IsTuru == EBelgeOutboxIsTuru.ArtefaktOlustur,
-                        cancellationToken);
-
-                if (mevcutOutboxMesaji is null)
+                else if (mevcutEBelgeKaydi is not null)
                 {
+                    // Karar yerel pipeline GEREKTİRMİYOR (Kullanilmayacak/HariciMuhasebeSistemi/
+                    // global henüz açık değil) ama bir EBelgeKaydi bulunuyor - bu, veri
+                    // tutarsızlığıdır (karar ile fiilî pipeline durumu ÇELİŞİYOR).
                     throw new BaseException(
-                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeOutboxMesaji bulunamadı; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
-                        errorCode: 500);
-                }
-
-                if (mevcutOutboxMesaji.IsDeleted)
-                {
-                    throw new BaseException(
-                        $"Belge FaturalamaDurumu 'Kesildi' ancak EBelgeOutboxMesaji soft-delete edilmiş; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
-                        errorCode: 500);
-                }
-
-                if (!string.IsNullOrWhiteSpace(belge.EBelgeUuid)
-                    && !string.Equals(belge.EBelgeUuid, mevcutEBelgeKaydi.EBelgeUuid, StringComparison.Ordinal))
-                {
-                    throw new BaseException(
-                        $"Belgenin legacy EBelgeUuid değeri ({belge.EBelgeUuid}) ile EBelgeKaydi değeri ({mevcutEBelgeKaydi.EBelgeUuid}) uyuşmuyor; veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
+                        $"Belge FaturalamaDurumu 'Kesildi', immutable e-belge kararı yerel pipeline gerektirmiyor ancak EBelgeKaydi bulunuyor; " +
+                        $"veri tutarsızlığı, sistem yöneticisine başvurun. (Id: {id})",
                         errorCode: 500);
                 }
 
@@ -1146,23 +1178,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                     errorCode: 500);
             }
 
-            EnsureUblHazirlikKaynaklari(belge, tesis.Kurum);
-
             // Kesim anı sözleşmesi: TimeProvider'dan TEK bir saat alınır ve akış boyunca
             // (kapı kontrolü + FaturaKesimTarihi + snapshot) bu değer yeniden kullanılır -
             // ikinci kez UtcNow/Now çağrılmaz (bkz. görev sonuç raporu, "Kesim anı sözleşmesi").
             var planlananKesimZamaniUtc = _timeProvider.GetUtcNow().UtcDateTime;
             var planlananKesimTarihiTrt = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(planlananKesimZamaniUtc);
-
-            // Kanal HER ZAMAN burada, sayaç sorgusundan/kilidinden/artırımından, resmî numara
-            // üretiminden ve belge durum değişikliklerinden ÖNCE çözülür - hem V1 hem V2 yolu
-            // için gereklidir (bkz. görev sonuç raporu, Faz 2B.4.2 "Kanalı sayaç kilidinden önce
-            // çöz"). Mevcut ResolveEBelgeKanali kuralları DEĞİŞMEDEN kullanılır; yalnız çağrı
-            // noktası taşındı.
-            var cariKart = belge.CariKart
-                ?? throw new BaseException("E-belge kanalını belirlemek için cari kart bilgisi bulunamadı.", errorCode: 400);
-
-            var eBelgeKanali = ResolveEBelgeKanali(cariKart);
 
             EnsureCutoverTarihGecerli(belge, planlananKesimZamaniUtc);
 
@@ -1174,17 +1194,39 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             var politikaKarari = await _kurumPolitikaServisi.DegerlendirAsync(belge.KurumId, planlananKesimTarihiTrt, cancellationToken);
             EnsurePolitikaEngelDegil(politikaKarari);
 
-            var aktifSatirlar = belge.Satirlar.Where(x => !x.IsDeleted).ToList();
+            // Faz 2B.10.1 görev md.10 - UBL'ye özgü hazırlık/doğrulama (kurum vergi/adres alanları,
+            // cari kart e-Fatura/e-Arşiv bayrakları, e-belge kanalı çözümü, pre-cut validator)
+            // ARTIK yalnız politika kararı yerel snapshot üretimini GEREKTİRİYORSA çalışır -
+            // Kullanilmayacak/HariciMuhasebeSistemi/global henüz açık değilken bu alanların dolu
+            // olması ZORUNLU DEĞİLDİR (bkz. görev md.10). GibPortal İÇİN davranış DEĞİŞMEDİ.
+            CariKart? cariKart = null;
+            var eBelgeKanali = default(EBelgeKanali);
+            var aktifSatirlar = new List<SatisBelgesiSatiri>();
 
-            // Tam kesim öncesi UBL hazırlık kapısı - yalnız EBelgeUblOptions.Enabled açıkken
-            // çalışır (kapalıyken bu fazdan önceki davranış hiç değişmez). Kanal e-Arşiv
-            // değilse (ör. e-Fatura mükellefi) veya dar kapsam dışında kalan herhangi bir alan
-            // varsa, resmî numara verilmeden ATOMİK olarak reddedilir - sayaç henüz hiç
-            // sorgulanmamıştır.
-            if (_eBelgeUblOptions.Enabled)
+            if (politikaKarari.Yetenekler.YerelSnapshotOlustur)
             {
-                _ublPreCutValidator.Validate(BuildUblPreCutContext(
-                    belge, aktifSatirlar, tesis.Kurum, cariKart, eBelgeKanali, planlananKesimTarihiTrt));
+                EnsureUblHazirlikKaynaklari(belge, tesis.Kurum);
+
+                // Kanal HER ZAMAN burada, sayaç sorgusundan/kilidinden/artırımından, resmî numara
+                // üretiminden ve belge durum değişikliklerinden ÖNCE çözülür - hem V1 hem V2 yolu
+                // için gereklidir (bkz. görev sonuç raporu, Faz 2B.4.2 "Kanalı sayaç kilidinden önce
+                // çöz"). Mevcut ResolveEBelgeKanali kuralları DEĞİŞMEDEN kullanılır.
+                cariKart = belge.CariKart
+                    ?? throw new BaseException("E-belge kanalını belirlemek için cari kart bilgisi bulunamadı.", errorCode: 400);
+
+                eBelgeKanali = ResolveEBelgeKanali(cariKart);
+                aktifSatirlar = belge.Satirlar.Where(x => !x.IsDeleted).ToList();
+
+                // Tam kesim öncesi UBL hazırlık kapısı - yalnız EBelgeUblOptions.Enabled açıkken
+                // çalışır (kapalıyken bu fazdan önceki davranış hiç değişmez). Kanal e-Arşiv
+                // değilse (ör. e-Fatura mükellefi) veya dar kapsam dışında kalan herhangi bir alan
+                // varsa, resmî numara verilmeden ATOMİK olarak reddedilir - sayaç henüz hiç
+                // sorgulanmamıştır.
+                if (_eBelgeUblOptions.Enabled)
+                {
+                    _ublPreCutValidator.Validate(BuildUblPreCutContext(
+                        belge, aktifSatirlar, tesis.Kurum, cariKart, eBelgeKanali, planlananKesimTarihiTrt));
+                }
             }
 
             // AlisIadeFaturasi için: numara üretilmeden ÖNCE iade edilen asıl AlisFaturasi'nin
@@ -1252,6 +1294,25 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 TicariBelgeMuhasebeDurumu.Onaylandi,
                 TicariBelgeFaturalamaDurumu.Kesildi);
 
+            // Faz 2B.10.1 görev md.11 - karar PERSIST edilmeden hemen önce, kullanılan politika
+            // satırının (varsa) HÂLÂ AYNI sürümde olduğu YENİDEN doğrulanır - politika
+            // değerlendirmesi İLE bu an ARASINDA (aynı transaction içinde bile, READ COMMITTED
+            // altında) başka bir oturum politikayı değiştirmiş OLABİLİR. Eşleşmiyorsa TÜM işlem
+            // (sayaç dahil) rollback edilir - eski bir politika sürümüne göre karar YAZILMAZ.
+            if (politikaKarari.PolitikaId.HasValue)
+            {
+                var guncelPolitikaSurumu = await _db.Set<KurumEBelgePolitikasi>()
+                    .AsNoTracking()
+                    .Where(p => p.Id == politikaKarari.PolitikaId.Value)
+                    .Select(p => (int?)p.PolitikaSurumu)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (guncelPolitikaSurumu != politikaKarari.PolitikaSurumu)
+                {
+                    throw new EBelgeKurumPolitikaKararCakismasiException();
+                }
+            }
+
             // Faz 2B.10 görev md.10/md.11 - immutable karar snapshot'ı YÖNTEMDEN BAĞIMSIZ HER
             // ZAMAN oluşturulur (davranış matrisi md.11 - "Karar kaydı oluştur" HER dalda ilk
             // adımdır). Persist edilen bool alanlar kullanıcı config'i DEĞİLDİR - karar anında
@@ -1293,20 +1354,23 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 // Feature açıkken (ve yukarıdaki kapıdan geçmiş belgeler için) gerçek, typed V2
                 // snapshot üretilir; kapalıyken V1 üretim yolu AYNEN korunur (bkz. görev sonuç
                 // raporu, "V1 üretim yolunu kaldırma veya değiştirme").
+                // cariKart, BURAYA gelindiğinde (politikaKarari.Yetenekler.YerelSnapshotOlustur=true)
+                // yukarıdaki AYNI koşullu blokta ZATEN dolduruldu - null-forgiving yalnız derleyicinin
+                // iki ayrı `if` bloğu arasında bunu izleyemediği İÇİN kullanılır.
                 var snapshot = _eBelgeUblOptions.Enabled
                     ? EBelgeSnapshotFactory.CreateSnapshotV2(
                         eBelgeKaydi,
                         belge,
                         tesis.Kurum,
                         tesis,
-                        cariKart,
+                        cariKart!,
                         faturaKesimZamaniUtc)
                     : EBelgeSnapshotFactory.CreateSnapshot(
                         eBelgeKaydi,
                         belge,
                         tesis.Kurum,
                         tesis,
-                        cariKart,
+                        cariKart!,
                         faturaKesimZamaniUtc);
 
                 eBelgeKaydi.Snapshot = snapshot;

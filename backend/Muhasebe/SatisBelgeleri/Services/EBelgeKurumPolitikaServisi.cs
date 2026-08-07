@@ -29,6 +29,53 @@ public sealed record EBelgeKurumPolitikaKarari
 }
 
 /// <summary>
+/// Faz 2B.10.1 görev md.4 - <see cref="IEBelgeKurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync"/>'in
+/// type-safe, immutable sonucu. Ham kurum/müşteri/belge bilgisi TAŞIMAZ - yalnız politika
+/// kimliği/sürümü VE nedeni (bkz. <see cref="EBelgeIslemPolitikaUygunlukNedeni"/>).
+/// </summary>
+public sealed record EBelgeIslemPolitikaUygunlukSonucu
+{
+    public required bool UygunMu { get; init; }
+
+    public required EBelgeIslemPolitikaUygunlukNedeni Neden { get; init; }
+
+    public required int? PolitikaId { get; init; }
+
+    public required int? PolitikaSurumu { get; init; }
+}
+
+/// <summary>Faz 2B.10.1 görev md.4 - bir outbox işinin (claim SONRASI/commit ÖNCESİ) hâlâ izinli olup olmadığının type-safe ayrım kümesi.</summary>
+public enum EBelgeIslemPolitikaUygunlukNedeni
+{
+    /// <summary>Karar + güncel politika + güncel yetenek matrisi ÜÇÜ de işlemi desteklemektedir.</summary>
+    Uygun = 1,
+
+    /// <summary>İmmutable `SatisBelgesiEBelgeKarari` bulunamadı - karar-öncesi/legacy kayıt (bkz. görev md.3, "fail-open DEĞİL, fail-closed").</summary>
+    KararBulunamadi = 2,
+
+    /// <summary>Karar var ama kurum İÇİN `KurumEBelgePolitikasi` satırı bulunamadı (silinmiş/hiç oluşturulmamış).</summary>
+    PolitikaBulunamadi = 3,
+
+    /// <summary>Politika bulundu ama `AktifMi=false` (kill switch tetiklenmiş).</summary>
+    PolitikaPasif = 4,
+
+    /// <summary>Güncel politikanın yöntemi, kararın alındığı ANDAKİ yöntemden FARKLI (kurum yöntem değiştirmiş).</summary>
+    YontemDegisti = 5,
+
+    /// <summary>Politika aktif/yöntem uyumlu ama kurumun aktivasyon tarihi (bugüne göre) henüz gelmedi.</summary>
+    AktivasyonTarihiGelmedi = 6,
+
+    /// <summary>Kararın KENDİSİ (karar anındaki snapshot) bu iş türü İÇİN gereken yeteneği taşımıyor (ör. UblImzala istenmiş ama karar YerelImzaOlustur=false).</summary>
+    ImmutableYetenekYok = 7,
+
+    /// <summary>Güncel yöntem yetenek matrisinde bu iş türü İÇİN gereken yetenek artık YOK (ör. yöntem OperasyonelMi=false'a düşürüldü).</summary>
+    GuncelYontemDesteklenmiyor = 8,
+
+    /// <summary>Karar kaydı BAŞKA bir kuruma ait (composite FK/tenant izolasyonu ihlali savunma kontrolü).</summary>
+    TenantUyusmazligi = 9,
+}
+
+/// <summary>
 /// Faz 2B.10 - satış belgesi akışının ÖNÜNE konan, kurum bazlı fail-closed karar katmanı.
 /// Karar sırası (bkz. görev md.3): (1) global feature flag, (2) global cutover/not-before,
 /// (3) kurum politikası. Global değerlendirme (1+2) MEVCUT <see cref="IEBelgeProcessingActivationGate"/>
@@ -41,13 +88,15 @@ public interface IEBelgeKurumPolitikaServisi
     Task<EBelgeKurumPolitikaKarari> DegerlendirAsync(int kurumId, DateTime belgeTarihi, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Faz 2B.10 görev md.14 - worker/outbox savunma katmanı İÇİN: bir EBelgeKaydi'ye bağlı
-    /// immutable karardaki yetenek (ör. `YerelImzaOlustur`) HEM karar ANINDA true OLMALI HEM
-    /// GÜNCEL kurum politikasında hâlâ true OLMALIDIR - biri EKSİKSE `false` döner. Karar kaydı
-    /// hiç YOKSA (karar-öncesi/legacy outbox mesajı) GERİYE DÖNÜK UYUMLULUK için `true` döner
-    /// (bkz. `EBelgeOutboxMesajIslemeService` XML doc'u).
+    /// Faz 2B.10.1 görev md.4/md.14 - worker/outbox savunma katmanı VE artifact/imza commit-öncesi
+    /// kontrolleri İÇİN zengin, type-safe uygunluk sonucu. Karar kaydı hiç YOKSA (karar-öncesi/
+    /// legacy outbox mesajı) ARTIK fail-closed (`KararBulunamadi`, `UygunMu=false`) döner - ÖNCEKİ
+    /// `IslemHalaIzinliMiAsync`'in geriye dönük uyumluluk İÇİN `true` dönen fail-open davranışı
+    /// KALDIRILDI (bkz. görev md.3, "legacy kayıtlar fail-closed"). Bugünkü Türkiye yerel tarihi
+    /// (belgenin KENDİ tarihi DEĞİL) aktivasyon tarihi karşılaştırması İÇİN kullanılır - bu, işin
+    /// hâlâ İZİNLİ olup OLMADIĞI şu ANDA sorulmaktadır.
     /// </summary>
-    Task<bool> IslemHalaIzinliMiAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default);
+    Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default);
 }
 
 public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
@@ -148,7 +197,8 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         return Karar(true, EBelgeKurumPolitikaKararNedeni.Aktif, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, yetenekler, nowUtc);
     }
 
-    public async Task<bool> IslemHalaIzinliMiAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default)
+    public async Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(
+        int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default)
     {
         var karar = await _dbContext.Set<SatisBelgesiEBelgeKarari>()
             .AsNoTracking()
@@ -156,21 +206,83 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
 
         if (karar is null)
         {
-            // Karar-öncesi/legacy outbox mesajı - bkz. arayüz XML doc'u, geriye dönük uyumluluk.
-            return true;
+            // Faz 2B.10.1 görev md.3 - karar-öncesi/legacy outbox mesajı ARTIK fail-open "true"
+            // DEĞİL, açıkça fail-closed'dır. Otomatik bir yöntem (ör. DogrudanGib) VARSAYILMAZ.
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.KararBulunamadi, null, null);
+        }
+
+        if (karar.KurumId != kurumId)
+        {
+            // Composite tenant-aware FK bunu zaten yapısal olarak engeller - savunma amaçlı runtime kontrolü.
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.TenantUyusmazligi, karar.KurumEBelgePolitikasiId, karar.PolitikaSurumu);
+        }
+
+        var kararYetenekVar = isTuru switch
+        {
+            EBelgeOutboxIsTuru.ArtefaktOlustur => karar.YerelSnapshotOlustur && karar.YerelUnsignedUblOlustur,
+            EBelgeOutboxIsTuru.UblImzala => karar.YerelImzaOlustur,
+            _ => false,
+        };
+
+        if (!kararYetenekVar)
+        {
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.ImmutableYetenekYok, karar.KurumEBelgePolitikasiId, karar.PolitikaSurumu);
+        }
+
+        var politika = await _dbContext.Set<KurumEBelgePolitikasi>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.KurumId == kurumId, cancellationToken);
+
+        if (politika is null)
+        {
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.PolitikaBulunamadi, karar.KurumEBelgePolitikasiId, karar.PolitikaSurumu);
+        }
+
+        if (!politika.AktifMi)
+        {
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.PolitikaPasif, politika.Id, politika.PolitikaSurumu);
+        }
+
+        if (politika.EntegrasyonYontemi != karar.EntegrasyonYontemi)
+        {
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.YontemDegisti, politika.Id, politika.PolitikaSurumu);
         }
 
         var buguneTrt = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(_timeProvider.GetUtcNow().UtcDateTime);
-        var guncelKarar = await DegerlendirAsync(kurumId, buguneTrt, cancellationToken);
-
-        return isTuru switch
+        if (politika.AktivasyonYerelTarihi is null || politika.AktivasyonYerelTarihi.Value.Date > buguneTrt.Date)
         {
-            EBelgeOutboxIsTuru.ArtefaktOlustur => karar.YerelSnapshotOlustur && karar.YerelUnsignedUblOlustur &&
-                guncelKarar.Yetenekler.YerelSnapshotOlustur && guncelKarar.Yetenekler.YerelUnsignedUblOlustur,
-            EBelgeOutboxIsTuru.UblImzala => karar.YerelImzaOlustur && guncelKarar.Yetenekler.YerelImzaOlustur,
-            _ => true,
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.AktivasyonTarihiGelmedi, politika.Id, politika.PolitikaSurumu);
+        }
+
+        var guncelYetenekler = _yetenekSaglayici.Getir(politika.EntegrasyonYontemi);
+        if (!guncelYetenekler.OperasyonelMi)
+        {
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.GuncelYontemDesteklenmiyor, politika.Id, politika.PolitikaSurumu);
+        }
+
+        var guncelYetenekVar = isTuru switch
+        {
+            EBelgeOutboxIsTuru.ArtefaktOlustur => guncelYetenekler.YerelSnapshotOlustur && guncelYetenekler.YerelUnsignedUblOlustur,
+            EBelgeOutboxIsTuru.UblImzala => guncelYetenekler.YerelImzaOlustur,
+            _ => false,
         };
+
+        if (!guncelYetenekVar)
+        {
+            return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.GuncelYontemDesteklenmiyor, politika.Id, politika.PolitikaSurumu);
+        }
+
+        return Uygunluk(true, EBelgeIslemPolitikaUygunlukNedeni.Uygun, politika.Id, politika.PolitikaSurumu);
     }
+
+    private static EBelgeIslemPolitikaUygunlukSonucu Uygunluk(
+        bool uygunMu, EBelgeIslemPolitikaUygunlukNedeni neden, int? politikaId, int? politikaSurumu) => new()
+    {
+        UygunMu = uygunMu,
+        Neden = neden,
+        PolitikaId = politikaId,
+        PolitikaSurumu = politikaSurumu,
+    };
 
     private static EBelgeKurumPolitikaKarari Karar(
         bool islemeIzinliMi,

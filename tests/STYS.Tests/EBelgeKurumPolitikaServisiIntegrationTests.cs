@@ -393,23 +393,25 @@ public class EBelgeKurumPolitikaServisiIntegrationTests : IAsyncLifetime
         Assert.Equal(EBelgeKurumPolitikaKararNedeni.PolitikaYapilandirilmadi, kararB.Neden);
     }
 
-    // md.14 - IslemHalaIzinliMiAsync: karar kaydı hiç yoksa (karar-öncesi/legacy outbox mesajı)
-    // geriye dönük uyumluluk için `true` döner.
+    // Faz 2B.10.1 görev md.3 - DegerlendirIslemUygunlugunuAsync: karar kaydı hiç yoksa (karar-öncesi/
+    // legacy outbox mesajı) ARTIK fail-open "true" DEĞİL, açıkça fail-closed (`KararBulunamadi`).
     [IntegrationFact]
-    public async Task IslemHalaIzinliMiAsyncKararKaydiYokIkenGeriyeDonukUyumlulukIcinTrueDoner()
+    [Trait("CriticalInvariant", "LegacyDecisionNeverProcesses")]
+    public async Task DegerlendirIslemUygunlugunuAsyncKararKaydiYokIkenFailClosedDoner()
     {
         await using var dbContext = CreateDbContext();
         var servis = CreateServisiGlobalAktif(dbContext);
 
-        var izinliMi = await servis.IslemHalaIzinliMiAsync(_kurumId, eBelgeKaydiId: 999_999, EBelgeOutboxIsTuru.UblImzala);
+        var sonuc = await servis.DegerlendirIslemUygunlugunuAsync(_kurumId, eBelgeKaydiId: 999_999, EBelgeOutboxIsTuru.UblImzala);
 
-        Assert.True(izinliMi);
+        Assert.False(sonuc.UygunMu);
+        Assert.Equal(EBelgeIslemPolitikaUygunlukNedeni.KararBulunamadi, sonuc.Neden);
     }
 
     // md.14 - karar ANINDA YerelImzaOlustur=true olsa bile GÜNCEL politika artık bunu desteklemiyorsa
     // (ör. GibPortal'a düşürüldüyse) işlem artık izinli DEĞİLDİR.
     [IntegrationFact]
-    public async Task IslemHalaIzinliMiAsyncKararAnindaImzaIzinliAmaGuncelPolitikaArtikDesteklemiyorsaFalseDoner()
+    public async Task DegerlendirIslemUygunlugunuAsyncKararAnindaImzaIzinliAmaGuncelPolitikaArtikDesteklemiyorsaUygunDegilDoner()
     {
         await using var seedCtx = CreateDbContext();
         seedCtx.Add(new KurumEBelgePolitikasi
@@ -452,8 +454,12 @@ public class EBelgeKurumPolitikaServisiIntegrationTests : IAsyncLifetime
         await using var dbContext = CreateDbContext();
         var servis = CreateServisiGlobalAktif(dbContext);
 
-        var izinliMi = await servis.IslemHalaIzinliMiAsync(_kurumId, eBelgeKaydi.Id, EBelgeOutboxIsTuru.UblImzala);
+        var sonuc = await servis.DegerlendirIslemUygunlugunuAsync(_kurumId, eBelgeKaydi.Id, EBelgeOutboxIsTuru.UblImzala);
 
-        Assert.False(izinliMi);
+        // Karar DogrudanGib iken güncel politika GibPortal'a değişmiş - bu, "yöntem değişti"
+        // durumudur (bkz. EBelgeIslemPolitikaUygunlukNedeni.YontemDegisti); her iki durumda da
+        // sonuç fail-closed'dır.
+        Assert.False(sonuc.UygunMu);
+        Assert.Equal(EBelgeIslemPolitikaUygunlukNedeni.YontemDegisti, sonuc.Neden);
     }
 }

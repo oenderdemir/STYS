@@ -86,3 +86,44 @@ public sealed class EBelgeKurumPolitikaDegisiklikEngellendiException : BaseExcep
     {
     }
 }
+
+/// <summary>
+/// Faz 2B.10.1 görev md.3/md.9 - `FaturaKesAsync` içinde, belge zaten `FaturalamaDurumu=Kesildi`
+/// (idempotent tekrar) OLMASINA RAĞMEN buna karşılık gelen bir immutable
+/// <see cref="STYS.Muhasebe.SatisBelgeleri.Entities.SatisBelgesiEBelgeKarari"/> BULUNAMADIĞINDA
+/// fırlatılır - Faz 2B.10 ÖNCESİ (legacy) kesilmiş bir belge olabilir. Bu durum ASLA otomatik
+/// yorumlanmaz/varsayılmaz (ör. "DogrudanGib kabul et") - manuel inceleme ve kontrollü, kurum/
+/// satış bazlı bir backfill kararı gerektirir (bkz. görev md.3, "Bu turda otomatik legacy
+/// backfill yazma").
+/// </summary>
+public sealed class EBelgeKurumPolitikaKararBulunamadiException : BaseException
+{
+    public const int HttpStatusCode = 500;
+    public const string SafeErrorCode = "EBELGE_KURUM_POLICY_DECISION_NOT_FOUND";
+
+    public string HataKodu { get; } = SafeErrorCode;
+
+    public EBelgeKurumPolitikaKararBulunamadiException(string mesaj)
+        : base(mesaj, HttpStatusCode)
+    {
+    }
+}
+
+/// <summary>
+/// Faz 2B.10.1 görev md.11 - kurum politikası değerlendirmesi İLE immutable kararın PERSIST
+/// edilmesi ARASINDA (aynı transaction içinde bile, READ COMMITTED altında başka bir oturumun
+/// eşzamanlı `PUT`'u nedeniyle) politika sürümü DEĞİŞTİYSE fırlatılır - eski bir politika
+/// sürümüne göre karar YAZILMAZ, tüm satış kesim işlemi (resmî numara/sayaç dahil) rollback olur.
+/// </summary>
+public sealed class EBelgeKurumPolitikaKararCakismasiException : BaseException
+{
+    public const int HttpStatusCode = 409;
+    public const string SafeErrorCode = "EBELGE_KURUM_POLICY_DECISION_CONFLICT";
+
+    public string HataKodu { get; } = SafeErrorCode;
+
+    public EBelgeKurumPolitikaKararCakismasiException()
+        : base("Kurum e-belge politikası, karar değerlendirmesinden sonra değiştirildi; fatura kesimi güvenli şekilde iptal edildi, lütfen tekrar deneyin.", HttpStatusCode)
+    {
+    }
+}

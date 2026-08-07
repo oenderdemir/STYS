@@ -237,6 +237,54 @@ WHERE [Id] = @OutboxMesajiId
             cancellationToken);
     }
 
+    private const string PolitikaBlokluHataKodu = "EBELGE_KURUM_POLICY_BLOCKED";
+    private const string PolitikaBlokluHataMesaji = "Kurum e-belge politikası bu işlem için artık izin vermiyor; işlem güvenli şekilde yeniden bekleme durumuna alındı.";
+
+    public Task<bool> TryReleasePolicyBlockedAsync(
+        int outboxMesajiId,
+        int kurumId,
+        int eBelgeKaydiId,
+        EBelgeOutboxIsTuru isTuru,
+        string kilitToken,
+        CancellationToken cancellationToken = default)
+        => ExecuteTransitionAsync(
+            """
+DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
+
+UPDATE [muhasebe].[EBelgeOutboxMesajlari]
+SET [Durum] = 1,
+    [DenemeSayisi] = CASE WHEN [DenemeSayisi] > 0 THEN [DenemeSayisi] - 1 ELSE 0 END,
+    [SonHataKodu] = @SonHataKodu,
+    [SonHataMesaji] = @SonHataMesaji,
+    [SonrakiDenemeZamaniUtc] = NULL,
+    [KilitToken] = NULL,
+    [KilitBitisZamaniUtc] = NULL,
+    [TamamlanmaZamaniUtc] = NULL,
+    [UpdatedAt] = @NowUtc,
+    [UpdatedBy] = N'system'
+OUTPUT inserted.[Id]
+WHERE [Id] = @OutboxMesajiId
+  AND [KurumId] = @KurumId
+  AND [EBelgeKaydiId] = @EBelgeKaydiId
+  AND [IsTuru] = @IsTuru
+  AND [IsDeleted] = 0
+  AND [Durum] = 2
+  AND [KilitToken] = @KilitToken
+  AND [KilitBitisZamaniUtc] IS NOT NULL
+  AND [KilitBitisZamaniUtc] > @NowUtc;
+""",
+            outboxMesajiId,
+            kurumId,
+            kilitToken,
+            configure: command =>
+            {
+                command.Parameters.Add(new SqlParameter("@EBelgeKaydiId", SqlDbType.Int) { Value = eBelgeKaydiId });
+                command.Parameters.Add(new SqlParameter("@IsTuru", SqlDbType.Int) { Value = (int)isTuru });
+                command.Parameters.Add(new SqlParameter("@SonHataKodu", SqlDbType.NVarChar, 100) { Value = PolitikaBlokluHataKodu });
+                command.Parameters.Add(new SqlParameter("@SonHataMesaji", SqlDbType.NVarChar, 2000) { Value = PolitikaBlokluHataMesaji });
+            },
+            cancellationToken);
+
     public Task<bool> TryRenewAsync(int outboxMesajiId, int kurumId, string kilitToken, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
     {
         var leaseSeconds = EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateLeaseSeconds(leaseDuration);

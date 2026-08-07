@@ -130,6 +130,11 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
         await dbContext.SaveChangesAsync();
 
+        // Faz 2B.10.1 görev md.1 - claim SQL'i artık immutable karar + GÜNCEL/aktif kurum
+        // politikasını ZORUNLU kılar; bu dosya EBelgeKaydi'yi SatisBelgesiService'in normal
+        // akışını KULLANMADAN doğrudan seed ettiğinden, eşlik eden karar burada seed edilir.
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
+
         var renderer = RealRendererTestSupport.CreateRealRenderer(_sidecarFixture.BaseUrl!);
         var renderSonucu = await renderer.RenderAsync(EBelgeUblRendererTestVerisi.GecerliSnapshot(), CancellationToken.None);
 
@@ -191,6 +196,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         var http = new HttpClient { BaseAddress = new Uri(_sidecarFixture.BaseUrl!), Timeout = TimeSpan.FromSeconds(15) };
         var schematronValidator = new SaxonSidecarEBelgeSchematronValidator(http);
 
+        var tp = timeProvider ?? TimeProvider.System;
         return new EBelgeUblImzalamaService(
             dbContext,
             new EBelgeXmlImzalayici(new EBelgeTestSertifikaSaglayici(), new EBelgeTestSertifikaGuvenPolicy()),
@@ -198,7 +204,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             xsdValidator,
             schematronValidator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
-            timeProvider ?? TimeProvider.System,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext, tp),
+            tp,
             NullLogger<EBelgeUblImzalamaService>.Instance);
     }
 
@@ -517,6 +524,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new AlwaysFailingXsdValidator(),
             new SaxonSidecarEBelgeSchematronValidator(http),
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -549,6 +557,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(kuralSeti),
             new AlwaysInvalidSchematronValidator(),
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -588,6 +597,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             probe,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -621,6 +631,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             rowChanger,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -715,6 +726,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         };
         dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
         await dbContext.SaveChangesAsync();
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
 
         var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydi.Id);
         var service = CreateService(dbContext);
@@ -852,6 +864,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(kuralSeti),
             new AlwaysInvalidSchematronValidator(), // dogrulama erken başarısız olduğundan asla çağrılmamalı
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -909,6 +922,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(kuralSeti),
             new AlwaysInvalidSchematronValidator(), // hash uyuşmazlığında asla çağrılmamalı
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -994,6 +1008,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             swapper,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1058,6 +1073,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             softDeleter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1121,6 +1137,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             corrupter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1172,6 +1189,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             counter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1208,6 +1226,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             softDeleter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1360,6 +1379,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             replacer,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1402,6 +1422,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1440,6 +1461,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1478,6 +1500,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1516,6 +1539,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1716,6 +1740,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new EBelgeUblXsdValidator(EBelgeUblRendererTestVerisi.KuralSetiYukle()),
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1728,5 +1753,70 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         await using var verifyCtx = CreateDbContext();
         var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
         Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum); // geçici hata DEĞİŞTİRMEZ
+    }
+
+    // ---- Faz 2B.10.1 görev md.8 - imza SONRASI (SignedReady yazılmadan ÖNCE) kurum politikası kill switch yarışı ----
+
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "PolicyKillSwitchPreventsCommit")]
+    public async Task ClaimSonrasiImzaSirasindaPolitikaPasifeAlinirsaSignedReadyYazilmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        // Politika, claim SONRASINDA (signer bloklanır, politika pasife alınır, signer serbest
+        // bırakılır yarışını simüle eder - imza operasyonu KENDİSİ tx dışıdır, bu yüzden burada
+        // deterministik olarak, gerçek zamanda beklemeden, imzadan ÖNCE pasife alınır - pre-commit
+        // kontrolü imza SONRASI/commit ÖNCESİ ÇALIŞTIĞINDAN sonuç AYNIDIR).
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 0 WHERE [KurumId] = {_kurumId}");
+
+        var service = CreateService(dbContext);
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum); // İLERLEMEDİ
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, outbox.Durum); // terminalize EDİLMEDİ, teknik Hata DEĞİL
+        Assert.Null(outbox.KilitToken);
+        Assert.Equal(0, outbox.DenemeSayisi); // claim'de tüketilen deneme GERİ ALINDI
+
+        await using var restoreCtx = CreateDbContext();
+        await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
+    }
+
+    [IntegrationFact]
+    public async Task PolitikaBloklandigindaSonHataAlanlariImzaVeyaSertifikaBilgisiIcermez()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 0 WHERE [KurumId] = {_kurumId}");
+
+        var service = CreateService(dbContext);
+        await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        await using var verifyCtx = CreateDbContext();
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+
+        // SonHataMesaji dolu olsa bile (gözlemlenebilirlik amaçlı sabit bir işaret) - imza bytes'ı,
+        // sertifika parmak izi veya XML içeriği ASLA içermemelidir.
+        Assert.DoesNotContain("BEGIN CERTIFICATE", outbox.SonHataMesaji ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<", outbox.SonHataMesaji ?? string.Empty, StringComparison.Ordinal);
+
+        await using var restoreCtx = CreateDbContext();
+        await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
     }
 }

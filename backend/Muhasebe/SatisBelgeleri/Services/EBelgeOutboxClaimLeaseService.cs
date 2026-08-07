@@ -44,6 +44,10 @@ public class EBelgeOutboxClaimLeaseService : IEBelgeOutboxClaimLeaseService
             command.CommandText = """
 DECLARE @NowUtc DATETIME2(7) = SYSUTCDATETIME();
 DECLARE @EnEskiTarih DATETIME2(7) = CONVERT(DATETIME2(7), '0001-01-01T00:00:00', 126);
+-- Faz 2B.10.1 görev md.1 - Türkiye 2016'dan beri sabit UTC+3 kullanır (yaz saati YOKTUR, bkz.
+-- TurkeyTimeZoneHelper XML doc'u) - bu yüzden burada AYNI sonucu güvenle veren sabit bir ofset
+-- kullanılır; SQL Server'ın AT TIME ZONE/IANA-Windows tz veritabanına BAĞIMLI OLUNMAZ.
+DECLARE @BuguneTrTarih DATE = CAST(DATEADD(HOUR, 3, @NowUtc) AS DATE);
 
 ;WITH Adaylar AS
 (
@@ -66,7 +70,27 @@ DECLARE @EnEskiTarih DATETIME2(7) = CONVERT(DATETIME2(7), '0001-01-01T00:00:00',
             WHEN outbox.[Durum] = 2 THEN outbox.[KilitBitisZamaniUtc]
         END AS UygunlukZamaniUtc
     FROM [muhasebe].[EBelgeOutboxMesajlari] AS outbox WITH (UPDLOCK, READPAST, ROWLOCK)
+    -- Faz 2B.10.1 görev md.1 - bir mesaj yalnız KENDİ immutable kararı VE kurumun GÜNCEL, aktif,
+    -- AYNI yöntemdeki politikası VARSA aday olabilir. Otoriter iş yeteneği (bu iş türü İÇİN
+    -- yerel pipeline gerekip gerekmediği) immutable karardaki SNAPSHOT alanlarından okunur -
+    -- yöntem -> yetenek matrisi burada İKİNCİ KEZ hard-code EDİLMEZ (bkz. görev md.1, "Otoriter
+    -- iş yeteneği immutable karardaki snapshot alanlarından alınmalı").
+    INNER JOIN [muhasebe].[SatisBelgesiEBelgeKararlari] AS karar WITH (READPAST)
+        ON karar.[EBelgeKaydiId] = outbox.[EBelgeKaydiId]
+       AND karar.[KurumId] = outbox.[KurumId]
+       AND karar.[IsDeleted] = 0
+    INNER JOIN [muhasebe].[KurumEBelgePolitikalari] AS politika WITH (READPAST)
+        ON politika.[KurumId] = outbox.[KurumId]
+       AND politika.[IsDeleted] = 0
     WHERE outbox.[IsDeleted] = 0
+      AND politika.[AktifMi] = 1
+      AND politika.[EntegrasyonYontemi] = karar.[EntegrasyonYontemi]
+      AND politika.[AktivasyonYerelTarihi] IS NOT NULL
+      AND politika.[AktivasyonYerelTarihi] <= @BuguneTrTarih
+      AND (
+            (outbox.[IsTuru] = 1 AND karar.[YerelSnapshotOlustur] = 1 AND karar.[YerelUnsignedUblOlustur] = 1)
+         OR (outbox.[IsTuru] = 2 AND karar.[YerelImzaOlustur] = 1)
+          )
       AND (
             (outbox.[Durum] = 1 AND (outbox.[SonrakiDenemeZamaniUtc] IS NULL OR outbox.[SonrakiDenemeZamaniUtc] <= @NowUtc))
          OR (outbox.[Durum] = 4 AND outbox.[SonrakiDenemeZamaniUtc] IS NOT NULL AND outbox.[SonrakiDenemeZamaniUtc] <= @NowUtc)

@@ -580,9 +580,9 @@ public class EBelgeOutboxMesajIslemeServiceTests
         Assert.Equal(0, handler.CallCount);
         Assert.Equal(EBelgeOutboxIslemeSonucuTuru.RetryPlanlandi, sonuc.SonucTuru);
         Assert.Equal(TimeSpan.FromMinutes(5), sonuc.RetryGecikmesi);
-        Assert.Equal(1, transition.FailCallCount);
+        Assert.Equal(1, transition.ReleasePolicyBlockedCallCount);
+        Assert.Equal(0, transition.FailCallCount);
         Assert.Equal(0, transition.CompleteCallCount);
-        Assert.StartsWith("EBELGE_KURUM_POLICY", transition.LastFailHataKodu);
     }
 
     [Fact]
@@ -590,7 +590,7 @@ public class EBelgeOutboxMesajIslemeServiceTests
     {
         var handler = new FakeHandler(EBelgeOutboxIsTuru.UblImzala, _ => EBelgeOutboxHandlerSonucu.Basarili());
         var politika = new FakePolitikaServisi { IzinliMi = false };
-        var transition = new FakeTransitionService(failResult: false);
+        var transition = new FakeTransitionService(releaseResult: false);
         var service = CreateService(new[] { handler }, transition: transition, kurumPolitikaServisi: politika);
 
         var sonuc = await service.IsleAsync(CreateClaim(isTuru: EBelgeOutboxIsTuru.UblImzala));
@@ -758,15 +758,21 @@ public class EBelgeOutboxMesajIslemeServiceTests
         public EBelgeOutboxIsTuru? LastIsTuru { get; private set; }
 
         public Task<EBelgeKurumPolitikaKarari> DegerlendirAsync(int kurumId, DateTime belgeTarihi, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Bu fake yalnız IslemHalaIzinliMiAsync'i destekler.");
+            throw new NotSupportedException("Bu fake yalnız DegerlendirIslemUygunlugunuAsync'i destekler.");
 
-        public Task<bool> IslemHalaIzinliMiAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default)
+        public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default)
         {
             IslemHalaIzinliMiCagriSayisi++;
             LastKurumId = kurumId;
             LastEBelgeKaydiId = eBelgeKaydiId;
             LastIsTuru = isTuru;
-            return Task.FromResult(IzinliMi);
+            return Task.FromResult(new EBelgeIslemPolitikaUygunlukSonucu
+            {
+                UygunMu = IzinliMi,
+                Neden = IzinliMi ? EBelgeIslemPolitikaUygunlukNedeni.Uygun : EBelgeIslemPolitikaUygunlukNedeni.PolitikaPasif,
+                PolitikaId = null,
+                PolitikaSurumu = null,
+            });
         }
     }
 
@@ -774,17 +780,20 @@ public class EBelgeOutboxMesajIslemeServiceTests
     {
         private readonly bool _completeResult;
         private readonly bool _failResult;
+        private readonly bool _releaseResult;
         private readonly Exception? _completeException;
         private readonly Exception? _failException;
 
         public FakeTransitionService(
             bool completeResult = true,
             bool failResult = true,
+            bool releaseResult = true,
             Exception? completeException = null,
             Exception? failException = null)
         {
             _completeResult = completeResult;
             _failResult = failResult;
+            _releaseResult = releaseResult;
             _completeException = completeException;
             _failException = failException;
         }
@@ -889,6 +898,29 @@ public class EBelgeOutboxMesajIslemeServiceTests
                 throw _failException;
             }
             return Task.FromResult(_failResult);
+        }
+
+        public int ReleasePolicyBlockedCallCount { get; private set; }
+
+        public int? LastReleaseOutboxMesajiId { get; private set; }
+
+        public int? LastReleaseKurumId { get; private set; }
+
+        public int? LastReleaseEBelgeKaydiId { get; private set; }
+
+        public EBelgeOutboxIsTuru? LastReleaseIsTuru { get; private set; }
+
+        public string? LastReleaseKilitToken { get; private set; }
+
+        public Task<bool> TryReleasePolicyBlockedAsync(int outboxMesajiId, int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, string kilitToken, CancellationToken cancellationToken = default)
+        {
+            ReleasePolicyBlockedCallCount++;
+            LastReleaseOutboxMesajiId = outboxMesajiId;
+            LastReleaseKurumId = kurumId;
+            LastReleaseEBelgeKaydiId = eBelgeKaydiId;
+            LastReleaseIsTuru = isTuru;
+            LastReleaseKilitToken = kilitToken;
+            return Task.FromResult(_releaseResult);
         }
     }
 }

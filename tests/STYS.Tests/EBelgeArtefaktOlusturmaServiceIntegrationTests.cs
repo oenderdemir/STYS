@@ -529,6 +529,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         };
         dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
         await dbContext.SaveChangesAsync();
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
 
         const string v1BenzeriJson = "{\"surum\":\"1\"}";
         var v1Bytes = Encoding.UTF8.GetBytes(v1BenzeriJson);
@@ -579,6 +580,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         };
         dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
         await dbContext.SaveChangesAsync();
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
 
         // V1 benzeri, geçersiz/desteklenmeyen bir "canonical" gövde - şema sürümü "2" değil.
         const string v1BenzeriJson = "{\"surum\":\"1\"}";
@@ -629,6 +631,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         };
         dbContext.EBelgeKayitlari.Add(eBelgeKaydi);
         await dbContext.SaveChangesAsync();
+        await EBelgeKurumPolitikaTestSupport.SeedEBelgeKarariAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydi.Id);
 
         var v2Snapshot = EBelgeUblRendererTestVerisi.GecerliSnapshot();
         var utf8Bytes = JsonSerializer.SerializeToUtf8Bytes(v2Snapshot, EBelgeCanonicalSnapshotV2Reader.CanonicalJsonOptions);
@@ -1038,5 +1041,93 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         // Outbox VE EBelgeKaydi, AYNI atomik transaction'da BİRLİKTE güncellenmiştir (senaryo 11).
         var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
         Assert.Equal(EBelgeKaydiDurumu.UnsignedUblKaliciHata, kayit.Durum);
+    }
+
+    // ---- Faz 2B.10.1 görev md.7 - claim SONRASI (render sırasında) kurum politikası kill switch yarışı ----
+
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "PolicyKillSwitchPreventsCommit")]
+    public async Task ClaimSonrasiPolitikaPasifeAlinirsaArtefaktYazilmazVeKaliciHataOlusmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        // Politika, claim SONRASINDA (render/handler henüz başlamadan/tamamlanmadan ÖNCE - burada
+        // deterministik olarak, gerçek zamanda BEKLEMEDEN) pasife alınır - "renderer bloklanır,
+        // politika pasife alınır, renderer serbest bırakılır" yarışını simüle eder.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 0 WHERE [KurumId] = {_kurumId}");
+
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId));
+
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kayit.Durum); // İLERLEMEDİ
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, outbox.Durum); // terminalize EDİLMEDİ, teknik Hata DEĞİL
+        Assert.Null(outbox.KilitToken);
+        Assert.Null(outbox.KilitBitisZamaniUtc);
+        Assert.Equal(0, outbox.DenemeSayisi); // claim'de tüketilen deneme GERİ ALINDI
+
+        await using var restoreCtx = CreateDbContext();
+        await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
+    }
+
+    [IntegrationFact]
+    public async Task ClaimSonrasiPolitikaYontemDegistirilirseArtefaktYazilmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        // Yöntem, claim SONRASINDA DEĞİŞTİRİLİR (kararın DogrudanGib'i İLE artık UYUMSUZ).
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [EntegrasyonYontemi] = 3 WHERE [KurumId] = {_kurumId}"); // 3 = GibPortal
+
+        var service = CreateService(dbContext);
+        var sonuc = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId));
+
+        await using var restoreCtx = CreateDbContext();
+        await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [EntegrasyonYontemi] = 5 WHERE [KurumId] = {_kurumId}"); // 5 = DogrudanGib
+    }
+
+    [IntegrationFact]
+    public async Task PolitikaTekrarAcilincaMesajYenidenClaimEdilebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 0 WHERE [KurumId] = {_kurumId}");
+
+        var service = CreateService(dbContext);
+        var bloklandi = await service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikPolitikaBloklu, bloklandi!.SonucTuru);
+
+        // Politika tekrar aktive edilir - claim filtresi mesajı ARTIK yeniden seçebilmelidir.
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
+
+        var yenidenClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+
+        Assert.NotNull(yenidenClaim);
+        Assert.Equal(claim.OutboxMesajiId, yenidenClaim!.OutboxMesajiId);
     }
 }

@@ -242,6 +242,119 @@ Yeni kritik invariant'lar (`EBelgeCriticalInvariantManifest`): `InstitutionPolic
 DB katmanında test edilir), `PortalRouteNeverSignsLocally` (GibPortal ASLA yerel imza mesajı
 oluşturmaz).
 
+## Faz 2B.10.1: Claim, Kill-Switch ve Idempotency Sertleştirmesi
+
+Faz 2B.10, kurum politikasını satış akışının (FaturaKesAsync) ve artifact/imza commit-öncesi
+kontrol noktalarının önüne kurdu, ama **outbox claim SQL'i** ile **worker'ın karar-öncesi (legacy)
+kayıtlara verdiği geriye-dönük-uyumluluk fail-open yanıtı** bu sertleştirmenin DIŞINDA kalmıştı.
+Faz 2B.10.1 bu iki açığı VE üç ek üretim davranış açığını kapatır — kurum politika veri modeli
+veya entegrasyon yöntemleri DEĞİŞMEDİ.
+
+### Claim eligibility SQL/transaction yaklaşımı
+
+`EBelgeOutboxClaimLeaseService`'in raw SQL'i artık `SatisBelgesiEBelgeKararlari` VE
+`KurumEBelgePolitikalari`'na `INNER JOIN` yapar — bir mesaj YALNIZ (a) kendi immutable kararı
+bulunuyorsa, (b) kurumun GÜNCEL politikası aktifse VE kararla AYNI yöntemdeyse, (c) kurumun
+aktivasyon tarihi (Türkiye yerel, sabit UTC+3 ofsetiyle hesaplanan `@BuguneTrTarih`) geçmişse VE
+(d) kararın KENDİ snapshot alanı (iş türüne göre `YerelSnapshotOlustur`+`YerelUnsignedUblOlustur`
+veya `YerelImzaOlustur`) true ise ADAY olabilir. Yöntem → yetenek matrisi SQL'de İKİNCİ KEZ
+hard-code EDİLMEZ — otoriter iş yeteneği immutable karardan, güncel politika İSE yalnız aktiflik/
+yöntem-uyumu/aktivasyon-tarihi İÇİN kullanılır. Uygunsuz adaylar `WHERE`/`JOIN` içinde tamamen
+elenir (post-filter DEĞİL) — bu yüzden `TOP (1)` doğal olarak SIRADAKİ uygun mesajı seçer, bloklu
+bir ilk aday sonraki mesajları AÇLIĞA (starvation) sürüklemez. Mevcut `UPDLOCK/READPAST/ROWLOCK`
+atomikliği VE çoklu-worker güvenliği DEĞİŞMEDEN korunur; politika/karar JOIN'leri `READPAST` ile
+okunur (eşzamanlı bir politika güncellemesiyle KİLİT ÇEKİŞMESİNE girmez, yalnız o turda ADAY
+DIŞI bırakılır).
+
+### Pasif politikada attempt tüketilmeme garantisi
+
+Politika claim ANINDA zaten pasif/uyumsuzsa mesaj hiç ADAY olmadığından `DenemeSayisi` ARTMAZ.
+Politika claim SONRASINDA (worker render/imza ile MEŞGULKEN) kapatılırsa, yeni
+`IEBelgeOutboxLeaseTransitionService.TryReleasePolicyBlockedAsync` mesajı `Durum=Bekliyor`'a
+döndürür VE claim'de artırılan denemeyi 1 AZALTIR (0'ın altına DÜŞMEZ) — politika yarışı nedeniyle
+tüketilen bir deneme, GERÇEK bir işleme denemesi SAYILMAZ.
+
+### Claim sonrası kill-switch yarışı
+
+Dört kesin kontrol noktası: (1) claim ÖNCESİ (claim SQL'in KENDİSİ), (2) handler başlamadan ÖNCE
+(`EBelgeOutboxMesajIslemeService.IsleAsync`, mevcut savunma katmanı — ARTIK zengin
+`EBelgeIslemPolitikaUygunlukSonucu` kullanır), (3) pahalı render/imza işleminden SONRA (yeni),
+(4) atomik DB commit'inden HEMEN ÖNCE (yeni, (3) ile AYNI kontrol noktası — render/imza zaten
+transaction DIŞINDA çalıştığından, commit-öncesi kontrol doğal olarak "işlem sonrası" kontrolü de
+kapsar). Politika (2)/(3)-(4)'te bloklarsa: `TryReleasePolicyBlockedAsync` KULLANILIR (genel
+`TryFailAsync`/Durum=Hata DEĞİL) — bu, kill switch'in NORMAL bir teknik hata OLMADIĞINI, retry
+churn/alarm gürültüsü ÜRETMEMESİ gerektiğini yansıtır.
+
+### Artifact commit öncesi politika kontrolü
+
+`EBelgeArtefaktOlusturmaService.DenemeBasariAtomikAsync`, lease ownership doğrulandıktan SONRA,
+artifact/EBelgeKaydi DEĞİŞTİRİLMEDEN ÖNCE, AYNI açık transaction içinde
+`DegerlendirIslemUygunlugunuAsync` ile TEKRAR doğrular. Uygun değilse: `TryReleasePolicyBlockedAsync`
+AYNI transaction içinde çağrılır ve commit edilir (yeni `AtomikPolitikaBloklu` sonuç türü) — artifact
+insert EDİLMEZ, `EBelgeKaydi.Durum` DEĞİŞMEZ, `TryCompleteJobAsync` HİÇ çağrılmaz. Politika okuması
+İLE release yazması AYNI transaction/bağlantı üzerinde olduğundan yeni bir TOCTOU penceresi AÇILMAZ.
+
+### SignedReady commit öncesi politika kontrolü
+
+`EBelgeUblImzalamaService`'e YENİ bir `IEBelgeKurumPolitikaServisi` bağımlılığı eklendi. Hem YENİ
+imza yolunda (`DenemeYeniSignedInsertAtomikAsync`) hem idempotent/rakip-satır yolunda
+(`IslemMevcutSignedAsync`), ownership doğrulamasından SONRA, `SignedReady` artefaktı
+YAZILMADAN/`EBelgeKaydi.Durum` İLERLETİLMEDEN ÖNCE AYNI kontrol uygulanır. Politika imzalama
+SIRASINDA kapatılırsa: SignedReady YAZILMAZ, imza sonucu (bytes/sertifika/algoritma bilgisi)
+DISCARD edilir — `SonHataMesaji`'na yalnız SABİT, güvenli bir işaret yazılır, imza içeriği/
+sertifika ASLA loglanmaz/saklanmaz.
+
+### Legacy kararların fail-closed davranışı
+
+`IEBelgeKurumPolitikaServisi.IslemHalaIzinliMiAsync` (bool, karar-yoksa-`true`) KALDIRILDI; yerine
+zengin `DegerlendirIslemUygunlugunuAsync` (`EBelgeIslemPolitikaUygunlukSonucu` +
+`EBelgeIslemPolitikaUygunlukNedeni`: `Uygun`/`KararBulunamadi`/`PolitikaBulunamadi`/`PolitikaPasif`/
+`YontemDegisti`/`AktivasyonTarihiGelmedi`/`ImmutableYetenekYok`/`GuncelYontemDesteklenmiyor`/
+`TenantUyusmazligi`) geldi. Karar kaydı hiç YOKSA sonuç ARTIK `KararBulunamadi` (fail-closed) —
+ÖNCEKİ "geriye dönük uyumluluk için true" davranışı KALDIRILDI. `FaturaKesAsync`'in idempotent
+tekrar dalı da AYNI ilkeyi izler: `FaturalamaDurumu=Kesildi` olan ama karşılık gelen
+`SatisBelgesiEBelgeKarari` bulunamayan bir belge (Faz 2B.10 ÖNCESİ kesilmiş olabilir)
+`EBelgeKurumPolitikaKararBulunamadiException` (`EBELGE_KURUM_POLICY_DECISION_NOT_FOUND`) fırlatır —
+otomatik yorumlama/varsayım YAPILMAZ. Mevcut legacy kayıtların ele alınışı: **manuel inceleme →
+kurum ve satış bazında yöntem kararı → kontrollü backfill** (bu turda otomatik legacy backfill
+YAZILMADI).
+
+### Pipeline gerekmeyen yöntemlerde UBL doğrulamalarının atlanması
+
+`SatisBelgesiService.FaturaKesAsync` akışı YENİDEN sıralandı: belge/transaction doğrulamaları →
+global activation/cutover (`EnsureCutoverTarihGecerli`, DEĞİŞMEDİ) → kurum politikası
+(`DegerlendirAsync`/`EnsurePolitikaEngelDegil`) → **yalnız `politikaKarari.Yetenekler.
+YerelSnapshotOlustur=true` ise** UBL hazırlığı (`EnsureUblHazirlikKaynaklari`, cari kart e-Fatura/
+e-Arşiv bayrağı kontrolü, `ResolveEBelgeKanali`, `_ublPreCutValidator.Validate`). `Kullanilmayacak`/
+`HariciMuhasebeSistemi`/henüz aktif olmayan global kapı durumlarında bu alanların DOLU olması ARTIK
+ZORUNLU DEĞİLDİR — satış, e-belgeyle İLGİSİZ UBL kısıtlarıyla REDDEDİLMEZ. `GibPortal` İÇİN
+davranış DEĞİŞMEDİ (UBL alanları/kanal çözümü hâlâ zorunlu).
+
+### Yöntem-aware idempotency
+
+`FaturaKesAsync`'in idempotent-tekrar dalı artık immutable `SatisBelgesiEBelgeKarari` üzerinden
+dallanır: `YerelSnapshotOlustur=false` olan kararlarda (`Kullanilmayacak`/`HariciMuhasebeSistemi`/
+global henüz aktif değilken alınan kararlar) `EBelgeKaydi` bulunMAMASI beklenen durumdur — ikinci
+`FaturaKesAsync` çağrısı artık "EBelgeKaydi bulunamadı" veri-tutarsızlığı hatası YERİNE mevcut
+sonucu idempotent olarak döner, yeni sayaç TÜKETMEZ, ikinci karar OLUŞTURMAZ.
+`YerelSnapshotOlustur=true` olan kararlarda (`GibPortal`) mevcut EBelgeKaydi/snapshot/outbox
+tutarlılık kontrolleri AYNEN korunur.
+
+### Politika sürümü karar yarışı
+
+İmmutable karar PERSIST edilmeden HEMEN ÖNCE (aynı transaction içinde), kullanılan politika
+satırının `PolitikaSurumu`'su YENİDEN okunur ve `DegerlendirAsync`'in kullandığı sürümle
+karşılaştırılır. Farklıysa (başka bir oturumun eşzamanlı `PUT`'u nedeniyle) `EBelgeKurumPolitikaKararCakismasiException`
+(`EBELGE_KURUM_POLICY_DECISION_CONFLICT`) fırlatılır — TÜM satış kesim işlemi (resmî numara/sayaç
+dahil) rollback olur, eski bir politika sürümüne göre karar YAZILMAZ.
+
+### Yeni kritik invariant'lar
+
+`InactivePolicyNeverClaims` (pasif/uyumsuz politika mesajları claim edilmez),
+`PolicyKillSwitchPreventsCommit` (kill switch, artifact/SignedReady commit'ini engeller),
+`NonLocalRouteIsIdempotent` (yerel pipeline gerektirmeyen yöntemlerde tekrar kesim idempotenttir),
+`LegacyDecisionNeverProcesses` (karar-öncesi/legacy kayıtlar hiçbir aşamada işlenmez).
+
 ## Kurum Süreç Analiz Şablonu
 
 Kurum bazlı bilgi toplama için bkz. `docs/e-belge-kurum-surec-analizi-sablonu.md` — bu şablon

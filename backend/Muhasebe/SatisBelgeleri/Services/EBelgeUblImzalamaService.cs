@@ -60,7 +60,10 @@ public enum EBelgeUblImzalamaSonucuTuru
     AtomikBasarili = 1,
     GeciciHata = 2,
     AtomikKaliciHata = 3,
-    SahiplikKaybedildi = 4
+    SahiplikKaybedildi = 4,
+
+    /// <summary>Faz 2B.10.1 görev md.8 - commit ÖNCESİ kurum politikası yeniden doğrulaması UYGUNSUZ bulundu; servis KENDİ transaction'ında outbox'ı güvenli bekleme durumuna ALDI, SignedReady YAZILMADI.</summary>
+    AtomikPolitikaBloklu = 5
 }
 
 public sealed record EBelgeUblImzalamaSonucu
@@ -95,6 +98,8 @@ public sealed record EBelgeUblImzalamaSonucu
     }
 
     public static EBelgeUblImzalamaSonucu SahiplikKaybedildi() => new(EBelgeUblImzalamaSonucuTuru.SahiplikKaybedildi, null, null);
+
+    public static EBelgeUblImzalamaSonucu AtomikPolitikaBloklu() => new(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, null, null);
 }
 
 public interface IEBelgeUblImzalamaService
@@ -130,6 +135,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
     private readonly IEBelgeUblXsdValidator _xsdValidator;
     private readonly IEBelgeSchematronValidator _schematronValidator;
     private readonly IEBelgeOutboxLeaseTransitionService _leaseTransitionService;
+    private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EBelgeUblImzalamaService> _logger;
 
@@ -140,6 +146,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         IEBelgeUblXsdValidator xsdValidator,
         IEBelgeSchematronValidator schematronValidator,
         IEBelgeOutboxLeaseTransitionService leaseTransitionService,
+        IEBelgeKurumPolitikaServisi kurumPolitikaServisi,
         TimeProvider timeProvider,
         ILogger<EBelgeUblImzalamaService> logger)
     {
@@ -149,6 +156,7 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         _xsdValidator = xsdValidator;
         _schematronValidator = schematronValidator;
         _leaseTransitionService = leaseTransitionService;
+        _kurumPolitikaServisi = kurumPolitikaServisi;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -565,6 +573,28 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
         }
 
+        // Faz 2B.10.1 görev md.8 - imza operasyonundan SONRA, SignedReady artifact YAZILMADAN
+        // ÖNCE, AYNI transaction içinde kurum politikası TEKRAR doğrulanır (immutable
+        // YerelImzaOlustur + güncel politika aktifliği + yöntem uyumu + global signing gate -
+        // hepsi `DegerlendirIslemUygunlugunuAsync` İÇİNDE). Politika imzalama SIRASINDA
+        // kapatıldıysa: SignedReady YAZILMAZ, EBelgeKaydi.Durum İLERLEMEZ, imza sonucu discard
+        // edilir - private key/imza bytes hiçbir yerde loglanmaz.
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, cancellationToken);
+        if (!uygunluk.UygunMu)
+        {
+            var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(
+                talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
+
+            if (!geriAlindi)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+            }
+
+            await tx.CommitAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.AtomikPolitikaBloklu();
+        }
+
         var kayit = await _dbContext.Set<EBelgeKaydi>()
             .FirstAsync(x => x.Id == talep.EBelgeKaydiId && x.KurumId == talep.KurumId, cancellationToken);
 
@@ -655,6 +685,25 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         {
             await tx.RollbackAsync(cancellationToken);
             return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+        }
+
+        // Faz 2B.10.1 görev md.8 - bkz. IslemMevcutSignedAsync XML doc'u, AYNI gerekçe: imza
+        // operasyonundan SONRA, SignedReady YAZILMADAN ÖNCE, AYNI transaction içinde kurum
+        // politikası TEKRAR doğrulanır.
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, cancellationToken);
+        if (!uygunluk.UygunMu)
+        {
+            var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(
+                talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
+
+            if (!geriAlindi)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+            }
+
+            await tx.CommitAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.AtomikPolitikaBloklu();
         }
 
         var kayit = await _dbContext.Set<EBelgeKaydi>()

@@ -58,4 +58,23 @@ public interface IEBelgeOutboxLeaseTransitionService
         string sonHataMesaji,
         TimeSpan? retryDelay,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Faz 2B.10.1 görev md.6 - kurum politikası kill switch/uygunluk kaybı NORMAL bir teknik hata
+    /// DEĞİLDİR; bu yüzden `TryFailJobAsync` (Durum=Hata, terminal/retry-with-backoff) KULLANILMAZ.
+    /// Mesaj `Durum=Bekliyor`'a (Hata=4 DEĞİL) döner, lease temizlenir, `SonHataKodu`/`SonHataMesaji`
+    /// SABİT/güvenli bir gözlemlenebilirlik işaretiyle (ham kurum/müşteri/belge bilgisi İÇERMEZ)
+    /// doldurulur - terminalize EDİLMEZ. `DenemeSayisi`, claim ANINDA artırılmış olan denemeyi
+    /// GERİ ALMAK için 1 AZALTILIR (0'ın altına DÜŞMEZ) - politika yarışı nedeniyle tüketilen bir
+    /// deneme, gerçek bir işleme denemesi SAYILMAZ (bkz. görev md.6, "attempt geri alınmalı").
+    /// Mesaj, YENİDEN CLAIM EDİLEBİLİRLİĞİNİ (politika tekrar açıldığında) claim SORGUSUNUN
+    /// KENDİSİNDEN alır - burada AYRICA bir `SonrakiDenemeZamaniUtc` gecikmesi UYGULANMAZ.
+    /// </summary>
+    Task<bool> TryReleasePolicyBlockedAsync(
+        int outboxMesajiId,
+        int kurumId,
+        int eBelgeKaydiId,
+        EBelgeOutboxIsTuru isTuru,
+        string kilitToken,
+        CancellationToken cancellationToken = default);
 }

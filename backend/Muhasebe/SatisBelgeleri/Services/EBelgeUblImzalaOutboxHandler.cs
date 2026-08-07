@@ -61,6 +61,8 @@ public sealed class EBelgeUblImzalaOutboxHandler : IEBelgeOutboxIsTuruHandler
                 => EBelgeOutboxHandlerSonucu.AtomikTerminalHata(),
             EBelgeUblImzalamaSonucuTuru.SahiplikKaybedildi
                 => EBelgeOutboxHandlerSonucu.SahiplikKaybedildi(),
+            EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu
+                => EBelgeOutboxHandlerSonucu.AtomikPolitikaBloklu(),
             _ => throw new InvalidOperationException("Bilinmeyen imzalama sonucu.")
         };
     }

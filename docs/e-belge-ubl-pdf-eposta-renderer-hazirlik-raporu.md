@@ -4078,3 +4078,75 @@ silinmesi/atlanması, frontend/PDF/e-posta geliştirmesi.
 karar kaydı); `OzelEntegrator`/`DogrudanGib` için gerçek adaptör/HSM entegrasyonu gerekiyor;
 Faz 2B.10 öncesi (legacy) `EBelgeKaydi` kayıtları için açık bir backfill/migrasyon kararı henüz
 alınmadı — bu operasyonel bir sonraki adımdır, kod tarafında OTOMATİK bir varsayım YAPILMADI.
+
+## Faz 2B.10.1: Kurum Politikası Claim, Kill-Switch ve Idempotency Sertleştirmesi
+
+Faz 2B.10, kurum politikasını satış akışının VE artifact/imza commit-öncesinin önüne kurmuştu; bu
+tur, o sertleştirmenin DIŞINDA kalmış beş üretim davranış açığını kapatır. Kurum politika veri
+modeli VE entegrasyon yöntemleri DEĞİŞMEDİ - tam tasarım gerekçesi için bkz.
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md` "Faz 2B.10.1" bölümü.
+
+**1. Claim öncesi politika uygunluğu**: `EBelgeOutboxClaimLeaseService`'in raw SQL'i artık
+`SatisBelgesiEBelgeKararlari` VE `KurumEBelgePolitikalari`'na `INNER JOIN` yapar - pasif/uyumsuz-
+yöntemli/aktivasyon-tarihi-gelmemiş/karar-öncesi (legacy) mesajlar HİÇ ADAY olmaz; `DenemeSayisi`/
+lease OLUŞMAZ. Yöntem→yetenek matrisi SQL'de İKİNCİ KEZ hard-code EDİLMEZ - otoriter yetenek
+immutable karardan okunur, güncel politika yalnız aktiflik/yöntem-uyumu/aktivasyon-tarihi İÇİN
+kullanılır. Uygunsuzluk `WHERE`/`JOIN` içinde elendiğinden bloklu bir ilk aday sonraki uygun
+mesajı AÇLIĞA (starvation) SÜRÜKLEMEZ; mevcut `UPDLOCK/READPAST/ROWLOCK` çoklu-worker güvenliği
+KORUNUR.
+
+**2. Claim sonrası kill-switch yarışı**: Yeni `IEBelgeOutboxLeaseTransitionService.
+TryReleasePolicyBlockedAsync` - politika engeli NORMAL bir teknik hata DEĞİLDİR; mesaj
+`Durum=Bekliyor`'a döner (terminalize EDİLMEZ), claim'de tüketilen deneme GERİ ALINIR (0'ın altına
+DÜŞMEZ), retry churn/alarm gürültüsü ÜRETİLMEZ. `EBelgeArtefaktOlusturmaService` ve
+`EBelgeUblImzalamaService` (YENİ `IEBelgeKurumPolitikaServisi` bağımlılığıyla), lease ownership
+doğrulandıktan SONRA, artifact/SignedReady YAZILMADAN/`EBelgeKaydi.Durum` İLERLETİLMEDEN ÖNCE, AYNI
+açık transaction içinde politikayı TEKRAR doğrular (yeni `AtomikPolitikaBloklu` sonuç türü) - yeni
+bir TOCTOU penceresi AÇILMAZ.
+
+**3. Legacy kayıtlar fail-closed**: `IslemHalaIzinliMiAsync` (bool, karar-yoksa-`true` fail-open)
+KALDIRILDI; yerine zengin `DegerlendirIslemUygunlugunuAsync`
+(`EBelgeIslemPolitikaUygunlukSonucu`/`EBelgeIslemPolitikaUygunlukNedeni`) geldi - karar kaydı
+YOKSA sonuç ARTIK `KararBulunamadi` (fail-closed). `FaturaKesAsync`'in idempotent-tekrar dalı da
+AYNI ilkeyi izler: karşılık gelen karar bulunamayan bir `FaturalamaDurumu=Kesildi` belgesi (Faz
+2B.10 öncesi kesilmiş olabilir) `EBelgeKurumPolitikaKararBulunamadiException`
+(`EBELGE_KURUM_POLICY_DECISION_NOT_FOUND`) fırlatır - otomatik yorumlama YAPILMAZ; ele alınışı
+manuel inceleme + kontrollü backfilldir (bu turda YAZILMADI).
+
+**4. Yöntem-aware idempotency + UBL koşullu doğrulama**: `FaturaKesAsync`'in idempotent-tekrar
+kontrolü artık immutable karar üzerinden dallanır - `YerelSnapshotOlustur=false` kararlarda
+(`Kullanilmayacak`/`HariciMuhasebeSistemi`/global henüz açık değil) EBelgeKaydi bulunmaması BEKLENEN
+durumdur; önceki "EBelgeKaydi bulunamadı" veri-tutarsızlığı hatası KALDIRILDI. Akış YENİDEN
+sıralandı: UBL'ye özgü hazırlık/doğrulama (kurum vergi/adres, cari kart e-Fatura/e-Arşiv bayrağı,
+kanal çözümü, pre-cut validator) ARTIK yalnız `YerelSnapshotOlustur=true` ise çalışır - `GibPortal`
+davranışı DEĞİŞMEDİ.
+
+**5. Politika sürümü karar yarışı**: İmmutable karar PERSIST edilmeden HEMEN ÖNCE, kullanılan
+politika satırının sürümü YENİDEN doğrulanır; değiştiyse `EBelgeKurumPolitikaKararCakismasiException`
+(`EBELGE_KURUM_POLICY_DECISION_CONFLICT`) - TÜM satış kesimi (sayaç dahil) rollback olur.
+
+**Eklenen kritik invariant'lar**: `InactivePolicyNeverClaims`, `PolicyKillSwitchPreventsCommit`,
+`NonLocalRouteIsIdempotent`, `LegacyDecisionNeverProcesses`.
+
+**Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; 552 → 578):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 308, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 556, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 576, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 578, Failed: 0, Skipped: 0  (preflight: SQL+Java+29 kritik invariant testi GEÇTİ)
+```
+
+Not: `nightly` profilinin İLK koşumunda, bu fazın kapsamı DIŞINDAKİ (kurum politikasıyla İLGİSİZ,
+`SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur` - gerçek HTTP timeout
+zamanlamasına duyarlı, ÖNCEDEN VAR OLAN) bir test flaky biçimde başarısız oldu; izole 3/3 ve tam
+profil YENİDEN koşumunda (576/576) sorunsuz geçti - dosyada HİÇBİR değişiklik yapılmadı, test
+atlanmadı/gevşetilmedi.
+
+**Kasıtlı olarak YAPILMAYANLAR**: Kurum politika veri modelini/entegrasyon yöntemlerini baştan
+yazma, HSM/mali mühür geliştirmesi, GİB/özel entegratör adaptörü, claim güvenliğini iki ayrı
+yarışa-açık işlemle çözme, pasif mesajı teknik hata/retry churn döngüsüne sokma, legacy kayıt için
+permissive fallback, kill switch sonrası artifact/SignedReady yazma, pipeline gerekmeyen yöntemde
+UBL alanlarını zorunlu tutma, mevcut lease/stale-worker güvenliğini zayıflatma, aktivasyon
+tarihlerini değiştirme, test skip etme, tüm solution test paketini çalıştırma, frontend/PDF/
+e-posta geliştirmesi.

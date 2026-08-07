@@ -127,14 +127,16 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>GERÇEK EBelgeKurumPolitikaServisi (global kapı HER ZAMAN aktif - uzak geçmiş tarih) - kurum politikasının GERÇEK yönlendirme etkisini test eder.</summary>
-    private static ISatisBelgesiService CreateService(StysAppDbContext dbContext, DateTimeOffset kesimZamani)
+    private static ISatisBelgesiService CreateService(StysAppDbContext dbContext, DateTimeOffset kesimZamani, bool globalAktif = true)
     {
         var mapper = CreateMapper();
         var satisBelgesiRepository = new SatisBelgesiRepository(dbContext, mapper);
         var muhasebeFisRepository = new STYS.Muhasebe.MuhasebeFisleri.Repositories.MuhasebeFisRepository(dbContext, mapper);
         var timeProvider = new FakeTimeProvider(kesimZamani);
         var globalGate = new EBelgeProcessingActivationGate(
-            Options.Create(new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }),
+            Options.Create(globalAktif
+                ? new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }
+                : new EBelgeProcessingOptions { Enabled = false }),
             timeProvider,
             NullLogger<EBelgeProcessingActivationGate>.Instance);
         var kurumPolitikaServisi = new EBelgeKurumPolitikaServisi(dbContext, globalGate, new EBelgeYontemYetenekSaglayici(), timeProvider);
@@ -290,6 +292,270 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
             .ToListAsync();
         Assert.Contains(EBelgeOutboxIsTuru.ArtefaktOlustur, isTurleri);
         Assert.DoesNotContain(EBelgeOutboxIsTuru.UblImzala, isTurleri);
+    }
+
+    // ---- Faz 2B.10.1 görev md.9 - yerel pipeline GEREKTİRMEYEN yöntemlerde ikinci FaturaKesAsync idempotent döner ----
+
+    public static IEnumerable<object[]> YerelPipelineGerektirmeyenSenaryolar() =>
+    [
+        ["Kullanilmayacak"],
+        ["HariciMuhasebeSistemi"],
+        ["GlobalKapali"],
+    ];
+
+    [IntegrationTheory]
+    [Trait("CriticalInvariant", "NonLocalRouteIsIdempotent")]
+    [MemberData(nameof(YerelPipelineGerektirmeyenSenaryolar))]
+    public async Task YerelPipelineGerektirmeyenYontemlerdeIkinciKesimIdempotentDonerSayacTuketmezIkinciKararOlusturmaz(string senaryo)
+    {
+        var globalAktif = senaryo != "GlobalKapali";
+        if (globalAktif)
+        {
+            var yontem = senaryo == "Kullanilmayacak" ? EBelgeEntegrasyonYontemi.Kullanilmayacak : EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi;
+            await SeedPolitikaAsync(yontem, hariciSistemKodu: yontem == EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi ? "ERP-42" : null);
+        }
+        // GlobalKapali senaryosunda politika HİÇ seed edilmez - global kapı zaten kapalı olduğundan
+        // kurum politikası hiç değerlendirilmeden aynı fail-open-olmayan sonuca ulaşılır.
+
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var ilkCtx = CreateDbContext();
+        var ilkService = CreateService(ilkCtx, KesimZamani, globalAktif: globalAktif);
+        var ilkSonuc = await ilkService.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+        Assert.NotNull(ilkSonuc.ResmiFaturaNo);
+
+        await using var sayacCtx1 = CreateDbContext();
+        var sayacIlk = await sayacCtx1.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
+
+        // İKİNCİ FaturaKesAsync çağrısı - ÖNCEDEN "EBelgeKaydi bulunamadı" veri-tutarsızlığı
+        // hatası veriyordu (bkz. görev md.4); artık idempotent olarak mevcut sonucu DÖNMELİDİR.
+        await using var ikinciCtx = CreateDbContext();
+        var ikinciService = CreateService(ikinciCtx, KesimZamani, globalAktif: globalAktif);
+        var ikinciSonuc = await ikinciService.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.Equal(ilkSonuc.ResmiFaturaNo, ikinciSonuc.ResmiFaturaNo);
+
+        await using var sayacCtx2 = CreateDbContext();
+        var sayacIkinci = await sayacCtx2.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
+        Assert.Equal(sayacIlk.SonNumara, sayacIkinci.SonNumara); // sayaç TÜKETİLMEDİ
+
+        await using var kararCtx = CreateDbContext();
+        var kararSayisi = await kararCtx.SatisBelgesiEBelgeKararlari.IgnoreQueryFilters().CountAsync(x => x.SatisBelgesiId == belgeId);
+        Assert.Equal(1, kararSayisi); // ikinci karar OLUŞTURULMADI
+    }
+
+    // ---- GibPortal İÇİN mevcut EBelgeKaydi/snapshot/outbox kontrolü korunur ----
+
+    [IntegrationFact]
+    public async Task GibPortalIkinciKesimMevcutEBelgeKaydiSnapshotOutboxKontroluyleIdempotentDoner()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.GibPortal);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var ilkCtx = CreateDbContext();
+        var ilkService = CreateService(ilkCtx, KesimZamani);
+        var ilkSonuc = await ilkService.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        await using var ikinciCtx = CreateDbContext();
+        var ikinciService = CreateService(ikinciCtx, KesimZamani);
+        var ikinciSonuc = await ikinciService.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.Equal(ilkSonuc.ResmiFaturaNo, ikinciSonuc.ResmiFaturaNo);
+
+        await using var verifyCtx = CreateDbContext();
+        var eBelgeKaydiSayisi = await verifyCtx.EBelgeKayitlari.IgnoreQueryFilters().CountAsync(x => x.SatisBelgesiId == belgeId);
+        Assert.Equal(1, eBelgeKaydiSayisi);
+        var kararSayisi = await verifyCtx.SatisBelgesiEBelgeKararlari.IgnoreQueryFilters().CountAsync(x => x.SatisBelgesiId == belgeId);
+        Assert.Equal(1, kararSayisi);
+    }
+
+    // ---- Immutable karar yoksa (Faz 2B.10 öncesi/legacy) idempotent tekrar fail-closed olur ----
+
+    [IntegrationFact]
+    public async Task ImmutableKararYoksaIdempotentTekrarFailClosedOlur()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.Kullanilmayacak);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var ilkCtx = CreateDbContext();
+        var ilkService = CreateService(ilkCtx, KesimZamani);
+        await ilkService.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        // Faz 2B.10 ÖNCESİ (legacy) kesilmiş bir belgeyi simüle etmek İÇİN, immutable karar
+        // KENDİSİ SİLİNEMEZ (immutability korumalı) - bu yüzden doğrudan SQL İLE (uygulama
+        // katmanını BYPASS ederek) silinir.
+        await using var legacySimCtx = CreateDbContext();
+        await legacySimCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM [muhasebe].[SatisBelgesiEBelgeKararlari] WHERE [SatisBelgesiId] = {belgeId}");
+
+        await using var ikinciCtx = CreateDbContext();
+        var ikinciService = CreateService(ikinciCtx, KesimZamani);
+
+        var ex = await Assert.ThrowsAsync<EBelgeKurumPolitikaKararBulunamadiException>(
+            () => ikinciService.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None));
+
+        Assert.Equal("EBELGE_KURUM_POLICY_DECISION_NOT_FOUND", ex.HataKodu);
+    }
+
+    // ---- Faz 2B.10.1 görev md.10 - yerel pipeline GEREKTİRMEYEN yöntemlerde UBL'ye özgü alanlar zorunlu DEĞİL ----
+
+    [IntegrationFact]
+    public async Task KullanilmayacakYontemindeCariKartEFaturaEArsivBayraklariKapaliOlsaDaSatisKesilebilir()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.Kullanilmayacak);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        // Cari kartın e-Fatura/e-Arşiv bayraklarını KAPAT - GibPortal/yerel pipeline gerekseydi
+        // ResolveEBelgeKanali bunu REDDEDERDİ.
+        await using var mutateCtx = CreateDbContext();
+        var cariKart = await mutateCtx.CariKartlar.SingleAsync(x => x.Id == _musteriKartId);
+        cariKart.EArsivKapsamindaMi = false;
+        cariKart.EFaturaMukellefiMi = false;
+        await mutateCtx.SaveChangesAsync();
+
+        await using var kesimCtx = CreateDbContext();
+        var service = CreateService(kesimCtx, KesimZamani);
+        var sonuc = await service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.NotNull(sonuc.ResmiFaturaNo);
+    }
+
+    [IntegrationFact]
+    public async Task HariciMuhasebeSistemiYontemindeKurumAdresAlaniEksikOlsaDaSatisKesilebilir()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi, hariciSistemKodu: "ERP-42");
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        // Kurumun UBL'ye özgü hukuki adres alanını BOŞALT - yerel pipeline gerekseydi
+        // EnsureUblHazirlikKaynaklari bunu REDDEDERDİ.
+        await using var mutateCtx = CreateDbContext();
+        var kurum = await mutateCtx.Kurumlar.SingleAsync(x => x.Id == _kurumId);
+        kurum.Adres = "";
+        await mutateCtx.SaveChangesAsync();
+
+        await using var kesimCtx = CreateDbContext();
+        var service = CreateService(kesimCtx, KesimZamani);
+        var sonuc = await service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None);
+
+        Assert.NotNull(sonuc.ResmiFaturaNo);
+
+        await using var restoreCtx = CreateDbContext();
+        var kurumRestore = await restoreCtx.Kurumlar.SingleAsync(x => x.Id == _kurumId);
+        kurumRestore.Adres = "Test Kurum Adres " + _uniqueSuffix;
+        await restoreCtx.SaveChangesAsync();
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalYontemindeUblAlanlariHalaZorunludurVeKanalDogruCozulur()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.GibPortal);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var mutateCtx = CreateDbContext();
+        var cariKart = await mutateCtx.CariKartlar.SingleAsync(x => x.Id == _musteriKartId);
+        cariKart.EArsivKapsamindaMi = false;
+        cariKart.EFaturaMukellefiMi = false;
+        await mutateCtx.SaveChangesAsync();
+
+        await using var kesimCtx = CreateDbContext();
+        var service = CreateService(kesimCtx, KesimZamani);
+
+        await Assert.ThrowsAsync<BaseException>(
+            () => service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None));
+
+        await using var verifyCtx = CreateDbContext();
+        var belge = await verifyCtx.SatisBelgeleri.AsNoTracking().SingleAsync(x => x.Id == belgeId);
+        Assert.Null(belge.ResmiFaturaNo);
+    }
+
+    // ---- Politika değerlendirmesi İLE karar persist edilmesi ARASINDA politika sürümü değişirse rollback ----
+
+    [IntegrationFact]
+    public async Task PolitikaSurumuKararDegerlendirmesiIlePersistArasindaDegisirseTumSatisKesimiRollbackOlur()
+    {
+        await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.Kullanilmayacak);
+        var belgeId = await PrepareReadyInvoiceAsync(KesimZamani);
+
+        await using var sayacCtx = CreateDbContext();
+        var sayacOnce = await sayacCtx.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
+
+        // Yarışı simüle etmek İÇİN: gerçek servisin DegerlendirAsync'i çağırdığı ANDAN SONRA ama
+        // persist ANINDAN ÖNCE politika sürümünü değiştiren bir SAHTE karar servisi kullanılır -
+        // gerçek DegerlendirAsync SONUCUNU (eski sürüm bilgisiyle) döner, ama YAN ETKİ olarak
+        // politikayı YENİ bir sürüme yükseltir (başka bir oturumun eşzamanlı PUT'unu simüle eder).
+        await using var kesimCtx = CreateDbContext();
+        var mapper = CreateMapper();
+        var satisBelgesiRepository = new SatisBelgesiRepository(kesimCtx, mapper);
+        var muhasebeFisRepository = new STYS.Muhasebe.MuhasebeFisleri.Repositories.MuhasebeFisRepository(kesimCtx, mapper);
+        var timeProvider = new FakeTimeProvider(KesimZamani);
+        var globalGate = new EBelgeProcessingActivationGate(
+            Options.Create(new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }),
+            timeProvider,
+            NullLogger<EBelgeProcessingActivationGate>.Instance);
+        var gercekPolitikaServisi = new EBelgeKurumPolitikaServisi(kesimCtx, globalGate, new EBelgeYontemYetenekSaglayici(), timeProvider);
+        var yarisServisi = new PolitikaSurumunuDegistirenKarariServisi(gercekPolitikaServisi, _kurumId);
+
+        var service = new SatisBelgesiService(
+            satisBelgesiRepository,
+            kesimCtx,
+            mapper,
+            muhasebeFisRepository,
+            null!,
+            new SatisBelgesiMuhasebeTestSupport.FakeUserAccessScopeService(),
+            NullLogger<SatisBelgesiService>.Instance,
+            new SatisBelgesiMuhasebeTestSupport.NoOpDomainOperationLogger(),
+            timeProvider,
+            Options.Create(new EBelgeUblOptions { Enabled = true }),
+            kurumPolitikaServisi: yarisServisi);
+
+        await Assert.ThrowsAsync<EBelgeKurumPolitikaKararCakismasiException>(
+            () => service.FaturaKesAsync(belgeId, new FaturaKesRequest { SeriKodu = SeriKodu }, CancellationToken.None));
+
+        await using var verifyCtx = CreateDbContext();
+        var belge = await verifyCtx.SatisBelgeleri.AsNoTracking().SingleAsync(x => x.Id == belgeId);
+        Assert.Null(belge.ResmiFaturaNo); // rollback oldu
+
+        var sayacSonra = await verifyCtx.KurumFaturaNumaraSayaclari.AsNoTracking()
+            .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
+        Assert.Equal(sayacOnce.SonNumara, sayacSonra.SonNumara); // sayaç TÜKETİLMEDİ
+
+        var kararSayisi = await verifyCtx.SatisBelgesiEBelgeKararlari.IgnoreQueryFilters().CountAsync(x => x.SatisBelgesiId == belgeId);
+        Assert.Equal(0, kararSayisi); // immutable karar OLUŞTURULMADI
+    }
+
+    /// <summary>DegerlendirAsync'i gerçek servise devreder, ama YAN ETKİ olarak (dönmeden ÖNCE) politikanın PolitikaSurumu'nu artırır - "değerlendirme İLE persist ARASINDA politika değişti" yarışını deterministik olarak simüle eder.</summary>
+    private sealed class PolitikaSurumunuDegistirenKarariServisi : IEBelgeKurumPolitikaServisi
+    {
+        private readonly IEBelgeKurumPolitikaServisi _inner;
+        private readonly int _kurumId;
+        private bool _degistirildi;
+
+        public PolitikaSurumunuDegistirenKarariServisi(IEBelgeKurumPolitikaServisi inner, int kurumId)
+        {
+            _inner = inner;
+            _kurumId = kurumId;
+        }
+
+        public async Task<EBelgeKurumPolitikaKarari> DegerlendirAsync(int kurumId, DateTime belgeTarihi, CancellationToken cancellationToken = default)
+        {
+            var sonuc = await _inner.DegerlendirAsync(kurumId, belgeTarihi, cancellationToken);
+
+            if (!_degistirildi)
+            {
+                _degistirildi = true;
+                await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+                await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [PolitikaSurumu] = [PolitikaSurumu] + 1 WHERE [KurumId] = {_kurumId}", cancellationToken);
+            }
+
+            return sonuc;
+        }
+
+        public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default) =>
+            _inner.DegerlendirIslemUygunlugunuAsync(kurumId, eBelgeKaydiId, isTuru, cancellationToken);
     }
 
     // ---- Politika yapılandırılmadıysa: satış TAMAMLANMAZ, hiçbir kalıcı iz bırakmaz ----

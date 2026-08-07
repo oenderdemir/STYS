@@ -24,5 +24,9 @@ public static class EBelgeCriticalInvariantManifest
         "InstitutionPolicyFailClosed",
         "InstitutionPolicyTenantIsolation",
         "PortalRouteNeverSignsLocally",
+        "InactivePolicyNeverClaims",
+        "PolicyKillSwitchPreventsCommit",
+        "NonLocalRouteIsIdempotent",
+        "LegacyDecisionNeverProcesses",
     ];
 }

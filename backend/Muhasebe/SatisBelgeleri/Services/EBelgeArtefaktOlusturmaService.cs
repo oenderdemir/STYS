@@ -226,6 +226,27 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
         }
 
+        // Faz 2B.10.1 görev md.7 - lease ownership doğrulandıktan SONRA, artifact/EBelgeKaydi
+        // DEĞİŞTİRİLMEDEN ÖNCE, AYNI transaction içinde kurum politikası TEKRAR doğrulanır -
+        // render/sidecar çağrısı (Faz 2) SÜRESİNCE politika kapanmış OLABİLİR. Uygun değilse:
+        // artifact insert EDİLMEZ, EBelgeKaydi.Durum DEĞİŞMEZ, outbox KENDİ transaction'ında
+        // güvenli bekleme durumuna alınır (terminalize EDİLMEZ).
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, cancellationToken);
+        if (!uygunluk.UygunMu)
+        {
+            var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(
+                talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, talep.KilitToken, cancellationToken);
+
+            if (!geriAlindi)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
+            }
+
+            await tx.CommitAsync(cancellationToken);
+            return EBelgeArtefaktOlusturmaSonucu.AtomikPolitikaBloklu();
+        }
+
         // Taze, TRANSACTION İÇİNDE izlenen (tracked) bir EBelgeKaydi al - Faz 1'deki referans,
         // önceki bir denemede rollback edilmiş olabilir (stale tracking riskini önler).
         var kayit = await _dbContext.Set<EBelgeKaydi>()

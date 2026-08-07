@@ -43,6 +43,12 @@ public class EBelgeTestMetadataContractTests
         // katmanlarında kanıtladığından bilinçli bir tekrardır.
         "InstitutionPolicyTenantIsolation",
 
+        // Faz 2B.10.2 - global signing gate'in kuyruklu imzalamayı engellediği İKİ AYRI senaryoda
+        // AYRI AYRI kanıtlanır: (1) handler BAŞLAMADAN erken kapı (gate kapalıyken hiç işlenmeye
+        // başlamaz), (2) imza SIRASINDA kapanan gate'in commit-öncesi (ikinci) kontrol noktasında
+        // yakalanması (SignedReady commit edilmez). Aynı invariant, iki farklı savunma noktası.
+        "SigningGatePreventsQueuedSigning",
+
         // Faz 2B.10.1 - kill switch'in commit'i engellediği İKİ AYRI outbox iş türünde
         // (ArtefaktOlustur - EBelgeArtefaktOlusturmaServiceIntegrationTests VE UblImzala -
         // EBelgeUblImzalamaServiceIntegrationTests) AYRI AYRI kanıtlanır - aynı invariant, iki

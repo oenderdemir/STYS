@@ -221,6 +221,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             new EBelgeOutboxLeaseTransitionService(dbContext),
             signingActivationGate ?? FakeSigningActivationGate.Kapali,
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext, timeProvider),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
             timeProvider ?? TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
     }
@@ -234,6 +235,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         private readonly bool _sonuc;
         private FakeSigningActivationGate(bool sonuc) => _sonuc = sonuc;
         public bool ShouldCreateSigningMessage() => _sonuc;
+        public bool CanSignNow() => _sonuc;
     }
 
     private sealed class FixedTimeProvider : TimeProvider
@@ -733,6 +735,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
             new EBelgeOutboxLeaseTransitionService(dbContext),
             FakeSigningActivationGate.Kapali,
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
             TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
@@ -921,7 +924,8 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         var service = new EBelgeArtefaktOlusturmaService(
             dbContext, new EBelgeCanonicalSnapshotV2Reader(), renderer,
             new EBelgeOutboxLeaseTransitionService(dbContext), FakeSigningActivationGate.Kapali,
-            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext), TimeProvider.System,
+            EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext), TimeProvider.System,
             NullLogger<EBelgeArtefaktOlusturmaService>.Instance);
 
         // Geçici hata yolu (Gecici) EBelgeKaydi'yı hiç DEĞİŞTİRMEDİĞİNDEN, atomik transaction/lease
@@ -1129,5 +1133,68 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
 
         Assert.NotNull(yenidenClaim);
         Assert.Equal(claim.OutboxMesajiId, yenidenClaim!.OutboxMesajiId);
+    }
+
+    // ---- Faz 2B.10.2 görev md.10 - GERÇEK iki-transaction eşzamanlılık testi ----
+
+    /// <summary>
+    /// Faz 2B.10.2 görev md.10 - yukarıdaki `ClaimSonrasiPolitikaPasifeAlinirsaArtefaktYazilmazVeKaliciHataOlusmaz`
+    /// testi ("politika ÖNCE deaktive edilir, SONRA servis çağrılır") GERÇEK TOCTOU penceresini test
+    /// ETMEZ - sıralı bir simülasyondur. Bu test onun yerine GERÇEK, örtüşen iki transaction kurar:
+    /// (1) "admin" bağlantısı politika satırını AÇIK bir transaction içinde AktifMi=0 yapar ama
+    /// COMMIT ETMEZ (satır kilidi TUTULUR), (2) worker'ın GERÇEK `OlusturAsync` çağrısı AYRI bir
+    /// Task olarak BAŞLATILIR - outbox sahiplik kilidini alır, GERÇEK render/XSD/Schematron işini
+    /// tamamlar, kendi transaction'ını açar ve `IEBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync`
+    /// çağrısında admin'in tuttuğu satır kilidine ÇARPARAK GERÇEKTEN BLOKE OLUR. Bu blokajın GERÇEK
+    /// olduğu, worker task'ının makul bir süre içinde TAMAMLANMADIĞI doğrulanarak KANITLANIR (SQL
+    /// Server bloke etmeseydi task ANINDA dönerdi). Admin'in transaction'ı COMMIT edildikten SONRA
+    /// worker'ın devam edip GÜNCEL (pasif) politikayı GÖRDÜĞÜ ve artefakt YAZMADIĞI doğrulanır - bu,
+    /// "deaktivasyon çağrısı başarıyla döndükten SONRA eski politikaya göre HİÇBİR artefakt commit
+    /// edilemez" garantisinin (görev md.17) GERÇEK bir kanıtıdır, salt sıralı bir simülasyon DEĞİL.
+    /// </summary>
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "PolicyKillSwitchPreventsCommit")]
+    public async Task GercekEszamanliKillSwitchWorkerBlokeEderVeArtefaktYazdirmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var eBelgeKaydiId = await SeedEBelgeKaydiWithV2SnapshotAsync(dbContext);
+        var claim = await SeedAndClaimOutboxAsync(dbContext, eBelgeKaydiId);
+
+        await using var adminCtx = CreateDbContext();
+        await using var adminTx = await adminCtx.Database.BeginTransactionAsync();
+        await adminCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 0 WHERE [KurumId] = {_kurumId}");
+
+        await using var workerCtx = CreateDbContext();
+        var service = CreateService(workerCtx);
+        var workerTask = Task.Run(() => service.OlusturAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId)));
+
+        // Worker, render/XSD/Schematron'u tamamladıktan SONRA kendi transaction'ını açıp politika
+        // satırını kilitlemeye ÇALIŞIRKEN admin'in TUTTUĞU kilide çarpıp BLOKE OLMALIDIR - bu
+        // yüzden makul bir süre (2 sn) içinde TAMAMLANMAMASI beklenir (gerçek SQL blokajının
+        // KANITI - task race'i DEĞİL, gerçek sunucu-taraflı bekleme).
+        var erkenTamamlandiMi = await Task.WhenAny(workerTask, Task.Delay(TimeSpan.FromSeconds(2))) == workerTask;
+        Assert.False(erkenTamamlandiMi, "worker, admin'in tuttuğu politika satırı kilidine ÇARPMADI - test GERÇEK bir TOCTOU penceresi KURAMADI.");
+
+        await adminTx.CommitAsync();
+
+        var sonuc = await workerTask;
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeArtefaktOlusturmaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId));
+
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.SnapshotHazir, kayit.Durum); // İLERLEMEDİ
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, outbox.Durum);
+        Assert.Equal(0, outbox.DenemeSayisi);
+
+        await using var restoreCtx = CreateDbContext();
+        await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
     }
 }

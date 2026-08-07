@@ -42,6 +42,7 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
 
     private readonly IEBelgeUblPreCutValidator _ublPreCutValidator;
     private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
+    private readonly IEBelgeKurumPolitikaTransactionGuard _kurumPolitikaGuard;
 
     /// <summary>Satış belgesi satırlarında desteklenen KDV uygulama tipleri.</summary>
     private static readonly HashSet<int> DesteklenenKdvUygulamaTipleri =
@@ -97,7 +98,8 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         TimeProvider? timeProvider = null,
         IOptions<EBelgeUblOptions>? eBelgeUblOptions = null,
         IEBelgeUblPreCutValidator? ublPreCutValidator = null,
-        IEBelgeKurumPolitikaServisi? kurumPolitikaServisi = null)
+        IEBelgeKurumPolitikaServisi? kurumPolitikaServisi = null,
+        IEBelgeKurumPolitikaTransactionGuard? kurumPolitikaGuard = null)
         : base(satisBelgesiRepository, mapper)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
@@ -126,6 +128,11 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<EBelgeProcessingActivationGate>.Instance),
             new EBelgeYontemYetenekSaglayici(),
             _timeProvider);
+
+        // Faz 2B.10.2 görev md.8/md.9 - satış kararı PERSIST edilmeden önce kurum politika
+        // satırını KİLİTLEYEN transaction-scope guard - `_kurumPolitikaServisi` İLE AYNI
+        // opsiyonel-parametre/production-safe-varsayılan deseni (bkz. yukarıdaki gerekçe).
+        _kurumPolitikaGuard = kurumPolitikaGuard ?? new EBelgeKurumPolitikaTransactionGuard(_db);
     }
 
     // ── Satirları include eden yardımcı ──
@@ -1194,6 +1201,38 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
             var politikaKarari = await _kurumPolitikaServisi.DegerlendirAsync(belge.KurumId, planlananKesimTarihiTrt, cancellationToken);
             EnsurePolitikaEngelDegil(politikaKarari);
 
+            // Faz 2B.10.2 görev md.8/md.9 - yukarıdaki `DegerlendirAsync` KENDİ İÇİNDE unlocked
+            // (READ COMMITTED) bir SELECT ile karar verir; bu, "aynı transaction içinde okundu"
+            // olması bile TEK BAŞINA bir serileştirme GARANTİSİ VERMEZ - başka bir oturum, bu an
+            // İLE sayaç/karar/EBelgeKaydi yazımı ARASINDA politika satırını değiştirebilir/
+            // deaktive edebilir. Bu yüzden, kullanılan politika satırı (varsa) SAYAÇ SATIRI
+            // KİLİTLENMEDEN ÖNCE (görev md.9 kilit sırası: SatisBelgesi satırı -> Kurum politika
+            // satırı -> sayaç/karar/EBelgeKaydi yazımları) AYNI transaction içinde WITH (UPDLOCK,
+            // HOLDLOCK, ROWLOCK) İLE KİLİTLENİR ve karar ANINDAKİ TÜM karşılaştırılabilir alanlarla
+            // (Id/KurumId/PolitikaSurumu/AktifMi/EntegrasyonYontemi/AktivasyonYerelTarihi) BİREBİR
+            // karşılaştırılır. Kilit bu transaction commit/rollback edilene kadar TUTULUR - bu
+            // noktadan SONRA politika satırı BAŞKA bir yazıcı tarafından DEĞİŞTİRİLEMEZ. Herhangi
+            // bir alan uyuşmazsa TÜM işlem (sayaç dahil) rollback edilir - eski bir politika
+            // sürümüne göre karar YAZILMAZ, sayaç TÜKETİLMEZ (bkz. aşağıdaki
+            // `EBelgeKurumPolitikaKararCakismasiException`).
+            if (politikaKarari.PolitikaId.HasValue)
+            {
+                var kilitliPolitika = await _kurumPolitikaGuard.KilitleVeOkuAsync(belge.KurumId, cancellationToken);
+
+                var kilitliPolitikaEslesiyorMu = kilitliPolitika is not null
+                    && kilitliPolitika.Id == politikaKarari.PolitikaId.Value
+                    && kilitliPolitika.KurumId == belge.KurumId
+                    && kilitliPolitika.PolitikaSurumu == politikaKarari.PolitikaSurumu
+                    && kilitliPolitika.AktifMi == politikaKarari.AktifMi
+                    && kilitliPolitika.EntegrasyonYontemi == politikaKarari.EntegrasyonYontemi
+                    && kilitliPolitika.AktivasyonYerelTarihi == politikaKarari.AktivasyonYerelTarihi;
+
+                if (!kilitliPolitikaEslesiyorMu)
+                {
+                    throw new EBelgeKurumPolitikaKararCakismasiException();
+                }
+            }
+
             // Faz 2B.10.1 görev md.10 - UBL'ye özgü hazırlık/doğrulama (kurum vergi/adres alanları,
             // cari kart e-Fatura/e-Arşiv bayrakları, e-belge kanalı çözümü, pre-cut validator)
             // ARTIK yalnız politika kararı yerel snapshot üretimini GEREKTİRİYORSA çalışır -
@@ -1294,24 +1333,10 @@ WHERE [IsDeleted] = 0 AND [KurumId] = {belge.KurumId} AND [MaliYil] = {maliYil} 
                 TicariBelgeMuhasebeDurumu.Onaylandi,
                 TicariBelgeFaturalamaDurumu.Kesildi);
 
-            // Faz 2B.10.1 görev md.11 - karar PERSIST edilmeden hemen önce, kullanılan politika
-            // satırının (varsa) HÂLÂ AYNI sürümde olduğu YENİDEN doğrulanır - politika
-            // değerlendirmesi İLE bu an ARASINDA (aynı transaction içinde bile, READ COMMITTED
-            // altında) başka bir oturum politikayı değiştirmiş OLABİLİR. Eşleşmiyorsa TÜM işlem
-            // (sayaç dahil) rollback edilir - eski bir politika sürümüne göre karar YAZILMAZ.
-            if (politikaKarari.PolitikaId.HasValue)
-            {
-                var guncelPolitikaSurumu = await _db.Set<KurumEBelgePolitikasi>()
-                    .AsNoTracking()
-                    .Where(p => p.Id == politikaKarari.PolitikaId.Value)
-                    .Select(p => (int?)p.PolitikaSurumu)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                if (guncelPolitikaSurumu != politikaKarari.PolitikaSurumu)
-                {
-                    throw new EBelgeKurumPolitikaKararCakismasiException();
-                }
-            }
+            // Faz 2B.10.2 görev md.8 - politika satırı serileştirme kilidi/karşılaştırması ARTIK
+            // sayaç kilidinden ÖNCE yapılır (bkz. yukarıdaki blok, görev md.9 kilit sırası) - bu
+            // eski, sayaç kilidinden SONRA çalışan ve yalnız `PolitikaSurumu` sütununu unlocked
+            // okuyan yeniden-kontrol KALDIRILDI (yetersiz bir serileştirme garantisiydi).
 
             // Faz 2B.10 görev md.10/md.11 - immutable karar snapshot'ı YÖNTEMDEN BAĞIMSIZ HER
             // ZAMAN oluşturulur (davranış matrisi md.11 - "Karar kaydı oluştur" HER dalda ilk

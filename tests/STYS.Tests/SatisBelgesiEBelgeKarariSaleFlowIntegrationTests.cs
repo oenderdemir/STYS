@@ -472,7 +472,21 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
 
     // ---- Politika değerlendirmesi İLE karar persist edilmesi ARASINDA politika sürümü değişirse rollback ----
 
+    /// <summary>
+    /// Faz 2B.10.2 görev md.8/md.12 - GERÇEK İKİ `StysAppDbContext` (Context A: satış akışı,
+    /// Context B: "eşzamanlı admin PUT'u" side-effect'i) kullanır - `DegerlendirAsync`'in kendisi
+    /// SATIŞ akışının aynı transaction'ının PARÇASI olduğundan (ve unlocked bir SELECT olduğundan),
+    /// Context B'nin güncellemesini `DegerlendirAsync` ÇAĞRISI TAMAMLANDIKTAN HEMEN SONRA ama satış
+    /// akışının kendi `IEBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync` kilidini almasından
+    /// ÖNCE, KISA ÖMÜRLÜ ve HEMEN COMMIT EDİLEN bir transaction ile uygulayan sahte bir karar
+    /// servisi (`PolitikaSurumunuDegistirenKarariServisi`) kullanılır - bu, gerçek iki-transaction
+    /// bir yarışı DETERMİNİSTİK biçimde kurar (Context B'nin update'i Context A'nın GUARD kilidini
+    /// almasından ÖNCE zaten COMMIT EDİLMİŞ olur, böylece guard GÜNCEL - değişmiş - satırı görür).
+    /// Artık eski, salt `PolitikaSurumu` sütununu unlocked yeniden okuyan kontrol DEĞİL, YENİ
+    /// guard-tabanlı kilit+çok-alanlı karşılaştırma test edilir.
+    /// </summary>
     [IntegrationFact]
+    [Trait("CriticalInvariant", "PolicyDecisionVersionIsSerialized")]
     public async Task PolitikaSurumuKararDegerlendirmesiIlePersistArasindaDegisirseTumSatisKesimiRollbackOlur()
     {
         await SeedPolitikaAsync(EBelgeEntegrasyonYontemi.Kullanilmayacak);
@@ -483,7 +497,7 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
             .SingleAsync(x => x.KurumId == _kurumId && x.MaliYil == 2026 && x.SeriKodu == SeriKodu);
 
         // Yarışı simüle etmek İÇİN: gerçek servisin DegerlendirAsync'i çağırdığı ANDAN SONRA ama
-        // persist ANINDAN ÖNCE politika sürümünü değiştiren bir SAHTE karar servisi kullanılır -
+        // guard kilidinden ÖNCE politika sürümünü değiştiren bir SAHTE karar servisi kullanılır -
         // gerçek DegerlendirAsync SONUCUNU (eski sürüm bilgisiyle) döner, ama YAN ETKİ olarak
         // politikayı YENİ bir sürüme yükseltir (başka bir oturumun eşzamanlı PUT'unu simüle eder).
         await using var kesimCtx = CreateDbContext();
@@ -556,6 +570,9 @@ public class SatisBelgesiEBelgeKarariSaleFlowIntegrationTests : IAsyncLifetime
 
         public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default) =>
             _inner.DegerlendirIslemUygunlugunuAsync(kurumId, eBelgeKaydiId, isTuru, cancellationToken);
+
+        public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuKilitliAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, EBelgeKilitliPolitikaSnapshot? kilitliPolitika, CancellationToken cancellationToken = default) =>
+            _inner.DegerlendirIslemUygunlugunuKilitliAsync(kurumId, eBelgeKaydiId, isTuru, kilitliPolitika, cancellationToken);
     }
 
     // ---- Politika yapılandırılmadıysa: satış TAMAMLANMAZ, hiçbir kalıcı iz bırakmaz ----

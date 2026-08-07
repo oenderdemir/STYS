@@ -184,7 +184,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE [muhasebe].[EBelgeOutboxMesajlari] SET [KilitBitisZamaniUtc] = DATEADD(MINUTE, -1, SYSUTCDATETIME()) WHERE [Id] = {outboxMesajiId}");
 
-    private EBelgeUblImzalamaService CreateService(StysAppDbContext dbContext, TimeProvider? timeProvider = null)
+    private EBelgeUblImzalamaService CreateService(StysAppDbContext dbContext, TimeProvider? timeProvider = null, IEBelgeSigningActivationGate? signingActivationGate = null)
     {
         if (_sidecarFixture.BaseUrl is null)
         {
@@ -205,6 +205,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             schematronValidator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext, tp),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            signingActivationGate ?? EBelgeTestSigningActivationGate.Acik,
             tp,
             NullLogger<EBelgeUblImzalamaService>.Instance);
     }
@@ -525,6 +527,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new SaxonSidecarEBelgeSchematronValidator(http),
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -558,6 +562,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new AlwaysInvalidSchematronValidator(),
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -598,6 +604,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             probe,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -632,6 +640,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             rowChanger,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -865,6 +875,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new AlwaysInvalidSchematronValidator(), // dogrulama erken başarısız olduğundan asla çağrılmamalı
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -923,6 +935,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             new AlwaysInvalidSchematronValidator(), // hash uyuşmazlığında asla çağrılmamalı
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1009,6 +1023,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             swapper,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1074,6 +1090,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             softDeleter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1138,6 +1156,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             corrupter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1190,6 +1210,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             counter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1227,6 +1249,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             softDeleter,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1380,6 +1404,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             replacer,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1423,6 +1449,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1462,6 +1490,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1501,6 +1531,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1540,6 +1572,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1741,6 +1775,8 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             mutator,
             new EBelgeOutboxLeaseTransitionService(dbContext),
             EBelgeKurumPolitikaTestSupport.CreateAlwaysAktifServisi(dbContext),
+            new EBelgeKurumPolitikaTransactionGuard(dbContext),
+            EBelgeTestSigningActivationGate.Acik,
             TimeProvider.System,
             NullLogger<EBelgeUblImzalamaService>.Instance);
 
@@ -1792,6 +1828,164 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         await using var restoreCtx = CreateDbContext();
         await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
+    }
+
+    /// <summary>
+    /// Faz 2B.10.2 görev md.10 - yukarıdaki `ClaimSonrasiImzaSirasindaPolitikaPasifeAlinirsaSignedReadyYazilmaz`
+    /// testi ("politika ÖNCE deaktive edilir, SONRA servis çağrılır") sıralı bir simülasyondur -
+    /// GERÇEK TOCTOU penceresini KANITLAMAZ. Bu test GERÇEK, örtüşen iki transaction kurar: (1)
+    /// "admin" bağlantısı politika satırını AÇIK bir transaction içinde AktifMi=0 yapar ama COMMIT
+    /// ETMEZ, (2) worker'ın GERÇEK `ImzalaAsync` çağrısı AYRI bir Task olarak başlatılır - erken
+    /// gate kontrolünü geçer (gate AÇIK), Faz1/Faz2'yi (imza/bağımsız doğrulama - tx DIŞI) GERÇEKTEN
+    /// tamamlar, KISA commit transaction'ını açar ve politika satırını kilitlemeye çalışırken
+    /// admin'in tuttuğu kilide ÇARPARAK GERÇEKTEN BLOKE OLUR - bu, worker task'ının makul bir süre
+    /// içinde TAMAMLANMADIĞI doğrulanarak KANITLANIR. Admin COMMIT edildikten SONRA worker'ın GÜNCEL
+    /// (pasif) politikayı GÖRDÜĞÜ ve SignedReady YAZMADIĞI doğrulanır.
+    /// </summary>
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "PolicyKillSwitchPreventsCommit")]
+    public async Task GercekEszamanliKillSwitchImzaSirasindaWorkerBlokeEderVeSignedReadyYazdirmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        await using var adminCtx = CreateDbContext();
+        await using var adminTx = await adminCtx.Database.BeginTransactionAsync();
+        await adminCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 0 WHERE [KurumId] = {_kurumId}");
+
+        await using var workerCtx = CreateDbContext();
+        var service = CreateService(workerCtx);
+        var workerTask = Task.Run(() => service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId)));
+
+        var erkenTamamlandiMi = await Task.WhenAny(workerTask, Task.Delay(TimeSpan.FromSeconds(2))) == workerTask;
+        Assert.False(erkenTamamlandiMi, "worker, admin'in tuttuğu politika satırı kilidine ÇARPMADI - test GERÇEK bir TOCTOU penceresi KURAMADI.");
+
+        await adminTx.CommitAsync();
+
+        var sonuc = await workerTask;
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum); // İLERLEMEDİ
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, outbox.Durum);
+        Assert.Equal(0, outbox.DenemeSayisi);
+
+        await using var restoreCtx = CreateDbContext();
+        await restoreCtx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
+    }
+
+    // ---- Faz 2B.10.2 görev md.5-7/md.11 - global signing gate, GERÇEK commit-öncesi kapı ----
+
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "SigningGatePreventsQueuedSigning")]
+    public async Task SigningGateKapaliykenKuyruktakiMesajHicIslenmeyeBaslamazVeSignedReadyYazilmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, unsignedArtifact) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        var service = CreateService(dbContext, signingActivationGate: EBelgeTestSigningActivationGate.Kapali);
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        // Gate handler BAŞLAMADAN kapalı bulunduğundan, unsigned kaynak artefakt bile OKUNMAMIŞ
+        // olmalıdır - erken kapı, imza/render işine HİÇ GİRMEDEN devreye girer.
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum); // İLERLEMEDİ
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, outbox.Durum); // terminalize EDİLMEDİ
+        Assert.Null(outbox.KilitToken);
+        Assert.Equal(0, outbox.DenemeSayisi); // claim'de tüketilen deneme GERİ ALINDI - retry churn YOK
+    }
+
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "SigningGatePreventsQueuedSigning")]
+    public async Task SigningGateImzaSirasindaKapanirsaSignedReadyCommitEdilmezImzaSonucuDiscardEdilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        // Handler BAŞLARKEN gate AÇIK (erken kontrolü geçer) - imza/bağımsız doğrulama (tx dışı)
+        // sırasında KAPANIR - commit-öncesi (ikinci) kontrol bunu YAKALAMALIDIR.
+        var toggleGate = new ToggleSigningActivationGate(acikSayisi: 1);
+        var service = CreateService(dbContext, signingActivationGate: toggleGate);
+        var sonuc = await service.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, sonuc!.SonucTuru);
+        Assert.True(toggleGate.CagriSayisi >= 2, "commit-öncesi (ikinci) gate kontrolü hiç ÇAĞRILMADI.");
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.False(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady));
+
+        var kayit = await verifyCtx.EBelgeKayitlari.AsNoTracking().SingleAsync(x => x.Id == eBelgeKaydiId);
+        Assert.Equal(EBelgeKaydiDurumu.UnsignedUblHazir, kayit.Durum);
+
+        var outbox = await verifyCtx.EBelgeOutboxMesajlari.AsNoTracking().SingleAsync(x => x.Id == claim.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, outbox.Durum);
+        Assert.Equal(0, outbox.DenemeSayisi);
+    }
+
+    [IntegrationFact]
+    public async Task SigningGateTekrarAcilincaKuyruktakiMesajYenidenIslenebilirVeSignedReadyUretilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var (eBelgeKaydiId, _) = await SeedUnsignedArtifactAsync(dbContext);
+        var claim = await SeedAndClaimUblImzalaOutboxAsync(dbContext, eBelgeKaydiId);
+
+        var kapaliService = CreateService(dbContext, signingActivationGate: EBelgeTestSigningActivationGate.Kapali);
+        var bloklandi = await kapaliService.ImzalaAsync(TalepFromClaim(claim, _kurumId, eBelgeKaydiId));
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, bloklandi!.SonucTuru);
+
+        // Gate tekrar açılır - claim filtresi mesajı ARTIK yeniden seçebilmelidir.
+        var yenidenClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+        Assert.NotNull(yenidenClaim);
+        Assert.Equal(claim.OutboxMesajiId, yenidenClaim!.OutboxMesajiId);
+
+        var acikService = CreateService(dbContext, signingActivationGate: EBelgeTestSigningActivationGate.Acik);
+        var sonuc = await acikService.ImzalaAsync(TalepFromClaim(yenidenClaim, _kurumId, eBelgeKaydiId));
+
+        Assert.NotNull(sonuc);
+        Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikBasarili, sonuc!.SonucTuru);
+
+        await using var verifyCtx = CreateDbContext();
+        Assert.True(await verifyCtx.EBelgeArtifactlari.IgnoreQueryFilters().AnyAsync(a => a.EBelgeKaydiId == eBelgeKaydiId && a.ArtifactAsamasi == EBelgeArtifactAsamasi.SignedReady && !a.IsDeleted));
+    }
+
+    /// <summary>Faz 2B.10.2 görev md.11 - `CanSignNow()`'ı belirli sayıda çağrıdan SONRA kapatan, deterministik gate geçiş test double'ı (config hot-reload GEREKMEZ).</summary>
+    private sealed class ToggleSigningActivationGate : IEBelgeSigningActivationGate
+    {
+        private readonly int _acikSayisi;
+        private int _cagriSayisi;
+
+        public ToggleSigningActivationGate(int acikSayisi) => _acikSayisi = acikSayisi;
+
+        public int CagriSayisi => _cagriSayisi;
+
+        public bool ShouldCreateSigningMessage() => true;
+
+        public bool CanSignNow()
+        {
+            _cagriSayisi++;
+            return _cagriSayisi <= _acikSayisi;
+        }
     }
 
     [IntegrationFact]

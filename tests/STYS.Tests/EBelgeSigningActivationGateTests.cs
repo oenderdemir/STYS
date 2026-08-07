@@ -105,4 +105,45 @@ public class EBelgeSigningActivationGateTests
 
         Assert.False(gate.ShouldCreateSigningMessage());
     }
+
+    // ---- Faz 2B.10.2 görev md.5 - CanSignNow() (commit-öncesi kapı), ShouldCreateSigningMessage()
+    // (mesaj-oluşturma-anı kapısı) İLE AYNI paylaşılan çekirdeği (`Degerlendir()`) kullanır - tek
+    // kaynak-of-truth: Enabled/NotBeforeLocalDate/Europe/Istanbul/TimeProvider algoritması İKİ
+    // YERDE YENİDEN YAZILMAZ. Bu testler ikisinin HER ZAMAN AYNI sonucu döndüğünü kanıtlar. ----
+
+    [Theory]
+    [InlineData(true, "2026-09-15", 2027, 1, 1)] // gate açık
+    [InlineData(false, "2026-09-15", 2027, 1, 1)] // Enabled=false
+    [InlineData(true, "2030-01-01", 2027, 1, 1)] // tarih henüz gelmedi
+    [InlineData(true, "gecersiz-tarih", 2027, 1, 1)] // fail-closed geçersiz config
+    public void CanSignNowVeShouldCreateSigningMessageHerZamanAyniSonucuDoner(
+        bool enabled, string notBeforeLocalDate, int yil, int ay, int gun)
+    {
+        var gate = CreateGate(
+            new EBelgeSigningOptions { Enabled = enabled, NotBeforeLocalDate = notBeforeLocalDate },
+            new DateTimeOffset(yil, ay, gun, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(gate.ShouldCreateSigningMessage(), gate.CanSignNow());
+    }
+
+    [Fact]
+    public void CanSignNowGecersizConfigIleFailClosedOlur()
+    {
+        var gate = CreateGate(
+            new EBelgeSigningOptions { Enabled = true, NotBeforeLocalDate = null },
+            new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        Assert.False(gate.CanSignNow());
+    }
+
+    [Fact]
+    public void CanSignNowAcikPencerdeTrueDoner()
+    {
+        var istanbul15EylulBaslangic = new DateTimeOffset(2026, 9, 15, 0, 0, 0, TimeSpan.FromHours(3));
+        var gate = CreateGate(
+            new EBelgeSigningOptions { Enabled = true, NotBeforeLocalDate = "2026-09-15" },
+            istanbul15EylulBaslangic.ToUniversalTime());
+
+        Assert.True(gate.CanSignNow());
+    }
 }

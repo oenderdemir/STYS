@@ -136,6 +136,8 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
     private readonly IEBelgeSchematronValidator _schematronValidator;
     private readonly IEBelgeOutboxLeaseTransitionService _leaseTransitionService;
     private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
+    private readonly IEBelgeKurumPolitikaTransactionGuard _kurumPolitikaGuard;
+    private readonly IEBelgeSigningActivationGate _signingActivationGate;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EBelgeUblImzalamaService> _logger;
 
@@ -147,6 +149,8 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         IEBelgeSchematronValidator schematronValidator,
         IEBelgeOutboxLeaseTransitionService leaseTransitionService,
         IEBelgeKurumPolitikaServisi kurumPolitikaServisi,
+        IEBelgeKurumPolitikaTransactionGuard kurumPolitikaGuard,
+        IEBelgeSigningActivationGate signingActivationGate,
         TimeProvider timeProvider,
         ILogger<EBelgeUblImzalamaService> logger)
     {
@@ -157,6 +161,8 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         _schematronValidator = schematronValidator;
         _leaseTransitionService = leaseTransitionService;
         _kurumPolitikaServisi = kurumPolitikaServisi;
+        _kurumPolitikaGuard = kurumPolitikaGuard;
+        _signingActivationGate = signingActivationGate;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -165,6 +171,17 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
     {
         ArgumentNullException.ThrowIfNull(talep);
         talep = ValidateTalepAndNormalize(talep);
+
+        // Faz 2B.10.2 görev md.7 - handler BAŞLAMADAN (pahalı unsigned-artifact okuması/imza
+        // operasyonundan ÖNCE), global signing gate KONTROL edilir - kuyrukta bekleyen bir
+        // UblImzala mesajı, gate KAPALIYKEN hiç İŞLENMEYE BAŞLAMAZ. Bu, md.4'teki İKİNCİ (commit
+        // öncesi) kontrol noktasının EK, ERKEN bir savunma katmanıdır - TEK başına YETERLİ
+        // sayılmaz (claim SONRASI/imza SIRASINDA gate kapanabilir, bkz. aşağıdaki commit-öncesi
+        // kontrol).
+        if (!_signingActivationGate.CanSignNow())
+        {
+            return await SonuclandirSigningGateKapaliAtomikAsync(talep, cancellationToken);
+        }
 
         // ---- Faz 1: kısa okuma (açık transaction yok) ----
         var kayit = await _dbContext.Set<EBelgeKaydi>()
@@ -573,14 +590,21 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
         }
 
-        // Faz 2B.10.1 görev md.8 - imza operasyonundan SONRA, SignedReady artifact YAZILMADAN
-        // ÖNCE, AYNI transaction içinde kurum politikası TEKRAR doğrulanır (immutable
-        // YerelImzaOlustur + güncel politika aktifliği + yöntem uyumu + global signing gate -
-        // hepsi `DegerlendirIslemUygunlugunuAsync` İÇİNDE). Politika imzalama SIRASINDA
-        // kapatıldıysa: SignedReady YAZILMAZ, EBelgeKaydi.Durum İLERLEMEZ, imza sonucu discard
-        // edilir - private key/imza bytes hiçbir yerde loglanmaz.
-        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, cancellationToken);
-        if (!uygunluk.UygunMu)
+        // Faz 2B.10.2 görev md.4/md.9 - imza operasyonundan SONRA, SignedReady artifact
+        // YAZILMADAN ÖNCE, AYNI transaction içinde ÖNCE kurum politika satırı KİLİTLENİR
+        // (WITH (UPDLOCK, HOLDLOCK, ROWLOCK) - bkz. `IEBelgeKurumPolitikaTransactionGuard`),
+        // SONRA o kilitli anlık görüntü üzerinden uygunluk (immutable YerelImzaOlustur + güncel
+        // politika aktifliği + yöntem uyumu) değerlendirilir, SONRA global signing gate TEKRAR
+        // kontrol edilir (commit-öncesi ikinci kapı - md.5/md.6, handler başındaki erken
+        // kontrolden BAĞIMSIZ, çünkü gate imza SIRASINDA kapanmış olabilir). Kilit, bu
+        // transaction commit/rollback edilene kadar TUTULUR - böylece "politika satırı bu
+        // transaction bitmeden değiştirilemez" garantisi sağlanır (salt READ COMMITTED SELECT
+        // bu garantiyi VERMEZ). Politika/gate imzalama SIRASINDA kapatıldıysa: SignedReady
+        // YAZILMAZ, EBelgeKaydi.Durum İLERLEMEZ, imza sonucu discard edilir - private key/imza
+        // bytes hiçbir yerde loglanmaz.
+        var kilitliPolitika = await _kurumPolitikaGuard.KilitleVeOkuAsync(talep.KurumId, cancellationToken);
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuKilitliAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, kilitliPolitika, cancellationToken);
+        if (!uygunluk.UygunMu || !_signingActivationGate.CanSignNow())
         {
             var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(
                 talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
@@ -687,11 +711,14 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
             return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
         }
 
-        // Faz 2B.10.1 görev md.8 - bkz. IslemMevcutSignedAsync XML doc'u, AYNI gerekçe: imza
-        // operasyonundan SONRA, SignedReady YAZILMADAN ÖNCE, AYNI transaction içinde kurum
-        // politikası TEKRAR doğrulanır.
-        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, cancellationToken);
-        if (!uygunluk.UygunMu)
+        // Faz 2B.10.2 görev md.4/md.9 - bkz. IslemMevcutSignedAsync XML doc'u, AYNI gerekçe:
+        // imza operasyonundan SONRA, SignedReady YAZILMADAN ÖNCE, AYNI transaction içinde ÖNCE
+        // kurum politika satırı KİLİTLENİR, SONRA o kilitli anlık görüntü üzerinden uygunluk
+        // değerlendirilir, SONRA global signing gate TEKRAR kontrol edilir (commit-öncesi
+        // ikinci kapı).
+        var kilitliPolitika = await _kurumPolitikaGuard.KilitleVeOkuAsync(talep.KurumId, cancellationToken);
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuKilitliAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, kilitliPolitika, cancellationToken);
+        if (!uygunluk.UygunMu || !_signingActivationGate.CanSignNow())
         {
             var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(
                 talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
@@ -855,6 +882,41 @@ public sealed class EBelgeUblImzalamaService : IEBelgeUblImzalamaService
         }
 
         return await TamamlaKaliciHataAyniTransactiondaAsync(tx, talep, kayit, hataKodu, hataMesaji, cancellationToken);
+    }
+
+    /// <summary>
+    /// Faz 2B.10.2 görev md.7 - handler BAŞLAMADAN (imza/render işine hiç girmeden) global
+    /// signing gate'in KAPALI bulunduğu durumu sonuçlandırır. Kurum politikası ile İLGİLİ
+    /// DEĞİLDİR (gate kurum politikasından BAĞIMSIZ bir kontrol katmanıdır - bkz. md.6) - aynı
+    /// `TryReleasePolicyBlockedAsync`/`AtomikPolitikaBloklu` mekanizması KASITLI olarak yeniden
+    /// kullanılır, çünkü outbox satırının davranışı (terminal OLMAYAN, Durum=Bekliyor, attempt
+    /// iade edilir, retry churn OLMAZ) her iki senaryoda da AYNIDIR - ayrı bir DB geçişi/sonuç
+    /// türü icat etmek bu turun "küçük ve hedefli" kapsamını gereksiz yere büyütür.
+    /// </summary>
+    private async Task<EBelgeUblImzalamaSonucu> SonuclandirSigningGateKapaliAtomikAsync(
+        EBelgeUblImzalamaTalebi talep,
+        CancellationToken cancellationToken)
+    {
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var sahip = await _leaseTransitionService.IsOwnedForJobAsync(talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
+        if (!sahip)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+        }
+
+        var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(
+            talep.OutboxMesajiId, talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala, talep.KilitToken, cancellationToken);
+
+        if (!geriAlindi)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return EBelgeUblImzalamaSonucu.SahiplikKaybedildi();
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return EBelgeUblImzalamaSonucu.AtomikPolitikaBloklu();
     }
 
     /// <summary>

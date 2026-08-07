@@ -4150,3 +4150,94 @@ permissive fallback, kill switch sonrası artifact/SignedReady yazma, pipeline g
 UBL alanlarını zorunlu tutma, mevcut lease/stale-worker güvenliğini zayıflatma, aktivasyon
 tarihlerini değiştirme, test skip etme, tüm solution test paketini çalıştırma, frontend/PDF/
 e-posta geliştirmesi.
+
+## Faz 2B.10.2: Policy Commit Serialization ve Signing Gate Sertleştirmesi
+
+Faz 2B.10.1, kurum politikasını commit-öncesi bir kontrol noktası olarak kurdu, ama bu kontroller
+HER YERDE unlocked bir `SELECT`'e dayanıyordu - "aynı transaction içinde okundu" olması bile bir
+serileştirme GARANTİSİ VERMEZ. Bu tur, mimariyi YENİDEN TASARLAMADAN, küçük ve hedefli biçimde iki
+somut TOCTOU açığını kapatır: (1) politika kontrolü İLE artifact/SignedReady/satış-kararı commit'i
+ARASINDAKİ yarış penceresi, (2) kuyruğa alınmış bir `UblImzala` mesajının global signing gate
+KAPANDIKTAN SONRA bile imzalanabilmesi. Tam tasarım gerekçesi için bkz.
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md` "Faz 2B.10.2" bölümü.
+
+**1. Merkezi politika satırı kilidi**: Yeni `IEBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync`
+- `KurumEBelgePolitikalari` satırını `WITH (UPDLOCK, HOLDLOCK, ROWLOCK)` ile okur, ambient EF Core
+transaction'ına katılır (outbox lease servislerinin AYNI ham-SQL-ambient-transaction deseni).
+`HOLDLOCK`, kilidi transaction commit/rollback edilene kadar TUTAR; `KurumId` UNIQUE INDEX'i ile
+birlikte phantom-insert (satır hiç yokken aynı anahtarla yeni satır eklenmesi) koruması sağlar.
+TÜM transaction `SERIALIZABLE`'a YÜKSELTİLMEZ - yalnız HEDEFLİ bir satır/key-range kilidi.
+
+**2. Uygunluk algoritmasının tek çekirdeği**: `IEBelgeKurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync`
+(unlocked, worker'ın claim-sonrası İLK savunma katmanı) VE YENİ `DegerlendirIslemUygunlugunuKilitliAsync`
+(kilitlenmiş bir anlık görüntüyle, commit-öncesi SON kontrol) AYNI özel
+`DegerlendirIslemUygunlugunuCoreAsync` çekirdeğini paylaşır - algoritma İKİ YERDE YENİDEN YAZILMAZ,
+yalnız politikanın NASIL okunduğu farklıdır.
+
+**3. Artifact/SignedReady/satış kararı serileştirmesi**: `EBelgeArtefaktOlusturmaService.
+DenemeBasariAtomikAsync` VE `EBelgeUblImzalamaService`'in HER İKİ SignedReady commit yolu, outbox
+sahiplik kilidinden SONRA ama artifact/EBelgeKaydi yazımından ÖNCE guard'ı çağırır (kilit sırası:
+Outbox satırı → Kurum politika satırı → artifact/EBelgeKaydi yazımları). `SatisBelgesiService.
+FaturaKesAsync`, SatisBelgesi satır kilidinden SONRA ama sayaç satırı kilitlenmeden ÖNCE guard'ı
+çağırıp kilitli anlık görüntünün TÜM karşılaştırılabilir alanlarını (Id/KurumId/PolitikaSurumu/
+AktifMi/EntegrasyonYontemi/AktivasyonYerelTarihi) `DegerlendirAsync`'in kararıyla karşılaştırır -
+Faz 2B.10.1'in yalnız `PolitikaSurumu` sütununu unlocked yeniden okuyan (ve bu yüzden AYNI TOCTOU
+açığına sahip) kontrolünün YERİNE geçer.
+
+**4. Global signing gate gerçek bir commit kapısı**: `EBelgeUblImzalamaService` artık `IEBelgeSigningActivationGate`
+bağımlılığı alır (Faz 2B.10.1'de YOKTU). Yeni `CanSignNow()`, `ShouldCreateSigningMessage()` İLE
+AYNI `Degerlendir()` çekirdeğini paylaşır (Enabled/NotBeforeLocalDate/Europe-Istanbul/TimeProvider
+algoritması İKİ YERDE YAZILMAZ). İki kontrol noktası: (a) `ImzalaAsync`'in EN BAŞINDA - gate
+kapalıysa imza/render işine HİÇ GİRİLMEZ; (b) imza operasyonu (tx dışı) tamamlandıktan SONRA,
+SignedReady yazılmadan HEMEN ÖNCE, politika kilidiyle AYNI kısa commit transaction'ı içinde TEKRAR
+kontrol edilir - gate imza SIRASINDA kapandıysa SignedReady YAZILMAZ, imza sonucu (private key/imza
+bytes dahil) DISCARD edilir. Her iki nokta da AYNI `TryReleasePolicyBlockedAsync`/
+`AtomikPolitikaBloklu` mekanizmasını (kurum politikasıyla PAYLAŞILAN) kullanır - ayrı bir DB
+geçişi/sonuç türü İCAT EDİLMEDİ (outbox satırının davranışı - terminal olmayan, Bekliyor, attempt
+iade, retry churn yok - iki senaryoda da AYNIDIR).
+
+**5. Kilit sırası ve kill switch'in kısa kalması**: Worker: Outbox satırı → Kurum politika satırı →
+artifact/EBelgeKaydi yazımları. Satış: SatisBelgesi satırı → Kurum politika satırı → sayaç/karar/
+EBelgeKaydi yazımları. `EBelgeKurumPolitikaYonetimServisi.GuncelleAsync` (kill switch) yalnız kurum
+politika satırını kilitler - outbox/SatisBelgesi/sayaç satırlarından HİÇBİRİNİ kilitlemez, bu
+yüzden deadlock YAPISAL OLARAK İMKÂNSIZDIR.
+
+**Eklenen kritik invariant'lar**: `SigningGatePreventsQueuedSigning`, `PolicyDecisionVersionIsSerialized`.
+`PolicyKillSwitchPreventsCommit` (Faz 2B.10.1) artık GERÇEK, örtüşen iki-transaction testlerle de
+kanıtlanır (`Task.WhenAny` + zaman aşımıyla "task GERÇEKTEN bloke oldu" ispatı, sıralı simülasyon
+DEĞİL) - hem "kill switch önce kazanır" hem "worker'ın kilidi önce kazanır" sıralamaları AYRI AYRI
+test edilir.
+
+**Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; 578 → 592):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 316, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 570, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 590, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 592, Failed: 0, Skipped: 0  (preflight: SQL+Java+31 kritik invariant testi GEÇTİ)
+```
+
+Not: `release` profilinin İLK koşumunda, bu fazın kapsamı DIŞINDAKİ (kurum politikasıyla İLGİSİZ,
+`EBelgeSchematronSidecarIntegrationTests.BuyukXmlLimitteReddedilir` - büyük XML/HTTP bağlantı
+zamanlamasına duyarlı, ÖNCEDEN VAR OLAN) bir test flaky biçimde başarısız oldu; izole koşumda VE tam
+profil YENİDEN koşumunda (592/592) sorunsuz geçti - dosyada HİÇBİR değişiklik yapılmadı, test
+atlanmadı/gevşetilmedi.
+
+Ayrıca, ilk `nightly` koşumunda `EBelgeOutboxWorkerIntegrationTests` içindeki (kendi bağımsız DI
+container'ını manuel kuran, `backend/Program.cs`'i KULLANMAYAN) worker end-to-end testleri, yeni
+`IEBelgeKurumPolitikaTransactionGuard` kaydı EKSİK olduğundan zaman aşımına uğradı - test container'ı
+güncellendi (gerçek servisin ihtiyaç duyduğu her bağımlılık, production DI'daki GİBİ, test DI'ında da
+KAYITLI olmalıdır). Ayrıca `GercekWorkerUblImzalaMesajiniClaimEdipTamamlarVeSignedReadyArtifactOlusur`
+testi Faz 2B.10.1 semantiğiyle (`signingGateAcik: false` - gate yalnız mesaj OLUŞTURMA anını
+etkilerdi) yazılmıştı; testin AMACI ("worker GERÇEKTEN imzalayıp SignedReady üretir") ile YENİ
+commit-öncesi gate semantiği ÇELİŞTİĞİNDEN `signingGateAcik: true`'ya güncellendi - gate-kapalı
+davranışı ZATEN AYRI, doğrudan testlerle (bkz. yukarıda) kapsanmaktadır.
+
+**Kasıtlı olarak YAPILMAYANLAR**: Kurum politika veri modelini/entegrasyon yöntemlerini/mevcut Faz
+2B.10-2B.10.1 davranış matrisini baştan yazma, TÜM transaction'ı `SERIALIZABLE`'a yükseltme, claim
+SQL'ini/lease mimarisini değiştirme, `IOptionsMonitor` hot-reload migrasyonu zorlama (gate geçişleri
+test double'larıyla deterministik simüle edildi), yeni bir DB geçişi/tablo/sonuç türü icat etme
+(gate-bloklu VE politika-bloklu senaryolar AYNI `AtomikPolitikaBloklu` mekanizmasını paylaşır),
+`sys.dm_tran_locks` tabanlı DMV polling altyapısı kurma (blokaj kanıtı `Task.WhenAny` + zaman
+aşımıyla YAPILDI), test skip etme, tüm solution test paketini çalıştırma, frontend/PDF/e-posta
+geliştirmesi.

@@ -27,6 +27,27 @@ public sealed class EBelgeTestYontemYetenekSaglayici : IEBelgeYontemYetenekSagla
 }
 
 /// <summary>
+/// Faz 2B.10.2 - <see cref="STYS.Muhasebe.SatisBelgeleri.Services.EBelgeUblImzalamaService"/>'in
+/// artık zorunlu bağımlılığı olan global signing gate İÇİN, gate davranışını (Enabled/tarih
+/// kapısı) test ETMEYEN senaryolarda kullanılan sabit "HER ZAMAN AÇIK" test double'ı - gerçek
+/// `EBelgeSigningActivationGate`'in Enabled/NotBeforeLocalDate algoritmasını AYRI test dosyaları
+/// (ör. <c>EBelgeSigningActivationGateTests</c>) zaten doğrudan kapsar.
+/// </summary>
+public sealed class EBelgeTestSigningActivationGate : STYS.Muhasebe.SatisBelgeleri.Services.IEBelgeSigningActivationGate
+{
+    public static readonly EBelgeTestSigningActivationGate Acik = new(true);
+    public static readonly EBelgeTestSigningActivationGate Kapali = new(false);
+
+    private readonly bool _sonuc;
+
+    private EBelgeTestSigningActivationGate(bool sonuc) => _sonuc = sonuc;
+
+    public bool ShouldCreateSigningMessage() => _sonuc;
+
+    public bool CanSignNow() => _sonuc;
+}
+
+/// <summary>
 /// Faz 2B.10 - mevcut (2B.5-2B.9) e-belge testlerinin, EBelgeKaydi/outbox/imzalama zincirini
 /// SatisBelgesiService'in normal akışını (ve dolayısıyla kurum politikası kararını) KULLANMADAN
 /// DOĞRUDAN seed ettiği yerlerde, YENİ politika-tabanlı fail-closed kapıların bu testleri

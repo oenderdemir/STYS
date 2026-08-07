@@ -254,6 +254,10 @@ builder.Services.AddSingleton<IEBelgeProcessingActivationGate, EBelgeProcessingA
 // SADECE test assembly'sinde tanımlıdır, BURADA ASLA kaydedilmez (bkz. görev md.7).
 builder.Services.AddSingleton<IEBelgeYontemYetenekSaglayici, EBelgeYontemYetenekSaglayici>();
 builder.Services.AddScoped<IEBelgeKurumPolitikaServisi, EBelgeKurumPolitikaServisi>();
+// Faz 2B.10.2: worker/satış akışı commit'inden ÖNCE kurum politika satırını WITH (UPDLOCK,
+// HOLDLOCK, ROWLOCK) ile kilitleyen, ambient EF Core transaction'ına katılan merkezi guard -
+// bkz. görev md.2/md.9 kilit sırası dokümantasyonu.
+builder.Services.AddScoped<IEBelgeKurumPolitikaTransactionGuard, EBelgeKurumPolitikaTransactionGuard>();
 builder.Services.AddScoped<IEBelgeKurumPolitikaYonetimServisi, EBelgeKurumPolitikaYonetimServisi>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerDelay, TimeProviderEBelgeOutboxWorkerDelay>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerMetrics, EBelgeOutboxWorkerMetrics>();

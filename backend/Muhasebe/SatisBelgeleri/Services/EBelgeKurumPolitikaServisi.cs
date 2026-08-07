@@ -23,6 +23,12 @@ public sealed record EBelgeKurumPolitikaKarari
 
     public required int? PolitikaSurumu { get; init; }
 
+    /// <summary>Faz 2B.10.2 görev md.8 - politika satırı bulunduysa (`PolitikaId.HasValue`) karar ANINDAKİ `AktifMi` değeri; politika satırı YOKSA `false`. Karar sonrası, kilitli-satır KARŞILAŞTIRMASI İÇİN kullanılır (bkz. `SatisBelgesiService.FaturaKesAsync`).</summary>
+    public required bool AktifMi { get; init; }
+
+    /// <summary>Faz 2B.10.2 görev md.8 - politika satırı bulunduysa karar ANINDAKİ `AktivasyonYerelTarihi` değeri; YOKSA `null`.</summary>
+    public required DateTime? AktivasyonYerelTarihi { get; init; }
+
     public required EBelgeYontemYetenekleri Yetenekler { get; init; }
 
     public required DateTime KararZamaniUtc { get; init; }
@@ -97,6 +103,17 @@ public interface IEBelgeKurumPolitikaServisi
     /// hâlâ İZİNLİ olup OLMADIĞI şu ANDA sorulmaktadır.
     /// </summary>
     Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Faz 2B.10.2 görev md.3/md.4 - <see cref="DegerlendirIslemUygunlugunuAsync"/> İLE AYNI
+    /// uygunluk algoritmasını (İKİNCİ KEZ YAZILMADAN, ortak bir çekirdek üzerinden) kullanır, ama
+    /// güncel politikayı KENDİ SORGUSUYLA OKUMAZ - ÖNCEDEN <see cref="IEBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync"/>
+    /// ile KİLİTLENMİŞ bir anlık görüntüyü PARAMETRE olarak alır. Bu, commit-öncesi kontrol İLE
+    /// artifact/SignedReady yazımı ARASINDA politikanın DEĞİŞEMEYECEĞİNİ garanti eder (bkz. görev
+    /// md.3/md.4, "TOCTOU yarışı").
+    /// </summary>
+    Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuKilitliAsync(
+        int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, EBelgeKilitliPolitikaSnapshot? kilitliPolitika, CancellationToken cancellationToken = default);
 }
 
 public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
@@ -129,14 +146,14 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         var globalKarar = _globalGate.Evaluate();
         if (globalKarar.Reason == EBelgeProcessingActivationReason.Disabled)
         {
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.GlobalKapali, EBelgeEntegrasyonYontemi.Yapilandirilmadi, null, null, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.GlobalKapali, EBelgeEntegrasyonYontemi.Yapilandirilmadi, null, null, false, null, BosYetenekler, nowUtc);
         }
 
         if (globalKarar.Reason != EBelgeProcessingActivationReason.Active)
         {
             // BeforeActivationDate / InvalidDateConfiguration / InvalidTimeZoneConfiguration -
             // hepsi fail-closed: kurum politikası bu kapıyı AÇAMAZ.
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.GlobalAktivasyonTarihiGelmedi, EBelgeEntegrasyonYontemi.Yapilandirilmadi, null, null, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.GlobalAktivasyonTarihiGelmedi, EBelgeEntegrasyonYontemi.Yapilandirilmadi, null, null, false, null, BosYetenekler, nowUtc);
         }
 
         // Karar sırası md.3: kurum politikası.
@@ -148,17 +165,17 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         {
             // Görev md.9 - global süreç aktif olduktan SONRA "politika yok" SESSİZCE
             // Kullanilmayacak yorumlanmaz - açık, fail-closed bir neden döner.
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaYapilandirilmadi, EBelgeEntegrasyonYontemi.Yapilandirilmadi, politika?.Id, politika?.PolitikaSurumu, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaYapilandirilmadi, EBelgeEntegrasyonYontemi.Yapilandirilmadi, politika?.Id, politika?.PolitikaSurumu, politika?.AktifMi ?? false, politika?.AktivasyonYerelTarihi, BosYetenekler, nowUtc);
         }
 
         if (!Enum.IsDefined(politika.EntegrasyonYontemi))
         {
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaGecersiz, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaGecersiz, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, BosYetenekler, nowUtc);
         }
 
         if (!politika.AktifMi)
         {
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaPasif, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaPasif, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, BosYetenekler, nowUtc);
         }
 
         if (politika.AktivasyonYerelTarihi is null)
@@ -166,12 +183,12 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
             // AktifMi=true iken AktivasyonYerelTarihi'nin null OLMAMASI yönetim servisi
             // tarafından garanti edilir - buraya kadar geldiyse bu, veri bütünlüğü açısından
             // GEÇERSİZ bir durumdur (ör. elle DB düzenlemesi) - "tarih henüz gelmedi" DEĞİL.
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaGecersiz, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.PolitikaGecersiz, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, BosYetenekler, nowUtc);
         }
 
         if (politika.AktivasyonYerelTarihi.Value.Date > belgeTarihi.Date)
         {
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.KurumAktivasyonTarihiGelmedi, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.KurumAktivasyonTarihiGelmedi, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, BosYetenekler, nowUtc);
         }
 
         var yetenekler = _yetenekSaglayici.Getir(politika.EntegrasyonYontemi);
@@ -179,26 +196,51 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         if (politika.EntegrasyonYontemi == EBelgeEntegrasyonYontemi.Kullanilmayacak)
         {
             // Görev md.9 "Açıkça Kullanılmayacak" - HATA DEĞİLDİR; yerel pipeline gerekmez.
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.YontemKullanilmayacak, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, yetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.YontemKullanilmayacak, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, yetenekler, nowUtc);
         }
 
         if (politika.EntegrasyonYontemi == EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi)
         {
             // Görev md.9 "Harici muhasebe sistemi" - HATA DEĞİLDİR; yerel pipeline gerekmez.
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.HariciSistemSorumlu, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, yetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.HariciSistemSorumlu, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, yetenekler, nowUtc);
         }
 
         if (!yetenekler.OperasyonelMi)
         {
             // OzelEntegrator/DogrudanGib - gerçek adapter YOKKEN fail-closed (görev md.9/24).
-            return Karar(false, EBelgeKurumPolitikaKararNedeni.YontemHenuzDesteklenmiyor, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, BosYetenekler, nowUtc);
+            return Karar(false, EBelgeKurumPolitikaKararNedeni.YontemHenuzDesteklenmiyor, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, BosYetenekler, nowUtc);
         }
 
-        return Karar(true, EBelgeKurumPolitikaKararNedeni.Aktif, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, yetenekler, nowUtc);
+        return Karar(true, EBelgeKurumPolitikaKararNedeni.Aktif, politika.EntegrasyonYontemi, politika.Id, politika.PolitikaSurumu, politika.AktifMi, politika.AktivasyonYerelTarihi, yetenekler, nowUtc);
     }
 
-    public async Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(
-        int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default)
+    public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuAsync(
+        int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, CancellationToken cancellationToken = default) =>
+        DegerlendirIslemUygunlugunuCoreAsync(
+            kurumId, eBelgeKaydiId, isTuru,
+            politikaGetir: async ct =>
+            {
+                var p = await _dbContext.Set<KurumEBelgePolitikasi>()
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.KurumId == kurumId, ct);
+                return p is null ? null : PolitikaSnapshotUret(p);
+            },
+            cancellationToken);
+
+    public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuKilitliAsync(
+        int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, EBelgeKilitliPolitikaSnapshot? kilitliPolitika, CancellationToken cancellationToken = default) =>
+        DegerlendirIslemUygunlugunuCoreAsync(kurumId, eBelgeKaydiId, isTuru, _ => Task.FromResult(kilitliPolitika), cancellationToken);
+
+    /// <summary>
+    /// Faz 2B.10.2 görev md.3/md.4 - `DegerlendirIslemUygunlugunuAsync` (kendi unlocked
+    /// sorgusuyla) VE `DegerlendirIslemUygunlugunuKilitliAsync` (ÖNCEDEN kilitlenmiş bir anlık
+    /// görüntüyle) arasında PAYLAŞILAN TEK karar çekirdeği - politika okuma STRATEJİSİ
+    /// (`politikaGetir` delegesi) HARİÇ, uygunluk ALGORİTMASI İKİ YERDE YENİDEN YAZILMAZ.
+    /// </summary>
+    private async Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuCoreAsync(
+        int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru,
+        Func<CancellationToken, Task<EBelgeKilitliPolitikaSnapshot?>> politikaGetir,
+        CancellationToken cancellationToken)
     {
         var karar = await _dbContext.Set<SatisBelgesiEBelgeKarari>()
             .AsNoTracking()
@@ -229,9 +271,7 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
             return Uygunluk(false, EBelgeIslemPolitikaUygunlukNedeni.ImmutableYetenekYok, karar.KurumEBelgePolitikasiId, karar.PolitikaSurumu);
         }
 
-        var politika = await _dbContext.Set<KurumEBelgePolitikasi>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.KurumId == kurumId, cancellationToken);
+        var politika = await politikaGetir(cancellationToken);
 
         if (politika is null)
         {
@@ -275,6 +315,16 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         return Uygunluk(true, EBelgeIslemPolitikaUygunlukNedeni.Uygun, politika.Id, politika.PolitikaSurumu);
     }
 
+    private static EBelgeKilitliPolitikaSnapshot PolitikaSnapshotUret(KurumEBelgePolitikasi p) => new()
+    {
+        Id = p.Id,
+        KurumId = p.KurumId,
+        PolitikaSurumu = p.PolitikaSurumu,
+        AktifMi = p.AktifMi,
+        EntegrasyonYontemi = p.EntegrasyonYontemi,
+        AktivasyonYerelTarihi = p.AktivasyonYerelTarihi,
+    };
+
     private static EBelgeIslemPolitikaUygunlukSonucu Uygunluk(
         bool uygunMu, EBelgeIslemPolitikaUygunlukNedeni neden, int? politikaId, int? politikaSurumu) => new()
     {
@@ -290,6 +340,8 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         EBelgeEntegrasyonYontemi yontem,
         int? politikaId,
         int? politikaSurumu,
+        bool aktifMi,
+        DateTime? aktivasyonYerelTarihi,
         EBelgeYontemYetenekleri yetenekler,
         DateTime kararZamaniUtc) => new()
     {
@@ -298,6 +350,8 @@ public sealed class EBelgeKurumPolitikaServisi : IEBelgeKurumPolitikaServisi
         EntegrasyonYontemi = yontem,
         PolitikaId = politikaId,
         PolitikaSurumu = politikaSurumu,
+        AktifMi = aktifMi,
+        AktivasyonYerelTarihi = aktivasyonYerelTarihi,
         Yetenekler = yetenekler,
         KararZamaniUtc = kararZamaniUtc,
     };

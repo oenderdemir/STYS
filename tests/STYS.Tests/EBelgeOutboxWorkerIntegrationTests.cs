@@ -214,6 +214,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         private readonly bool _sonuc;
         private FakeSigningActivationGate(bool sonuc) => _sonuc = sonuc;
         public bool ShouldCreateSigningMessage() => _sonuc;
+        public bool CanSignNow() => _sonuc;
     }
 
     private static EBelgeProcessingOptions HizliWorkerOptions(int leaseDurationSeconds = 60) => new()
@@ -259,6 +260,10 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         // E2E test container'ında (bkz. EBelgeKurumPolitikaTestSupport).
         services.AddSingleton<IEBelgeYontemYetenekSaglayici>(EBelgeTestYontemYetenekSaglayici.Instance);
         services.AddScoped<IEBelgeKurumPolitikaServisi, EBelgeKurumPolitikaServisi>();
+        // Faz 2B.10.2 - EBelgeArtefaktOlusturmaService/EBelgeUblImzalamaService'in ikisi de ARTIK
+        // bu guard'ı zorunlu bağımlılık olarak alır (bkz. backend/Program.cs'teki GERÇEK kayıt) -
+        // bu manuel test DI container'ı da AYNI kaydı taşımalıdır.
+        services.AddScoped<IEBelgeKurumPolitikaTransactionGuard, EBelgeKurumPolitikaTransactionGuard>();
         services.AddScoped<IEBelgeArtefaktOlusturmaService, EBelgeArtefaktOlusturmaService>();
         services.AddScoped<IEBelgeOutboxIsTuruHandler, EBelgeArtefaktOlusturOutboxHandler>();
 
@@ -357,7 +362,14 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
             await SeedOutboxMesajiAsync(seedCtx, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
         }
 
-        await using var provider = BuildWorkerContainer(HizliWorkerOptions(), signingGateAcik: false);
+        // Faz 2B.10.2 görev md.5/md.6 - global signing gate ARTIK yalnız mesaj-OLUŞTURMA anında
+        // değil, İMZALAMA COMMIT'İNDEN ÖNCE de (hem handler başındaki erken kontrolde hem de
+        // commit-öncesi ikinci kontrolde) GERÇEKTEN uygulanır - bu yüzden bu testin (amacı: worker
+        // GERÇEKTEN imzalayıp SignedReady üretir) gate'i AÇIK kurması GEREKİR. Gate KAPALIYKEN
+        // kuyruklu mesajın işlenmeye HİÇ başlamayacağı/SignedReady ÜRETMEYECEĞİ AYRICA, doğrudan
+        // `EBelgeUblImzalamaServiceIntegrationTests`'te (`SigningGateKapaliykenKuyruktakiMesajHicIslenmeyeBaslamazVeSignedReadyYazilmaz`)
+        // test edilir - burada TEKRAR EDİLMEZ.
+        await using var provider = BuildWorkerContainer(HizliWorkerOptions(), signingGateAcik: true);
         var worker = CreateWorker(provider);
 
         await worker.StartAsync(CancellationToken.None);

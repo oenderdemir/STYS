@@ -299,6 +299,48 @@ public class EBelgeKurumPolitikaYonetimServisiIntegrationTests : IAsyncLifetime
         Assert.False(sonuc.AktifMi);
     }
 
+    /// <summary>
+    /// Faz 2B.10.2 görev md.9/md.10 - "worker'ın politika kilidi ÖNCE kazandığı" sıralamanın
+    /// GERÇEK kanıtı: worker'ı TEMSİL EDEN bir bağlantı, <see cref="IEBelgeKurumPolitikaTransactionGuard"/>
+    /// ile politika satırını KİLİTLER (kendi transaction'ı İÇİNDE, HENÜZ commit ETMEDEN) - bu SIRADA
+    /// başlatılan GERÇEK bir kill switch `GuncelleAsync` çağrısı (AYRI bir bağlantı/transaction),
+    /// UPDATE aşamasında (SELECT'i DEĞİL - SELECT bir S kilidi ister, U kilidiyle UYUMLUDUR; ama
+    /// UPDATE bir X kilidi ister, U kilidiyle ÇAKIŞIR) worker'ın kilidine ÇARPARAK GERÇEKTEN BLOKE
+    /// OLUR. Bu, task'ın makul bir süre TAMAMLANMADIĞI doğrulanarak KANITLANIR. Worker'ın
+    /// transaction'ı COMMIT edildiğinde (satırı DEĞİŞTİRMEDEN) kill switch serbest kalır ve normal
+    /// şekilde tamamlanır - "worker'ın kilidi ÖNCE kazanması → worker commit → SONRA kill switch
+    /// commit" sıralamasının (görev md.9) GERÇEK bir kanıtıdır.
+    /// </summary>
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "PolicyKillSwitchPreventsCommit")]
+    public async Task WorkerPolitikaKilidiOnceAlinirsaKillSwitchGuncellemesiKilitSerbestKalanaKadarGercektenBlokeOlur()
+    {
+        await using var seedCtx = CreateDbContext();
+        var servis = CreateServis(seedCtx);
+        var ilk = await servis.GuncelleAsync(_kurumId, DtoIcin(
+            EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1), null, ""));
+
+        await using var workerCtx = CreateDbContext();
+        await using var workerTx = await workerCtx.Database.BeginTransactionAsync();
+        var guard = new EBelgeKurumPolitikaTransactionGuard(workerCtx);
+        var kilitliSnapshot = await guard.KilitleVeOkuAsync(_kurumId);
+        Assert.NotNull(kilitliSnapshot);
+        Assert.True(kilitliSnapshot!.AktifMi);
+
+        await using var adminCtx = CreateDbContext();
+        var adminServis = CreateServis(adminCtx);
+        var killSwitchTask = Task.Run(() => adminServis.GuncelleAsync(_kurumId, DtoIcin(
+            EBelgeEntegrasyonYontemi.GibPortal, false, new DateTime(2020, 1, 1), null, Convert.ToBase64String(ilk.RowVersion))));
+
+        var erkenTamamlandiMi = await Task.WhenAny(killSwitchTask, Task.Delay(TimeSpan.FromSeconds(2))) == killSwitchTask;
+        Assert.False(erkenTamamlandiMi, "kill switch GuncelleAsync'i, worker'ın TUTTUĞU politika satırı kilidine ÇARPMADI - test GERÇEK bir kilit çakışması KURAMADI.");
+
+        await workerTx.CommitAsync();
+
+        var sonuc = await killSwitchTask;
+        Assert.False(sonuc.AktifMi);
+    }
+
     // ---- Pending iş varken YÖNTEM değişimi engellenir ----
 
     [IntegrationFact]

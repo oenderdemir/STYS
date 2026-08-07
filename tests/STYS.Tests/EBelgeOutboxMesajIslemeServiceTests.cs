@@ -774,6 +774,9 @@ public class EBelgeOutboxMesajIslemeServiceTests
                 PolitikaSurumu = null,
             });
         }
+
+        public Task<EBelgeIslemPolitikaUygunlukSonucu> DegerlendirIslemUygunlugunuKilitliAsync(int kurumId, int eBelgeKaydiId, EBelgeOutboxIsTuru isTuru, EBelgeKilitliPolitikaSnapshot? kilitliPolitika, CancellationToken cancellationToken = default) =>
+            DegerlendirIslemUygunlugunuAsync(kurumId, eBelgeKaydiId, isTuru, cancellationToken);
     }
 
     private sealed class FakeTransitionService : IEBelgeOutboxLeaseTransitionService

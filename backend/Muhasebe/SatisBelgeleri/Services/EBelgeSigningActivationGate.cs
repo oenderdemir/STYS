@@ -21,6 +21,15 @@ public interface IEBelgeSigningActivationGate
 {
     /// <summary>`true` yalnız `Enabled=true` VE `TimeProvider`'ın şu anki UTC zamanı, `NotBeforeLocalDate`'in Europe/Istanbul yerel gün başlangıcına karşılık gelen UTC anına ULAŞMIŞSA döner. Config geçersizse (tarih parse edilemiyor, timezone bulunamıyor) FAIL-CLOSED olarak `false` döner (bkz. görev md.18).</summary>
     bool ShouldCreateSigningMessage();
+
+    /// <summary>
+    /// Faz 2B.10.2 görev md.5 - `ShouldCreateSigningMessage` İLE TAMAMEN AYNI (Enabled+
+    /// NotBeforeLocalDate+Europe/Istanbul+TimeProvider+fail-closed) algoritmayı, semantik olarak
+    /// daha DOĞRU bir isimle sunar: "yeni bir imzalama mesajı OLUŞTURULSUN mu" (üretim ANI)
+    /// DEĞİL, "ŞU AN imzalama/SignedReady COMMIT edilebilir mi" (tüketim/commit ANI) sorusu İÇİN.
+    /// Algoritma İKİNCİ KEZ YAZILMAZ - ikisi de AYNI iç değerlendirmeyi kullanır.
+    /// </summary>
+    bool CanSignNow();
 }
 
 /// <summary>
@@ -48,7 +57,12 @@ public sealed class EBelgeSigningActivationGate : IEBelgeSigningActivationGate
         _logger = logger;
     }
 
-    public bool ShouldCreateSigningMessage()
+    public bool ShouldCreateSigningMessage() => Degerlendir();
+
+    public bool CanSignNow() => Degerlendir();
+
+    /// <summary>Faz 2B.10.2 görev md.5 - `ShouldCreateSigningMessage`/`CanSignNow`'ın PAYLAŞTIĞI TEK karar - Enabled/tarih/timezone algoritması BURADA, TEK yerde yaşar.</summary>
+    private bool Degerlendir()
     {
         if (!_options.Enabled)
         {

@@ -28,5 +28,7 @@ public static class EBelgeCriticalInvariantManifest
         "PolicyKillSwitchPreventsCommit",
         "NonLocalRouteIsIdempotent",
         "LegacyDecisionNeverProcesses",
+        "SigningGatePreventsQueuedSigning",
+        "PolicyDecisionVersionIsSerialized",
     ];
 }

@@ -49,6 +49,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
     private readonly IEBelgeOutboxLeaseTransitionService _leaseTransitionService;
     private readonly IEBelgeSigningActivationGate _signingActivationGate;
     private readonly IEBelgeKurumPolitikaServisi _kurumPolitikaServisi;
+    private readonly IEBelgeKurumPolitikaTransactionGuard _kurumPolitikaGuard;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EBelgeArtefaktOlusturmaService> _logger;
 
@@ -59,6 +60,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         IEBelgeOutboxLeaseTransitionService leaseTransitionService,
         IEBelgeSigningActivationGate signingActivationGate,
         IEBelgeKurumPolitikaServisi kurumPolitikaServisi,
+        IEBelgeKurumPolitikaTransactionGuard kurumPolitikaGuard,
         TimeProvider timeProvider,
         ILogger<EBelgeArtefaktOlusturmaService> logger)
     {
@@ -68,6 +70,7 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
         _leaseTransitionService = leaseTransitionService;
         _signingActivationGate = signingActivationGate;
         _kurumPolitikaServisi = kurumPolitikaServisi;
+        _kurumPolitikaGuard = kurumPolitikaGuard;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -226,12 +229,18 @@ public sealed class EBelgeArtefaktOlusturmaService : IEBelgeArtefaktOlusturmaSer
             return EBelgeArtefaktOlusturmaSonucu.SahiplikKaybedildi();
         }
 
-        // Faz 2B.10.1 görev md.7 - lease ownership doğrulandıktan SONRA, artifact/EBelgeKaydi
-        // DEĞİŞTİRİLMEDEN ÖNCE, AYNI transaction içinde kurum politikası TEKRAR doğrulanır -
-        // render/sidecar çağrısı (Faz 2) SÜRESİNCE politika kapanmış OLABİLİR. Uygun değilse:
-        // artifact insert EDİLMEZ, EBelgeKaydi.Durum DEĞİŞMEZ, outbox KENDİ transaction'ında
-        // güvenli bekleme durumuna alınır (terminalize EDİLMEZ).
-        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, cancellationToken);
+        // Faz 2B.10.2 görev md.3/md.9 - lease ownership (outbox row) doğrulandıktan SONRA, ama
+        // artifact/EBelgeKaydi DEĞİŞTİRİLMEDEN ÖNCE, kurum politika satırı `WITH (UPDLOCK,
+        // HOLDLOCK, ROWLOCK)` ile KİLİTLENİR - normal AsNoTracking()/READ COMMITTED okuma "aynı
+        // transaction içinde okundu" olsa bile bir SERIALIZATION garantisi VERMEZ (bkz. görev
+        // md.1). Kilit alındıktan SONRA, uygunluk bu SABİTLENMİŞ anlık görüntü ÜZERİNDEN
+        // değerlendirilir - render/sidecar çağrısı (Faz 2) SÜRESİNCE politika kapanmış OLABİLİR,
+        // ama bu KİLİT alındıktan SONRA artık BAŞKA hiçbir writer politikayı DEĞİŞTİREMEZ (lock
+        // ordering: outbox ownership row → kurum policy row → EBelgeKaydi/artifact yazmaları,
+        // bkz. görev md.9). Uygun değilse: artifact insert EDİLMEZ, EBelgeKaydi.Durum DEĞİŞMEZ,
+        // outbox KENDİ transaction'ında güvenli bekleme durumuna alınır (terminalize EDİLMEZ).
+        var kilitliPolitika = await _kurumPolitikaGuard.KilitleVeOkuAsync(talep.KurumId, cancellationToken);
+        var uygunluk = await _kurumPolitikaServisi.DegerlendirIslemUygunlugunuKilitliAsync(talep.KurumId, talep.EBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur, kilitliPolitika, cancellationToken);
         if (!uygunluk.UygunMu)
         {
             var geriAlindi = await _leaseTransitionService.TryReleasePolicyBlockedAsync(

@@ -128,6 +128,7 @@ public class EBelgeSigningBackfillServiceIntegrationTests : IAsyncLifetime
         private readonly bool _sonuc;
         public FixedActivationGate(bool sonuc) => _sonuc = sonuc;
         public bool ShouldCreateSigningMessage() => _sonuc;
+        public bool CanSignNow() => _sonuc;
     }
 
     [IntegrationFact]

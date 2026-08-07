@@ -62,6 +62,13 @@ public interface IEBelgeOutboxLeaseTransitionService
     /// <summary>
     /// Faz 2B.10.1 görev md.6 - kurum politikası kill switch/uygunluk kaybı NORMAL bir teknik hata
     /// DEĞİLDİR; bu yüzden `TryFailJobAsync` (Durum=Hata, terminal/retry-with-backoff) KULLANILMAZ.
+    /// Faz 2B.10.2 görev md.7 - isim "Policy" desin, bu metot AYNI zamanda global signing gate
+    /// commit-öncesi kapandığında (`EBelgeUblImzalamaService`'in HER İKİ kontrol noktası) DA
+    /// kullanılır - "policy" ARTIK dar anlamda yalnız kurum e-belge politikasını DEĞİL, DAHA GENİŞ
+    /// bir "eligibility" (kurum politikası VEYA global signing gate) semantiğini TAŞIR. Bu tur
+    /// (Faz 2B.10.3) BÜYÜK bir rename YAPMAZ - davranış (aşağıdaki paragraf) İSİMDEN daha önemlidir;
+    /// isim ilerideki bir fazda `TryReleaseEligibilityBlockedAsync` gibi daha GENEL bir adla
+    /// DEĞİŞTİRİLEBİLİR.
     /// Mesaj `Durum=Bekliyor`'a (Hata=4 DEĞİL) döner, lease temizlenir, `SonHataKodu`/`SonHataMesaji`
     /// SABİT/güvenli bir gözlemlenebilirlik işaretiyle (ham kurum/müşteri/belge bilgisi İÇERMEZ)
     /// doldurulur - terminalize EDİLMEZ. `DenemeSayisi`, claim ANINDA artırılmış olan denemeyi

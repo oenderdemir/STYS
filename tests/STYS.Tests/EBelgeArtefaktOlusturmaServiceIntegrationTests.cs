@@ -185,7 +185,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         });
         await dbContext.SaveChangesAsync();
 
-        var claimService = new EBelgeOutboxClaimLeaseService(dbContext);
+        var claimService = new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik);
         var claim = await claimService.TryClaimNextAsync(leaseDuration ?? TimeSpan.FromMinutes(5));
         Assert.NotNull(claim);
         return claim!;
@@ -494,7 +494,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         await BackdateLeaseExpiryAsync(seedCtx, eskiClaim.OutboxMesajiId);
 
         await using var reclaimCtx = CreateDbContext();
-        var yeniClaim = await new EBelgeOutboxClaimLeaseService(reclaimCtx).TryClaimNextAsync(TimeSpan.FromMinutes(5));
+        var yeniClaim = await new EBelgeOutboxClaimLeaseService(reclaimCtx, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromMinutes(5));
         Assert.NotNull(yeniClaim);
         Assert.Equal(eskiClaim.OutboxMesajiId, yeniClaim!.OutboxMesajiId);
         Assert.NotEqual(eskiClaim.KilitToken, yeniClaim.KilitToken);
@@ -768,7 +768,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         await seedCtx.SaveChangesAsync();
 
         await using var workCtx = CreateDbContext();
-        var claimService = new EBelgeOutboxClaimLeaseService(workCtx);
+        var claimService = new EBelgeOutboxClaimLeaseService(workCtx, EBelgeTestSigningActivationGate.Acik);
         var claim = await claimService.TryClaimNextAsync(TimeSpan.FromSeconds(60));
         Assert.NotNull(claim);
         Assert.Equal(eBelgeKaydiId, claim!.EBelgeKaydiId);
@@ -1129,7 +1129,7 @@ public class EBelgeArtefaktOlusturmaServiceIntegrationTests : IAsyncLifetime, IC
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE [muhasebe].[KurumEBelgePolitikalari] SET [AktifMi] = 1 WHERE [KurumId] = {_kurumId}");
 
-        var yenidenClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+        var yenidenClaim = await new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromSeconds(60));
 
         Assert.NotNull(yenidenClaim);
         Assert.Equal(claim.OutboxMesajiId, yenidenClaim!.OutboxMesajiId);

@@ -4241,3 +4241,69 @@ test double'larıyla deterministik simüle edildi), yeni bir DB geçişi/tablo/s
 `sys.dm_tran_locks` tabanlı DMV polling altyapısı kurma (blokaj kanıtı `Task.WhenAny` + zaman
 aşımıyla YAPILDI), test skip etme, tüm solution test paketini çalıştırma, frontend/PDF/e-posta
 geliştirmesi.
+
+## Faz 2B.10.3: Signing Gate Claim Eligibility ve Churn Engelleme
+
+Faz 2B.10.2, global signing gate'i GERÇEK bir commit-öncesi kapı yapmıştı (handler başında + SignedReady
+commit'inden hemen önce) - ama İKİ kontrolü de claim SONRASI çalışıyordu: gate kapalıyken bir
+`UblImzala` mesajı YİNE claim edilip HEMEN "Bekliyor"a bırakılıyor, tekrar claim edilebiliyordu.
+`DenemeSayisi` tüketilmese bile bu, gerçek worker/SQL churn üretiyordu. Bu tur, mimariyi
+DEĞİŞTİRMEDEN yalnız BU problemi kapatır - tam tasarım gerekçesi için bkz.
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md` "Faz 2B.10.3" bölümü.
+
+**1. Signing gate claim eligibility'nin parçası**: `EBelgeOutboxClaimLeaseService`, `IEBelgeSigningActivationGate`
+bağımlılığı alır; `TryClaimNextAsync`'in BAŞINDA `CanSignNow()` BİR KEZ değerlendirilir ve claim SQL'ine
+`@SigningAllowed` BIT parametresi olarak geçirilir - `AND (outbox.IsTuru <> 2 OR @SigningAllowed = 1)`.
+`Enabled`/tarih/timezone/config-parsing algoritması SQL'e TAŞINMADI - tek kaynak-of-truth
+`IEBelgeSigningActivationGate` olarak KALDI. Mevcut politika/yöntem/aktivasyon-tarihi uygunluğu (Faz
+2B.10.1) DEĞİŞMEDİ - signing gate ONA EKLENEN bir AND katmanıdır; `ArtefaktOlustur` mesajları
+ETKİLENMEZ.
+
+**2. Üç katmanlı savunma**: (a) claim öncesi - YENİ; (b) handler/imza öncesi - Faz 2B.10.2'den
+KORUNDU; (c) SignedReady commit öncesi - Faz 2B.10.2'den KORUNDU. Claim eligibility TEK BAŞINA
+yeterli DEĞİLDİR - claim ANINDA gate açık olup imzalama SIRASINDA kapanabileceğinden (b)/(c) HİÇBİRİ
+kaldırılmadı.
+
+**3. Starvation yok**: signing gate yalnız `UblImzala`'yı hedefler; kuyrukta ÖNCE gelen bloklu bir
+signing mesajı SONRAKİ uygun bir `ArtefaktOlustur` mesajının claim edilmesini ENGELLEMEZ. Worker'a
+AYRI bir "signing kapalıysa TÜM polling turunu durdur" dalı EKLENMEDİ - böyle bir dal starvation'ı
+KENDİSİ ÜRETİRDİ.
+
+**4. Attempt/lease garantisi**: gate kapalıyken bir `UblImzala` mesajı İÇİN claim çağrısı satırı HİÇ
+DEĞİŞTİRMEZ (`Durum`/`KilitToken`/`KilitBitisZamaniUtc`/`DenemeSayisi` sabit kalır), `null` döner - art
+arda/aynı poll turunda tekrarlanan çağrılar HEP `null` döner, DB durumu HER SEFERİNDE AYNI kalır.
+
+**5. Transaction guard fail-fast**: `EBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync` artık açık
+bir ambient transaction OLMADAN çağrılırsa `InvalidOperationException` fırlatır (ÖNCEDEN sessizce,
+transaction olmadan da ÇALIŞIYORDU - bu durumda `HOLDLOCK` garantisi sessizce KAYBOLUYORDU). TÜM
+production çağrı noktaları ZATEN açık transaction içinde çağırdığından bu değişiklik onların
+davranışını ETKİLEMEDİ - yalnız programlama hatalarını fail-fast hale GETİRDİ.
+
+**6. İsimlendirme notu**: `TryReleasePolicyBlockedAsync`, ARTIK kurum politikası VE global signing gate
+İKİSİ İÇİN kullanıldığından XML doc'u güncellendi - büyük bir rename YAPILMADI (davranış isimden daha
+önemli, geniş blast-radius riski VAR).
+
+**Eklenen/güçlendirilen kritik invariant**: `SigningGatePreventsQueuedSigning` artık yalnız "claim
+edilmiş mesaj SignedReady üretmiyor" değil, DAHA GÜÇLÜ biçimde "gate kapalıyken signing mesajı hiç
+claim edilmiyor" davranışını da kanıtlar (`EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests`).
+
+**Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; 592 → 601):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 316, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 579, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 599, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 601, Failed: 0, Skipped: 0  (preflight: SQL+Java+31 kritik invariant testi GEÇTİ)
+```
+
+Not: Faz 2B.10.2'nin release çalıştırmasında bir kez flaky olan
+`EBelgeSchematronSidecarIntegrationTests.BuyukXmlLimitteReddedilir` bu turun kapsamı DIŞINDADIR - bu
+turun HİÇBİR çalıştırmasında tekrar başarısız OLMADI, dosyaya DOKUNULMADI.
+
+**Kasıtlı olarak YAPILMAYANLAR**: Faz 2B.10/2B.10.1/2B.10.2 mimarisini/davranış matrisini baştan
+yazma, `EBelgeOutboxWorker`'a "signing kapalıysa tüm polling turunu durdur" dalı ekleme (starvation
+üretirdi), Enabled/tarih/timezone/config-parsing algoritmasını SQL'e taşıma/hard-code etme, mevcut
+erken/commit-öncesi signing gate kontrollerini kaldırma, `TryReleasePolicyBlockedAsync`'i büyük
+ölçekte rename etme, yeni bir DB geçişi/tablo/sonuç türü icat etme, test skip etme, tüm solution
+test paketini çalıştırma, flaky (bu turla ilgisiz) `EBelgeSchematronSidecarIntegrationTests` testine
+dokunma, frontend/PDF/e-posta geliştirmesi.

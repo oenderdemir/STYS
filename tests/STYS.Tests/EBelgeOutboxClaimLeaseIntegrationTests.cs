@@ -130,7 +130,7 @@ public class EBelgeOutboxClaimLeaseIntegrationTests : IAsyncLifetime
     }
 
     private static IEBelgeOutboxClaimLeaseService CreateClaimService(StysAppDbContext dbContext)
-        => new EBelgeOutboxClaimLeaseService(dbContext);
+        => new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik);
 
     private static StysAppDbContext CreateDbContext()
     {

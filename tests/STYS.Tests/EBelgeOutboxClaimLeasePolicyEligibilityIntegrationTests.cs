@@ -179,8 +179,19 @@ public class EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests : IAsyncLif
         return mesaj.Id;
     }
 
-    private static Task<EBelgeOutboxClaimLeaseResultDto?> ClaimNextAsync(StysAppDbContext dbContext) =>
-        new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+    private static Task<EBelgeOutboxClaimLeaseResultDto?> ClaimNextAsync(StysAppDbContext dbContext, IEBelgeSigningActivationGate? signingGate = null) =>
+        new EBelgeOutboxClaimLeaseService(dbContext, signingGate ?? EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+
+    /// <summary>Faz 2B.10.3 görev md.8/md.9 - Enabled/NotBeforeLocalDate/timezone algoritmasının GERÇEK `EBelgeSigningActivationGate` üzerinden (test double İLE DEĞİL) doğrulandığı senaryolar İÇİN sabit bir zaman sağlayıcı.</summary>
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _zaman;
+        public FixedTimeProvider(DateTimeOffset zaman) => _zaman = zaman;
+        public override DateTimeOffset GetUtcNow() => _zaman;
+    }
+
+    private static EBelgeSigningActivationGate CreateRealSigningGate(EBelgeSigningOptions options, DateTimeOffset nowUtc) =>
+        new(Microsoft.Extensions.Options.Options.Create(options), new FixedTimeProvider(nowUtc), Microsoft.Extensions.Logging.Abstractions.NullLogger<EBelgeSigningActivationGate>.Instance);
 
     // 1+3. Politika pasifken uygun outbox claim edilmez; lease/token oluşmaz.
     [IntegrationFact]
@@ -334,5 +345,171 @@ public class EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests : IAsyncLif
 
         var nonNullClaims = claims.Where(c => c is not null).ToList();
         Assert.Single(nonNullClaims);
+    }
+
+    // ---- Faz 2B.10.3 - global signing gate, claim eligibility'ye EK bir AND katmanı olarak ----
+
+    // 10/11/12. Signing gate kapalıyken UblImzala mesajı claim edilmez, attempt değişmez, lease oluşmaz.
+    [IntegrationFact]
+    [Trait("CriticalInvariant", "SigningGatePreventsQueuedSigning")]
+    public async Task SigningGateKapaliykenUblImzalaMesajiClaimEdilmezAttemptDegismezLeaseOlusmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        var outboxId = await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
+
+        var claim = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Kapali);
+
+        Assert.Null(claim);
+
+        var mesaj = await dbContext.EBelgeOutboxMesajlari.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == outboxId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, mesaj.Durum);
+        Assert.Equal(0, mesaj.DenemeSayisi);
+        Assert.Null(mesaj.KilitToken);
+        Assert.Null(mesaj.KilitBitisZamaniUtc);
+    }
+
+    // 13. Aynı batch/poll boyunca art arda claim çağrıları HEP null döner - gerçek churn yok.
+    [IntegrationFact]
+    public async Task SigningGateKapaliykenArtArdaBesClaimCagrisiHepNullDonerVeMesajDegismezKalir()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        var outboxId = await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
+
+        for (var i = 0; i < 5; i++)
+        {
+            var claim = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Kapali);
+            Assert.Null(claim);
+        }
+
+        var mesaj = await dbContext.EBelgeOutboxMesajlari.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == outboxId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, mesaj.Durum);
+        Assert.Equal(0, mesaj.DenemeSayisi);
+        Assert.Null(mesaj.KilitToken);
+        Assert.Null(mesaj.KilitBitisZamaniUtc);
+    }
+
+    // 5/9. Gate kapalıyken kuyrukta ÖNCE gelen bloklu bir UblImzala mesajı, SONRA gelen uygun bir
+    // ArtefaktOlustur mesajının claim edilmesini ENGELLEMEZ (starvation yok).
+    [IntegrationFact]
+    public async Task SigningGateKapaliykenIlkSiradakiSigningMesajiUygunArtefaktMesajininClaimEdilmesiniEngellemez()
+    {
+        await using var dbContext = CreateDbContext();
+
+        var (satisBelgesiIdSign, eBelgeKaydiIdSign) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiIdSign, eBelgeKaydiIdSign, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        var signOutboxId = await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiIdSign, EBelgeOutboxIsTuru.UblImzala); // ÖNCE seed edilir (küçük Id)
+
+        var (satisBelgesiIdArt, eBelgeKaydiIdArt) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiIdArt, eBelgeKaydiIdArt, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        var artOutboxId = await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiIdArt, EBelgeOutboxIsTuru.ArtefaktOlustur); // SONRA seed edilir (büyük Id)
+
+        var claim = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Kapali);
+
+        Assert.NotNull(claim);
+        Assert.Equal(artOutboxId, claim!.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxIsTuru.ArtefaktOlustur, claim.IsTuru);
+
+        var signMesaj = await dbContext.EBelgeOutboxMesajlari.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == signOutboxId);
+        Assert.Equal(EBelgeOutboxDurumu.Bekliyor, signMesaj.Durum); // bloklu kaldı ama starvation OLUŞTURMADI
+        Assert.Equal(0, signMesaj.DenemeSayisi);
+    }
+
+    // 6. Gate tekrar açılınca AYNI signing mesajı claim edilebilir.
+    [IntegrationFact]
+    public async Task SigningGateTekrarAcilincaAyniSigningMesajiClaimEdilebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        var outboxId = await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
+
+        var bloklu = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Kapali);
+        Assert.Null(bloklu);
+
+        var claim = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Acik);
+
+        Assert.NotNull(claim);
+        Assert.Equal(outboxId, claim!.OutboxMesajiId);
+        Assert.Equal(1, claim.DenemeSayisi); // gate kapalıyken YAPILAN denemeler DenemeSayisi'ni ARTIRMADI
+        Assert.NotNull(claim.KilitToken);
+    }
+
+    // 8. Gate NotBeforeLocalDate tarihi HENÜZ gelmemişse (gerçek EBelgeSigningActivationGate ile) signing mesajı claim edilmez.
+    [IntegrationFact]
+    public async Task SigningGateAktivasyonTarihiHenuzGelmemisseSigningMesajiClaimEdilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
+
+        var gate = CreateRealSigningGate(
+            new EBelgeSigningOptions { Enabled = true, NotBeforeLocalDate = "2030-01-01" },
+            new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        var claim = await ClaimNextAsync(dbContext, gate);
+
+        Assert.Null(claim);
+    }
+
+    // 9. Geçersiz NotBeforeLocalDate config'i (gerçek gate) fail-closed'dır - signing mesajı claim edilmez.
+    [IntegrationFact]
+    public async Task SigningGateGecersizNotBeforeLocalDateIleSigningMesajiClaimEdilmezFailClosed()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
+
+        var gate = CreateRealSigningGate(
+            new EBelgeSigningOptions { Enabled = true, NotBeforeLocalDate = "gecersiz-tarih" },
+            new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+        var claim = await ClaimNextAsync(dbContext, gate);
+
+        Assert.Null(claim);
+    }
+
+    // 10. Politika pasif + signing gate AÇIK - mevcut politika filtresi YİNE çalışır (signing gate onu BASTIRMAZ).
+    [IntegrationFact]
+    public async Task PolitikaPasifSigningGateAcikkenUblImzalaMesajiYineDeClaimEdilmezPolitikaFiltresiCalisir()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: false, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.UblImzala);
+
+        var claim = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Acik);
+
+        Assert.Null(claim);
+    }
+
+    // 11. Politika aktif + signing gate KAPALI - AYNI kurumun ArtefaktOlustur mesajı YİNE claim
+    // edilir (politika filtresi engellemiyor), ama UblImzala mesajı signing gate TARAFINDAN engellenir.
+    [IntegrationFact]
+    public async Task PolitikaAktifSigningGateKapaliykenArtefaktMesajiClaimEdilirImzaMesajiEdilmez()
+    {
+        await using var dbContext = CreateDbContext();
+        var (satisBelgesiId, eBelgeKaydiId) = await SeedEBelgeKaydiAsync(dbContext, _kurumId, _tesisId, _musteriKartId, _suffixA);
+        await SeedPolitikaAsync(dbContext, _kurumId, EBelgeEntegrasyonYontemi.DogrudanGib, aktifMi: true, new DateTime(2020, 1, 1));
+        await SeedKararAsync(dbContext, _kurumId, satisBelgesiId, eBelgeKaydiId, EBelgeEntegrasyonYontemi.DogrudanGib, true, true, true);
+        var artOutboxId = await SeedOutboxAsync(dbContext, _kurumId, eBelgeKaydiId, EBelgeOutboxIsTuru.ArtefaktOlustur);
+
+        var claim = await ClaimNextAsync(dbContext, EBelgeTestSigningActivationGate.Kapali);
+
+        Assert.NotNull(claim);
+        Assert.Equal(artOutboxId, claim!.OutboxMesajiId);
+        Assert.Equal(EBelgeOutboxIsTuru.ArtefaktOlustur, claim.IsTuru);
     }
 }

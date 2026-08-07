@@ -508,7 +508,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
         int outboxMesajiId;
         await using (var claimCtx = CreateDbContext())
         {
-            var instanceAClaimService = new EBelgeOutboxClaimLeaseService(claimCtx);
+            var instanceAClaimService = new EBelgeOutboxClaimLeaseService(claimCtx, EBelgeTestSigningActivationGate.Acik);
             var instanceAClaim = await instanceAClaimService.TryClaimNextAsync(TimeSpan.FromSeconds(2));
             Assert.NotNull(instanceAClaim);
             outboxMesajiId = instanceAClaim!.OutboxMesajiId;
@@ -516,7 +516,7 @@ public class EBelgeOutboxWorkerIntegrationTests : IAsyncLifetime, IClassFixture<
             // Instance A aktif lease TUTARKEN, Instance B (AYRI bir DbContext/claim servisi) AYNI
             // mesajı ALAMAZ - kuyrukta BAŞKA claim edilebilir mesaj OLMADIĞINDAN `null` döner.
             await using var instanceBCtx = CreateDbContext();
-            var instanceBClaimService = new EBelgeOutboxClaimLeaseService(instanceBCtx);
+            var instanceBClaimService = new EBelgeOutboxClaimLeaseService(instanceBCtx, EBelgeTestSigningActivationGate.Acik);
             var instanceBIlkDeneme = await instanceBClaimService.TryClaimNextAsync(TimeSpan.FromMinutes(5));
             Assert.Null(instanceBIlkDeneme);
         }

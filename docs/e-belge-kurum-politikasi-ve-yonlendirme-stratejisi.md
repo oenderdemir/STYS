@@ -491,6 +491,91 @@ Yeni kritik invariant'lar (`EBelgeCriticalInvariantManifest`): `SigningGatePreve
 edilemez). `PolicyKillSwitchPreventsCommit` (Faz 2B.10.1) artık GERÇEK iki-transaction testlerle
 de kanıtlanır (önceki sıralı testler KORUNDU, güçlendirici testler EKLENDİ).
 
+## Faz 2B.10.3: Signing Gate Claim Eligibility ve Churn Engelleme
+
+Faz 2B.10.2, global signing gate'i GERÇEK bir commit-öncesi kapı yaptı (handler başında + SignedReady
+commit'inden hemen önce) - ama bu iki kontrol noktasının İKİSİ de claim SONRASI çalışıyordu. Sonuç:
+gate kapalıyken bir `UblImzala` mesajı YİNE claim edilip HEMEN "Bekliyor"a bırakılıyor, tekrar claim
+edilebiliyordu - `DenemeSayisi` tüketilmese bile bu, worker/SQL churn üretiyordu. Faz 2B.10.3, mimariyi
+DEĞİŞTİRMEDEN bu tek problemi kapatır: **signing gate ARTIK claim eligibility'nin KENDİSİNİN bir
+parçası** - gate kapalıyken bir `UblImzala` mesajı hiç ADAY OLMAZ.
+
+### Signing gate claim eligibility
+
+`EBelgeOutboxClaimLeaseService`, `IEBelgeSigningActivationGate` bağımlılığı alır ve `TryClaimNextAsync`'in
+BAŞINDA `CanSignNow()`'ı BİR KEZ değerlendirir - bu type-safe bool karar, claim SQL'ine `@SigningAllowed`
+BIT parametresi olarak geçirilir: `AND (outbox.IsTuru <> 2 OR @SigningAllowed = 1)`. `Enabled`/tarih/
+timezone/config-parsing ALGORİTMASI SQL'e TAŞINMAZ - tek kaynak-of-truth `IEBelgeSigningActivationGate`
+olarak KALIR; SQL yalnız caller'ın ZATEN hesapladığı kararı KULLANIR. Bu, mevcut politika/yöntem/
+aktivasyon-tarihi uygunluğunun (bkz. Faz 2B.10.1) YERİNE GEÇEN değil, ONA EKLENEN bir AND katmanıdır -
+`ArtefaktOlustur` mesajları bundan HİÇ ETKİLENMEZ.
+
+### Üç katmanlı signing gate savunması
+
+Claim eligibility TEK BAŞINA yeterli DEĞİLDİR - claim ANINDA gate açık olabilir ama imzalama SIRASINDA
+kapanabilir (aynı TOCTOU açığı, farklı bir pencere). Bu yüzden ÜÇ AYRI savunma katmanı VARDIR:
+
+1. **Claim öncesi** (`EBelgeOutboxClaimLeaseService`) - gate kapalıysa mesaj hiç claim edilmez.
+2. **Handler/imza öncesi** (`EBelgeUblImzalamaService.ImzalaAsync`'in EN BAŞI) - Faz 2B.10.2'den
+   KORUNDU; imza/render işine hiç girilmeden erken çıkış.
+3. **SignedReady commit öncesi** (Faz 2B.10.2'den KORUNDU) - imza operasyonu tamamlandıktan SONRA,
+   SignedReady yazılmadan HEMEN ÖNCE TEKRAR kontrol.
+
+Üçü de AYNI `IEBelgeSigningActivationGate.CanSignNow()` çekirdeğini kullanır - HİÇBİRİ algoritmayı
+kendi başına YENİDEN YAZMAZ.
+
+### Gate kapalı queue starvation davranışı
+
+Signing gate yalnız `UblImzala` iş türünü hedefler - kuyrukta ÖNCE gelen bloklu bir signing mesajı,
+SONRAKİ uygun bir `ArtefaktOlustur` mesajının claim edilmesini ENGELLEMEZ (claim SQL'in `WHERE`
+yüklemi ineligible satırları CTE'den TAMAMEN eler, `TOP (1) ... ORDER BY` sıradaki UYGUN adaya geçer).
+Worker'da AYRICA bir "signing kapalıysa TÜM polling turunu durdur" dalı YOKTUR - böyle bir dal
+starvation'ı KENDİSİ ÜRETİRDİ.
+
+### Gate kapalı attempt/lease garantisi
+
+Gate kapalıyken `TryClaimNextAsync` bir `UblImzala` mesajı İÇİN: satır GÜNCELLENMEZ (`Durum`/
+`KilitToken`/`KilitBitisZamaniUtc`/`DenemeSayisi` HİÇBİRİ değişmez), `null` döner. Aynı mesaj İÇİN art
+arda/aynı poll turunda tekrarlanan claim çağrıları HEP `null` döner ve DB durumu HER SEFERİNDE AYNI
+kalır - gerçek churn (SQL yazımı/lease/log gürültüsü) ORTADAN KALKAR (Faz 2B.10.2'nin "claim SONRASI
+hemen Bekliyor'a bırak" davranışının AKSİNE).
+
+### Transaction guard fail-fast sözleşmesi
+
+`EBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync` ARTIK açık bir ambient transaction OLMADAN
+çağrılırsa `InvalidOperationException` fırlatır (Faz 2B.10.2'de sessizce, transaction OLMADAN da
+çalışıyordu - bu durumda `HOLDLOCK`'un verdiği garanti sessizce KAYBOLUYORDU). Bu, business bir
+fallback DEĞİL, bir programlama/çağıran hatasıdır - fail-closed bir DEĞER DÖNDÜRMEK yerine fail-FAST
+bir exception TERCİH edilir. TÜM production çağrı noktaları (`EBelgeArtefaktOlusturmaService`,
+`EBelgeUblImzalamaService`'in her iki yolu, `SatisBelgesiService.FaturaKesAsync`) zaten AÇIK bir
+transaction içinde çağırır - bu değişiklik onların davranışını ETKİLEMEZ.
+
+### `TryReleasePolicyBlockedAsync` isimlendirme notu
+
+Bu metot ARTIK yalnız kurum politikası nedeniyle DEĞİL, global signing gate commit-öncesi kapandığında
+DA (`EBelgeUblImzalamaService`'in her iki kontrol noktasında) kullanılır - outbox satırının davranışı
+(terminal olmayan, Bekliyor, attempt iade, retry churn yok) İKİ senaryoda da AYNI olduğundan ayrı bir
+sonuç türü/DB geçişi İCAT EDİLMEDİ. İsim "Policy" desin, semantiği ARTIK "kurum politikası VEYA global
+signing gate nedeniyle non-terminal eligibility release"dir. Bu tur BÜYÜK bir rename YAPMADI (davranış
+isimden daha önemlidir) - ilerideki bir fazda `TryReleaseEligibilityBlockedAsync` gibi daha genel bir
+adla değiştirilmesi değerlendirilebilir.
+
+### Test kapsamı
+
+`EBelgeOutboxClaimLeasePolicyEligibilityIntegrationTests`'e veri-odaklı biçimde eklenen testler: gate
+kapalıyken UblImzala claim edilmez/attempt değişmez/lease oluşmaz, art arda 5 claim çağrısı hep `null`
+döner ve DB durumu değişmez kalır, bloklu bir signing mesajı sıradaki uygun `ArtefaktOlustur`
+mesajının claim edilmesini engellemez (starvation yok), gate tekrar açılınca AYNI mesaj claim edilir,
+GERÇEK `EBelgeSigningActivationGate` ile aktivasyon-tarihi-gelmemiş/geçersiz-config senaryolarında
+signing claim edilmez (fail-closed), politika pasif + gate açık / politika aktif + gate kapalı
+kombinasyonlarının HER İKİ filtrenin de BAĞIMSIZ çalıştığını kanıtladığı testler.
+`EBelgeKurumPolitikaYonetimServisiIntegrationTests.TransactionGuardAcikTransactionOlmadanCagrilirsaFailFastExceptionFirlatir`
+guard'ın fail-fast sözleşmesini doğrular; Faz 2B.10.2'nin GERÇEK serialization testleri (mevcut guard
+çağrı noktalarının TÜMÜ zaten açık transaction içinde olduğundan) DEĞİŞİKLİK OLMADAN geçmeye devam
+eder. `SigningGatePreventsQueuedSigning` kritik invariant'ı ARTIK yalnız "claim edilmiş mesaj
+SignedReady üretmiyor" değil, DAHA GÜÇLÜ biçimde "gate kapalıyken signing mesajı hiç claim edilmiyor"
+davranışını da kanıtlar.
+
 ## Kurum Süreç Analiz Şablonu
 
 Kurum bazlı bilgi toplama için bkz. `docs/e-belge-kurum-surec-analizi-sablonu.md` — bu şablon

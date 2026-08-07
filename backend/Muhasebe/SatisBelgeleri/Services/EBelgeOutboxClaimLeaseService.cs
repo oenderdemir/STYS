@@ -12,17 +12,28 @@ namespace STYS.Muhasebe.SatisBelgeleri.Services;
 public class EBelgeOutboxClaimLeaseService : IEBelgeOutboxClaimLeaseService
 {
     private readonly StysAppDbContext _dbContext;
+    private readonly IEBelgeSigningActivationGate _signingActivationGate;
 
     public EBelgeOutboxClaimLeaseService(
-        StysAppDbContext dbContext)
+        StysAppDbContext dbContext,
+        IEBelgeSigningActivationGate signingActivationGate)
     {
         _dbContext = dbContext;
+        _signingActivationGate = signingActivationGate;
     }
 
     public async Task<EBelgeOutboxClaimLeaseResultDto?> TryClaimNextAsync(TimeSpan leaseDuration, CancellationToken cancellationToken = default)
     {
         var leaseSeconds = EBelgeOutboxLeaseValidationHelper.NormalizeAndValidateLeaseSeconds(leaseDuration);
         var kilitToken = Guid.NewGuid().ToString("D");
+
+        // Faz 2B.10.3 görev md.2/md.3 - global signing gate'in Enabled/tarih/timezone/config-parsing
+        // ALGORİTMASI SQL'e TAŞINMAZ; tek kaynak-of-truth `IEBelgeSigningActivationGate` olarak
+        // KALIR. Burada YALNIZ caller'ın (bu servisin) zaten type-safe biçimde hesapladığı bool
+        // karar, aşağıdaki SQL'e bir parametre olarak GEÇİRİLİR - `CanSignNow()` KENDİSİ fail-closed
+        // (Enabled=false/geçersiz tarih/geçersiz timezone İÇİN exception FIRLATMADAN `false` döner,
+        // bkz. `EBelgeSigningActivationGate.Degerlendir`) olduğundan bu satır da fail-closed'dır.
+        var signingAllowed = _signingActivationGate.CanSignNow();
 
         var connection = _dbContext.Database.GetDbConnection();
         var shouldCloseConnection = connection.State != ConnectionState.Open;
@@ -91,6 +102,11 @@ DECLARE @BuguneTrTarih DATE = CAST(DATEADD(HOUR, 3, @NowUtc) AS DATE);
             (outbox.[IsTuru] = 1 AND karar.[YerelSnapshotOlustur] = 1 AND karar.[YerelUnsignedUblOlustur] = 1)
          OR (outbox.[IsTuru] = 2 AND karar.[YerelImzaOlustur] = 1)
           )
+      -- Faz 2B.10.3 görev md.1/md.2 - global signing gate KAPALIYKEN bir UblImzala mesajı hiç
+      -- ADAY OLMAZ (claim edilmez, lease almaz, DenemeSayisi değişmez) - bu, EK bir AND katmanıdır,
+      -- yukarıdaki politika/yöntem/aktivasyon uygunluğunun YERİNE GEÇMEZ. AYNI kuyruktaki uygun
+      -- ArtefaktOlustur mesajları bundan ETKİLENMEZ (görev md.5, starvation OLUŞTURULMAZ).
+      AND (outbox.[IsTuru] <> 2 OR @SigningAllowed = 1)
       AND (
             (outbox.[Durum] = 1 AND (outbox.[SonrakiDenemeZamaniUtc] IS NULL OR outbox.[SonrakiDenemeZamaniUtc] <= @NowUtc))
          OR (outbox.[Durum] = 4 AND outbox.[SonrakiDenemeZamaniUtc] IS NOT NULL AND outbox.[SonrakiDenemeZamaniUtc] <= @NowUtc)
@@ -122,6 +138,7 @@ OUTPUT
 
             command.Parameters.Add(new SqlParameter("@LeaseSeconds", SqlDbType.Int) { Value = leaseSeconds });
             command.Parameters.Add(new SqlParameter("@KilitToken", SqlDbType.NVarChar, 36) { Value = kilitToken });
+            command.Parameters.Add(new SqlParameter("@SigningAllowed", SqlDbType.Bit) { Value = signingAllowed });
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken))

@@ -171,7 +171,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         });
         await dbContext.SaveChangesAsync();
 
-        var claimService = new EBelgeOutboxClaimLeaseService(dbContext);
+        var claimService = new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik);
         var claim = await claimService.TryClaimNextAsync(leaseDuration ?? TimeSpan.FromMinutes(5));
         Assert.NotNull(claim);
         return claim!;
@@ -290,7 +290,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         await seedCtx.SaveChangesAsync();
 
         await using var workCtx = CreateDbContext();
-        var claim = await new EBelgeOutboxClaimLeaseService(workCtx).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+        var claim = await new EBelgeOutboxClaimLeaseService(workCtx, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromSeconds(60));
         Assert.NotNull(claim);
         Assert.Equal(eBelgeKaydiId, claim!.EBelgeKaydiId);
         Assert.Equal(EBelgeOutboxIsTuru.UblImzala, claim.IsTuru);
@@ -836,7 +836,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         });
         await dbContext.SaveChangesAsync();
 
-        var claim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromMinutes(5));
+        var claim = await new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromMinutes(5));
         Assert.NotNull(claim);
         Assert.Equal(EBelgeOutboxIsTuru.ArtefaktOlustur, claim!.IsTuru);
 
@@ -1267,7 +1267,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [IsDeleted] = 0 WHERE [Id] = {unsignedArtifact.Id}");
         await BackdateLeaseExpiryAsync(dbContext, claim.OutboxMesajiId);
 
-        var yeniClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromMinutes(5));
+        var yeniClaim = await new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromMinutes(5));
         Assert.NotNull(yeniClaim);
 
         var ikinciService = CreateService(dbContext);
@@ -1588,7 +1588,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
             $"UPDATE [muhasebe].[EBelgeArtifactlari] SET [RuleSetId] = {unsignedArtifact.RuleSetId} WHERE [Id] = {unsignedArtifact.Id}");
         await BackdateLeaseExpiryAsync(dbContext, claim.OutboxMesajiId);
 
-        var yeniClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromMinutes(5));
+        var yeniClaim = await new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromMinutes(5));
         Assert.NotNull(yeniClaim);
 
         var ikinciService = CreateService(dbContext);
@@ -1955,7 +1955,7 @@ public class EBelgeUblImzalamaServiceIntegrationTests : IAsyncLifetime, IClassFi
         Assert.Equal(EBelgeUblImzalamaSonucuTuru.AtomikPolitikaBloklu, bloklandi!.SonucTuru);
 
         // Gate tekrar açılır - claim filtresi mesajı ARTIK yeniden seçebilmelidir.
-        var yenidenClaim = await new EBelgeOutboxClaimLeaseService(dbContext).TryClaimNextAsync(TimeSpan.FromSeconds(60));
+        var yenidenClaim = await new EBelgeOutboxClaimLeaseService(dbContext, EBelgeTestSigningActivationGate.Acik).TryClaimNextAsync(TimeSpan.FromSeconds(60));
         Assert.NotNull(yenidenClaim);
         Assert.Equal(claim.OutboxMesajiId, yenidenClaim!.OutboxMesajiId);
 

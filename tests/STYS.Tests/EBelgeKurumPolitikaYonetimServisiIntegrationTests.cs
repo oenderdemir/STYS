@@ -341,6 +341,27 @@ public class EBelgeKurumPolitikaYonetimServisiIntegrationTests : IAsyncLifetime
         Assert.False(sonuc.AktifMi);
     }
 
+    /// <summary>
+    /// Faz 2B.10.3 görev md.13 - <see cref="IEBelgeKurumPolitikaTransactionGuard.KilitleVeOkuAsync"/>
+    /// AÇIK bir ambient transaction OLMADAN çağrılırsa fail-FAST bir <see cref="InvalidOperationException"/>
+    /// fırlatmalıdır - `HOLDLOCK`'un verdiği "transaction sonuna kadar tutulan kilit" garantisi,
+    /// tutacak bir transaction YOKSA sessizce KAYBOLUR; bu, business bir fallback'e ASLA ÇEVRİLMEZ.
+    /// </summary>
+    [IntegrationFact]
+    public async Task TransactionGuardAcikTransactionOlmadanCagrilirsaFailFastExceptionFirlatir()
+    {
+        await using var seedCtx = CreateDbContext();
+        var servis = CreateServis(seedCtx);
+        await servis.GuncelleAsync(_kurumId, DtoIcin(
+            EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1), null, ""));
+
+        await using var dbContext = CreateDbContext();
+        var guard = new EBelgeKurumPolitikaTransactionGuard(dbContext);
+
+        // KASITLI olarak `Database.BeginTransactionAsync()` HİÇ çağrılmadı.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => guard.KilitleVeOkuAsync(_kurumId));
+    }
+
     // ---- Pending iş varken YÖNTEM değişimi engellenir ----
 
     [IntegrationFact]

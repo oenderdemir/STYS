@@ -68,6 +68,17 @@ public sealed class EBelgeKurumPolitikaTransactionGuard : IEBelgeKurumPolitikaTr
             throw new BaseException("KurumId pozitif olmalıdır.", 400);
         }
 
+        // Faz 2B.10.3 görev md.13 - bu guard yalnız AÇIK bir ambient transaction İÇİNDE anlamlıdır
+        // (bkz. sınıf XML doc'u): `HOLDLOCK`'un verdiği "transaction sonuna kadar tutulan kilit"
+        // garantisi, kilit tutacak bir transaction YOKSA sessizce KAYBOLUR - `UPDLOCK` tek başına
+        // yalnız İFADE ömrü boyunca sürer, `ExecuteReaderAsync` dönüşünde HEMEN serbest kalır. Bu,
+        // güvenli bir business-hata DEĞİL, bir PROGRAMLAMA/çağıran hatasıdır - fail-closed bir
+        // sonuç DÖNDÜRMEK YERİNE (ki bu, "kilitlendi" YANILSAMASI yaratır) fail-FAST bir exception
+        // fırlatılır.
+        var currentTransaction = _dbContext.Database.CurrentTransaction
+            ?? throw new InvalidOperationException(
+                "Kurum e-belge politika transaction guard açık bir transaction gerektirir.");
+
         var connection = _dbContext.Database.GetDbConnection();
         var shouldCloseConnection = connection.State != ConnectionState.Open;
 
@@ -79,11 +90,7 @@ public sealed class EBelgeKurumPolitikaTransactionGuard : IEBelgeKurumPolitikaTr
         try
         {
             await using var command = connection.CreateCommand();
-            var currentTransaction = _dbContext.Database.CurrentTransaction;
-            if (currentTransaction is not null)
-            {
-                command.Transaction = currentTransaction.GetDbTransaction();
-            }
+            command.Transaction = currentTransaction.GetDbTransaction();
 
             // Faz 2B.10.2 görev md.2 - HOLDLOCK, UPDLOCK'un normalde ifade SONUNDA bıraktığı kilidi
             // transaction SONUNA kadar TUTAR (SERIALIZABLE'a EŞDEĞER bir garanti, ama yalnız BU

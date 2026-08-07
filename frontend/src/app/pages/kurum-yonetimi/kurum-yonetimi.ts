@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, Observable, of } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -49,6 +50,7 @@ interface UserOption {
     imports: [
         CommonModule,
         FormsModule,
+        RouterLink,
         ButtonModule,
         CheckboxModule,
         ConfirmDialogModule,
@@ -73,6 +75,7 @@ export class KurumYonetimi implements OnInit {
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly cdr = inject(ChangeDetectorRef);
+    private readonly activatedRoute = inject(ActivatedRoute);
 
     kurumlar: KurumModel[] = [];
     selectedKurum: KurumFormState = this.createEmptyKurum();
@@ -118,7 +121,11 @@ export class KurumYonetimi implements OnInit {
             return;
         }
 
-        this.loadPageData(false);
+        // Faz 2B.11 görev md.27 - E-Belge Yönetimi ekranındaki "Satıcı bilgilerini tamamla"
+        // butonu, ?kurumId= query param'ı ile bu ekrana yönlendirebilir - o kurum otomatik seçilir.
+        const kurumIdParam = this.activatedRoute.snapshot.queryParamMap.get('kurumId');
+        const preferredKurumId = kurumIdParam ? Number(kurumIdParam) : null;
+        this.loadPageData(false, Number.isFinite(preferredKurumId) ? preferredKurumId : null);
     }
 
     refresh(): void {
@@ -606,6 +613,10 @@ export class KurumYonetimi implements OnInit {
                     ad: this.selectedKurum.ad,
                     aktifMi: this.selectedKurum.aktifMi,
                     vergiNo: this.selectedKurum.vergiNo,
+                    vergiDairesi: this.selectedKurum.vergiDairesi,
+                    adres: this.selectedKurum.adres,
+                    ilce: this.selectedKurum.ilce,
+                    il: this.selectedKurum.il,
                     telefon: this.selectedKurum.telefon,
                     eposta: this.selectedKurum.eposta,
                     logoDosyaAdi: null,
@@ -641,6 +652,10 @@ export class KurumYonetimi implements OnInit {
             kod: kurum.kod ?? '',
             ad: kurum.ad ?? '',
             vergiNo: kurum.vergiNo ?? null,
+            vergiDairesi: kurum.vergiDairesi ?? null,
+            adres: kurum.adres ?? null,
+            ilce: kurum.ilce ?? null,
+            il: kurum.il ?? null,
             telefon: kurum.telefon ?? null,
             eposta: kurum.eposta ?? null,
             aktifMi: kurum.aktifMi,
@@ -657,6 +672,10 @@ export class KurumYonetimi implements OnInit {
             kod: '',
             ad: '',
             vergiNo: null,
+            vergiDairesi: null,
+            adres: null,
+            ilce: null,
+            il: null,
             telefon: null,
             eposta: null,
             aktifMi: true,
@@ -670,6 +689,10 @@ export class KurumYonetimi implements OnInit {
             kod: (form.kod ?? '').trim(),
             ad: (form.ad ?? '').trim(),
             vergiNo: this.normalizeOptionalText(form.vergiNo),
+            vergiDairesi: this.normalizeOptionalText(form.vergiDairesi),
+            adres: this.normalizeOptionalText(form.adres),
+            ilce: this.normalizeOptionalText(form.ilce),
+            il: this.normalizeOptionalText(form.il),
             telefon: this.normalizeOptionalText(form.telefon),
             eposta: this.normalizeOptionalText(form.eposta),
             aktifMi: form.aktifMi === true,

@@ -87,6 +87,7 @@ import { KdvHareketRaporuComponent } from './app/pages/muhasebe/kdv-hareket-rapo
 import { KdvOzetRaporuComponent } from './app/pages/muhasebe/kdv-ozet-raporu/kdv-ozet-raporu.component';
 import { KdvBeyannameHazirlikKontrolComponent } from './app/pages/muhasebe/kdv-beyanname-hazirlik-kontrol/kdv-beyanname-hazirlik-kontrol.component';
 import { SatisBelgeleriComponent } from './app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component';
+import { EBelgeYonetimi } from './app/pages/muhasebe/e-belge-yonetimi/e-belge-yonetimi';
 import { TevkifatHesapEslemeleriPage } from './app/pages/muhasebe/tevkifat-hesap-eslemeleri/tevkifat-hesap-eslemeleri.component';
 import { TicariBelgelerComponent } from './app/pages/ticari-belgeler/ticari-belgeler';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
@@ -202,6 +203,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/kdv-beyanname-hazirlik-kontrol', component: KdvBeyannameHazirlikKontrolComponent, data: { breadcrumb: ['Muhasebe', 'KDV Beyanname Hazırlık Kontrolü'] } },
             { path: 'ticari-belgeler', component: TicariBelgelerComponent, canActivate: [permissionGuard('TicariBelgeYonetimi.View')], data: { breadcrumb: ['Satış Yönetimi', 'Ticari Belgeler'] } },
             { path: 'muhasebe/satis-belgeleri', component: SatisBelgeleriComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Satış Belgeleri'], belgeModu: 'satis' } },
+            { path: 'muhasebe/e-belge-yonetimi', component: EBelgeYonetimi, canActivate: [permissionGuard('MuhasebeSatisBelgeleriYonetimi.View')], data: { breadcrumb: ['Muhasebe', 'E-Belge Yönetimi'] } },
             { path: 'muhasebe/alis-belgeleri', component: SatisBelgeleriComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Alış Belgeleri'], belgeModu: 'alis' } },
             { path: 'muhasebe/yevmiye-defteri', component: YevmiyeDefteriComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Yevmiye Defteri'] } },
             { path: 'muhasebe/muavin-defter', component: MuavinDefterComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Muavin Defter'] } },

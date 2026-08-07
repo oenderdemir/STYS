@@ -576,6 +576,95 @@ eder. `SigningGatePreventsQueuedSigning` kritik invariant'ı ARTIK yalnız "clai
 SignedReady üretmiyor" değil, DAHA GÜÇLÜ biçimde "gate kapalıyken signing mesajı hiç claim edilmiyor"
 davranışını da kanıtlar.
 
+## Faz 2B.11: E-Belge Yönetim, Readiness ve UBL Veri Tamamlama Ekranları
+
+Faz 2B.10-2B.10.3, kurum bazlı e-belge yönlendirmesini TAMAMEN backend'de kurdu — ama kurum
+yöneticilerinin politikayı görüp yönetebileceği, hazırlık durumunu anlayabileceği bir arayüz YOKTU
+(politika yalnız API üzerinden yönetilebiliyordu). Faz 2B.11, mimariyi/karar mantığını
+DEĞİŞTİRMEDEN, YALNIZ bir yönetim/gözlemleme katmanı ekler: yeni bir salt-okunur `readiness`
+endpoint'i + servisi, ve bunu tüketen bir Angular ekranı. Business logic (yöntem yeteneği, global
+kapı durumu, aktivasyon tarihi, satıcı verisi tamlığı, imzalama uygulanabilirliği) BURADA da
+frontend'e SIZMAZ — tamamı backend'de hesaplanır, frontend yalnız görselleştirir. Kullanım detayları
+için bkz. `docs/e-belge-yonetim-ekrani-kullanim-rehberi.md`.
+
+### Readiness servisi — mevcut yapıların BİR ARAYA GETİRİLMESİ
+
+Yeni `IEBelgeKurumReadinessService`/`EBelgeKurumReadinessService`
+(`backend/Muhasebe/SatisBelgeleri/Services/EBelgeKurumReadinessServisi.cs`), `GET
+.../e-belge-politikasi/readiness`'in tek arkasındaki serviS, mevcut
+`IEBelgeYontemYetenekSaglayici`/`IEBelgeProcessingActivationGate`/`IEBelgeSigningActivationGate`/
+kurum politikası okumasını BİR ARAYA GETİRİR — hiçbirinin algoritmasını İKİNCİ KEZ YAZMAZ, yeni bir
+karar mantığı İCAT ETMEZ. Salt-okunur bir GET olduğundan Faz 2B.10.2'nin satır kilidi/transaction
+guard mekanizmasına (yalnız commit-öncesi yarış pencereleri için gereklidir) ihtiyaç DUYMAZ —
+`AsNoTracking()` ile düz okuma yeterlidir.
+
+`KurumEBelgeReadinessDto`, kurumun e-belge hazırlığının TAM anlık görüntüsünü döner: politika
+yapılandırılmış/aktif mi, yöntem operasyonel mi, global işleme kapısı durumu (metin + bool),
+global minimum aktivasyon tarihi (yalnız GÖRÜNTÜLEME amaçlı — backend validasyonunun YERİNE
+GEÇMEZ), yerel snapshot/unsigned-UBL/imza/otomatik-gönderim gerekliliği, satıcı ana verisi
+tamlığı + eksik alan kodları, imzalama kapısının UYGULANABİLİR olup olmadığı (yalnız yerel imza
+gerektiren yöntemlerde anlamlıdır) + şu an mümkün olup olmadığı, genel `islemeHazirMi` bayrağı,
+blokaj nedeni kodları dizisi, ve TÜM yöntemler için (yalnız seçili olan değil) capability listesi
+(`yontemler`) — bu SONUNCUSU, frontend'in "hangi yöntem seçilebilir/devre dışı" listesini
+KENDİ HESAPLAMADAN, doğrudan backend'den kurabilmesi içindir.
+
+### Güvenli kod sözlüğü — `EBelgeKurumReadinessKodlari`
+
+Eksik satıcı alanları (`VERGI_NO`/`VERGI_DAIRESI`/`ADRES`/`ILCE`/`IL`) ve genel blokaj nedenleri,
+ham alan değeri/VKN/müşteri bilgisi TAŞIMAYAN, SABİT kod string'leridir. Mevcut karar servisinin
+(`EBelgeKurumPolitikaEngelliException`) ZATEN kullandığı dört kod (`NOT_CONFIGURED`/`INACTIVE`/
+`BEFORE_ACTIVATION_DATE`/`METHOD_NOT_IMPLEMENTED`) BİREBİR REUSE edilir — YENİDEN İCAT EDİLMEZ; bu
+turda yalnız karar servisinde karşılığı olmayan üç YENİ kod eklenir: global işleme kapısı kapalı
+(`EBELGE_GLOBAL_PROCESSING_DISABLED`), satıcı ana verisi eksik
+(`EBELGE_KURUM_POLICY_SELLER_DATA_INCOMPLETE`), imzalama kapısı kapalı
+(`EBELGE_SIGNING_GATE_DISABLED`). Frontend bu kodları KENDİ Türkçe etiket haritasına çevirir
+(`EBELGE_BLOKAJ_NEDENI_LABELS`) — backend TÜRKÇE METİN üretmez, yalnız type-safe kod.
+
+### API ve yetkilendirme
+
+`KurumEBelgePolitikasiController`'a eklenen TEK yeni action: `GET
+.../e-belge-politikasi/readiness`. Mevcut `GET policy`/`PUT policy`/`GET revizyonlar`
+sözleşmesi/yetkilendirme deseni (`EnsureCanAccessKurumAsync`) AYNEN kullanılır — yeni bir rol/izin
+İCAT EDİLMEMİŞTİR, cross-tenant erişim AYNI şekilde 403 ile reddedilir.
+
+### Frontend — E-Belge Yönetimi ekranı
+
+`frontend/src/app/pages/muhasebe/e-belge-yonetimi/` — `/muhasebe/e-belge-yonetimi` rotası, Muhasebe
+menüsü altında YENİ bir DB-driven menu kaydı (`pi pi-file-edit`, migration
+`20260807000000_AddEBelgeYonetimiMenuFaz2B11` — ZATEN var olan `MuhasebeSatisBelgeleriYonetimi.Menu`
+rolüne bağlanır, YENİ rol/izin İCAT EDİLMEZ). Ekran: hazırlık durumu kart grid'i (PrimeNG severity
+haritalı, renk-körü DOSTU — durum metinle de ifade edilir), politika formu (aktivasyon/pasifleştirme/
+yöntem-değişikliği için AYRI onay diyalogları, desteklenmeyen yöntemler disabled + "Henüz
+desteklenmiyor"), revizyon geçmişi tablosu. TypeScript `EBelgeEntegrasyonYontemi` enum'u backend
+enum'unun int değerleriyle BİREBİR eşleşir; capability matrix frontend'de İKİNCİ KEZ YAZILMAZ, TÜMÜ
+`readiness.yontemler`'den okunur. Tarih alanları (aktivasyon tarihi) yalnız `yyyy-MM-dd` takvim
+değeri olarak işlenir — UTC dönüşümü YOKTUR (off-by-one koruması). 409 concurrency yanıtında ekran
+politika+readiness+revizyonları BAŞTAN yeniden yükler — eski `rowVersion` ile SESSİZCE ÜZERİNE
+YAZMAZ.
+
+### Kurum ve Cari Kart alan tamamlaması
+
+Bu tur ayrıca iki ÖNCEDEN VAR OLAN, backend'de zaten desteklenen ama frontend modelinde eksik
+taşınan alan grubunu tamamlar (yeni migration/backend mapping GEREKMEDİ — AutoMapper 1:1 property
+eşlemesi zaten çalışıyordu, yalnız frontend TypeScript arayüzleri eksikti):
+
+- **Kurum**: `vergiDairesi`/`adres`/`ilce`/`il` — Kurum Yönetimi ekranındaki Kurum Bilgileri
+  sekmesi, bu alanları içeren mantıksal alt bölümlere ayrıldı (Temel Bilgiler / Mali-E-Belge
+  Bilgileri / İletişim / Tenant-Giriş / Logo). Önceden bu alanlar formda hiç görünmediğinden
+  düzenleme-kaydetme akışında SESSİZCE kayboluyordu — bu Faz 2B.11'in "Satıcı ana verileri"
+  gereksinimi için KRİTİKTİR (readiness bu alanları kontrol eder).
+- **Cari Kart**: `ad`/`soyad` — "E-Belge Bilgileri" bölümünde gerçek kişi/kurumsal ayrımı
+  `SatisBelgesiService.ApplyCariSnapshot`'ın kullandığı AYNI kuralla (`CariTipi != "Musteri"` =
+  kurumsal) yapılır; e-Fatura/e-Arşiv onayları AYNI bölümde toplanır.
+
+### Kasıtlı olarak YAPILMAYANLAR
+
+HSM/mali mühür/GİB gerçek entegrasyonu, PDF/e-posta üretimi, yeni bir entegrasyon adaptörü, yeni
+rol/izin icadı, frontend'de backend capability matrix'inin ikinci bir kopyası, `EBelgeProcessing`/
+`EBelgeSigning`/`EBelgeUbl` global kapılarının flip edilmesi veya `NotBeforeLocalDate` değişikliği,
+herhangi bir kurumun politikasının otomatik seed edilmesi, Kurum Yönetimi/Cari Kart ekranlarının
+baştan yazılması, VKN/TCKN/PII'nin readiness yanıtına/loglara eklenmesi.
+
 ## Kurum Süreç Analiz Şablonu
 
 Kurum bazlı bilgi toplama için bkz. `docs/e-belge-kurum-surec-analizi-sablonu.md` — bu şablon

@@ -51,6 +51,8 @@ export interface CariKartModel {
   anaMuhasebeHesapKodu?: string | null;
   muhasebeHesapSiraNo?: number | null;
   unvanAdSoyad: string;
+  ad?: string | null;
+  soyad?: string | null;
   vergiNoTckn?: string | null;
   vergiDairesi?: string | null;
   telefon?: string | null;
@@ -78,6 +80,8 @@ export interface CreateCariKartRequest {
   anaMuhasebeHesapKodu?: string | null;
   muhasebeHesapSiraNo?: number | null;
   unvanAdSoyad: string;
+  ad?: string | null;
+  soyad?: string | null;
   vergiNoTckn?: string | null;
   vergiDairesi?: string | null;
   telefon?: string | null;

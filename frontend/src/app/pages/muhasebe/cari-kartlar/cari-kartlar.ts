@@ -206,6 +206,8 @@ export class CariKartlarPage implements OnInit {
             cariTipi: this.model.cariTipi,
             cariKodu: this.isCariKoduReadOnly() ? null : (this.model.cariKodu?.trim() || null),
             unvanAdSoyad: this.model.unvanAdSoyad.trim(),
+            ad: this.model.ad?.trim() || null,
+            soyad: this.model.soyad?.trim() || null,
             vergiNoTckn: this.model.vergiNoTckn?.trim() || null,
             vergiDairesi: this.model.vergiDairesi?.trim() || null,
             telefon: this.model.telefon?.trim() || null,
@@ -317,6 +319,8 @@ export class CariKartlarPage implements OnInit {
             anaMuhasebeHesapKodu: null,
             muhasebeHesapSiraNo: null,
             unvanAdSoyad: '',
+            ad: null,
+            soyad: null,
             vergiNoTckn: null,
             vergiDairesi: null,
             telefon: null,
@@ -368,6 +372,17 @@ export class CariKartlarPage implements OnInit {
 
     private isAutoCariTipi(cariTipi: string | null | undefined): boolean {
         return cariTipi === 'Tedarikci' || cariTipi === 'Musteri' || cariTipi === 'KurumsalMusteri';
+    }
+
+    /**
+     * Faz 2B.11 görev md.24 - backend'in GERÇEK karar noktasıyla (SatisBelgesiService.
+     * ApplyCariSnapshot: `!string.Equals(cari.CariTipi, CariKartTipleri.Musteri, ...)`) AYNI
+     * semantiği kullanır - yalnız `CariTipi === 'Musteri'` gerçek kişidir, `KurumsalMusteri` DAHİL
+     * diğer TÜM tipler kurumsal (Unvan/VKN) olarak ele alınır. Yeni/bağımsız bir business rule
+     * İCAT EDİLMEZ.
+     */
+    isGercekKisi(): boolean {
+        return this.model.cariTipi === CARI_TIPLERI.Musteri;
     }
 
     private closeOpenDialogForTesisChange(): void {

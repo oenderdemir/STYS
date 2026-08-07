@@ -124,41 +124,18 @@
                 <p-tabpanels>
                     <p-tabpanel value="0">
                         <div class="kurum-form-grid">
-                            <div class="field">
-                                <label>Kod *</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.kod" placeholder="Kurum kodu" />
+                            <div class="field field-full form-subsection-title">
+                                <h4>Temel Bilgiler</h4>
                             </div>
 
                             <div class="field">
-                                <label>Ad *</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.ad" placeholder="Kurum adi" />
+                                <label for="kurumKod">Kod *</label>
+                                <input pInputText id="kurumKod" class="w-full" [(ngModel)]="selectedKurum.kod" placeholder="Kurum kodu" />
                             </div>
 
                             <div class="field">
-                                <label>Vergi No</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.vergiNo" placeholder="Vergi numarasi" />
-                            </div>
-
-                            <div class="field">
-                                <label>Telefon</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.telefon" placeholder="Telefon" />
-                            </div>
-
-                            <div class="field field-full">
-                                <label>E-posta</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.eposta" placeholder="E-posta" />
-                            </div>
-
-                            <div class="field">
-                                <label>Tenant Key</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.tenantKey" placeholder="trt" />
-                                <small class="help-text">Kısa kurum anahtarı (ör: trt, meb). Otomatik küçük harfe çevrilir.</small>
-                            </div>
-
-                            <div class="field">
-                                <label>Login Host</label>
-                                <input pInputText class="w-full" [(ngModel)]="selectedKurum.loginHost" placeholder="trt.stys.com" />
-                                <small class="help-text">Login ekranı subdomain'i (ör: trt.stys.com). Protokol yazmayın.</small>
+                                <label for="kurumAd">Ad *</label>
+                                <input pInputText id="kurumAd" class="w-full" [(ngModel)]="selectedKurum.ad" placeholder="Kurum adi" />
                             </div>
 
                             <div class="field field-full toggle-field">
@@ -166,7 +143,71 @@
                                 <label for="kurumActive">Aktif kurum</label>
                             </div>
 
+                            <div class="field field-full form-subsection-title">
+                                <h4>Mali / E-Belge Bilgileri</h4>
+                                <small class="help-text">Bu alanlar, e-belge UBL üretimi için kurumun "satıcı" bilgilerini oluşturur - hangi alanların zorunlu olduğu, kurumun e-belge politikası/entegrasyon yöntemine göre <a routerLink="/muhasebe/e-belge-yonetimi">E-Belge Yönetimi</a> ekranındaki hazırlık durumunda gösterilir.</small>
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumVergiNo">Vergi No</label>
+                                <input pInputText id="kurumVergiNo" class="w-full" [(ngModel)]="selectedKurum.vergiNo" placeholder="Vergi numarasi" maxlength="32" />
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumVergiDairesi">Vergi Dairesi</label>
+                                <input pInputText id="kurumVergiDairesi" class="w-full" [(ngModel)]="selectedKurum.vergiDairesi" placeholder="Vergi dairesi" maxlength="128" />
+                            </div>
+
+                            <div class="field field-full">
+                                <label for="kurumAdres">Adres</label>
+                                <input pInputText id="kurumAdres" class="w-full" [(ngModel)]="selectedKurum.adres" placeholder="Acik adres" maxlength="512" />
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumIlce">İlçe</label>
+                                <input pInputText id="kurumIlce" class="w-full" [(ngModel)]="selectedKurum.ilce" placeholder="Ilce" maxlength="128" />
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumIl">İl</label>
+                                <input pInputText id="kurumIl" class="w-full" [(ngModel)]="selectedKurum.il" placeholder="Il" maxlength="128" />
+                            </div>
+
+                            <div class="field field-full form-subsection-title">
+                                <h4>İletişim</h4>
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumTelefon">Telefon</label>
+                                <input pInputText id="kurumTelefon" class="w-full" [(ngModel)]="selectedKurum.telefon" placeholder="Telefon" />
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumEposta">E-posta</label>
+                                <input pInputText id="kurumEposta" class="w-full" [(ngModel)]="selectedKurum.eposta" placeholder="E-posta" />
+                            </div>
+
+                            <div class="field field-full form-subsection-title">
+                                <h4>Tenant / Giriş</h4>
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumTenantKey">Tenant Key</label>
+                                <input pInputText id="kurumTenantKey" class="w-full" [(ngModel)]="selectedKurum.tenantKey" placeholder="trt" />
+                                <small class="help-text">Kısa kurum anahtarı (ör: trt, meb). Otomatik küçük harfe çevrilir.</small>
+                            </div>
+
+                            <div class="field">
+                                <label for="kurumLoginHost">Login Host</label>
+                                <input pInputText id="kurumLoginHost" class="w-full" [(ngModel)]="selectedKurum.loginHost" placeholder="trt.stys.com" />
+                                <small class="help-text">Login ekranı subdomain'i (ör: trt.stys.com). Protokol yazmayın.</small>
+                            </div>
+
                             @if (selectedKurum.id) {
+                                <div class="field field-full form-subsection-title">
+                                    <h4>Logo</h4>
+                                </div>
+
                                 <div class="field field-full kurum-logo-field">
                                     <label>Kurum Logosu</label>
                                     <div class="kurum-logo-section">

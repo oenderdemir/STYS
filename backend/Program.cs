@@ -259,6 +259,9 @@ builder.Services.AddScoped<IEBelgeKurumPolitikaServisi, EBelgeKurumPolitikaServi
 // bkz. görev md.2/md.9 kilit sırası dokümantasyonu.
 builder.Services.AddScoped<IEBelgeKurumPolitikaTransactionGuard, EBelgeKurumPolitikaTransactionGuard>();
 builder.Services.AddScoped<IEBelgeKurumPolitikaYonetimServisi, EBelgeKurumPolitikaYonetimServisi>();
+// Faz 2B.11: kurum e-belge hazırlık/readiness read-only servisi - business logic'i TEK yerde
+// (bu serviste) toplar; frontend/controller kendi başına iş kuralı YAZMAZ (bkz. görev md.31).
+builder.Services.AddScoped<IEBelgeKurumReadinessService, EBelgeKurumReadinessService>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerDelay, TimeProviderEBelgeOutboxWorkerDelay>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerMetrics, EBelgeOutboxWorkerMetrics>();
 builder.Services.AddSingleton<IEBelgeOutboxWorkerHealthState, EBelgeOutboxWorkerHealthState>();

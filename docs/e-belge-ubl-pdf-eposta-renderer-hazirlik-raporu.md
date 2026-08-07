@@ -4307,3 +4307,84 @@ erken/commit-öncesi signing gate kontrollerini kaldırma, `TryReleasePolicyBloc
 ölçekte rename etme, yeni bir DB geçişi/tablo/sonuç türü icat etme, test skip etme, tüm solution
 test paketini çalıştırma, flaky (bu turla ilgisiz) `EBelgeSchematronSidecarIntegrationTests` testine
 dokunma, frontend/PDF/e-posta geliştirmesi.
+
+## Faz 2B.11: E-Belge Yönetim, Readiness ve UBL Veri Tamamlama Ekranları
+
+Faz 2B.10-2B.10.3, kurum bazlı e-belge yönlendirmesini tamamen backend'de kurmuştu, ama kurum
+yöneticilerinin politikayı görüp yönetebileceği bir arayüz yoktu — politika yalnız doğrudan API
+çağrılarıyla yönetilebiliyordu. Bu tur, mimariyi/karar mantığını DEĞİŞTİRMEDEN yalnız bir yönetim/
+gözlemleme katmanı ekler: yeni bir salt-okunur `readiness` endpoint'i + servisi, ve bunu tüketen bir
+Angular ekranı. Tam tasarım gerekçesi için bkz.
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md` "Faz 2B.11" bölümü; ekranın kullanım
+detayları için bkz. `docs/e-belge-yonetim-ekrani-kullanim-rehberi.md` (bu tur YENİ eklenen).
+
+**1. Readiness servisi ve endpoint'i**: yeni `IEBelgeKurumReadinessService`/
+`EBelgeKurumReadinessService` (`GET .../e-belge-politikasi/readiness`), mevcut
+`IEBelgeYontemYetenekSaglayici`/`IEBelgeProcessingActivationGate`/`IEBelgeSigningActivationGate`/
+kurum politikası okumasını BİR ARAYA GETİRİR — hiçbirinin algoritmasını İKİNCİ KEZ YAZMAZ. Salt-okunur
+bir GET olduğundan Faz 2B.10.2'nin satır kilidi/transaction guard mekanizmasına ihtiyaç DUYMAZ.
+`KurumEBelgeReadinessDto`, politika durumu/yöntem operasyonelliği/global kapı durumu/aktivasyon
+tarihi/satıcı verisi tamlığı/imzalama uygulanabilirliği/TÜM yöntemlerin capability listesini tek bir
+anlık görüntüde döner. Eksik alan/blokaj nedenleri, ham değer/VKN/müşteri bilgisi TAŞIMAYAN SABİT kod
+string'leridir (`EBelgeKurumReadinessKodlari`) — mevcut dört kod (`NOT_CONFIGURED`/`INACTIVE`/
+`BEFORE_ACTIVATION_DATE`/`METHOD_NOT_IMPLEMENTED`) `EBelgeKurumPolitikaEngelliException`'dan BİREBİR
+REUSE edilir, yalnız üç YENİ kod eklenir (global kapı kapalı, satıcı verisi eksik, imzalama kapısı
+kapalı).
+
+**2. E-Belge Yönetimi ekranı**: `frontend/src/app/pages/muhasebe/e-belge-yonetimi/` —
+`/muhasebe/e-belge-yonetimi` rotası, Muhasebe menüsü altında YENİ bir DB-driven menu kaydı (`pi
+pi-file-edit`, migration `20260807000000_AddEBelgeYonetimiMenuFaz2B11` — ZATEN var olan
+`MuhasebeSatisBelgeleriYonetimi.Menu`/`.View`/`.Manage` rolleri REUSE edilir, YENİ rol/izin İCAT
+EDİLMEZ). Hazırlık durumu kart grid'i (PrimeNG severity haritalı, renk-körü dostu), politika formu
+(aktivasyon/pasifleştirme/yöntem-değişikliği için AYRI onay diyalogları), revizyon geçmişi tablosu.
+TypeScript `EBelgeEntegrasyonYontemi` enum'u backend enum'unun int değerleriyle BİREBİR eşleşir;
+capability matrix frontend'de İKİNCİ KEZ YAZILMAZ. Tarih alanları yalnız `yyyy-MM-dd` takvim değeri
+olarak işlenir (UTC dönüşümü YOK — off-by-one koruması). 409 concurrency yanıtında ekran
+politika+readiness+revizyonları BAŞTAN yeniden yükler.
+
+**3. Kurum ve Cari Kart alan tamamlaması**: `Kurum.vergiDairesi/adres/ilce/il` ve
+`CariKart.ad/soyad` — backend'de ZATEN desteklenen ama frontend TypeScript modelinde eksik taşınan
+alanlar (AutoMapper 1:1 eşlemesi zaten çalışıyordu, yeni migration/mapping GEREKMEDİ). Önceden bu
+alanlar formda görünmediğinden düzenleme-kaydetme akışında SESSİZCE kayboluyordu — Kurum Bilgileri
+sekmesi mantıksal alt bölümlere ayrıldı, Cari Kart'ta "E-Belge Bilgileri" bölümü gerçek kişi/kurumsal
+ayrımını (`CariTipi != "Musteri"` = kurumsal, `ApplyCariSnapshot`'ın kullandığı AYNI kural) yansıtır.
+
+**Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; 601 → 615):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 316, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 593, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 613, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 615, Failed: 0, Skipped: 0  (preflight: SQL+Java+31 kritik invariant testi GEÇTİ)
+```
+
+Bu turun HİÇBİR çalıştırmasında flaky `EBelgeSchematronSidecarIntegrationTests` dahil hiçbir test
+tekrar başarısız OLMADI (dört profil de tek seferde temiz geçti).
+
+Frontend: `npm run build` (production) başarıyla tamamlandı (mevcut, bu turdan ÖNCEKİ initial-bundle
+budget uyarısı DIŞINDA hata/uyarı yok — sakai-ng şablonunun PrimeNG'e bağlı önceden var olan bütçe
+aşımı, bu turda BÜYÜTÜLMEDİ/küçültülmedi). Yeni/değiştirilen bileşenler için hedefli Karma/Jasmine
+testleri (`e-belge-yonetimi.spec.ts`, `e-belge-yonetimi.service.spec.ts`, `kurum-yonetimi.spec.ts`,
+`cari-kartlar.spec.ts`) ChromeHeadless altında 14/14 geçti.
+
+Manuel doğrulama: tarayıcı otomasyonu bu ortamda MEVCUT OLMADIĞINDAN, görev md.52'deki altı senaryo
+(A: politika-yok uyarısı; B: GİB Portal eksik-satıcı-verisi uyarısı ve Kurum güncellemesi sonrası
+otomatik çözülmesi; C: Harici Muhasebe Sistemi'nde imzalamanın "Uygulanamaz" olması ve global kapı
+kapalıyken bile `islemeHazirMi=true` dönmesi; D: Doğrudan GİB'in backend tarafından 400 ile
+reddedilmesi; E: kill switch pasifleştirmenin doğrulama gerektirmeden başarılı olması ve revizyon
+geçmişinde doğru aktör ile 3 satır görünmesi; F: bayat `rowVersion` ile 409) artı cross-tenant 403,
+GERÇEK bir `dotnet run` backend süreci + gerçek yerel SQL Server'a karşı uçtan uca `curl` çağrılarıyla
+doğrulandı (HTTP durum kodları VE tam JSON yanıt şekilleri). Bu, tam etkileşimli tarayıcı
+tıklama-doğrulamasının YERİNİ TUTMAZ — ama gerçek iş mantığı/yetkilendirme/kalıcılık riskini uçtan uca
+KAPSAR. Doğrulama için geçici olarak değiştirilen kimlik doğrulama/yetki verileri (`trt-admin` parola
+hash'i, "Kurum Yöneticisi Grubu" için geçici rol ataması) doğrulama SONRASI eski haline getirildi;
+doğrulama sırasında oluşan Kurum 1000 alan verileri ve e-belge politikası/revizyon geçmişi kayıtları
+(zararsız yerel geliştirme fixture'ları olduğundan) YEREL veritabanında BIRAKILDI.
+
+**Kasıtlı olarak YAPILMAYANLAR**: HSM/mali mühür/GİB gerçek entegrasyonu, PDF/e-posta üretimi, yeni
+bir entegrasyon adaptörü, yeni rol/izin icadı, frontend'de backend capability matrix'inin ikinci bir
+kopyası, `EBelgeProcessing`/`EBelgeSigning`/`EBelgeUbl` global kapılarının flip edilmesi veya
+`NotBeforeLocalDate` değişikliği, herhangi bir kurumun politikasının otomatik seed edilmesi, Kurum
+Yönetimi/Cari Kart ekranlarının baştan yazılması, VKN/TCKN/PII'nin readiness yanıtına/loglara
+eklenmesi, yeni bir DB migration'ı (Ad/Soyad/adres sütunları zaten mevcuttu), test skip etme, tüm
+solution test paketini çalıştırma.

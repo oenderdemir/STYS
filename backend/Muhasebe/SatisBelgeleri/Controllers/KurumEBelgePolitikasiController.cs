@@ -23,6 +23,7 @@ namespace STYS.Muhasebe.SatisBelgeleri.Controllers;
 public class KurumEBelgePolitikasiController : UIController
 {
     private readonly IEBelgeKurumPolitikaYonetimServisi _yonetimServisi;
+    private readonly IEBelgeKurumReadinessService _readinessServisi;
     private readonly StysAppDbContext _stysDbContext;
     private readonly TodIdentityDbContext _identityDbContext;
     private readonly ICurrentUserAccessor _currentUserAccessor;
@@ -30,12 +31,14 @@ public class KurumEBelgePolitikasiController : UIController
 
     public KurumEBelgePolitikasiController(
         IEBelgeKurumPolitikaYonetimServisi yonetimServisi,
+        IEBelgeKurumReadinessService readinessServisi,
         StysAppDbContext stysDbContext,
         TodIdentityDbContext identityDbContext,
         ICurrentUserAccessor currentUserAccessor,
         ICurrentTenantAccessor currentTenantAccessor)
     {
         _yonetimServisi = yonetimServisi;
+        _readinessServisi = readinessServisi;
         _stysDbContext = stysDbContext;
         _identityDbContext = identityDbContext;
         _currentUserAccessor = currentUserAccessor;
@@ -63,6 +66,21 @@ public class KurumEBelgePolitikasiController : UIController
 
         var guncellenen = await _yonetimServisi.GuncelleAsync(kurumId, request, cancellationToken);
         return Ok(ToDto(guncellenen));
+    }
+
+    /// <summary>
+    /// Faz 2B.11 görev md.6 - read-only hazırlık/readiness anlık görüntüsü. Mevcut GET (`.View`)
+    /// authorization deseni AYNEN kullanılır - yeni bir permission UYDURULMAZ. Business logic
+    /// BURADA YAZILMAZ, tamamı `IEBelgeKurumReadinessService`'te yaşar (görev md.31).
+    /// </summary>
+    [HttpGet("readiness")]
+    [Permission(StructurePermissions.MuhasebeSatisBelgeleriYonetimi.View, TodPlatformAuthorizationConstants.SuperAdminPermission)]
+    public async Task<ActionResult<KurumEBelgeReadinessDto>> GetReadiness(int kurumId, CancellationToken cancellationToken)
+    {
+        await EnsureCanAccessKurumAsync(kurumId, cancellationToken);
+
+        var readiness = await _readinessServisi.GetirAsync(kurumId, cancellationToken);
+        return Ok(readiness);
     }
 
     [HttpGet("revizyonlar")]

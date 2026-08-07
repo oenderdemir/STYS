@@ -73,17 +73,37 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
         bool isSuperAdmin,
         bool isKurumAdmin,
         int? currentKurumId,
-        Guid? currentUserId = null) =>
+        Guid? currentUserId = null,
+        TimeProvider? timeProvider = null,
+        EBelgeProcessingOptions? processingOptions = null,
+        IEBelgeSigningActivationGate? signingGate = null) =>
         new(
             new EBelgeKurumPolitikaYonetimServisi(
                 dbContext,
                 new EBelgeYontemYetenekSaglayici(),
-                Options.Create(new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }),
-                TimeProvider.System),
+                Options.Create(processingOptions ?? new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }),
+                timeProvider ?? TimeProvider.System),
+            new EBelgeKurumReadinessService(
+                dbContext,
+                new EBelgeYontemYetenekSaglayici(),
+                new EBelgeProcessingActivationGate(
+                    Options.Create(processingOptions ?? new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" }),
+                    timeProvider ?? TimeProvider.System,
+                    Microsoft.Extensions.Logging.Abstractions.NullLogger<EBelgeProcessingActivationGate>.Instance),
+                signingGate ?? new AlwaysKapaliSigningGate(),
+                timeProvider ?? TimeProvider.System,
+                Options.Create(processingOptions ?? new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" })),
             dbContext,
             identityDbContext,
             new FakeCurrentUserAccessor(currentUserId ?? Guid.NewGuid()),
             new FakeCurrentTenantAccessor(currentKurumId, isSuperAdmin, isKurumAdmin));
+
+    /// <summary>Faz 2B.11 - readiness testlerinde signing gate'in DAVRANIŞI test EDİLMİYOR (bu, GİB Portal readiness'ini bloke ETMEMELİDİR - bkz. görev md.30) - bu yüzden VARSAYILAN olarak "her zaman kapalı" bir sabit kullanılır; gate açık/kapalı OLMASI HİÇBİR readiness testinin sonucunu DEĞİŞTİRMEMELİDİR.</summary>
+    private sealed class AlwaysKapaliSigningGate : IEBelgeSigningActivationGate
+    {
+        public bool ShouldCreateSigningMessage() => false;
+        public bool CanSignNow() => false;
+    }
 
     /// <summary>
     /// Controller eylemleri `Ok(dto)` döndürür - bu, `ActionResult&lt;T&gt;.Result`'ı DOLDURUR,
@@ -219,6 +239,263 @@ public class KurumEBelgePolitikasiControllerIntegrationTests : IAsyncLifetime
             () => controller3.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1), ilk.RowVersion), CancellationToken.None));
 
         Assert.Equal(409, ex.ErrorCode);
+    }
+
+    // ──────────────────────────── Faz 2B.11 - readiness endpoint'i ────────────────────────────
+
+    private async Task ClearKurumPolitikaAsync(StysAppDbContext dbContext) =>
+        await dbContext.Set<KurumEBelgePolitikasi>().IgnoreQueryFilters()
+            .Where(p => p.KurumId == _kurumId)
+            .ExecuteDeleteAsync();
+
+    private async Task SetKurumSellerFieldsAsync(string? vergiNo = "1111111111", string? vergiDairesi = "Test VD", string? adres = "Test Adres", string? ilce = "Kadıköy", string? il = "İstanbul")
+    {
+        await using var dbContext = CreateDbContext();
+        var kurum = await dbContext.Kurumlar.SingleAsync(x => x.Id == _kurumId);
+        kurum.VergiNo = vergiNo;
+        kurum.VergiDairesi = vergiDairesi;
+        kurum.Adres = adres;
+        kurum.Ilce = ilce;
+        kurum.Il = il;
+        await dbContext.SaveChangesAsync();
+    }
+
+    // ---- Authorization (görev md.42 madde 1-4) ----
+
+    [IntegrationFact]
+    public async Task ErisilebilirKurumIcinReadinessBasariylaDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None));
+
+        Assert.NotNull(readiness);
+        Assert.Equal(_kurumId, readiness!.KurumId);
+    }
+
+    [IntegrationFact]
+    public async Task YetkisizKullaniciBaskaKurumunReadinessiniGoremez()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: false, isKurumAdmin: false, currentKurumId: null);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => controller.GetReadiness(_kurumId, CancellationToken.None));
+        Assert.Equal(403, ex.ErrorCode);
+    }
+
+    /// <summary>
+    /// Görev md.4/md.42 madde 3-4 - readiness endpoint'i YENİ bir permission İCAT ETMEZ; mevcut
+    /// `GET` (politika okuma) İLE AYNI `[Permission(.View, SuperAdmin)]` sözleşmesini taşır - bu,
+    /// reflection üzerinden DOĞRUDAN kanıtlanır (gerçek ASP.NET Core authorization pipeline'ı bu
+    /// testlerde ÇALIŞTIRILMIYOR, mevcut dosyadaki DİĞER testlerle AYNI kısıt).
+    /// </summary>
+    [IntegrationFact]
+    public async Task ReadinessEndpointiPolitikaGetIleAyniPermissionSozlesmesiniTasir()
+    {
+        var controllerType = typeof(KurumEBelgePolitikasiController);
+        var getMethod = controllerType.GetMethod(nameof(KurumEBelgePolitikasiController.Get))!;
+        var getReadinessMethod = controllerType.GetMethod(nameof(KurumEBelgePolitikasiController.GetReadiness))!;
+
+        var getPermission = getMethod.GetCustomAttributesData().Single(a => a.AttributeType.Name == "PermissionAttribute");
+        var getReadinessPermission = getReadinessMethod.GetCustomAttributesData().Single(a => a.AttributeType.Name == "PermissionAttribute");
+
+        var getArgs = getPermission.ConstructorArguments.Select(a => a.Value?.ToString()).ToList();
+        var getReadinessArgs = getReadinessPermission.ConstructorArguments.Select(a => a.Value?.ToString()).ToList();
+
+        Assert.Equal(getArgs, getReadinessArgs);
+    }
+
+    // ---- Readiness hesaplaması (görev md.42 madde 5-15) ----
+
+    [IntegrationFact]
+    public async Task PolitikaYokIkenConfiguredFalseDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await ClearKurumPolitikaAsync(dbContext);
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.False(readiness.PolitikaYapilandirilmisMi);
+        Assert.False(readiness.IslemeHazirMi);
+        Assert.Contains(EBelgeKurumReadinessKodlari.PolitikaYapilandirilmadi, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task KullanilmayacakIcinYerelUblVeSigningUygulanamazAmaHazirSayilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.Kullanilmayacak, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.Empty(readiness.BlokajNedenleri);
+        Assert.False(readiness.YerelSnapshotGerekliMi);
+        Assert.False(readiness.YerelUnsignedUblGerekliMi);
+        Assert.False(readiness.YerelImzaGerekliMi);
+        Assert.False(readiness.SigningGateUygulanabilirMi);
+    }
+
+    [IntegrationFact]
+    public async Task HariciMuhasebeSistemindeSigningUygulanamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        var dto = Dto(EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi, true, new DateTime(2020, 1, 1));
+        var updated = await controller.Update(_kurumId, dto with { HariciSistemKodu = "ERP-1" }, CancellationToken.None);
+        Assert.NotNull(AsOk(updated));
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.False(readiness.YerelImzaGerekliMi);
+        Assert.False(readiness.SigningGateUygulanabilirMi);
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalEksikVergiNoIleNotReadyVeVergiNoKoduDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync(vergiNo: null);
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.False(readiness.IslemeHazirMi);
+        Assert.False(readiness.SaticiAnaVerileriHazirMi);
+        Assert.Contains(EBelgeKurumReadinessKodlari.VergiNo, readiness.EksikSaticiAlanlari);
+        Assert.Contains(EBelgeKurumReadinessKodlari.SaticiAnaVerileriEksik, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalEksikAdresIleGuvenliAlanKoduDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync(adres: null);
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.Contains(EBelgeKurumReadinessKodlari.Adres, readiness.EksikSaticiAlanlari);
+        // Güvenlik: eksik alan listesi yalnız SABİT kod taşır, gerçek adres DEĞERİNİ İÇERMEZ.
+        Assert.DoesNotContain(readiness.EksikSaticiAlanlari, x => x.Contains("Test", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalTumSaticiAlanlariDoluysaSaticiHazirVeIslemeHazir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.True(readiness.SaticiAnaVerileriHazirMi);
+        Assert.Empty(readiness.EksikSaticiAlanlari);
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.Empty(readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task GibPortalSigningGateKapaliOlsaBileReadinessiBlokeEtmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync();
+        // CreateController varsayılanı ZATEN "her zaman kapalı" bir signing gate kullanır (bkz.
+        // AlwaysKapaliSigningGate) - bu test bunu AÇIKÇA doğrular.
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.False(readiness.SigningSuAnMumkunMu);
+        Assert.False(readiness.SigningGateUygulanabilirMi); // GibPortal yerel imza GEREKTİRMEZ
+        Assert.True(readiness.IslemeHazirMi);
+        Assert.DoesNotContain(EBelgeKurumReadinessKodlari.SigningGateKapali, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task OzelEntegratorMethodOperasyonelDegildir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+
+        // OzelEntegrator henüz operasyonel OLMADIĞINDAN Update ZATEN reddeder (mevcut
+        // ValidateHedefDurum davranışı) - readiness'in `Yontemler` LİSTESİ üzerinden, POLİTİKA
+        // hiç yazılmadan da capability'nin doğru yansıdığı doğrulanır.
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        var ozelEntegrator = readiness.Yontemler.Single(y => y.Yontem == EBelgeEntegrasyonYontemi.OzelEntegrator);
+        Assert.False(ozelEntegrator.OperasyonelMi);
+    }
+
+    [IntegrationFact]
+    public async Task DogrudanGibMethodOperasyonelDegildir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        var dogrudanGib = readiness.Yontemler.Single(y => y.Yontem == EBelgeEntegrasyonYontemi.DogrudanGib);
+        Assert.False(dogrudanGib.OperasyonelMi);
+    }
+
+    [IntegrationFact]
+    public async Task GlobalAktivasyonTarihiOncesindeGibPortalReadyDegildir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync();
+
+        // Politika, GEÇMİŞTEKİ bir global tarihle (yazma anında SERBEST) GibPortal + Aktif olarak kaydedilir.
+        var writeController = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null);
+        await writeController.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        // Readiness, GELECEKTEKİ bir global minimum tarihiyle DEĞERLENDİRİLİR (henüz gelmemiş).
+        await using var readinessDbContext = CreateDbContext();
+        var readinessController = CreateController(
+            readinessDbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            processingOptions: new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2099-01-01" });
+
+        var readiness = AsOk(await readinessController.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.False(readiness.GlobalProcessingAktifMi);
+        Assert.False(readiness.IslemeHazirMi);
+        Assert.Contains(EBelgeKurumReadinessKodlari.GlobalIslemKapisiKapali, readiness.BlokajNedenleri);
+    }
+
+    [IntegrationFact]
+    public async Task GlobalAktivasyonTarihiSonrasindaGecerliPolitikaVeVeriIslemeHazirOlabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await using var identityDbContext = CreateIdentityDbContext();
+        await SetKurumSellerFieldsAsync();
+        var controller = CreateController(dbContext, identityDbContext, isSuperAdmin: true, isKurumAdmin: false, currentKurumId: null,
+            processingOptions: new EBelgeProcessingOptions { Enabled = true, NotBeforeLocalDate = "2020-01-01" });
+        await controller.Update(_kurumId, Dto(EBelgeEntegrasyonYontemi.GibPortal, true, new DateTime(2020, 1, 1)), CancellationToken.None);
+
+        var readiness = AsOk(await controller.GetReadiness(_kurumId, CancellationToken.None))!;
+
+        Assert.True(readiness.GlobalProcessingAktifMi);
+        Assert.True(readiness.IslemeHazirMi);
     }
 
     private sealed class FakeCurrentUserAccessor : ICurrentUserAccessor

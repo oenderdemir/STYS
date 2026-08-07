@@ -1,0 +1,198 @@
+.ebelge-page {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+
+    h3 {
+        margin: 0;
+    }
+
+    p {
+        margin: 0.15rem 0 0 0;
+        color: var(--text-color-secondary);
+    }
+}
+
+.state-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--content-border-radius, 8px);
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+
+    i {
+        font-size: 1.1rem;
+    }
+}
+
+.state-banner-warn {
+    background: color-mix(in srgb, var(--yellow-500, orange) 12%, transparent);
+    border: 1px solid var(--yellow-500, orange);
+    color: var(--yellow-700, #92400e);
+}
+
+.state-banner-danger {
+    background: color-mix(in srgb, var(--red-500, red) 10%, transparent);
+    border: 1px solid var(--red-500, red);
+    color: var(--red-700, #b91c1c);
+}
+
+.state-banner-info {
+    background: color-mix(in srgb, var(--blue-500, blue) 10%, transparent);
+    border: 1px solid var(--blue-500, blue);
+    color: var(--blue-700, #1d4ed8);
+}
+
+// ──────────────────────────── Hazırlık durumu kartları - responsive grid (görev md.39) ────────────────────────────
+
+.status-card-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+@media (max-width: 1200px) {
+    .status-card-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .status-card-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .status-card-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.status-card {
+    border: 1px solid var(--surface-border);
+    border-radius: var(--content-border-radius, 8px);
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.status-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.status-card-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-color-secondary);
+}
+
+.blokaj-list {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--surface-border);
+
+    ul {
+        margin: 0;
+        padding-left: 1.25rem;
+    }
+}
+
+.satici-eksik-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--content-border-radius, 8px);
+    background: color-mix(in srgb, var(--red-500, red) 8%, transparent);
+    border: 1px solid var(--red-500, red);
+}
+
+// ──────────────────────────── Politika formu - 2 kolon (görev md.39) ────────────────────────────
+
+.policy-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem 1rem;
+    align-items: start;
+}
+
+@media (max-width: 768px) {
+    .policy-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.policy-form-grid .field {
+    margin: 0;
+    min-width: 0;
+}
+
+.policy-form-grid .field-full {
+    grid-column: 1 / -1;
+}
+
+.policy-form-grid label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-color-secondary);
+}
+
+.toggle-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 1.6rem;
+
+    label {
+        margin: 0 !important;
+    }
+}
+
+.help-text {
+    display: block;
+    margin-top: 0.3rem;
+    color: var(--text-color-secondary);
+    font-size: 0.78rem;
+}
+
+.form-actions {
+    margin-top: 1.25rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+// ──────────────────────────── Revizyon tablosu ────────────────────────────
+
+.revizyon-neden-cell {
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// Confirm dialog mesajlarında (görev md.14) satır sonlarının okunabilir kalması için.
+::ng-deep .p-confirmdialog .p-confirmdialog-message {
+    white-space: pre-line;
+}

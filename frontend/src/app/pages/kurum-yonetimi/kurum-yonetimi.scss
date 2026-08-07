@@ -119,6 +119,28 @@
     color: var(--text-color-secondary);
 }
 
+.form-subsection-title {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--surface-border);
+
+    &:first-child {
+        padding-top: 0;
+        border-top: none;
+    }
+
+    h4 {
+        margin: 0 0 0.15rem 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+
+    .help-text {
+        display: block;
+        margin-top: 0.15rem;
+    }
+}
+
 .toggle-field {
     display: flex;
     align-items: center;

@@ -73,14 +73,36 @@
             <label class="block font-medium mb-2">Eposta</label>
             <input pInputText class="w-full" [(ngModel)]="model.eposta" maxlength="256" />
         </div>
-        <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Vergi No/TCKN</label>
-            <input pInputText class="w-full" [(ngModel)]="model.vergiNoTckn" maxlength="32" />
+
+        <div class="col-span-12">
+            <h6 class="m-0">E-Belge Bilgileri</h6>
+            <p class="text-sm text-gray-600 m-0 mt-1">Bu alanlar, cari kart bir satış belgesinde alıcı olarak kullanıldığında e-belge (UBL) üretimi için gereken kimlik/adres bilgilerini oluşturur.</p>
         </div>
-        <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Vergi Dairesi</label>
-            <input pInputText class="w-full" [(ngModel)]="model.vergiDairesi" maxlength="128" />
-        </div>
+
+        @if (isGercekKisi()) {
+            <div class="col-span-12 md:col-span-6">
+                <label class="block font-medium mb-2">Ad</label>
+                <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="128" placeholder="Gerçek kişi adı" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block font-medium mb-2">Soyad</label>
+                <input pInputText class="w-full" [(ngModel)]="model.soyad" maxlength="128" placeholder="Gerçek kişi soyadı" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block font-medium mb-2">TCKN</label>
+                <input pInputText class="w-full" [(ngModel)]="model.vergiNoTckn" maxlength="32" placeholder="T.C. kimlik no" />
+            </div>
+        } @else {
+            <div class="col-span-12 md:col-span-6">
+                <label class="block font-medium mb-2">Vergi No</label>
+                <input pInputText class="w-full" [(ngModel)]="model.vergiNoTckn" maxlength="32" placeholder="Vergi kimlik no" />
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <label class="block font-medium mb-2">Vergi Dairesi</label>
+                <input pInputText class="w-full" [(ngModel)]="model.vergiDairesi" maxlength="128" />
+            </div>
+        }
+
         <div class="col-span-12">
             <label class="block font-medium mb-2">Adres</label>
             <input pInputText class="w-full" [(ngModel)]="model.adres" maxlength="512" />
@@ -93,6 +115,9 @@
             <label class="block font-medium mb-2">Ilce</label>
             <input pInputText class="w-full" [(ngModel)]="model.ilce" maxlength="128" />
         </div>
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2"><input id="eFatura" type="checkbox" [(ngModel)]="model.eFaturaMukellefiMi" /><label for="eFatura">E-Fatura Mükellefi</label></div>
+        <div class="col-span-12 md:col-span-6 flex align-items-center gap-2"><input id="eArsiv" type="checkbox" [(ngModel)]="model.eArsivKapsamindaMi" /><label for="eArsiv">E-Arşiv Kapsamında</label></div>
+
         <div class="col-span-12">
             <h6 class="m-0">Açılış Bakiyesi</h6>
         </div>
@@ -178,9 +203,7 @@
                 </ng-template>
             </p-table>
         </div>
-        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="aktifMi" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifMi">Aktif</label></div>
-        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="eFatura" type="checkbox" [(ngModel)]="model.eFaturaMukellefiMi" /><label for="eFatura">E-Fatura</label></div>
-        <div class="col-span-12 md:col-span-4 flex align-items-center gap-2"><input id="eArsiv" type="checkbox" [(ngModel)]="model.eArsivKapsamindaMi" /><label for="eArsiv">E-Arsiv</label></div>
+        <div class="col-span-12 flex align-items-center gap-2"><input id="aktifMi" type="checkbox" [(ngModel)]="model.aktifMi" /><label for="aktifMi">Aktif</label></div>
     </div>
 
     <ng-template #footer>

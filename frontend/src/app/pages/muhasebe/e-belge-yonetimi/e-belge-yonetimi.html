@@ -1,0 +1,243 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="ebelge-page">
+    <div class="page-header">
+        <div>
+            <h3>E-Belge Yönetimi</h3>
+            <p>{{ kurumAdi || '-' }}</p>
+        </div>
+        <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" [loading]="isAnySectionLoading" (onClick)="refreshAll()" />
+    </div>
+
+    @if (superAdminKurumSecimiGerekli) {
+        <p-card styleClass="mb-3">
+            <label for="superAdminKurumSecimi" class="block font-medium mb-2">Kurum Seçin</label>
+            <p-select
+                inputId="superAdminKurumSecimi"
+                class="w-full md:w-30rem"
+                [options]="superAdminKurumSecenekleri"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Bir kurum seçin"
+                [ngModel]="kurumId"
+                (onChange)="onSuperAdminKurumSecildi($event.value)"
+                appendTo="body"
+            />
+            <small class="help-text">SuperAdmin olarak aktif bir kurumunuz olmadığından, e-belge politikasını görüntülemek/yönetmek istediğiniz kurumu seçin.</small>
+        </p-card>
+    }
+
+    @if (erisimYok) {
+        <div class="state-banner state-banner-danger">
+            <i class="pi pi-lock"></i>
+            <span>Bu ekrana erişim için bir kuruma atanmış olmanız gerekir. Yetkiniz olduğunu düşünüyorsanız sistem yöneticinizle iletişime geçin.</span>
+        </div>
+    }
+
+    @if (kurumId && !canView) {
+        <div class="state-banner state-banner-danger">
+            <i class="pi pi-lock"></i>
+            <span>Bu kurumun e-belge politikasını görüntüleme yetkiniz yok.</span>
+        </div>
+    }
+
+    @if (kurumId && canView) {
+        @if (readiness && !readiness.politikaYapilandirilmisMi) {
+            <div class="state-banner state-banner-warn">
+                <i class="pi pi-exclamation-triangle"></i>
+                <span>Politika henüz yapılandırılmamış. Aşağıdaki formu kullanarak bu kurum için bir e-belge entegrasyon yöntemi seçin.</span>
+            </div>
+        }
+
+        <!-- ──────────────────────────── Bölüm A: Hazırlık Durumu ──────────────────────────── -->
+        <p-card styleClass="mb-3">
+            <ng-template pTemplate="title">Hazırlık Durumu</ng-template>
+            <ng-template pTemplate="subtitle">
+                @if (readiness) {
+                    <p-tag [value]="readiness.islemeHazirMi ? 'İşleme Hazır' : 'Hazır Değil'" [severity]="readiness.islemeHazirMi ? 'success' : 'warn'" />
+                }
+            </ng-template>
+
+            @if (readinessLoading && !readiness) {
+                <p class="text-sm text-gray-600">Yükleniyor...</p>
+            } @else if (readiness) {
+                <div class="status-card-grid">
+                    @for (card of statusCards; track card.baslik) {
+                        <div class="status-card">
+                            <div class="status-card-header">
+                                <span class="status-card-title">{{ card.baslik }}</span>
+                                <p-tag [value]="card.durum" [severity]="card.severity" />
+                            </div>
+                            @if (card.aciklama) {
+                                <small class="help-text">{{ card.aciklama }}</small>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (readiness.blokajNedenleri.length > 0) {
+                    <div class="blokaj-list">
+                        <h5 class="m-0 mb-2">Blokaj Nedenleri</h5>
+                        <ul>
+                            @for (neden of readiness.blokajNedenleri; track neden) {
+                                <li>{{ blokajNedeniLabel(neden) }}</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (eksikSaticiAlanVarMi) {
+                    <div class="satici-eksik-banner">
+                        <div>
+                            <strong>Eksik satıcı alanları:</strong>
+                            {{ readiness!.eksikSaticiAlanlari.map(blokajNedeniLabel).join(', ') }}
+                        </div>
+                        @if (canNavigateToKurumYonetimi) {
+                            <p-button label="Satıcı bilgilerini tamamla" icon="pi pi-building" size="small" (onClick)="navigateToKurumYonetimi()" />
+                        } @else {
+                            <small class="help-text">Bu alanları tamamlamak için Kurum Yönetimi ekranına erişim yetkiniz gerekir.</small>
+                        }
+                    </div>
+                }
+
+                @if (readiness.globalMinimumAktivasyonYerelTarihi) {
+                    <p class="text-sm text-gray-600 mt-3 mb-0">
+                        Global minimum aktivasyon tarihi: <strong>{{ formatTrDate(readiness.globalMinimumAktivasyonYerelTarihi) }}</strong> - bu tarihten önce hiçbir kurum politikası etkin olamaz.
+                    </p>
+                }
+            }
+        </p-card>
+
+        <!-- ──────────────────────────── Bölüm B: E-Belge Politikası ──────────────────────────── -->
+        <p-card styleClass="mb-3">
+            <ng-template pTemplate="title">E-Belge Politikası</ng-template>
+
+            @if (policyLoading && !politika) {
+                <p class="text-sm text-gray-600">Yükleniyor...</p>
+            } @else {
+                @if (!canManage) {
+                    <div class="state-banner state-banner-info">
+                        <i class="pi pi-info-circle"></i>
+                        <span>Salt görüntüleme yetkiniz var. Politikayı değiştirmek için kurum yöneticisi yetkisi gerekir.</span>
+                    </div>
+                }
+
+                <div class="policy-form-grid">
+                    <div class="field">
+                        <label for="ebelgeYontem">Entegrasyon Yöntemi *</label>
+                        <p-select
+                            inputId="ebelgeYontem"
+                            class="w-full"
+                            [options]="yontemSecenekleri"
+                            optionLabel="label"
+                            optionValue="value"
+                            optionDisabled="disabled"
+                            [(ngModel)]="formDraft.entegrasyonYontemi"
+                            [disabled]="!canManage"
+                            appendTo="body"
+                        />
+                        <small class="help-text">{{ formYontemAciklamasi }}</small>
+                    </div>
+
+                    <div class="field toggle-field">
+                        <p-checkbox inputId="ebelgeAktif" [binary]="true" [(ngModel)]="formDraft.aktifMi" [disabled]="!canManage"></p-checkbox>
+                        <label for="ebelgeAktif">Aktif</label>
+                    </div>
+
+                    <div class="field">
+                        <label for="ebelgeAktivasyonTarihi">Aktivasyon Tarihi @if (formDraft.aktifMi) {<span>*</span>}</label>
+                        <p-datepicker
+                            inputId="ebelgeAktivasyonTarihi"
+                            class="w-full"
+                            styleClass="w-full"
+                            inputStyleClass="w-full"
+                            [(ngModel)]="aktivasyonTarihiDate"
+                            [minDate]="minAktivasyonTarihi ?? undefined"
+                            [disabled]="!canManage"
+                            appendTo="body"
+                            [showIcon]="true"
+                            [showButtonBar]="true"
+                            [firstDayOfWeek]="1"
+                            dateFormat="dd.mm.yy"
+                        />
+                        @if (minAktivasyonTarihiMetni) {
+                            <small class="help-text">Bu tarihten önce aktif edilemez ({{ minAktivasyonTarihiMetni }}).</small>
+                        }
+                    </div>
+
+                    @if (hariciSistemKoduGerekliMi) {
+                        <div class="field">
+                            <label for="ebelgeHariciSistemKodu">Harici Sistem Kodu *</label>
+                            <input pInputText id="ebelgeHariciSistemKodu" class="w-full" [(ngModel)]="formDraft.hariciSistemKodu" maxlength="64" [disabled]="!canManage" />
+                        </div>
+                    }
+
+                    <div class="field field-full">
+                        <label for="ebelgeDegisiklikNedeni">Değişiklik Nedeni *</label>
+                        <textarea
+                            pTextarea
+                            id="ebelgeDegisiklikNedeni"
+                            class="w-full"
+                            rows="2"
+                            maxlength="500"
+                            [(ngModel)]="formDraft.degisiklikNedeni"
+                            [disabled]="!canManage"
+                            placeholder="Örn: Kurum mali işler biriminin 07.08.2026 tarihli onayı"
+                        ></textarea>
+                    </div>
+
+                    @if (politika) {
+                        <div class="field">
+                            <label>Politika Sürümü</label>
+                            <input pInputText class="w-full" [value]="politika.politikaSurumu" readonly />
+                        </div>
+                    }
+                </div>
+
+                @if (canManage) {
+                    <div class="form-actions">
+                        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+                    </div>
+                }
+            }
+        </p-card>
+
+        <!-- ──────────────────────────── Bölüm C: Değişiklik Geçmişi ──────────────────────────── -->
+        <p-card>
+            <ng-template pTemplate="title">Değişiklik Geçmişi</ng-template>
+
+            <p-table [value]="revizyonlar" [loading]="revisionLoading" [tableStyle]="{ 'min-width': '60rem' }" [paginator]="revizyonlar.length > 10" [rows]="10">
+                <ng-template #header>
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Sürüm</th>
+                        <th>Eski Yöntem</th>
+                        <th>Yeni Yöntem</th>
+                        <th>Eski Durum</th>
+                        <th>Yeni Durum</th>
+                        <th>Değişiklik Nedeni</th>
+                        <th>Değiştiren</th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>{{ formatTrDateTime(item.degisiklikZamaniUtc) }}</td>
+                        <td>{{ item.eskiSurum }} → {{ item.yeniSurum }}</td>
+                        <td>{{ yontemLabel(item.eskiYontem) }}</td>
+                        <td>{{ yontemLabel(item.yeniYontem) }}</td>
+                        <td><p-tag [value]="item.eskiAktifMi ? 'Aktif' : 'Pasif'" [severity]="item.eskiAktifMi ? 'success' : 'secondary'" /></td>
+                        <td><p-tag [value]="item.yeniAktifMi ? 'Aktif' : 'Pasif'" [severity]="item.yeniAktifMi ? 'success' : 'secondary'" /></td>
+                        <td class="revizyon-neden-cell" [title]="item.degisiklikNedeni">{{ item.degisiklikNedeni }}</td>
+                        <td>{{ item.degistirenKullanici || '-' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template #emptymessage>
+                    <tr>
+                        <td colspan="8" class="text-center text-gray-600">Henüz bir değişiklik kaydı yok.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-card>
+    }
+</div>

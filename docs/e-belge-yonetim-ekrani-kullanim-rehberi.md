@@ -187,36 +187,47 @@ durumda:
 
 ## Yetkilendirme
 
-Ekran, mevcut `StructurePermissions.MuhasebeSatisBelgeleriYonetimi` ailesini kullanır — yeni bir
-izin İCAT EDİLMEMİŞTİR:
+STYS'te yetkilendirme ÜÇ AYRI, birbirine KARIŞTIRILMAYAN katmandan oluşur (bkz. Faz 2B.11.2,
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md` "Faz 2B.11.2" bölümü):
 
-- **View** (veya SuperAdmin): salt-okunur erişim — kayıt/aktivasyon/pasifleştirme kontrolleri
-  gizlenir/disabled gösterilir.
-- **Manage** (veya SuperAdmin, veya kurum yöneticisi kendi kurumu için): politika kaydetme.
+1. **Menü görünürlüğü** — `MenuItem` → `MenuItemRoles` → `Xxx.Menu` (bkz. "erişim" bölümü
+   yukarıda). Bu ekran İÇİN `MuhasebeSatisBelgeleriYonetimi.Menu`.
+2. **Frontend işlem UX'i** — `canView`/`canManage` getter'ları, gerektiği ÖLÇÜDE (form alanlarını
+   göstermek/gizlemek, Kaydet/Aktifleştir/Pasifleştir butonlarını etkinleştirmek/devre dışı
+   bırakmak için). Bunlar bir authorization KATMANI DEĞİLDİR — yalnız kullanıcı deneyimidir.
+3. **Gerçek authorization** — backend endpoint'lerindeki `[Permission(...)]` attribute'ları
+   (`StructurePermissions.MuhasebeSatisBelgeleriYonetimi.View`/`.Manage`, `OR SuperAdmin`) +
+   tenant/kurum scope kontrolleri (`EnsureCanAccessKurumAsync`/`EnsureCanManageKurumAsync`).
 
-Frontend'deki bu ayrım YALNIZ kullanıcı deneyimi içindir — gerçek yetki kontrolü HER ZAMAN
-backend'de (`EnsureCanAccessKurumAsync`/`EnsureCanManageKurumAsync`) yapılır; bir kullanıcı UI'ı
-atlayıp doğrudan API'yi çağırsa bile aynı kısıtlamalarla karşılaşır.
+Angular rotası (`/muhasebe/e-belge-yonetimi`) YALNIZ authentication ağacının (`authGuard`/
+`authChildGuard`) altındadır — ek bir domain-permission route guard TAŞIMAZ (Faz 2B.11.1'de
+eklenmiş olan `permissionOrSuperAdminGuard`, Faz 2B.11.2'de bu mimari nedenle KALDIRILDI — bkz.
+aşağıdaki not). Bu, menü görünürlüğünün ZATEN `.Menu` rolü tarafından kontrol edildiği, ve
+gerçek işlem yetkisinin HER ZAMAN backend'de uygulandığı bir mimaride, rota seviyesinde İKİNCİ
+bir yetki kontrolünün gereksiz olmasındandır — kullanıcı doğrudan URL'ye gelse bile, yetkisiz
+bir API çağrısı backend tarafından REDDEDİLMEYE devam eder (`EnsureCanAccessKurumAsync`/
+`EnsureCanManageKurumAsync`, cross-tenant 403).
 
-**SuperAdmin — Faz 2B.11.1 düzeltmesi**: backend sözleşmesi `View/Manage OR SuperAdmin`
-(`[Permission(View, SuperAdminPermission)]` — OR semantiği) iken, ekranın ÖNCEKİ (Faz 2B.11)
-`canView`/`canManage` mantığı SuperAdmin'i de domain-spesifik `.View`/`.Manage` iznine SAHİP
-OLMAYA ZORLUYORDU (yanlışlıkla AND semantiği). Bu düzeltildi: `isSuperAdminUser()` artık HER
-İKİ getter'da da domain izin kontrolünden ÖNCE, koşulsuz olarak `true` döner — tıpkı backend'in
-davranışı gibi. Rota koruması da (`app.routes.ts`) AYNI sözleşmeyi taşıyan, bu rotaya ÖZGÜ
-`permissionOrSuperAdminGuard('MuhasebeSatisBelgeleriYonetimi.View')` kullanır — uygulamanın
-GENELİNDEKİ `permissionGuard` (yalnız `hasPermission` bakan, SuperAdmin'i AYRI DEĞERLENDİRMEYEN)
-davranışı DEĞİŞTİRİLMEDİ, yan etki yaratmaması için.
+`canView`/`canManage` getter'ları, backend'in `View/Manage OR SuperAdmin` semantiğini BİREBİR
+yansıtır (`isSuperAdminUser()` domain izin kontrolünden ÖNCE koşulsuz `true` döner) — ama bunlar
+SAYFA RENDER/YÜKLEME davranışı ve buton etkinliği İÇİNDİR, kullanıcıyı başka bir rotaya
+yönlendiren İKİNCİ bir authorization katmanı DEĞİLDİR.
 
-**UserManagement bağımsızlığı — Faz 2B.11.1 düzeltmesi**: ekranın kurum bağlamı (aktif kurum adı,
-SuperAdmin kurum seçici) ARTIK `KurumService.getAll()`/`getById()` (ikisi de backend'de
-`UserManagement.View` GEREKTİRİR) KULLANMAZ — bunun yerine yalnız kimlik doğrulama gerektiren,
-tenant-scope'a göre ZATEN erişilebilir kurumları döndüren `GET .../kurum/benim-kurumlarim`
-(`KurumService.getMyKurumlar()`) kullanılır. Bu sayede salt e-belge Viewer/Manager izni olan,
-`UserManagement` izni OLMAYAN bir kullanıcı ekranı TAM olarak kullanabilir. "Satıcı bilgilerini
-tamamla" kısayolu (Kurum Yönetimi ekranına gider) HÂLÂ `UserManagement.Manage OR SuperAdmin`
-gerektirir — ama bu, yalnız O BUTONUN görünürlüğünü etkiler, sayfanın KENDİSİNİN
-görüntülenmesini ETKİLEMEZ.
+**UserManagement bağımsızlığı**: ekranın kurum bağlamı (aktif kurum adı, SuperAdmin kurum seçici)
+`KurumService.getAll()`/`getById()` (ikisi de backend'de `UserManagement.View` GEREKTİRİR)
+KULLANMAZ — bunun yerine yalnız kimlik doğrulama gerektiren, tenant-scope'a göre ZATEN
+erişilebilir kurumları döndüren `GET .../kurum/benim-kurumlarim` (`KurumService.getMyKurumlar()`)
+kullanılır. Bu sayede salt e-belge Viewer/Manager izni olan, `UserManagement` izni OLMAYAN bir
+kullanıcı ekranı TAM olarak kullanabilir. "Satıcı bilgilerini tamamla" kısayolu (Kurum Yönetimi
+ekranına gider) HÂLÂ `UserManagement.Manage OR SuperAdmin` gerektirir — ama bu, yalnız O BUTONUN
+görünürlüğünü etkiler, sayfanın KENDİSİNİN görüntülenmesini ETKİLEMEZ.
+
+**Faz 2B.11.2 notu**: `permissionOrSuperAdminGuard` (ve genel `permissionGuard`) STYS'in
+DB-driven `MenuItemRoles` mimarisiyle TUTARSIZ, gereksiz bir ikinci yetkilendirme katmanıydı —
+KALDIRILDI (`permission.guard.ts` dosyasının kendisi de, repository genelinde başka hiçbir
+çağıranı KALMADIĞINDAN, tamamen silindi). Bu, backend authorization'ın GEVŞETİLMESİ ANLAMINA
+GELMEZ — yalnız frontend'in ZATEN otoriter olmayan, yanlışlıkla ikinci bir kaynak-of-truth
+İZLENİMİ veren bir kontrolünün kaldırılmasıdır.
 
 ## Sık görülen readiness blokajları
 

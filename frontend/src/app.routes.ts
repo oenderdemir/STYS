@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authChildGuard, authGuard, guestGuard, permissionGuard, permissionOrSuperAdminGuard } from './app/pages/auth';
+import { authChildGuard, authGuard, guestGuard } from './app/pages/auth';
 import { AppLayout } from './app/layout/component/app.layout';
 import { BinaYonetimi } from './app/pages/bina-yonetimi/bina-yonetimi';
 import { Dashboard } from './app/pages/dashboard/dashboard';
@@ -201,9 +201,9 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/kdv-hareket-raporu', component: KdvHareketRaporuComponent, data: { breadcrumb: ['Vergi & KDV İşlemleri', 'KDV Hareket Raporu'] } },
             { path: 'muhasebe/kdv-ozet-raporu', component: KdvOzetRaporuComponent, data: { breadcrumb: ['Vergi & KDV İşlemleri', 'KDV Özet Raporu'] } },
             { path: 'muhasebe/kdv-beyanname-hazirlik-kontrol', component: KdvBeyannameHazirlikKontrolComponent, data: { breadcrumb: ['Muhasebe', 'KDV Beyanname Hazırlık Kontrolü'] } },
-            { path: 'ticari-belgeler', component: TicariBelgelerComponent, canActivate: [permissionGuard('TicariBelgeYonetimi.View')], data: { breadcrumb: ['Satış Yönetimi', 'Ticari Belgeler'] } },
+            { path: 'ticari-belgeler', component: TicariBelgelerComponent, data: { breadcrumb: ['Satış Yönetimi', 'Ticari Belgeler'] } },
             { path: 'muhasebe/satis-belgeleri', component: SatisBelgeleriComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Satış Belgeleri'], belgeModu: 'satis' } },
-            { path: 'muhasebe/e-belge-yonetimi', component: EBelgeYonetimi, canActivate: [permissionOrSuperAdminGuard('MuhasebeSatisBelgeleriYonetimi.View')], data: { breadcrumb: ['Muhasebe', 'E-Belge Yönetimi'] } },
+            { path: 'muhasebe/e-belge-yonetimi', component: EBelgeYonetimi, data: { breadcrumb: ['Muhasebe', 'E-Belge Yönetimi'] } },
             { path: 'muhasebe/alis-belgeleri', component: SatisBelgeleriComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Alış Belgeleri'], belgeModu: 'alis' } },
             { path: 'muhasebe/yevmiye-defteri', component: YevmiyeDefteriComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Yevmiye Defteri'] } },
             { path: 'muhasebe/muavin-defter', component: MuavinDefterComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Muavin Defter'] } },

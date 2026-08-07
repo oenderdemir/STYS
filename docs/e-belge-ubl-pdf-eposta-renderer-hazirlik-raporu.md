@@ -4434,9 +4434,10 @@ gösterilir; SuperAdmin'in aktif kurumu yoksa sayfaya özgü selector AYNI endpo
 **5. SuperAdmin frontend/backend authorization eşleşmesi**: `canView`/`canManage` getter'ları
 ÖNCEDEN SuperAdmin'i de `hasPermission(...)` kontrolüne tabi tutuyordu (backend'in `View/Manage OR
 SuperAdmin` OR semantiğiyle TUTARSIZ AND semantiği). Düzeltildi: `isSuperAdminUser()` artık koşulsuz
-`true` döner. Route guard için, uygulama genelindeki `permissionGuard` DEĞİŞTİRİLMEDİ (yan etki
-riski) - bunun yerine hedefli, yeniden kullanılabilir `permissionOrSuperAdminGuard` eklendi, yalnız
-`/muhasebe/e-belge-yonetimi` rotasında kullanılır.
+`true` döner - bu, sayfa render/buton etkinliği için kullanılan bir UX kontrolüdür. (Bu turda AYRICA
+rotaya `permissionOrSuperAdminGuard` adlı bir route guard eklenmişti - Faz 2B.11.2'de bu yaklaşımın
+STYS'in DB-driven `MenuItemRoles` mimarisiyle TUTARSIZ olduğu anlaşılıp GERİ ALINDI, bkz. aşağıdaki
+"Faz 2B.11.2" bölümü.)
 
 **Test sonuçları** (dört profil, hepsi `Failed: 0, Skipped: 0`; 615 → 623):
 
@@ -4475,6 +4476,58 @@ ChromeHeadless altında geçti - permission guard paylaşılan altyapı olduğun
 
 **Kasıtlı olarak YAPILMAYANLAR**: Faz 2B.11 ekranlarının/mimarisinin baştan yazılması,
 `EBelgeProcessing`/`EBelgeSigning`/`EBelgeUbl` global kapılarının flip edilmesi veya
-`NotBeforeLocalDate` değişikliği, uygulama genelindeki `permissionGuard`'ın semantiğinin
-değiştirilmesi, V1 snapshot üretim yolunun sistemden kaldırılması, yeni bir DB migration'ı/tablo/
-sonuç türü icadı, test skip etme, tüm solution test paketini çalıştırma.
+`NotBeforeLocalDate` değişikliği, V1 snapshot üretim yolunun sistemden kaldırılması, yeni bir DB
+migration'ı/tablo/sonuç türü icadı, test skip etme, tüm solution test paketini çalıştırma.
+
+## Faz 2B.11.2: DB-Driven Menu Authorization ile Route Sadeleştirmesi
+
+Faz 2B.11.1'in eklediği `permissionOrSuperAdminGuard` route guard'ı, İYİ NİYETLİ ama MİMARİ OLARAK
+YANLIŞ bir düzeltmeydi: STYS frontend'de menü görünürlüğü route guard İLE YÖNETİLMEZ, otoriter
+model `MenuItem → MenuItemRoles → Xxx.Menu` zincirine dayanır. Bu tur, hem Faz 2B.11.1'in
+eklediği sapmayı hem ÖNCEDEN VAR OLAN bir sapmayı (`ticari-belgeler`'in `permissionGuard`
+kullanması) düzeltir - `app.routes.ts`'teki TÜM DİĞER onlarca rota zaten hiçbir domain-permission
+guard TAŞIMIYORDU. Tam tasarım gerekçesi için bkz.
+`docs/e-belge-kurum-politikasi-ve-yonlendirme-stratejisi.md` "Faz 2B.11.2" bölümü.
+
+**1. Route'lardan domain-permission guard'ları kaldırıldı**: `muhasebe/e-belge-yonetimi` VE
+`ticari-belgeler` rotalarından `canActivate` kaldırıldı - ikisi de ARTIK yalnız kök
+`authGuard`/`authChildGuard` ağacının altında, TÜM diğer rotalarla AYNI desende. Menü görünürlüğü
+(`MenuItemRoles`+`Xxx.Menu`) VE backend authorization (`[Permission(...)]`+tenant/kurum scope)
+DEĞİŞMEDİ - route guard'ın kaldırılması bir güvenlik gevşetmesi DEĞİLDİR, backend HER ZAMAN
+otoriterdir.
+
+**2. `permissionOrSuperAdminGuard`/`permissionGuard` tamamen kaldırıldı**: her ikisinin de
+repository genelinde route'lardan kaldırıldıktan SONRA hiçbir çağıranı KALMADIĞI doğrulandı
+(AÇIKÇA arandı) - `permission.guard.ts` VE `permission.guard.spec.ts` dosyalarının TAMAMI
+silindi, `auth/index.ts` barrel export'u güncellendi. Dead code BIRAKILMADI.
+
+**3. MenuItemRoles doğrulaması**: `muhasebe/e-belge-yonetimi` → `MuhasebeSatisBelgeleriYonetimi.Menu`
+(`20260807000000_AddEBelgeYonetimiMenuFaz2B11.cs`) VE `ticari-belgeler` → `TicariBelgeYonetimi.Menu`
+(`20260731210000_AddTicariBelgeYonetimiMenu.cs`, Faz 2B.11'den ÖNCEKİ mevcut bir migration)
+bağlantıları doğrulandı - HİÇBİRİ değiştirilmedi, yeni permission/migration İCAT EDİLMEDİ.
+
+**4. E-Belge component değişmedi**: `EBelgeYonetimi`'nin `canView`/`canManage` getter'ları AYNEN
+KORUNDU - bunlar route authorization DEĞİL, UI işlem kontrolüdür (edit alanları, Kaydet,
+Aktifleştir, Pasifleştir); backend YİNE otoriterdir. SuperAdmin İÇİN ayrı bir route guard
+OLUŞTURULMADI.
+
+**Test sonuçları** (dört profil - backend davranışı bu turda DEĞİŞMEDİĞİNDEN aynı sayılar
+beklenir, hepsi `Failed: 0, Skipped: 0`):
+
+```
+./scripts/test-ebelge.ps1 fast          -> Passed: 316, Failed: 0, Skipped: 0
+./scripts/test-ebelge.ps1 integration   -> Passed: 601, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 nightly       -> Passed: 621, Failed: 0, Skipped: 0  (preflight: SQL+Java GEÇTİ)
+./scripts/test-ebelge.ps1 release       -> Passed: 623, Failed: 0, Skipped: 0  (preflight: SQL+Java+31 kritik invariant testi GEÇTİ)
+```
+
+Frontend: `npm run build` (production) başarıyla tamamlandı (aynı, bu turdan ÖNCEKİ initial-bundle
+budget uyarısı DIŞINDA hata/uyarı yok). Karma/Jasmine tam suite `permission.guard.spec.ts`'in
+silinmesiyle 126'dan 118'e düştü (8 guard testi kaldırıldı) - kalan 118/118 ChromeHeadless altında
+geçti. Test sayısını KORUMAK için anlamsız replacement test YAZILMADI.
+
+**Kasıtlı olarak YAPILMAYANLAR**: Backend `[Permission(...)]`/tenant-kurum scope kontrollerinin
+değiştirilmesi, yeni bir permission/migration icadı, Faz 2B.11.1'in UBL/readiness
+düzeltmelerinin GERİ ALINMASI, `EBelgeYonetimi`'nin `canView`/`canManage` mantığının
+route-authorization'a dönüştürülmesi, SuperAdmin için ayrı route guard icadı, test skip etme, tüm
+solution test paketini çalıştırma.

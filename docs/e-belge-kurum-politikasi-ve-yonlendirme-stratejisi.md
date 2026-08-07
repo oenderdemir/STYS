@@ -747,18 +747,97 @@ GEREKSİNİM DUYMAZ). Frontend'in ÖNCEKİ `canView`/`canManage` getter'ları Su
 `hasPermission('...View'/'...Manage')` kontrolüne TABİ TUTUYORDU (yanlış AND semantiği) —
 domain-spesifik izni OLMAYAN "saf" bir SuperAdmin kullanıcı ekranı GÖREMİYORDU. Düzeltme:
 `isSuperAdminUser()` artık HER İKİ getter'da da domain izin kontrolünden ÖNCE, koşulsuz `true`
-döner. Route guard İÇİN, uygulama genelindeki `permissionGuard` (yalnız `hasPermission` bakar)
-DEĞİŞTİRİLMEDİ (yan etki riski — onlarca rota bu davranışa GÜVENİR) — bunun yerine hedefli, YENİDEN
-KULLANILABİLİR bir `permissionOrSuperAdminGuard(permission)` eklendi (`hasPermission(permission) ||
-isSuperAdminUser()`), yalnız `/muhasebe/e-belge-yonetimi` rotasında kullanılır.
+döner — bu, sayfa render/buton etkinliği İÇİN kullanılan bir UX kontrolüdür.
+
+> **Faz 2B.11.2 notu**: bu turda AYRICA, `/muhasebe/e-belge-yonetimi` rotasına eklenen
+> `permissionOrSuperAdminGuard` adlı bir route guard'la SuperAdmin'i rota seviyesinde de "AYRI
+> DEĞERLENDİRİLİR" hale getirmeye çalışılmıştı. Faz 2B.11.2'de bu yaklaşımın KENDİSİNİN, STYS'in
+> DB-driven `MenuItemRoles` mimarisiyle TUTARSIZ olduğu anlaşıldı ve GERİ ALINDI — bkz. aşağıdaki
+> "Faz 2B.11.2" bölümü. `canView`/`canManage` getter'larındaki SuperAdmin düzeltmesinin KENDİSİ
+> (bu paragraf) DOĞRUdur ve KORUNDU.
 
 ### Kasıtlı olarak YAPILMAYANLAR
 
 Faz 2B.11 ekranlarının/mimarisinin baştan yazılması, `EBelgeProcessing`/`EBelgeSigning`/`EBelgeUbl`
-global kapılarının flip edilmesi veya `NotBeforeLocalDate` değişikliği, `permissionGuard`'ın GENEL
-semantiğinin değiştirilmesi (yan etki riski), V1 snapshot üretim yolunun sistemden kaldırılması,
-yeni bir DB migration'ı/tablo/sonuç türü icadı, `TryReleasePolicyBlockedAsync` gibi mevcut paylaşılan
-mekanizmaların yeniden yazılması, test skip etme, tüm solution test paketini çalıştırma.
+global kapılarının flip edilmesi veya `NotBeforeLocalDate` değişikliği, V1 snapshot üretim yolunun
+sistemden kaldırılması, yeni bir DB migration'ı/tablo/sonuç türü icadı,
+`TryReleasePolicyBlockedAsync` gibi mevcut paylaşılan mekanizmaların yeniden yazılması, test skip
+etme, tüm solution test paketini çalıştırma.
+
+## Faz 2B.11.2: DB-Driven Menu Authorization ile Route Sadeleştirmesi
+
+Faz 2B.11.1, `/muhasebe/e-belge-yonetimi` rotasına `permissionOrSuperAdminGuard` adlı bir route
+guard ekledi — backend'in `View OR SuperAdmin` sözleşmesini rota seviyesinde de yansıtmak
+amacıyla. Bu, İYİ NİYETLİ ama MİMARİ OLARAK YANLIŞ bir düzeltmeydi: STYS frontend'de menü
+görünürlüğü route guard İLE YÖNETİLMEZ — otoriter model `MenuItem → MenuItemRoles → Xxx.Menu`
+zincirine dayanır (bkz. üstteki "Faz 2B.11: ... erişim" bölümleri). Angular route seviyesinde
+`permissionGuard`/`permissionOrSuperAdminGuard` kullanmak, bu mimaride gereksiz bir İKİNCİ
+yetkilendirme katmanı YARATIYORDU — ve `app.routes.ts`'teki DİĞER TÜM rotalar (rezervasyon, oda,
+muhasebe, restoran, vb. — literalman onlarca rota) zaten HİÇBİR domain-permission guard
+TAŞIMIYORDU; yalnız `ticari-belgeler` (önceki bir sapma) ve `muhasebe/e-belge-yonetimi` (Faz
+2B.11.1'de eklenen) bu deseni İHLAL EDİYORDU. Bu tur her iki sapmayı da düzeltir.
+
+### Route'lardan domain-permission guard'ları kaldırıldı
+
+`app.routes.ts`'te hem `muhasebe/e-belge-yonetimi` (`permissionOrSuperAdminGuard`) hem
+`ticari-belgeler` (`permissionGuard`) rotalarından `canActivate` kaldırıldı. Her iki rota da ARTIK
+yalnız uygulamanın kök `authGuard`/`authChildGuard` ağacının (`{ path: '', canActivate: [authGuard],
+canActivateChild: [authChildGuard], children: [...] }`) altındadır — TÜM diğer rotalarla AYNI
+desen. Menü görünürlüğü DEĞİŞMEDİ (hâlâ `MenuItemRoles` + `Xxx.Menu` ile kontrol edilir); gerçek
+işlem yetkisi DEĞİŞMEDİ (hâlâ backend `[Permission(...)]` + tenant/kurum scope kontrolleriyle
+uygulanır). Route guard'ın kaldırılması bir GÜVENLİK GEVŞETMESİ DEĞİLDİR — kullanıcı doğrudan
+URL'ye gelse bile (menüde görmese BİLE), yetkisiz bir API çağrısı backend tarafından AYNI şekilde
+reddedilir; route guard SADECE erken, istemci-taraflı bir yönlendirme kısayoluydu, otoriter kontrol
+HİÇBİR ZAMAN değildi.
+
+### `permissionOrSuperAdminGuard` ve `permissionGuard` tamamen kaldırıldı
+
+`permissionOrSuperAdminGuard`, yukarıdaki iki rotanın DIŞINDA hiçbir yerde kullanılmıyordu — TAMAMEN
+silindi. `permissionGuard` da (yalnız `ticari-belgeler`'de kullanılıyordu) route'lardan kaldırıldıktan
+sonra repository genelinde ARTIK HİÇBİR çağıranı KALMADIĞINDAN (repo genelinde AÇIKÇA arandı, tek
+kullanım noktası `ticari-belgeler` idi), `frontend/src/app/pages/auth/permission.guard.ts` VE
+`permission.guard.spec.ts` dosyalarının TAMAMI silindi, `auth/index.ts`'teki barrel export satırı
+kaldırıldı — dead code BIRAKILMADI. Bu, "kullanılmıyorsa sil, kullanılıyorsa DOKUNMA" ilkesinin
+UYGULANMASIdır; başka bir rota gerçekten `permissionGuard` kullanıyor olsaydı dosya KORUNURDU.
+
+### Menu/action permission ayrımı
+
+STYS yetki semantiği üç KATMANA ayrılır, birbirine KARIŞTIRILMAZ:
+
+- **`.Menu`** — YALNIZ menü görünürlüğü içindir (`MenuItemRoles` üzerinden). Backend API
+  authorization İÇİN KULLANILMAZ.
+- **`.View`** — backend read API işlemleri içindir (`GET policy`/`GET readiness`/`GET revizyonlar`).
+  Menü görünürlüğü İÇİN route guard olarak KULLANILMAZ.
+- **`.Manage`** — backend write API + frontend işlem butonları içindir (`PUT policy`,
+  Aktifleştir/Pasifleştir/Yöntem değiştir). Menü görünürlüğü İÇİN route guard olarak KULLANILMAZ.
+
+### MenuItemRoles doğrulaması
+
+İki mevcut, DEĞİŞTİRİLMEYEN migration doğrulandı:
+
+- `muhasebe/e-belge-yonetimi` → `MuhasebeSatisBelgeleriYonetimi.Menu`
+  (`20260807000000_AddEBelgeYonetimiMenuFaz2B11.cs`).
+- `ticari-belgeler` → `TicariBelgeYonetimi.Menu` (`20260731210000_AddTicariBelgeYonetimiMenu.cs`,
+  Faz 2B.11'den ÖNCEKİ bir migration — bu tur YENİ bir permission/migration İCAT ETMEDİ, yalnız
+  mevcut bağlantının doğru olduğunu doğruladı).
+
+### E-Belge component içi permission davranışı
+
+`EBelgeYonetimi` component'indeki `canView`/`canManage` getter'ları DEĞİŞTİRİLMEDİ — bunlar
+route authorization DEĞİLDİR, yalnız UI işlemlerini (edit alanlarının açılması, Kaydet,
+Aktifleştir, Pasifleştir) kontrol eden UX yardımcılarıdır; backend YİNE otoriterdir. SuperAdmin
+İÇİN ayrı bir Angular route guard OLUŞTURULMADI — SuperAdmin davranışı mevcut Menu API/backend
+authorization mekanizmasıyla çözülür.
+
+### Kasıtlı olarak YAPILMAYANLAR
+
+Backend `[Permission(...)]`/`EnsureCanAccessKurumAsync`/`EnsureCanManageKurumAsync`
+sözleşmelerinin değiştirilmesi, yeni bir permission/migration icadı, Faz 2B.11.1'in UBL/readiness
+düzeltmelerinin (`EBelgeUbl.Enabled` readiness entegrasyonu, runtime fail-closed, frontend
+capability tek kaynağı, UserManagement bağımsızlığı) GERİ ALINMASI, `EBelgeYonetimi`
+component'inin `canView`/`canManage` mantığının route-authorization'a DÖNÜŞTÜRÜLMESİ, test sayısını
+KORUMAK için anlamsız replacement test yazılması, test skip etme, tüm solution test paketini
+çalıştırma.
 
 ## Kurum Süreç Analiz Şablonu
 

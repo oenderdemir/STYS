@@ -51,7 +51,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
         var factory = NewFactory();
         var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await svc.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
         int success = 0, expectedFail = 0, unexpectedFail = 0;
@@ -111,7 +111,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
         var factory = NewFactory();
         var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await svc.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
         int success = 0, expectedFail = 0, unexpectedFail = 0;
@@ -166,7 +166,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
         var factory = NewFactory();
         var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await svc.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
         var throwingHook = new ThrowingEnrollmentHook();

@@ -35,7 +35,6 @@ public sealed class AgentListDto
 public sealed class AgentKaydetRequest
 {
     public string Ad { get; set; } = string.Empty;
-    public int KurumId { get; set; }
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];
     public IReadOnlyCollection<string> Scopes { get; set; } = [];
 }

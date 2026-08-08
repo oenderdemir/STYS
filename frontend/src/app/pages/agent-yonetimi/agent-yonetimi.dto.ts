@@ -18,7 +18,6 @@ export interface AgentDto extends AgentListDto {
 
 export interface AgentKaydetRequest {
     ad: string;
-    kurumId: number;
     tesisIds: number[];
     scopes: string[];
 }
@@ -39,7 +38,6 @@ export interface AgentEnrollmentCodeDto {
 }
 
 export interface AgentEnrollmentCodeRequest {
-    kurumId: number;
     tesisIds: number[];
     allowedScopes: string[];
     maxKullanimSayisi?: number;

@@ -21,7 +21,6 @@ public sealed class AgentEnrollmentResponse
 
 public sealed class AgentEnrollmentCodeRequest
 {
-    public int KurumId { get; set; }
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];
     public IReadOnlyCollection<string> AllowedScopes { get; set; } = [];
     public int? MaxKullanimSayisi { get; set; }

@@ -75,10 +75,6 @@
                         <label for="ad">Agent Adı</label>
                         <input pInputText id="ad" [(ngModel)]="agentForm.ad" required [class.ng-invalid]="submitted() && !agentForm.ad" />
                     </div>
-                    <div class="field">
-                        <label for="kurumId">Kurum ID</label>
-                        <input pInputText id="kurumId" type="number" [(ngModel)]="agentForm.kurumId" required />
-                    </div>
                 </p-tabpanel>
                 <p-tabpanel value="1">
                     <div class="field grid">
@@ -126,17 +122,13 @@
     [style]="{ width: '700px' }">
     <ng-template pTemplate="content">
         <div class="field grid">
-            <div class="col-4">
-                <label for="enrKurumId">Kurum ID</label>
-                <input pInputText id="enrKurumId" type="number" [(ngModel)]="enrollmentForm.kurumId" />
-            </div>
-            <div class="col-4 flex align-items-end">
+            <div class="col-6 flex align-items-end">
                 <div class="field-checkbox">
                     <p-checkbox inputId="requiresApproval" [binary]="true" [(ngModel)]="enrollmentForm.requiresApproval" />
                     <label for="requiresApproval">Onay gerektirsin</label>
                 </div>
             </div>
-            <div class="col-4 flex align-items-end">
+            <div class="col-6 flex align-items-end">
                 <button pButton pRipple label="Kod Oluştur" icon="pi pi-key" class="p-button-success" (click)="generateEnrollmentCode()"></button>
             </div>
         </div>

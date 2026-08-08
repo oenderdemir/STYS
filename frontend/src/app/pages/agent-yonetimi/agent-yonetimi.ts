@@ -16,6 +16,7 @@ import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { CheckboxModule } from 'primeng/checkbox';
 import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
+import { AuthService } from '../auth/auth.service';
 import {
     AgentDto,
     AgentDurumLabels,
@@ -59,6 +60,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly realtime = inject(AgentRealtimeService);
+    private readonly authService = inject(AuthService);
 
     agents = signal<AgentListDto[]>([]);
     loading = signal(false);
@@ -71,8 +73,8 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     selectedCommandType = signal<string>('Ping');
     viewingAgentId = signal<number | null>(null);
 
-    agentForm: AgentFormState = { ad: '', kurumId: 0, tesisIds: [], scopes: [] };
-    enrollmentForm: AgentEnrollmentCodeRequest = { kurumId: 0, tesisIds: [], allowedScopes: [] };
+    agentForm: AgentFormState = { ad: '', tesisIds: [], scopes: [] };
+    enrollmentForm: AgentEnrollmentCodeRequest = { tesisIds: [], allowedScopes: [] };
 
     durumLabels = AgentDurumLabels;
     commandTypes = ['Ping', 'HealthCheck', 'RefreshConfiguration', 'PavoConnectionTest'];
@@ -106,7 +108,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     }
 
     openNew(): void {
-        this.agentForm = { ad: '', kurumId: 0, tesisIds: [], scopes: [] };
+        this.agentForm = { ad: '', tesisIds: [], scopes: [] };
         this.submitted.set(false);
         this.dialogVisible.set(true);
     }
@@ -115,7 +117,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         this.service.getAgent(agent.id).subscribe({
             next: (detail) => {
                 this.agentForm = {
-                    id: detail.id, ad: detail.ad, kurumId: detail.kurumId,
+                    id: detail.id, ad: detail.ad,
                     tesisIds: detail.tesisIds, scopes: detail.scopes
                 };
                 this.submitted.set(false);
@@ -130,11 +132,10 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
 
     saveAgent(): void {
         this.submitted.set(true);
-        if (!this.agentForm.ad || !this.agentForm.kurumId) return;
+        if (!this.agentForm.ad) return;
 
         const request: AgentKaydetRequest = {
             ad: this.agentForm.ad,
-            kurumId: this.agentForm.kurumId,
             tesisIds: this.agentForm.tesisIds,
             scopes: this.agentForm.scopes
         };
@@ -198,7 +199,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     }
 
     openEnrollmentDialog(): void {
-        this.enrollmentForm = { kurumId: 0, tesisIds: [], allowedScopes: [] };
+        this.enrollmentForm = { tesisIds: [], allowedScopes: [] };
         this.enrollmentDialogVisible.set(true);
         this.loadEnrollmentCodes();
     }
@@ -215,7 +216,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
             next: (code) => {
                 this.messageService.add({ severity: 'success', summary: 'Kod Oluşturuldu', detail: code.code });
                 this.loadEnrollmentCodes();
-                this.enrollmentForm = { kurumId: 0, tesisIds: [], allowedScopes: [] };
+                this.enrollmentForm = { tesisIds: [], allowedScopes: [] };
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });

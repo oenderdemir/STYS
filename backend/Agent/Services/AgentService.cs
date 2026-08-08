@@ -61,8 +61,10 @@ public sealed class AgentService : IAgentService
 
     public async Task<AgentDto> CreateAsync(AgentKaydetRequest request, string createdBy, CancellationToken cancellationToken)
     {
-        EnforceKurumAccess(request.KurumId);
-        await ValidateTesislerAsync(request.KurumId, request.TesisIds, cancellationToken);
+        var kurumId = _tenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue) throw new BaseException("Aktif kurum seçilmedi.", 400);
+        EnforceKurumAccess(kurumId.Value);
+        await ValidateTesislerAsync(kurumId.Value, request.TesisIds, cancellationToken);
 
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -71,7 +73,7 @@ public sealed class AgentService : IAgentService
         {
             Ad = request.Ad,
             AgentKey = agentKey,
-            KurumId = request.KurumId,
+            KurumId = kurumId.Value,
             Durum = AgentDurum.Active,
             CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow
@@ -81,12 +83,12 @@ public sealed class AgentService : IAgentService
 
         foreach (var tesisId in request.TesisIds)
         {
-            db.Set<AgentTesis>().Add(new AgentTesis { AgentId = agent.Id, KurumId = request.KurumId, TesisId = tesisId, CreatedBy = createdBy, CreatedAt = DateTime.UtcNow });
+            db.Set<AgentTesis>().Add(new AgentTesis { AgentId = agent.Id, KurumId = kurumId.Value, TesisId = tesisId, CreatedBy = createdBy, CreatedAt = DateTime.UtcNow });
         }
 
         foreach (var scope in request.Scopes)
         {
-            db.Set<AgentScope>().Add(new AgentScope { AgentId = agent.Id, KurumId = request.KurumId, Scope = scope.ToLowerInvariant().Trim(), CreatedBy = createdBy, CreatedAt = DateTime.UtcNow });
+            db.Set<AgentScope>().Add(new AgentScope { AgentId = agent.Id, KurumId = kurumId.Value, Scope = scope.ToLowerInvariant().Trim(), CreatedBy = createdBy, CreatedAt = DateTime.UtcNow });
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -175,14 +177,16 @@ public sealed class AgentService : IAgentService
 
     public async Task<AgentEnrollmentCodeDto> GenerateEnrollmentCodeAsync(AgentEnrollmentCodeRequest request, string createdBy, CancellationToken cancellationToken)
     {
-        EnforceKurumAccess(request.KurumId);
-        await ValidateTesislerAsync(request.KurumId, request.TesisIds, cancellationToken);
+        var kurumId = _tenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue) throw new BaseException("Aktif kurum seçilmedi.", 400);
+        EnforceKurumAccess(kurumId.Value);
+        await ValidateTesislerAsync(kurumId.Value, request.TesisIds, cancellationToken);
 
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var code = GenerateSecureCode();
         var enrollment = new AgentEnrollment
         {
-            Code = code, KurumId = request.KurumId,
+            Code = code, KurumId = kurumId.Value,
             TesisIds = System.Text.Json.JsonSerializer.Serialize(request.TesisIds),
             AllowedScopes = System.Text.Json.JsonSerializer.Serialize(request.AllowedScopes),
             MaxKullanimSayisi = request.MaxKullanimSayisi ?? 1,

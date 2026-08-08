@@ -163,7 +163,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
 
         var factory = NewFactory();
         var service = new AgentService(new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(cs)), new FakeSuperAdminTenantAccessor());
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
         int success = 0, expectedFail = 0, unexpectedFail = 0;
@@ -222,7 +222,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var factory = NewFactory();
         var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, RequiresApproval = true };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, RequiresApproval = true };
         var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
         var tokenService = CreateTokenService(factory);
@@ -247,7 +247,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var factory = NewFactory();
         var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], RequiresApproval = false };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], RequiresApproval = false };
         var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
         var tokenService = CreateTokenService(factory);
         var result = await tokenService.EnrollAsync(new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"ACTIVE-{_uniqueSuffix}" }, CancellationToken.None);
@@ -307,7 +307,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var factory = NewFactory();
         var svc = new AgentService(factory, new FakeKurumTenantAccessor(_kurumAId));
 
-        var req = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumBId, TesisIds = [_tesisBId], AllowedScopes = ["agent.heartbeat"] };
+        var req = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisBId], AllowedScopes = ["agent.heartbeat"] };
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svc.GenerateEnrollmentCodeAsync(req, "test", CancellationToken.None));
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
@@ -322,7 +322,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var factory = NewFactory();
         var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var req = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", KurumId = _kurumAId, TesisIds = [_tesisBId], Scopes = ["agent.heartbeat"] };
+        var req = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", TesisIds = [_tesisBId], Scopes = ["agent.heartbeat"] };
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svc.CreateAsync(req, "test", CancellationToken.None));
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
@@ -333,7 +333,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
         var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
-        var req = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", KurumId = _kurumAId, TesisIds = [99999], Scopes = ["agent.heartbeat"] };
+        var req = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", TesisIds = [99999], Scopes = ["agent.heartbeat"] };
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svc.CreateAsync(req, "test", CancellationToken.None));
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }

@@ -96,7 +96,7 @@ public sealed class AgentService : IAgentService
     public async Task<AgentDto> UpdateAsync(int id, AgentKaydetRequest request, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.Set<AgentEntity>().Include(x => x.Tesisler).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        var agent = await db.Set<AgentEntity>().Include(x => x.Tesisler).Include(x => x.Scopes).Include(x => x.Credentialler).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
         if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
         EnforceKurumAccess(agent);
 
@@ -109,8 +109,33 @@ public sealed class AgentService : IAgentService
         foreach (var t in agent.Tesisler.Where(x => !request.TesisIds.Contains(x.TesisId)))
             t.IsDeleted = true;
 
+        var scopeChanged = SyncScopes(db, agent, request.Scopes);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (scopeChanged)
+            IncrementCredentialVersions(agent);
+
         await db.SaveChangesAsync(cancellationToken);
         return MapToDto(agent);
+    }
+
+    public async Task UpdateScopesAsync(int id, IReadOnlyCollection<string> scopes, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var agent = await db.Set<AgentEntity>().Include(x => x.Scopes).Include(x => x.Credentialler).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
+        EnforceKurumAccess(agent);
+
+        var scopeChanged = SyncScopes(db, agent, scopes);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (scopeChanged)
+        {
+            IncrementCredentialVersions(agent);
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task ApproveAsync(int id, CancellationToken cancellationToken)
@@ -236,6 +261,42 @@ public sealed class AgentService : IAgentService
     }
 
     private static bool ComputeOnline(DateTime? lastHeartbeat) => lastHeartbeat.HasValue && (DateTime.UtcNow - lastHeartbeat.Value) <= TimeSpan.FromMinutes(5);
+
+    private static bool SyncScopes(StysAppDbContext db, AgentEntity agent, IReadOnlyCollection<string> requestedScopes)
+    {
+        var changed = false;
+        var normalized = requestedScopes.Select(x => x.Trim().ToLowerInvariant()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var deleted = agent.Scopes?.Where(x => !x.IsDeleted).ToList() ?? new List<AgentScope>();
+
+        foreach (var existing in deleted)
+        {
+            if (normalized.Contains(existing.Scope, StringComparer.OrdinalIgnoreCase))
+            {
+                if (!existing.AktifMi) { existing.AktifMi = true; changed = true; }
+                normalized.Remove(existing.Scope);
+            }
+            else
+            {
+                existing.AktifMi = false;
+                existing.IsDeleted = true;
+                changed = true;
+            }
+        }
+
+        foreach (var scope in normalized)
+        {
+            db.Set<AgentScope>().Add(new AgentScope { AgentId = agent.Id, KurumId = agent.KurumId, Scope = scope, AktifMi = true, CreatedBy = agent.UpdatedBy, CreatedAt = DateTime.UtcNow });
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static void IncrementCredentialVersions(AgentEntity agent)
+    {
+        foreach (var cred in agent.Credentialler?.Where(x => x.AktifMi) ?? [])
+            cred.CredentialVersion++;
+    }
 
     private static string GenerateSecureCode()
     {

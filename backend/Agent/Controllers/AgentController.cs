@@ -37,6 +37,14 @@ public sealed class AgentController : ControllerBase
     public async Task<ActionResult<AgentDto>> Update(int id, [FromBody] AgentKaydetRequest request, CancellationToken cancellationToken) =>
         Ok(await _agentService.UpdateAsync(id, request, cancellationToken));
 
+    [HttpPut("{id:int}/scopes")]
+    [Permission(StructurePermissions.AgentYonetimi.Manage)]
+    public async Task<ActionResult> UpdateScopes(int id, [FromBody] List<string> scopes, CancellationToken cancellationToken)
+    {
+        await _agentService.UpdateScopesAsync(id, scopes, cancellationToken);
+        return Ok();
+    }
+
     [HttpPost("{id:int}/approve")]
     [Permission(StructurePermissions.AgentYonetimi.Manage)]
     public async Task<ActionResult> Approve(int id, CancellationToken cancellationToken)

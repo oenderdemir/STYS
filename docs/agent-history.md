@@ -346,9 +346,36 @@ Passed: 1049, Failed: 0, Skipped: 13, Total: 1062
 [x] agent-history.md gerçek kodla uyumlu
 ```
 
-#### Test Sonuçları
+#### Test Sonuçları (Kapanış)
 
 ```
 dotnet test --filter "Category!=Integration"
 Passed: 1049, Failed: 0, Skipped: 13, Total: 1062
 ```
+
+---
+
+### Faz 1 Kapanış Doğrulaması (08.08.2026)
+
+#### Scope Update ve Token Invalidation
+
+- `AgentService.UpdateAsync`: artık scope değişikliklerini de yönetiyor
+- `SyncScopes()`: yeni scope ekleme, mevcut scope kaldırma (soft-delete), tekrar enable etme
+- Scope değişikliğinde `IncrementCredentialVersions()` ile tüm aktif credential'ların versiyonu artırılıyor
+- Eski JWT'ler credential version mismatch nedeniyle authorization handler'da reddediliyor
+- `AgentController.UpdateScopes()` endpoint'i: `PUT /ui/agent/{id}/scopes`
+- Scope normalization: `Trim().ToLowerInvariant()`, boş/null red
+- Unique index `(AgentId, Scope)` ile duplicate önleme
+- Case-insensitive: `AGENT.HEARTBEAT` → `agent.heartbeat`
+
+#### Doğrulama Testleri (AgentPhase1VerificationTests) — 12 test
+
+**Scope:** Scope_AddNewScope, Scope_RemoveScope, Scope_ChangeInvalidatesCredentialVersion, Scope_CaseInsensitiveNormalization, Scope_DuplicateScope_Prevented
+**Concurrency:** ConcurrentSingleUse_CreatesOneAgent (2 paralel), Concurrent_NoOrphanRecords (3 paralel)
+**RequiresApproval:** True_PendingAgentCannotGetToken (403 → approve → 200), False_AgentIsActiveImmediately
+**Kurum:** KurumA_Admin_CannotAccessKurumB (detail/disable/revoke → 403), SuperAdmin_CanAccessAllKurums
+**Tesis:** CrossKurumTesis_Rejected (400), NonexistentTesis_Rejected (400)
+
+#### Faz 1 Kapanış Kararı
+
+**Faz 1: TAMAMLANDI** ✅ — 18 kriter sağlandı + 12 doğrulama testi eklendi

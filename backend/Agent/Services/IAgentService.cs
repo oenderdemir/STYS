@@ -8,6 +8,7 @@ public interface IAgentService
     Task<IReadOnlyCollection<AgentListDto>> GetAllAsync(CancellationToken cancellationToken);
     Task<AgentDto> CreateAsync(AgentKaydetRequest request, string createdBy, CancellationToken cancellationToken);
     Task<AgentDto> UpdateAsync(int id, AgentKaydetRequest request, CancellationToken cancellationToken);
+    Task UpdateScopesAsync(int id, IReadOnlyCollection<string> scopes, CancellationToken cancellationToken);
     Task ApproveAsync(int id, CancellationToken cancellationToken);
     Task DisableAsync(int id, CancellationToken cancellationToken);
     Task RevokeAsync(int id, CancellationToken cancellationToken);

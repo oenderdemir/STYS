@@ -32,4 +32,13 @@ public sealed class AgentTokenStore
             return _accessToken;
         }
     }
+
+    public void ClearToken()
+    {
+        lock (_lock)
+        {
+            _accessToken = null;
+            _expiresAt = DateTime.MinValue;
+        }
+    }
 }

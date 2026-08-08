@@ -1,9 +1,11 @@
 using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
+using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Services;
 using STYS.Agent.Workers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -14,14 +16,19 @@ builder.Services.AddSystemd();
 builder.Services.Configure<StysAgentClientOptions>(
     builder.Configuration.GetSection(StysAgentClientOptions.SectionName));
 
+builder.Services.AddSingleton<AgentTokenStore>();
+builder.Services.AddSingleton<IAgentCredentialStore, FileAgentCredentialStore>();
+
+builder.Services.AddTransient<AgentAuthenticationHandler>();
+
 builder.Services.AddHttpClient<IStysAgentApiClient, StysAgentApiClient>((sp, client) =>
 {
     var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StysAgentClientOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/'));
     client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
-});
+})
+.AddHttpMessageHandler<AgentAuthenticationHandler>();
 
-builder.Services.AddSingleton<AgentTokenStore>();
 builder.Services.AddSingleton<AgentHostedService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentHostedService>());
 builder.Services.AddHostedService<HeartbeatWorker>();

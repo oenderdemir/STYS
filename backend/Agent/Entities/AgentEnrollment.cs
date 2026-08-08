@@ -13,6 +13,7 @@ public sealed class AgentEnrollment : BaseEntity<int>, ITenantEntity
     public int MaxKullanimSayisi { get; set; } = 1;
     public DateTime ExpiresAt { get; set; }
     public AgentEnrollmentDurum Durum { get; set; } = AgentEnrollmentDurum.Active;
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
     public int? AgentId { get; set; }
 
     public Agent? Agent { get; set; }

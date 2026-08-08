@@ -9,6 +9,7 @@ public sealed class AgentCredential : BaseEntity<int>, ITenantEntity
     public string ClientId { get; set; } = string.Empty;
     public string ClientSecretHash { get; set; } = string.Empty;
     public bool AktifMi { get; set; } = true;
+    public int CredentialVersion { get; set; } = 1;
     public DateTime? ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }
 

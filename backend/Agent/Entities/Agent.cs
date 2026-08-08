@@ -11,6 +11,7 @@ public sealed class Agent : BaseEntity<int>, ITenantEntity
     public AgentDurum Durum { get; set; } = AgentDurum.PendingApproval;
     public string? AgentVersion { get; set; }
     public DateTime? SonGorulmeTarihi { get; set; }
+    public DateTime? LastHeartbeatAt { get; set; }
     public string? CihazKimligi { get; set; }
     public string? PublicKey { get; set; }
     public Guid? UserId { get; set; }

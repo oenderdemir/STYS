@@ -27,9 +27,13 @@ public sealed class CommandPollingWorker : BackgroundService
                     _logger.LogInformation("Komut alındı: {CommandType} ({CommandId})", command.CommandType, command.CommandId);
                 }
             }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotImplemented)
+            {
+                _logger.LogDebug("Komut endpoint'i henüz implemente edilmedi.");
+            }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Komut kontrolü sırasında hata (endpoint henüz mevcut değilse beklenir).");
+                _logger.LogWarning(ex, "Komut kontrolü başarısız.");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);

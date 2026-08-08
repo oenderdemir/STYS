@@ -14,6 +14,8 @@ public sealed class CurrentAgentContext : ICurrentAgentContext
     public int AgentId => GetClaimInt("agentId") ?? 0;
     public string AgentInstanceId => GetClaimString("agentInstanceId") ?? string.Empty;
     public int KurumId => GetClaimInt("kurumId") ?? 0;
+    public int CredentialVersion => GetClaimInt("credentialVersion") ?? 0;
+
     public IReadOnlyCollection<int> TesisIds
     {
         get

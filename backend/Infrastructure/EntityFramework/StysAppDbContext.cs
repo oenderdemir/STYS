@@ -1936,6 +1936,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Code).HasMaxLength(128).IsRequired();
             entity.Property(x => x.TesisIds).HasColumnType("nvarchar(max)");
             entity.Property(x => x.AllowedScopes).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
             entity.HasIndex(x => x.Code).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasOne(x => x.Agent).WithMany(x => x.Enrollments).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.SetNull);
         });

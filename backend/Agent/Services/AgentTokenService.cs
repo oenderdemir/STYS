@@ -2,13 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Infrastructure.EntityFramework;
-using TOD.Platform.Security.Auth.DTO;
-using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using AgentEntity = STYS.Agent.Entities.Agent;
 
@@ -17,17 +14,14 @@ namespace STYS.Agent.Services;
 public sealed class AgentTokenService : IAgentTokenService
 {
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
-    private readonly IJwtTokenService _jwtTokenService;
-    private readonly IOptions<AgentAuthOptions> _options;
+    private readonly IAgentJwtTokenService _jwtTokenService;
 
     public AgentTokenService(
         IDbContextFactory<StysAppDbContext> dbContextFactory,
-        IJwtTokenService jwtTokenService,
-        IOptions<AgentAuthOptions> options)
+        IAgentJwtTokenService jwtTokenService)
     {
         _dbContextFactory = dbContextFactory;
         _jwtTokenService = jwtTokenService;
-        _options = options;
     }
 
     public async Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken)
@@ -46,18 +40,20 @@ public sealed class AgentTokenService : IAgentTokenService
             await db.SaveChangesAsync(cancellationToken);
             throw new BaseException("Enrollment kodunun süresi dolmuş.", 400);
         }
-        if (enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
-            throw new BaseException("Enrollment kodu maksimum kullanım sayısına ulaştı.", 400);
 
         var allowedScopes = JsonSerializer.Deserialize<List<string>>(enrollment.AllowedScopes) ?? new List<string>();
         var allowedTesisIds = JsonSerializer.Deserialize<List<int>>(enrollment.TesisIds) ?? new List<int>();
+
+        var agentDurum = AgentDurum.Active;
+        if (enrollment.MaxKullanimSayisi > 0 && enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
+            throw new BaseException("Enrollment kodu maksimum kullanım sayısına ulaştı.", 400);
 
         var agent = new AgentEntity
         {
             Ad = request.AgentKey,
             AgentKey = request.AgentKey,
             KurumId = enrollment.KurumId,
-            Durum = AgentDurum.Active,
+            Durum = agentDurum,
             AgentVersion = request.AgentVersion,
             CihazKimligi = request.CihazKimligi,
             PublicKey = request.PublicKey,
@@ -91,6 +87,7 @@ public sealed class AgentTokenService : IAgentTokenService
             ClientId = clientId,
             ClientSecretHash = clientSecretHash,
             AktifMi = true,
+            CredentialVersion = 1,
             CreatedBy = "agent-enrollment",
             CreatedAt = DateTime.UtcNow
         });
@@ -119,7 +116,7 @@ public sealed class AgentTokenService : IAgentTokenService
 
         var credential = await db.Set<AgentCredential>()
             .Include(x => x.Agent)
-            .FirstOrDefaultAsync(x => x.ClientId == request.ClientId && x.AktifMi && !x.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(x => x.ClientId == request.ClientId && !x.IsDeleted, cancellationToken);
         if (credential is null)
             throw new BaseException("Geçersiz client kimliği.", 401);
 
@@ -127,44 +124,51 @@ public sealed class AgentTokenService : IAgentTokenService
         if (!string.Equals(credential.ClientSecretHash, expectedHash, StringComparison.OrdinalIgnoreCase))
             throw new BaseException("Geçersiz client secret.", 401);
 
+        if (!credential.AktifMi || credential.RevokedAt.HasValue)
+            throw new BaseException("Credential iptal edilmiş.", 401);
+
         if (credential.ExpiresAt.HasValue && DateTime.UtcNow > credential.ExpiresAt.Value)
             throw new BaseException("Credential süresi dolmuş.", 401);
 
         var agent = credential.Agent!;
-        if (agent.Durum != AgentDurum.Active)
-            throw new BaseException("Agent aktif değil.", 403);
+        if (agent.Durum == AgentDurum.Disabled)
+            throw new BaseException("Agent devre dışı bırakılmış.", 403);
+        if (agent.Durum == AgentDurum.Revoked)
+            throw new BaseException("Agent iptal edilmiş.", 403);
+        if (agent.Durum == AgentDurum.PendingApproval)
+            throw new BaseException("Agent henüz onaylanmamış.", 403);
 
         var tesisIds = await db.Set<AgentTesis>()
             .Where(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted)
             .Select(x => x.TesisId)
             .ToListAsync(cancellationToken);
 
-        agent.SonGorulmeTarihi = DateTime.UtcNow;
-        agent.AgentVersion = request.AgentVersion;
-        await db.SaveChangesAsync(cancellationToken);
+        var enrollment = await db.Set<AgentEnrollment>()
+            .Where(x => x.AgentId == agent.Id && !x.IsDeleted)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        var tokenRequest = new GenerateTokenRequest
+        var scopes = new List<string> { "agent.heartbeat", "agent.config.read" };
+        if (enrollment is not null)
         {
-            UserName = $"agent:{agent.Id}",
-            Name = agent.Ad,
-            Email = $"{agent.AgentKey}@agent.stys.local",
-            Surname = "",
-            UserId = agent.Id.ToString(),
+            var enrollmentScopes = JsonSerializer.Deserialize<List<string>>(enrollment.AllowedScopes) ?? new List<string>();
+            scopes = enrollmentScopes;
+        }
+
+        var descriptor = new AgentTokenDescriptor
+        {
+            AgentId = agent.Id,
+            AgentKey = agent.AgentKey,
+            AgentVersion = request.AgentVersion,
             KurumId = agent.KurumId,
-            KurumIds = new List<int> { agent.KurumId },
-            IsKurumAdmin = false,
-            IsSuperAdmin = false,
-            TokenVersion = 0
+            TesisIds = tesisIds,
+            Scopes = scopes,
+            AgentInstanceId = request.AgentInstanceId,
+            CredentialId = credential.Id,
+            CredentialVersion = credential.CredentialVersion
         };
 
-        var tokenResponse = await _jwtTokenService.GenerateToken(tokenRequest, cancellationToken);
-
-        return new AgentTokenResponse
-        {
-            AccessToken = tokenResponse.Token,
-            ExpiresAt = tokenResponse.TokenExpireDate,
-            TokenType = "Bearer"
-        };
+        return await _jwtTokenService.GenerateTokenAsync(descriptor, cancellationToken);
     }
 
     private static string GenerateClientSecret()

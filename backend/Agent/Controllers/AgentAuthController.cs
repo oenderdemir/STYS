@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using STYS.Agent.Authorization;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Entities;
 using STYS.Agent.Services;
+using STYS.Infrastructure.EntityFramework;
+using AgentEntity = STYS.Agent.Entities.Agent;
 
 namespace STYS.Agent.Controllers;
 
@@ -11,10 +15,14 @@ namespace STYS.Agent.Controllers;
 public sealed class AgentAuthController : ControllerBase
 {
     private readonly IAgentTokenService _tokenService;
+    private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
 
-    public AgentAuthController(IAgentTokenService tokenService)
+    public AgentAuthController(
+        IAgentTokenService tokenService,
+        IDbContextFactory<StysAppDbContext> dbContextFactory)
     {
         _tokenService = tokenService;
+        _dbContextFactory = dbContextFactory;
     }
 
     [HttpPost("enroll")]
@@ -32,27 +40,41 @@ public sealed class AgentAuthController : ControllerBase
         Ok(await _tokenService.IssueTokenAsync(request, cancellationToken));
 
     [HttpPost("heartbeat")]
-    [Authorize(Policy = AgentPolicies.AgentPolicy)]
+    [Authorize(Policy = AgentPolicies.AgentHeartbeat)]
     public async Task<ActionResult<AgentHeartbeatResponse>> Heartbeat(
         [FromBody] AgentHeartbeatRequest request,
         CancellationToken cancellationToken)
     {
-        var response = new AgentHeartbeatResponse
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated)
+            return Unauthorized();
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var agent = await db.Set<AgentEntity>()
+            .FirstOrDefaultAsync(x => x.Id == agentContext.AgentId && !x.IsDeleted, cancellationToken);
+
+        if (agent is not null)
         {
-            MinimumSupportedAgentVersion = "1.0.0",
-            RequiredContractVersion = "1.0.0",
+            agent.LastHeartbeatAt = DateTime.UtcNow;
+            agent.SonGorulmeTarihi = DateTime.UtcNow;
+            agent.AgentVersion = request.AgentVersion;
+            agent.CihazKimligi ??= request.CihazKimligi;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new AgentHeartbeatResponse
+        {
             RequiredUpdate = false
-        };
-        return Ok(response);
+        });
     }
 
     [HttpGet("config")]
-    [Authorize(Policy = AgentPolicies.AgentPolicy)]
+    [Authorize(Policy = AgentPolicies.AgentConfigRead)]
     public async Task<ActionResult<AgentConfigDto>> GetConfig(
         [FromQuery] long currentVersion,
         CancellationToken cancellationToken)
     {
-        var config = new AgentConfigDto
+        return Ok(new AgentConfigDto
         {
             Version = 1,
             Configs = new Dictionary<string, string>
@@ -61,7 +83,20 @@ public sealed class AgentAuthController : ControllerBase
                 ["commandPollIntervalSeconds"] = "10",
                 ["maxRetryCount"] = "3"
             }
-        };
-        return Ok(config);
+        });
+    }
+
+    [HttpGet("commands")]
+    [Authorize(Policy = AgentPolicies.AgentCommandRead)]
+    public ActionResult<IReadOnlyCollection<AgentCommandDto>> GetPendingCommands()
+    {
+        return Ok(Array.Empty<AgentCommandDto>());
+    }
+
+    [HttpPost("commands/result")]
+    [Authorize(Policy = AgentPolicies.AgentResultWrite)]
+    public ActionResult PostCommandResult([FromBody] AgentCommandResultRequest request)
+    {
+        return Ok();
     }
 }

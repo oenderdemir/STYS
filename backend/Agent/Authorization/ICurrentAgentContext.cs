@@ -7,5 +7,6 @@ public interface ICurrentAgentContext
     int KurumId { get; }
     IReadOnlyCollection<int> TesisIds { get; }
     IReadOnlyCollection<string> Scopes { get; }
+    int CredentialVersion { get; }
     bool IsAuthenticated { get; }
 }

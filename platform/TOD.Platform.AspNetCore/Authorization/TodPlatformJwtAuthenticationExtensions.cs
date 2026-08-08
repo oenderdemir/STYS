@@ -154,10 +154,32 @@ public static class TodPlatformJwtAuthenticationExtensions
                 {
                     OnTokenValidated = context =>
                     {
-                        var agentIdClaim = context.Principal?.FindFirstValue("agentId");
-                        if (string.IsNullOrWhiteSpace(agentIdClaim))
+                        var tokenType = context.Principal?.FindFirstValue("tokenType");
+                        if (!string.Equals(tokenType, "agent", StringComparison.OrdinalIgnoreCase))
                         {
-                            context.Fail("Agent token requires agentId claim.");
+                            context.Fail("Token is not an agent token.");
+                            return Task.CompletedTask;
+                        }
+
+                        var agentIdClaim = context.Principal?.FindFirstValue("agentId");
+                        if (string.IsNullOrWhiteSpace(agentIdClaim) || !int.TryParse(agentIdClaim, out _))
+                        {
+                            context.Fail("Agent token requires valid agentId claim.");
+                            return Task.CompletedTask;
+                        }
+
+                        var credentialIdClaim = context.Principal?.FindFirstValue("credentialId");
+                        if (string.IsNullOrWhiteSpace(credentialIdClaim) || !int.TryParse(credentialIdClaim, out _))
+                        {
+                            context.Fail("Agent token requires valid credentialId claim.");
+                            return Task.CompletedTask;
+                        }
+
+                        var credentialVersionClaim = context.Principal?.FindFirstValue("credentialVersion");
+                        if (string.IsNullOrWhiteSpace(credentialVersionClaim) || !int.TryParse(credentialVersionClaim, out _))
+                        {
+                            context.Fail("Agent token requires valid credentialVersion claim.");
+                            return Task.CompletedTask;
                         }
 
                         return Task.CompletedTask;

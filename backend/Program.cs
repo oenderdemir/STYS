@@ -4,6 +4,7 @@ using Microsoft.OpenApi;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using STYS.AccessScope;
+using STYS.Agent.Authorization;
 using STYS.Agent.Services;
 using STYS.Bildirimler.Hubs;
 using STYS.Bildirimler.Services;
@@ -194,7 +195,9 @@ builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapB
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IAgentTokenService, AgentTokenService>();
+builder.Services.AddScoped<IAgentJwtTokenService, AgentJwtTokenService>();
 builder.Services.AddScoped<STYS.Agent.Authorization.ICurrentAgentContext, STYS.Agent.Authorization.CurrentAgentContext>();
+builder.Services.AddAgentAuthorization();
 builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
 builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();

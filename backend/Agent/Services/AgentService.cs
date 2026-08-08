@@ -141,7 +141,11 @@ public sealed class AgentService : IAgentService
 
         agent.Durum = AgentDurum.Disabled;
         foreach (var cred in agent.Credentialler.Where(x => x.AktifMi))
+        {
             cred.AktifMi = false;
+            cred.CredentialVersion++;
+            cred.RevokedAt = DateTime.UtcNow;
+        }
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -157,6 +161,7 @@ public sealed class AgentService : IAgentService
         foreach (var cred in agent.Credentialler)
         {
             cred.AktifMi = false;
+            cred.CredentialVersion++;
             cred.RevokedAt = DateTime.UtcNow;
         }
 

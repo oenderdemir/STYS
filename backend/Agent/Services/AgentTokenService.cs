@@ -16,11 +16,13 @@ public sealed class AgentTokenService : IAgentTokenService
 {
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly IAgentJwtTokenService _jwtTokenService;
+    private readonly IAgentEnrollmentExecutionHook? _hook;
 
-    public AgentTokenService(IDbContextFactory<StysAppDbContext> dbContextFactory, IAgentJwtTokenService jwtTokenService)
+    public AgentTokenService(IDbContextFactory<StysAppDbContext> dbContextFactory, IAgentJwtTokenService jwtTokenService, IAgentEnrollmentExecutionHook? hook = null)
     {
         _dbContextFactory = dbContextFactory;
         _jwtTokenService = jwtTokenService;
+        _hook = hook;
     }
 
     public async Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken)
@@ -70,6 +72,9 @@ public sealed class AgentTokenService : IAgentTokenService
             var clientSecret = GenerateClientSecret();
             var clientSecretHash = ComputeSha256Hash(clientSecret);
             db.Set<AgentCredential>().Add(new AgentCredential { AgentId = agent.Id, KurumId = enrollment.KurumId, ClientId = clientId, ClientSecretHash = clientSecretHash, AktifMi = true, CredentialVersion = 1, CreatedBy = "agent-enrollment", CreatedAt = DateTime.UtcNow });
+
+            if (_hook is not null)
+                await _hook.AfterEntitiesCreatedBeforeCommitAsync(agent, cancellationToken);
 
             enrollment.KullanimSayisi++;
             enrollment.AgentId = agent.Id;

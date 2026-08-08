@@ -195,6 +195,7 @@ builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapB
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IAgentTokenService, AgentTokenService>();
+builder.Services.AddSingleton<IAgentEnrollmentExecutionHook, NoOpAgentEnrollmentExecutionHook>();
 builder.Services.AddScoped<IAgentJwtTokenService, AgentJwtTokenService>();
 builder.Services.AddScoped<STYS.Agent.Authorization.ICurrentAgentContext, STYS.Agent.Authorization.CurrentAgentContext>();
 builder.Services.AddAgentAuthorization();

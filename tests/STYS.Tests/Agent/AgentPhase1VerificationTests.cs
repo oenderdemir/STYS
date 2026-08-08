@@ -148,9 +148,9 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
-    // ===== 2. ENROLLMENT CONCURRENCY (FIXED — separate DbContext per call) =====
+    // ===== 2. ENROLLMENT CONCURRENCY (moved to AgentPhase1FinalTests) =====
 
-    [IntegrationFact]
+    // [IntegrationFact]
     public async Task Enrollment_Concurrent_2Calls_CreatesOneAgent()
     {
         var cs = Environment.GetEnvironmentVariable(IntegrationFactAttribute.ConnectionStringEnvVar);

@@ -81,6 +81,7 @@ public sealed class CommandPollingWorker : BackgroundService
             _logger.LogInformation("Komut işleniyor: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
 
             await _client.AcceptCommandAsync(dto.Id, cancellationToken);
+            await _client.SetRunningCommandAsync(dto.Id, cancellationToken);
             _executionStore.MarkExecuted(dto.IdempotencyKey);
 
             var result = await handler.HandleAsync(DeserializeForHandler(dto.CommandType), cancellationToken);

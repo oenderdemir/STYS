@@ -108,6 +108,16 @@ public sealed class AgentAuthController : ControllerBase
         return Ok();
     }
 
+    [HttpPost("commands/{id:guid}/running")]
+    [Authorize(Policy = AgentPolicies.AgentCommandExecute)]
+    public async Task<ActionResult> SetRunningCommand(Guid id, CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        await _commandService.SetRunningAsync(id, agentContext.AgentId, cancellationToken);
+        return Ok();
+    }
+
     [HttpPost("commands/{id:guid}/complete")]
     [Authorize(Policy = AgentPolicies.AgentResultWrite)]
     public async Task<ActionResult> CompleteCommand(Guid id, [FromBody] AgentCommandCompleteRequest request, CancellationToken cancellationToken)

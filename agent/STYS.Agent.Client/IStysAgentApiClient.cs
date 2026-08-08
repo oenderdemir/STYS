@@ -10,6 +10,7 @@ public interface IStysAgentApiClient
     Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken);
     Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken);
+    Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken);
     Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken);
     Task FailCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken);
     Task RejectCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken);

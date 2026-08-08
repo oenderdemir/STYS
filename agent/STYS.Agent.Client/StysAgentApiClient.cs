@@ -57,6 +57,12 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsync($"api/agent/commands/{commandId}/running", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
     {
         var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/complete", request, cancellationToken);

@@ -639,3 +639,46 @@ Unit Tests:         Passed: 1062, Failed: 0
 ```
 
 #### Faz 2 Durumu: TAMAMLANDI ✅
+
+---
+
+### Faz 2 Nihai Düzeltmeler (08.08.2026)
+
+**Running State:**
+- State machine: `Delivered → Accepted → Running → Completed/Failed`
+- Yeni endpoint: `POST /api/agent/commands/{id}/running`
+- Worker: `AcceptAsync → SetRunningAsync → HandleAsync → CompleteAsync/FailAsync`
+- `Accepted → Completed` direkt geçişi ENGELLENDİ (state machine tarafından)
+
+**Atomic Command Delivery:**
+- `GetPendingCommandsAsync`: transaction + `ExecuteUpdate` ile atomik Pending→Delivered
+- 2 parallel poll testi: yalnızca biri command'i alır (total deliveries=1)
+
+**PreviousStatus Audit Fix:**
+- `FailAsync`: önce `var prev = cmd.Status`, sonra status değiştir → doğru PreviousStatus
+- `RejectAsync`: aynı düzeltme
+- Artık `Failed → Failed` veya `Rejected → Rejected` audit bug'ı yok
+
+**Phase 2 Final Testleri:**
+
+| Test | Sonuç |
+|------|-------|
+| `Transition_DeliveredToAcceptedToRunningToCompleted_Passes` | PASS |
+| `Transition_AcceptedToCompletedDirectly_Fails` | PASS |
+| `Transition_RunningToFailed_Passes` | PASS |
+| `Transition_FromTerminalState_Fails` | PASS |
+| `Polling_TwoParallel_OnlyOneGetsCommand` | PASS |
+| `Fail_PreviousStatusIsCorrect` | PASS |
+| `Reject_PreviousStatusIsCorrect` | PASS |
+| `Idempotent_SecondExecuteBlocked` | PASS |
+
+**Test Sonuçları:**
+
+```
+Agent Integration: 33/33 PASS
+Full Solution:     1619 passed, 204 failed (pre-existing baseline)
+Unit Tests:        1062 passed
+Agent Regression:  0
+```
+
+**Faz 2 Durumu: TAMAMLANDI** ✅

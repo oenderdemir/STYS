@@ -201,6 +201,8 @@ public class StysAppDbContext : DbContext
     public DbSet<AgentTesis> AgentTesisler => Set<AgentTesis>();
     public DbSet<AgentEnrollment> AgentEnrollments => Set<AgentEnrollment>();
     public DbSet<AgentScope> AgentScopes => Set<AgentScope>();
+    public DbSet<AgentCommand> AgentCommands => Set<AgentCommand>();
+    public DbSet<AgentCommandExecution> AgentCommandExecutions => Set<AgentCommandExecution>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1948,6 +1950,34 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Scope).HasMaxLength(256).IsRequired();
             entity.HasIndex(x => new { x.AgentId, x.Scope }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasOne(x => x.Agent).WithMany(x => x.Scopes).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentCommand>(entity =>
+        {
+            entity.ToTable("AgentCommands", entegrasyonSchema);
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.CommandType).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.CorrelationId).HasMaxLength(64);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(128);
+            entity.Property(x => x.RequestedBy).HasMaxLength(256);
+            entity.Property(x => x.ResultPayload).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.ErrorCode).HasMaxLength(128);
+            entity.Property(x => x.Payload).HasColumnType("nvarchar(max)");
+            entity.HasIndex(x => new { x.AgentId, x.IdempotencyKey }).HasFilter("[IdempotencyKey] <> '' AND [IsDeleted] = 0");
+            entity.HasIndex(x => new { x.AgentId, x.Status });
+            entity.HasOne(x => x.Agent).WithMany().HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentCommandExecution>(entity =>
+        {
+            entity.ToTable("AgentCommandExecutions", entegrasyonSchema);
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.PreviousStatus).HasMaxLength(32);
+            entity.Property(x => x.ErrorCode).HasMaxLength(128);
+            entity.Property(x => x.MachineName).HasMaxLength(64);
+            entity.HasIndex(x => x.CommandId);
+            entity.HasOne(x => x.Command).WithMany(x => x.Executions).HasForeignKey(x => x.CommandId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PosTahsilatValor>(entity =>

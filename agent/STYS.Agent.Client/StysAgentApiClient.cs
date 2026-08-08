@@ -46,15 +46,26 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken)
     {
         var response = await _http.GetAsync("api/agent/commands", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotImplemented)
-            return [];
+        if (response.StatusCode == System.Net.HttpStatusCode.NotImplemented) return [];
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<List<AgentCommandDto>>(JsonOptions, cancellationToken) ?? [];
     }
 
-    public async Task SendCommandResultAsync(AgentCommandResultRequest request, CancellationToken cancellationToken)
+    public async Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken)
     {
-        var response = await _http.PostAsJsonAsync("api/agent/commands/result", request, cancellationToken);
+        var response = await _http.PostAsync($"api/agent/commands/{commandId}/accept", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/complete", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task FailCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/fail", request, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 }

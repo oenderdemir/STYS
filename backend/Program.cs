@@ -193,6 +193,7 @@ builder.Services.AddScoped<IMuhasebeFisService, MuhasebeFisService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
+builder.Services.AddScoped<AgentCommandService>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IAgentTokenService, AgentTokenService>();
 builder.Services.AddSingleton<IAgentEnrollmentExecutionHook, NoOpAgentEnrollmentExecutionHook>();

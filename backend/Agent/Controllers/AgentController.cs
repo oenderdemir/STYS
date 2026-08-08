@@ -11,10 +11,12 @@ namespace STYS.Agent.Controllers;
 public sealed class AgentController : ControllerBase
 {
     private readonly IAgentService _agentService;
+    private readonly AgentCommandService _commandService;
 
-    public AgentController(IAgentService agentService)
+    public AgentController(IAgentService agentService, AgentCommandService commandService)
     {
         _agentService = agentService;
+        _commandService = commandService;
     }
 
     [HttpGet]
@@ -88,4 +90,17 @@ public sealed class AgentController : ControllerBase
         await _agentService.RevokeEnrollmentCodeAsync(enrollmentId, cancellationToken);
         return Ok();
     }
+
+    [HttpPost("{id:int}/commands")]
+    [Permission(StructurePermissions.AgentYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> SendCommand(int id, [FromBody] AgentCommandSendRequest request, CancellationToken cancellationToken)
+    {
+        request.AgentId = id;
+        return Ok(await _commandService.SendAsync(request, User?.Identity?.Name ?? "system", cancellationToken));
+    }
+
+    [HttpGet("{id:int}/commands")]
+    [Permission(StructurePermissions.AgentYonetimi.View)]
+    public async Task<ActionResult<IReadOnlyCollection<AgentCommandDto>>> GetCommandHistory(int id, CancellationToken cancellationToken) =>
+        Ok(await _commandService.GetHistoryAsync(id, cancellationToken));
 }

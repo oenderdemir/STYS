@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\STYS.Agent.Contracts\STYS.Agent.Contracts.csproj" />
     <ProjectReference Include="..\STYS.Agent.Client\STYS.Agent.Client.csproj" />
+    <ProjectReference Include="..\STYS.Agent.Modules.Pavo\STYS.Agent.Modules.Pavo.csproj" />
   </ItemGroup>
 
 </Project>

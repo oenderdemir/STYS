@@ -476,3 +476,107 @@ Tüm kapanış kriterleri gerçek SQL Server integration testleri ile doğruland
 - Command execution yok (Faz 2)
 - HTTP resiliency (Polly) yok (Faz 2)
 - AgentAuthenticationHandler HTTP mock testleri (Faz 2)
+
+---
+
+## Faz 2 — Agent Command Infrastructure (08.08.2026)
+
+### Kapsam
+
+- Backend: `AgentCommand` + `AgentCommandExecution` entity'leri
+- State machine: Pending → Delivered → Accepted → Running → Completed/Failed
+- Idempotency: `IdempotencyKey` ile tekrar çalıştırma önleme
+- Strongly-typed command handler registry (backend'e generic shell execution yok)
+- Agent-side: `IAgentCommand`, `IAgentCommandHandler`, registry, `MemoryAgentCommandExecutionStore`
+- PAVO module skeleton (`STYS.Agent.Modules.Pavo`)
+- Command endpoint'leri: GET commands, POST accept/complete/fail
+- UI: admin command gönderme (dropdown), komut geçmişi sekmesi
+- Scope-based command delivery (`GetRequiredScope`)
+- Migration: `AgentCommands` + `AgentCommandExecutions` tabloları
+
+### Yeni Entity'ler
+
+| Entity | Tablo | Schema |
+|--------|-------|--------|
+| `AgentCommand` | `AgentCommands` | `[entegrasyon]` |
+| `AgentCommandExecution` | `AgentCommandExecutions` | `[entegrasyon]` |
+
+**AgentCommand:** Id(Guid), AgentId, KurumId, CommandType, Payload, Status, Priority, ScheduledAt, ExpiresAt, StartedAt, CompletedAt, RetryCount, MaxRetryCount, CorrelationId, IdempotencyKey, RequestedBy, ResultPayload, ErrorCode, ErrorMessage
+
+**AgentCommandExecution:** CommandId, AgentId, KurumId, Status, PreviousStatus, ErrorCode, ErrorMessage, MachineName
+
+### Command State Machine
+
+```text
+Pending → Delivered → Accepted → Running → Completed
+                                      → Failed
+Pending → Expired (süre aşımı)
+Pending → Cancelled
+Pending → Rejected (unknown type)
+```
+
+### Endpoint'ler
+
+| Method | Route | Yetki | Açıklama |
+|--------|-------|-------|----------|
+| GET | `/api/agent/commands` | `agent.command.read` | Agent'ın pending komutlarını getir |
+| POST | `/api/agent/commands/{id}/accept` | `agent.command.execute` | Komutu kabul et |
+| POST | `/api/agent/commands/{id}/complete` | `agent.result.write` | Komutu başarıyla tamamla |
+| POST | `/api/agent/commands/{id}/fail` | `agent.result.write` | Komutu hata ile tamamla |
+| POST | `/ui/agent/{id}/commands` | `AgentYonetimi.Manage` | Admin komut gönder |
+| GET | `/ui/agent/{id}/commands` | `AgentYonetimi.View` | Komut geçmişi |
+
+### Command Types ve Scope Mapping
+
+| CommandType | Gerekli Scope |
+|-------------|---------------|
+| Ping | `agent.command.execute` |
+| HealthCheck | `agent.command.execute` |
+| RefreshConfiguration | `agent.config.read` |
+| PavoConnectionTest | `stys.pavo.connection.test` |
+
+### Agent-Side Command Handler Registry
+
+- `IAgentCommandHandlerRegistry`: `Resolve<T>(commandType)` ile handler lookup
+- `AgentCommandHandlerRegistry`: registered types koleksiyonu + DI resolve
+- `MemoryAgentCommandExecutionStore`: `IdempotencyKey` bazlı tekrar çalıştırma önleme
+- `CommandPollingWorker`: poll → validate → idempotency check → accept → execute → complete/fail
+- Handler exception agent process'ini düşürmez
+
+### PAVO Module Skeleton
+
+- Proje: `STYS.Agent.Modules.Pavo`
+- `PavoConnectionTestCommand` + `PavoConnectionTestCommandHandler` (stub — 100ms delay)
+- Gerçek payment/refund/cancel yok
+
+### Yeni Dosyalar
+
+| Dosya | Açıklama |
+|-------|----------|
+| `backend/Agent/Entities/AgentCommand.cs` | Command entity |
+| `backend/Agent/Entities/AgentCommandExecution.cs` | Execution log entity |
+| `backend/Agent/Services/AgentCommandService.cs` | Command CRUD + state machine |
+| `agent/STYS.Agent.Client/Commands/IAgentCommand.cs` | Command abstraction |
+| `agent/STYS.Agent.Client/Commands/AgentCommandHandlerRegistry.cs` | Registry |
+| `agent/STYS.Agent.Client/Commands/IAgentCommandExecutionStore.cs` | Idempotency store |
+| `agent/STYS.Agent/Workers/CommandHandlers.cs` | Ping, HealthCheck, RefreshConfig handlers |
+| `agent/STYS.Agent/Workers/CommandPollingWorker.cs` | Gerçek command işleme |
+| `agent/STYS.Agent.Modules.Pavo/` | PAVO module (4 dosya) |
+
+### Migration
+
+- `AddAgentCommandTables` — `AgentCommands` + `AgentCommandExecutions`
+
+### Test Sonuçları
+
+```
+Unit tests: Passed: 1062, Failed: 0, Skipped: 0
+```
+
+### Bilinen Kısıtlamalar (Faz 2 sonrası)
+
+- SQLite offline command queue yok (Faz 3)
+- SignalR real-time command delivery yok (Faz 3)
+- Agent auto-update yok (Faz 4)
+- HTTP resiliency (Polly) yok (Faz 3)
+- Config endpoint'i hard-coded (Faz 3)

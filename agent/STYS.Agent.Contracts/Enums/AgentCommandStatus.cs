@@ -3,8 +3,12 @@ namespace STYS.Agent.Contracts.Enums;
 public enum AgentCommandStatus
 {
     Pending = 0,
-    InProgress = 1,
-    Completed = 2,
-    Failed = 3,
-    Expired = 4
+    Delivered = 1,
+    Accepted = 2,
+    Running = 3,
+    Completed = 4,
+    Failed = 5,
+    Cancelled = 6,
+    Expired = 7,
+    Rejected = 8
 }

@@ -16,13 +16,16 @@ public sealed class AgentAuthController : ControllerBase
 {
     private readonly IAgentTokenService _tokenService;
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
+    private readonly AgentCommandService _commandService;
 
     public AgentAuthController(
         IAgentTokenService tokenService,
-        IDbContextFactory<StysAppDbContext> dbContextFactory)
+        IDbContextFactory<StysAppDbContext> dbContextFactory,
+        AgentCommandService commandService)
     {
         _tokenService = tokenService;
         _dbContextFactory = dbContextFactory;
+        _commandService = commandService;
     }
 
     [HttpPost("enroll")]
@@ -88,15 +91,40 @@ public sealed class AgentAuthController : ControllerBase
 
     [HttpGet("commands")]
     [Authorize(Policy = AgentPolicies.AgentCommandRead)]
-    public ActionResult<IReadOnlyCollection<AgentCommandDto>> GetPendingCommands()
+    public async Task<ActionResult<IReadOnlyCollection<AgentCommandDto>>> GetPendingCommands(CancellationToken cancellationToken)
     {
-        return Ok(Array.Empty<AgentCommandDto>());
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        return Ok(await _commandService.GetPendingCommandsAsync(agentContext.AgentId, cancellationToken));
     }
 
-    [HttpPost("commands/result")]
-    [Authorize(Policy = AgentPolicies.AgentResultWrite)]
-    public ActionResult PostCommandResult([FromBody] AgentCommandResultRequest request)
+    [HttpPost("commands/{id:guid}/accept")]
+    [Authorize(Policy = AgentPolicies.AgentCommandExecute)]
+    public async Task<ActionResult> AcceptCommand(Guid id, CancellationToken cancellationToken)
     {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        await _commandService.AcceptAsync(id, agentContext.AgentId, cancellationToken);
+        return Ok();
+    }
+
+    [HttpPost("commands/{id:guid}/complete")]
+    [Authorize(Policy = AgentPolicies.AgentResultWrite)]
+    public async Task<ActionResult> CompleteCommand(Guid id, [FromBody] AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        await _commandService.CompleteAsync(id, agentContext.AgentId, request, cancellationToken);
+        return Ok();
+    }
+
+    [HttpPost("commands/{id:guid}/fail")]
+    [Authorize(Policy = AgentPolicies.AgentResultWrite)]
+    public async Task<ActionResult> FailCommand(Guid id, [FromBody] AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        await _commandService.FailAsync(id, agentContext.AgentId, request.ErrorMessage ?? "Unknown error", cancellationToken);
         return Ok();
     }
 }

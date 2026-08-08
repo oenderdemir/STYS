@@ -8,7 +8,9 @@ import {
     AgentEnrollmentCodeDto,
     AgentEnrollmentCodeRequest,
     AgentListDto,
-    AgentKaydetRequest
+    AgentKaydetRequest,
+    AgentCommandDto,
+    AgentCommandSendRequest
 } from './agent-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
@@ -98,6 +100,24 @@ export class AgentYonetimiService {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent/enrollment-codes/${enrollmentId}/revoke`, {}).pipe(
             map((r) => {
                 if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Enrollment kodu iptal edilemedi.');
+            })
+        );
+    }
+
+    getCommands(agentId: number): Observable<AgentCommandDto[]> {
+        return this.http.get<ApiResponse<AgentCommandDto[]>>(`${this.apiBaseUrl}/ui/agent/${agentId}/commands`).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Komut listesi alınamadı.');
+            })
+        );
+    }
+
+    sendCommand(agentId: number, request: AgentCommandSendRequest): Observable<AgentCommandDto> {
+        return this.http.post<ApiResponse<AgentCommandDto>>(`${this.apiBaseUrl}/ui/agent/${agentId}/commands`, request).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Komut gönderilemedi.');
             })
         );
     }

@@ -59,3 +59,28 @@ export const AgentEnrollmentDurumLabels: Record<number, string> = {
     2: 'Süresi Doldu',
     3: 'İptal Edildi'
 };
+
+export interface AgentCommandDto {
+    id: string;
+    agentId: number;
+    commandType: string;
+    payload?: string;
+    status: number;
+    priority: number;
+    scheduledAt?: string;
+    expiresAt?: string;
+    retryCount: number;
+    maxRetryCount: number;
+    correlationId: string;
+    idempotencyKey: string;
+    createdAt: string;
+}
+
+export interface AgentCommandSendRequest {
+    agentId: number;
+    commandType: string;
+    payload?: string;
+    priority: number;
+    expirationMinutes?: number;
+    maxRetryCount?: number;
+}

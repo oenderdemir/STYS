@@ -13,6 +13,7 @@ public sealed class AgentCommandService
 {
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly IAgentCommandRealtimeNotifier? _notifier;
 
     private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -25,9 +26,9 @@ public sealed class AgentCommandService
         ["PavoConnectionTest"] = "pavo"
     };
 
-    public AgentCommandService(IDbContextFactory<StysAppDbContext> dbContextFactory, ICurrentTenantAccessor tenantAccessor)
+    public AgentCommandService(IDbContextFactory<StysAppDbContext> dbContextFactory, ICurrentTenantAccessor tenantAccessor, IAgentCommandRealtimeNotifier? notifier = null)
     {
-        _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor;
+        _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _notifier = notifier;
     }
 
     public async Task<AgentCommandDto> SendAsync(AgentCommandSendRequest request, string requestedBy, CancellationToken ct)
@@ -52,7 +53,9 @@ public sealed class AgentCommandService
         };
         db.Set<AgentCommand>().Add(cmd);
         await db.SaveChangesAsync(ct);
-        return MapToDto(cmd);
+        var dto = MapToDto(cmd);
+        NotifyIfNeeded(dto);
+        return dto;
     }
 
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(int agentId, CancellationToken ct)
@@ -105,9 +108,8 @@ public sealed class AgentCommandService
         cmd.StartedAt = DateTime.UtcNow;
         AddExecution(db, cmd, "Accepted", prev, agentId);
         await db.SaveChangesAsync(ct);
-    }
-
-    public async Task SetRunningAsync(Guid commandId, int agentId, CancellationToken ct)
+        NotifyIfNeeded(MapToDto(cmd));
+    }    public async Task SetRunningAsync(Guid commandId, int agentId, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
@@ -118,9 +120,8 @@ public sealed class AgentCommandService
         cmd.Status = AgentCommandStatus.Running;
         AddExecution(db, cmd, "Running", prev, agentId);
         await db.SaveChangesAsync(ct);
-    }
-
-    public async Task CompleteAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
+        NotifyIfNeeded(MapToDto(cmd));
+    }    public async Task CompleteAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
@@ -137,6 +138,7 @@ public sealed class AgentCommandService
         cmd.ErrorMessage = request.ErrorMessage;
         AddExecution(db, cmd, target.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
+        NotifyIfNeeded(MapToDto(cmd));
     }
 
     public async Task FailAsync(Guid commandId, int agentId, string errorMessage, CancellationToken ct)
@@ -152,6 +154,7 @@ public sealed class AgentCommandService
         cmd.ErrorMessage = errorMessage;
         AddExecution(db, cmd, "Failed", prev, agentId, errorMessage: errorMessage);
         await db.SaveChangesAsync(ct);
+        NotifyIfNeeded(MapToDto(cmd));
     }
 
     public async Task RejectAsync(Guid commandId, int agentId, string errorMessage, CancellationToken ct)
@@ -167,6 +170,7 @@ public sealed class AgentCommandService
         cmd.ErrorMessage = errorMessage;
         AddExecution(db, cmd, "Rejected", prev, agentId, errorMessage: errorMessage);
         await db.SaveChangesAsync(ct);
+        NotifyIfNeeded(MapToDto(cmd));
     }
 
     private static void AddExecution(StysAppDbContext db, AgentCommand cmd, string status, AgentCommandStatus prev, int agentId, string? errorCode = null, string? errorMessage = null)
@@ -191,6 +195,12 @@ public sealed class AgentCommandService
         if (!CommandCapabilityMap.TryGetValue(commandType, out var c)) return;
         if (!await db.Set<AgentCapability>().AnyAsync(x => x.AgentId == agentId && x.Capability == c && x.AktifMi && !x.IsDeleted, ct))
             throw new BaseException($"Agent '{c}' capability'sine sahip değil.", 403);
+    }
+
+    private void NotifyIfNeeded(AgentCommandDto dto)
+    {
+        if (_notifier is null) return;
+        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(dto, CancellationToken.None); } catch { } });
     }
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()

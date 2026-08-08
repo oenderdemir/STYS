@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, effect } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -10,10 +10,13 @@ import { InputTextModule } from 'primeng/inputtext';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
+import { TabViewModule } from 'primeng/tabview';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { CheckboxModule } from 'primeng/checkbox';
+import { DropdownModule } from 'primeng/dropdown';
+import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
 import {
     AgentDto,
     AgentDurumLabels,
@@ -44,15 +47,18 @@ type AgentFormState = AgentKaydetRequest & { id?: number };
         TagModule,
         ToastModule,
         ToolbarModule,
-        CheckboxModule
+        CheckboxModule,
+        TabViewModule,
+        DropdownModule
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './agent-yonetimi.html'
 })
-export class AgentYonetimiComponent implements OnInit {
+export class AgentYonetimiComponent implements OnInit, OnDestroy {
     private readonly service = inject(AgentYonetimiService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
+    private readonly realtime = inject(AgentRealtimeService);
 
     agents = signal<AgentListDto[]>([]);
     loading = signal(false);
@@ -60,14 +66,35 @@ export class AgentYonetimiComponent implements OnInit {
     enrollmentDialogVisible = signal(false);
     enrollmentCodes = signal<AgentEnrollmentCodeDto[]>([]);
     submitted = signal(false);
+    commands = signal<AgentCommandDto[]>([]);
+    commandsLoading = signal(false);
+    selectedCommandType = signal<string>('Ping');
+    viewingAgentId = signal<number | null>(null);
 
     agentForm: AgentFormState = { ad: '', kurumId: 0, tesisIds: [], scopes: [] };
     enrollmentForm: AgentEnrollmentCodeRequest = { kurumId: 0, tesisIds: [], allowedScopes: [] };
 
     durumLabels = AgentDurumLabels;
+    commandTypes = ['Ping', 'HealthCheck', 'RefreshConfiguration', 'PavoConnectionTest'];
+
+    constructor() {
+        effect(() => {
+            const update = this.realtime.commandUpdates();
+            if (update && this.viewingAgentId() && update.agentId === this.viewingAgentId()) {
+                this.commands.update(list => {
+                    const without = list.filter(c => c.id !== update.id);
+                    return [update, ...without];
+                });
+            }
+        });
+    }
 
     ngOnInit(): void {
         this.loadAgents();
+    }
+
+    ngOnDestroy(): void {
+        this.realtime.leaveAgentGroup();
     }
 
     loadAgents(): void {
@@ -88,14 +115,14 @@ export class AgentYonetimiComponent implements OnInit {
         this.service.getAgent(agent.id).subscribe({
             next: (detail) => {
                 this.agentForm = {
-                    id: detail.id,
-                    ad: detail.ad,
-                    kurumId: detail.kurumId,
-                    tesisIds: detail.tesisIds,
-                    scopes: detail.scopes
+                    id: detail.id, ad: detail.ad, kurumId: detail.kurumId,
+                    tesisIds: detail.tesisIds, scopes: detail.scopes
                 };
                 this.submitted.set(false);
                 this.dialogVisible.set(true);
+                this.viewingAgentId.set(agent.id);
+                this.realtime.joinAgentGroup(agent.id);
+                this.loadCommands(agent.id);
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -216,5 +243,49 @@ export class AgentYonetimiComponent implements OnInit {
 
     getDurumLabel(durum: number): string {
         return this.durumLabels[durum] ?? 'Bilinmiyor';
+    }
+
+    loadCommands(agentId: number): void {
+        this.commandsLoading.set(true);
+        this.service.getCommands(agentId).pipe(finalize(() => this.commandsLoading.set(false))).subscribe({
+            next: (data) => this.commands.set(data),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    sendCommand(): void {
+        if (!this.viewingAgentId()) return;
+        this.service.sendCommand(this.viewingAgentId()!, {
+            agentId: this.viewingAgentId()!,
+            commandType: this.selectedCommandType(),
+            priority: 1
+        }).subscribe({
+            next: () => {
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Komut gönderildi.' });
+                this.loadCommands(this.viewingAgentId()!);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    getCommandStatusLabel(status: number): string {
+        const labels: Record<number, string> = { 0: 'Pending', 1: 'Delivered', 2: 'Accepted', 3: 'Running', 4: 'Completed', 5: 'Failed', 6: 'Cancelled', 7: 'Expired', 8: 'Rejected' };
+        return labels[status] ?? 'Unknown';
+    }
+
+    getCommandStatusSeverity(status: number): string {
+        switch (status) {
+            case 0: case 1: return 'info';
+            case 2: case 3: return 'warn';
+            case 4: return 'success';
+            case 5: case 7: case 8: return 'danger';
+            default: return 'secondary';
+        }
+    }
+
+    closeDialog(): void {
+        this.dialogVisible.set(false);
+        this.viewingAgentId.set(null);
+        this.realtime.leaveAgentGroup();
     }
 }

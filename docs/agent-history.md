@@ -682,3 +682,28 @@ Agent Regression:  0
 ```
 
 **Faz 2 Durumu: TAMAMLANDI** ✅
+
+---
+
+### Agent Command Realtime UI (SignalR)
+
+**Backend:**
+- `AgentHub` (`/ui/agent-hub`) — `JoinAgentGroupAsync(agentId)`, `LeaveAgentGroupAsync(agentId)`
+- Group: `agent:{agentId}`
+- `IAgentCommandRealtimeNotifier` → `AgentCommandRealtimeNotifier` (IHubContext tabanlı)
+- DB commit'ten sonra, SignalR başarısız olsa bile command işlemi etkilenmez (try/catch + fire-and-forget)
+- Tüm command durum değişikliklerinde `AgentCommandUpdated` event'i yayınlanır (Pending/Delivered/Accepted/Running/Completed/Failed/Rejected)
+
+**Frontend:**
+- `AgentRealtimeService` — singleton, `HubConnection` yönetimi, `joinAgentGroup`/`leaveAgentGroup`
+- Agent detay diyaloğu: `Komutlar` sekmesi, dropdown ile command gönderme, realtime durum güncellemeleri
+- Component destroy olduğunda gruptan çıkılır
+- `effect()` ile `commandUpdates` sinyali dinlenir, gelen command listede güncellenir
+
+**Test Sonuçları:**
+```
+Agent Integration: 33/33 PASS
+Full Solution:     1619 passed, 204 failed (baseline)
+Unit Tests:        1062 passed
+Agent Regression:  0
+```

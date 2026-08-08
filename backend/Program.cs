@@ -194,6 +194,7 @@ builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeServi
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
 builder.Services.AddScoped<AgentCommandService>();
+builder.Services.AddScoped<IAgentCommandRealtimeNotifier, STYS.Agent.Hubs.AgentCommandRealtimeNotifier>();
 builder.Services.AddScoped<IAgentService, AgentService>();
 builder.Services.AddScoped<IAgentTokenService, AgentTokenService>();
 builder.Services.AddSingleton<IAgentEnrollmentExecutionHook, NoOpAgentEnrollmentExecutionHook>();
@@ -398,6 +399,8 @@ app.MapGet("/ui/version", (IWebHostEnvironment env) => Results.Ok(new
     environment = env.EnvironmentName
 }));
 app.MapHub<BildirimHub>(BildirimHub.HubRoute)
+    .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
+app.MapHub<STYS.Agent.Hubs.AgentHub>(STYS.Agent.Hubs.AgentHub.HubRoute)
     .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Test"))

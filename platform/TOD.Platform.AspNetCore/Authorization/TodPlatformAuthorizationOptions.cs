@@ -9,4 +9,5 @@ public sealed class TodPlatformAuthorizationOptions
     public string ServiceUserPermission { get; set; } = TodPlatformAuthorizationConstants.ServiceUserPermission;
     public string UiScheme { get; set; } = TodPlatformAuthorizationConstants.UiScheme;
     public string ServiceScheme { get; set; } = TodPlatformAuthorizationConstants.ServiceScheme;
+    public string AgentScheme { get; set; } = TodPlatformAuthorizationConstants.AgentScheme;
 }

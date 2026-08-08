@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using STYS.Agent.Entities;
+using AgentEntity = STYS.Agent.Entities.Agent;
 using STYS.Bildirimler.Entities;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
@@ -194,6 +196,10 @@ public class StysAppDbContext : DbContext
     public DbSet<SatisBelgesiEBelgeKarari> SatisBelgesiEBelgeKararlari => Set<SatisBelgesiEBelgeKarari>();
     public DbSet<KurumEBelgePolitikaRevizyonu> KurumEBelgePolitikaRevizyonlari => Set<KurumEBelgePolitikaRevizyonu>();
     public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
+    public DbSet<AgentEntity> Agentler => Set<AgentEntity>();
+    public DbSet<AgentCredential> AgentCredentialler => Set<AgentCredential>();
+    public DbSet<AgentTesis> AgentTesisler => Set<AgentTesis>();
+    public DbSet<AgentEnrollment> AgentEnrollments => Set<AgentEnrollment>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1894,6 +1900,44 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.RezervasyonOdemeId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentEntity>(entity =>
+        {
+            entity.ToTable("Agentler", entegrasyonSchema);
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.AgentKey).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.AgentVersion).HasMaxLength(50);
+            entity.Property(x => x.CihazKimligi).HasMaxLength(500);
+            entity.Property(x => x.PublicKey).HasColumnType("nvarchar(max)");
+            entity.HasIndex(x => new { x.KurumId, x.AgentKey }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.UserId).HasFilter("[UserId] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<AgentCredential>(entity =>
+        {
+            entity.ToTable("AgentCredentialler", entegrasyonSchema);
+            entity.Property(x => x.ClientId).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.ClientSecretHash).HasMaxLength(256).IsRequired();
+            entity.HasIndex(x => x.ClientId).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasOne(x => x.Agent).WithMany(x => x.Credentialler).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentTesis>(entity =>
+        {
+            entity.ToTable("AgentTesisler", entegrasyonSchema);
+            entity.HasIndex(x => new { x.AgentId, x.TesisId }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasOne(x => x.Agent).WithMany(x => x.Tesisler).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AgentEnrollment>(entity =>
+        {
+            entity.ToTable("AgentEnrollments", entegrasyonSchema);
+            entity.Property(x => x.Code).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.TesisIds).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.AllowedScopes).HasColumnType("nvarchar(max)");
+            entity.HasIndex(x => x.Code).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasOne(x => x.Agent).WithMany(x => x.Enrollments).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<PosTahsilatValor>(entity =>

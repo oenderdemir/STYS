@@ -1,0 +1,125 @@
+<p-toast />
+<p-confirmDialog />
+
+<div class="card">
+    <p-toolbar styleClass="mb-4">
+        <ng-template pTemplate="left">
+            <button pButton pRipple label="Yeni Agent" icon="pi pi-plus" class="p-button-success mr-2" (click)="openNew()"></button>
+            <button pButton pRipple label="Enrollment Kodları" icon="pi pi-key" class="p-button-help" (click)="openEnrollmentDialog()"></button>
+        </ng-template>
+    </p-toolbar>
+
+    <p-table
+        [value]="agents()"
+        [loading]="loading()"
+        [paginator]="true"
+        [rows]="10"
+        [rowsPerPageOptions]="[5, 10, 25]"
+        dataKey="id"
+        styleClass="p-datatable-gridlines"
+        [tableStyle]="{ 'min-width': '50rem' }">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Ad</th>
+                <th>Agent Key</th>
+                <th>Durum</th>
+                <th>Sürüm</th>
+                <th>Son Görülme</th>
+                <th style="width: 12rem">İşlemler</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-agent>
+            <tr>
+                <td>{{ agent.ad }}</td>
+                <td>{{ agent.agentKey }}</td>
+                <td>
+                    <p-tag [value]="getDurumLabel(agent.durum)" [severity]="getDurumSeverity(agent.durum)" />
+                </td>
+                <td>{{ agent.agentVersion ?? '-' }}</td>
+                <td>{{ agent.sonGorulmeTarihi ? (agent.sonGorulmeTarihi | date:'short') : '-' }}</td>
+                <td>
+                    <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="editAgent(agent)" pTooltip="Düzenle"></button>
+                    @if (agent.durum === 0) {
+                        <button pButton pRipple icon="pi pi-check" class="p-button-rounded p-button-info mr-1" (click)="approveAgent(agent)" pTooltip="Onayla"></button>
+                    }
+                    @if (agent.durum === 1) {
+                        <button pButton pRipple icon="pi pi-ban" class="p-button-rounded p-button-warning mr-1" (click)="deleteAgent(agent)" pTooltip="Devre Dışı Bırak"></button>
+                    }
+                    @if (agent.durum !== 3) {
+                        <button pButton pRipple icon="pi pi-times" class="p-button-rounded p-button-danger" (click)="revokeAgent(agent)" pTooltip="İptal Et"></button>
+                    }
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<p-dialog
+    [(visible)]="dialogVisible()"
+    [header]="agentForm.id ? 'Agent Düzenle' : 'Yeni Agent'"
+    [modal]="true"
+    styleClass="p-fluid"
+    [style]="{ width: '500px' }">
+    <ng-template pTemplate="content">
+        <div class="field">
+            <label for="ad">Agent Adı</label>
+            <input pInputText id="ad" [(ngModel)]="agentForm.ad" required [class.ng-invalid]="submitted() && !agentForm.ad" />
+        </div>
+        <div class="field">
+            <label for="kurumId">Kurum ID</label>
+            <input pInputText id="kurumId" type="number" [(ngModel)]="agentForm.kurumId" required />
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <button pButton pRipple label="İptal" icon="pi pi-times" class="p-button-text" (click)="dialogVisible.set(false)"></button>
+        <button pButton pRipple label="Kaydet" icon="pi pi-check" class="p-button-success" (click)="saveAgent()"></button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog
+    [(visible)]="enrollmentDialogVisible()"
+    header="Enrollment Kodları"
+    [modal]="true"
+    styleClass="p-fluid"
+    [style]="{ width: '700px' }">
+    <ng-template pTemplate="content">
+        <div class="field grid">
+            <div class="col-6">
+                <label for="enrKurumId">Kurum ID</label>
+                <input pInputText id="enrKurumId" type="number" [(ngModel)]="enrollmentForm.kurumId" />
+            </div>
+            <div class="col-6 flex align-items-end">
+                <button pButton pRipple label="Kod Oluştur" icon="pi pi-key" class="p-button-success" (click)="generateEnrollmentCode()"></button>
+            </div>
+        </div>
+        <p-table [value]="enrollmentCodes()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Kod</th>
+                    <th>Kurum ID</th>
+                    <th>Durum</th>
+                    <th>Kullanım</th>
+                    <th>Bitiş</th>
+                    <th>İşlem</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-code>
+                <tr>
+                    <td><code>{{ code.code }}</code></td>
+                    <td>{{ code.kurumId }}</td>
+                    <td><p-tag [value]="code.durum === 0 ? 'Aktif' : 'Kullanılmış/İptal'" [severity]="code.durum === 0 ? 'success' : 'danger'" /></td>
+                    <td>{{ code.kullanimSayisi }}/{{ code.maxKullanimSayisi }}</td>
+                    <td>{{ code.expiresAt | date:'short' }}</td>
+                    <td>
+                        @if (code.durum === 0) {
+                            <button pButton pRipple icon="pi pi-times" class="p-button-rounded p-button-danger p-button-sm" (click)="revokeEnrollmentCode(code)" pTooltip="İptal Et"></button>
+                        }
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <button pButton pRipple label="Kapat" icon="pi pi-times" class="p-button-text" (click)="enrollmentDialogVisible.set(false)"></button>
+    </ng-template>
+</p-dialog>

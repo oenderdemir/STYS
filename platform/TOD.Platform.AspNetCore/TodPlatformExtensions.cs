@@ -66,6 +66,11 @@ public static class TodPlatformExtensions
                 .RequireAuthenticatedUser()
                 .RequireClaim(options.PermissionClaimType, options.AdminPermission, options.SuperAdminPermission, options.ServiceUserPermission)
                 .AddAuthenticationSchemes(options.ServiceScheme));
+
+            authOptions.AddPolicy(TodPlatformAuthorizationConstants.AgentPolicy, policy => policy
+                .RequireAuthenticatedUser()
+                .RequireClaim("agentId")
+                .AddAuthenticationSchemes(options.AgentScheme));
         });
 
         return services;

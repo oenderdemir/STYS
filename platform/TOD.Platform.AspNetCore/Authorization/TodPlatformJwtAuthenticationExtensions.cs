@@ -134,7 +134,36 @@ public static class TodPlatformJwtAuthenticationExtensions
             })
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwt)
             .AddJwtBearer(TodPlatformAuthorizationConstants.UiScheme, ConfigureJwt)
-            .AddJwtBearer(TodPlatformAuthorizationConstants.ServiceScheme, ConfigureJwt);
+            .AddJwtBearer(TodPlatformAuthorizationConstants.ServiceScheme, ConfigureJwt)
+            .AddJwtBearer(TodPlatformAuthorizationConstants.AgentScheme, options =>
+            {
+                options.RequireHttpsMetadata = !isDevelopment;
+                options.SaveToken = false;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.Zero,
+                    ValidateIssuer = validateIssuer,
+                    ValidateAudience = validateAudience,
+                    ValidIssuer = jwtIssuer,
+                    ValidAudience = jwtAudience
+                };
+                options.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = context =>
+                    {
+                        var agentIdClaim = context.Principal?.FindFirstValue("agentId");
+                        if (string.IsNullOrWhiteSpace(agentIdClaim))
+                        {
+                            context.Fail("Agent token requires agentId claim.");
+                        }
+
+                        return Task.CompletedTask;
+                    }
+                };
+            });
 
         return services;
     }

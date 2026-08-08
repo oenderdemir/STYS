@@ -608,4 +608,20 @@ public static class StructurePermissions
         public const string MuhasebeciAtayabilir = "KullaniciAtama.MuhasebeciAtayabilir";
     }
 
+    public static class AgentYonetimi
+    {
+        public const string Menu = "AgentYonetimi.Menu";
+        public const string View = "AgentYonetimi.View";
+        public const string Manage = "AgentYonetimi.Manage";
+    }
+
+    public static class Agent
+    {
+        public const string Heartbeat = "Agent.Heartbeat";
+        public const string ConfigRead = "Agent.ConfigRead";
+        public const string CommandRead = "Agent.CommandRead";
+        public const string CommandExecute = "Agent.CommandExecute";
+        public const string ResultWrite = "Agent.ResultWrite";
+    }
+
 }

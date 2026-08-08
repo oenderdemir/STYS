@@ -4,6 +4,7 @@ using Microsoft.OpenApi;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using STYS.AccessScope;
+using STYS.Agent.Services;
 using STYS.Bildirimler.Hubs;
 using STYS.Bildirimler.Services;
 using STYS.Countries.Mapping;
@@ -117,6 +118,7 @@ builder.Services.Configure<KurumLogoStorageOptions>(
 builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOptions.SectionName));
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
 builder.Services.Configure<EBelgeUblOptions>(builder.Configuration.GetSection(EBelgeUblOptions.SectionName));
+builder.Services.Configure<AgentAuthOptions>(builder.Configuration.GetSection(AgentAuthOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((serviceProvider, client) =>
 {
@@ -190,6 +192,9 @@ builder.Services.AddScoped<IMuhasebeFisService, MuhasebeFisService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
+builder.Services.AddScoped<IAgentService, AgentService>();
+builder.Services.AddScoped<IAgentTokenService, AgentTokenService>();
+builder.Services.AddScoped<STYS.Agent.Authorization.ICurrentAgentContext, STYS.Agent.Authorization.CurrentAgentContext>();
 builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
 builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();

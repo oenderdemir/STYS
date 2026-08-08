@@ -96,13 +96,17 @@ export class AgentRealtimeService {
     private async invokeJoinGroup(agentId: number): Promise<void> {
         try {
             await this.hubConnection?.invoke('JoinAgentGroupAsync', agentId);
-        } catch { }
+        } catch (err) {
+            console.warn('[AgentRealtime] JoinAgentGroup failed:', err);
+        }
     }
 
     private async invokeLeaveGroup(agentId: number): Promise<void> {
         try {
             await this.hubConnection?.invoke('LeaveAgentGroupAsync', agentId);
-        } catch { }
+        } catch (err) {
+            console.warn('[AgentRealtime] LeaveAgentGroup failed:', err);
+        }
     }
 
     private stopConnection(): void {

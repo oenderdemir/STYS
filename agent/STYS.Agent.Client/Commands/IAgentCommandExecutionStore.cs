@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace STYS.Agent.Client.Commands;
 
 public interface IAgentCommandExecutionStore
@@ -10,7 +12,7 @@ public interface IAgentCommandExecutionStore
 
 public sealed class MemoryAgentCommandExecutionStore : IAgentCommandExecutionStore
 {
-    private readonly Dictionary<string, AgentCommandResult> _store = new();
+    private readonly ConcurrentDictionary<string, AgentCommandResult> _store = new();
 
     public bool HasExecuted(string idempotencyKey) => _store.ContainsKey(idempotencyKey);
 

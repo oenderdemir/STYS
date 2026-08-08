@@ -54,25 +54,36 @@ public sealed class CommandPollingWorker : BackgroundService
     {
         try
         {
+            if (dto.ExpiresAt.HasValue && DateTime.UtcNow > dto.ExpiresAt.Value)
+            {
+                _logger.LogWarning("Komut süresi dolmuş: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+                return;
+            }
+
             if (_executionStore.HasExecuted(dto.IdempotencyKey))
             {
                 _logger.LogInformation("Komut zaten çalıştırılmış (idempotent): {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+                await _client.AcceptCommandAsync(dto.Id, cancellationToken);
+                var cached = _executionStore.GetResult(dto.IdempotencyKey);
+                if (cached is not null && cached.Success)
+                    await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = true, ResultPayload = cached.ResultPayload }, cancellationToken);
                 return;
             }
 
             var handler = _handlerRegistry.Resolve<IAgentCommand>(dto.CommandType);
             if (handler is null)
             {
-                _logger.LogWarning("Bilinmeyen komut tipi: {CommandType}", dto.CommandType);
+                _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+                await _client.RejectCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = $"Unknown command: {dto.CommandType}", ErrorCode = "UNKNOWN_COMMAND" }, cancellationToken);
                 return;
             }
 
             _logger.LogInformation("Komut işleniyor: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
 
             await _client.AcceptCommandAsync(dto.Id, cancellationToken);
+            _executionStore.MarkExecuted(dto.IdempotencyKey);
 
             var result = await handler.HandleAsync(DeserializeForHandler(dto.CommandType), cancellationToken);
-
             _executionStore.StoreResult(dto.IdempotencyKey, result);
 
             if (result.Success)
@@ -88,7 +99,12 @@ public sealed class CommandPollingWorker : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Komut işlenirken hata: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            _logger.LogError(ex, "Komut işlenirken beklenmeyen hata: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            try
+            {
+                await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = ex.Message, ErrorCode = "HANDLER_EXCEPTION" }, CancellationToken.None);
+            }
+            catch { }
         }
     }
 

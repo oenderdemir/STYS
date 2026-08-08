@@ -68,4 +68,10 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
         var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/fail", request, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task RejectCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/reject", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 }

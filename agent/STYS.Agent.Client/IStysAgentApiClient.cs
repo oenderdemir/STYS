@@ -12,4 +12,5 @@ public interface IStysAgentApiClient
     Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken);
     Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken);
     Task FailCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken);
+    Task RejectCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken);
 }

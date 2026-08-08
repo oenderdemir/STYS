@@ -14,6 +14,19 @@ public sealed class AgentCommandService
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
 
+    private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Ping"] = "agent.command.execute",
+        ["HealthCheck"] = "agent.command.execute",
+        ["RefreshConfiguration"] = "agent.config.read",
+        ["PavoConnectionTest"] = "stys.pavo.connection.test"
+    };
+
+    private static readonly Dictionary<string, string> CommandCapabilityMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["PavoConnectionTest"] = "pavo"
+    };
+
     public AgentCommandService(IDbContextFactory<StysAppDbContext> dbContextFactory, ICurrentTenantAccessor tenantAccessor)
     {
         _dbContextFactory = dbContextFactory;
@@ -31,32 +44,24 @@ public sealed class AgentCommandService
         if (agent.Durum != AgentDurum.Active)
             throw new BaseException("Agent aktif değil.", 400);
 
-        var scopes = await db.Set<AgentScope>().Where(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted).Select(x => x.Scope).ToListAsync(cancellationToken);
-        var requiredScope = GetRequiredScope(request.CommandType);
-        if (!string.IsNullOrWhiteSpace(requiredScope) && !scopes.Contains(requiredScope, StringComparer.OrdinalIgnoreCase))
-            throw new BaseException("Agent gerekli scope'a sahip değil.", 403);
+        await ValidateScopeAsync(db, agent.Id, request.CommandType, cancellationToken);
+        await ValidateCapabilityAsync(db, agent.Id, request.CommandType, cancellationToken);
+
+        var idempotencyKey = $"{request.CommandType}:{Guid.NewGuid():N}"[..64];
 
         var command = new AgentCommand
         {
-            Id = Guid.NewGuid(),
-            AgentId = agent.Id,
-            KurumId = agent.KurumId,
-            CommandType = request.CommandType,
-            Payload = request.Payload,
-            Status = AgentCommandStatus.Pending,
-            Priority = request.Priority,
+            Id = Guid.NewGuid(), AgentId = agent.Id, KurumId = agent.KurumId,
+            CommandType = request.CommandType, Payload = request.Payload,
+            Status = AgentCommandStatus.Pending, Priority = request.Priority,
             ExpiresAt = request.ExpirationMinutes.HasValue ? DateTime.UtcNow.AddMinutes(request.ExpirationMinutes.Value) : null,
             MaxRetryCount = request.MaxRetryCount,
-            CorrelationId = Guid.NewGuid().ToString("N"),
-            IdempotencyKey = $"{request.CommandType}:{Guid.NewGuid():N}"[..64],
-            RequestedBy = requestedBy,
-            CreatedBy = requestedBy,
-            CreatedAt = DateTime.UtcNow
+            CorrelationId = Guid.NewGuid().ToString("N"), IdempotencyKey = idempotencyKey,
+            RequestedBy = requestedBy, CreatedBy = requestedBy, CreatedAt = DateTime.UtcNow
         };
 
         db.Set<AgentCommand>().Add(command);
         await db.SaveChangesAsync(cancellationToken);
-
         return MapToDto(command);
     }
 
@@ -68,11 +73,16 @@ public sealed class AgentCommandService
         var commands = await db.Set<AgentCommand>()
             .Where(x => x.AgentId == agentId && !x.IsDeleted && x.Status == AgentCommandStatus.Pending)
             .Where(x => x.ExpiresAt == null || x.ExpiresAt > now)
-            .OrderByDescending(x => x.Priority)
-            .ThenBy(x => x.CreatedAt)
+            .OrderByDescending(x => x.Priority).ThenBy(x => x.CreatedAt)
             .Take(50)
             .ToListAsync(cancellationToken);
 
+        foreach (var cmd in commands)
+        {
+            cmd.Status = AgentCommandStatus.Delivered;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
         return commands.Select(MapToDto).ToList();
     }
 
@@ -81,8 +91,7 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         return await db.Set<AgentCommand>()
             .Where(x => x.AgentId == agentId && !x.IsDeleted)
-            .OrderByDescending(x => x.CreatedAt)
-            .Take(100)
+            .OrderByDescending(x => x.CreatedAt).Take(100)
             .Select(x => new AgentCommandDto
             {
                 Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Payload = x.Payload,
@@ -99,8 +108,7 @@ public sealed class AgentCommandService
         var command = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, cancellationToken);
         if (command is null) throw new BaseException("Komut bulunamadı.", 404);
 
-        if (command.Status != AgentCommandStatus.Pending && command.Status != AgentCommandStatus.Delivered)
-            throw new BaseException("Komut bu durumda kabul edilemez.", 400);
+        AgentCommandStateMachine.EnforceTransition(command.Status, AgentCommandStatus.Accepted, command.Id);
 
         if (command.ExpiresAt.HasValue && DateTime.UtcNow > command.ExpiresAt.Value)
         {
@@ -109,15 +117,14 @@ public sealed class AgentCommandService
             throw new BaseException("Komut süresi dolmuş.", 400);
         }
 
-        var prevStatus = command.Status;
         command.Status = AgentCommandStatus.Accepted;
         command.StartedAt = DateTime.UtcNow;
 
         db.Set<AgentCommandExecution>().Add(new AgentCommandExecution
         {
             CommandId = command.Id, AgentId = agentId, KurumId = command.KurumId,
-            Status = "Accepted", PreviousStatus = prevStatus.ToString(), MachineName = Environment.MachineName,
-            CreatedBy = "agent", CreatedAt = DateTime.UtcNow
+            Status = "Accepted", PreviousStatus = AgentCommandStatus.Delivered.ToString(),
+            MachineName = Environment.MachineName, CreatedBy = "agent", CreatedAt = DateTime.UtcNow
         });
 
         await db.SaveChangesAsync(cancellationToken);
@@ -129,11 +136,11 @@ public sealed class AgentCommandService
         var command = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, cancellationToken);
         if (command is null) throw new BaseException("Komut bulunamadı.", 404);
 
-        if (command.Status != AgentCommandStatus.Accepted && command.Status != AgentCommandStatus.Running)
-            throw new BaseException("Komut bu durumda tamamlanamaz.", 400);
+        var targetStatus = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
+        AgentCommandStateMachine.EnforceTransition(command.Status, targetStatus, command.Id);
 
         var prevStatus = command.Status;
-        command.Status = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
+        command.Status = targetStatus;
         command.CompletedAt = DateTime.UtcNow;
         command.ResultPayload = request.ResultPayload;
         command.ErrorCode = request.ErrorCode;
@@ -142,7 +149,7 @@ public sealed class AgentCommandService
         db.Set<AgentCommandExecution>().Add(new AgentCommandExecution
         {
             CommandId = command.Id, AgentId = agentId, KurumId = command.KurumId,
-            Status = request.Success ? "Completed" : "Failed", PreviousStatus = prevStatus.ToString(),
+            Status = targetStatus.ToString(), PreviousStatus = prevStatus.ToString(),
             ErrorCode = request.ErrorCode, ErrorMessage = request.ErrorMessage,
             MachineName = Environment.MachineName, CreatedBy = "agent", CreatedAt = DateTime.UtcNow
         });
@@ -156,7 +163,8 @@ public sealed class AgentCommandService
         var command = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, cancellationToken);
         if (command is null) throw new BaseException("Komut bulunamadı.", 404);
 
-        var prevStatus = command.Status;
+        AgentCommandStateMachine.EnforceTransition(command.Status, AgentCommandStatus.Failed, command.Id);
+
         command.Status = AgentCommandStatus.Failed;
         command.CompletedAt = DateTime.UtcNow;
         command.ErrorMessage = errorMessage;
@@ -164,11 +172,49 @@ public sealed class AgentCommandService
         db.Set<AgentCommandExecution>().Add(new AgentCommandExecution
         {
             CommandId = command.Id, AgentId = agentId, KurumId = command.KurumId,
-            Status = "Failed", PreviousStatus = prevStatus.ToString(), ErrorMessage = errorMessage,
-            MachineName = Environment.MachineName, CreatedBy = "agent", CreatedAt = DateTime.UtcNow
+            Status = "Failed", PreviousStatus = command.Status.ToString(),
+            ErrorMessage = errorMessage, MachineName = Environment.MachineName,
+            CreatedBy = "agent", CreatedAt = DateTime.UtcNow
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RejectAsync(Guid commandId, int agentId, string errorMessage, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var command = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, cancellationToken);
+        if (command is null) throw new BaseException("Komut bulunamadı.", 404);
+
+        AgentCommandStateMachine.EnforceTransition(command.Status, AgentCommandStatus.Rejected, command.Id);
+
+        command.Status = AgentCommandStatus.Rejected;
+        command.CompletedAt = DateTime.UtcNow;
+        command.ErrorMessage = errorMessage;
+
+        db.Set<AgentCommandExecution>().Add(new AgentCommandExecution
+        {
+            CommandId = command.Id, AgentId = agentId, KurumId = command.KurumId,
+            Status = "Rejected", PreviousStatus = command.Status.ToString(),
+            ErrorMessage = errorMessage, MachineName = Environment.MachineName,
+            CreatedBy = "agent", CreatedAt = DateTime.UtcNow
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task ValidateScopeAsync(StysAppDbContext db, int agentId, string commandType, CancellationToken ct)
+    {
+        if (!CommandScopeMap.TryGetValue(commandType, out var requiredScope)) return;
+        var hasScope = await db.Set<AgentScope>().AnyAsync(x => x.AgentId == agentId && x.Scope == requiredScope && x.AktifMi && !x.IsDeleted, ct);
+        if (!hasScope) throw new BaseException($"Agent '{requiredScope}' scope'una sahip değil.", 403);
+    }
+
+    private static async Task ValidateCapabilityAsync(StysAppDbContext db, int agentId, string commandType, CancellationToken ct)
+    {
+        if (!CommandCapabilityMap.TryGetValue(commandType, out var requiredCap)) return;
+        var hasCap = await db.Set<AgentCapability>().AnyAsync(x => x.AgentId == agentId && x.Capability == requiredCap && x.AktifMi && !x.IsDeleted, ct);
+        if (!hasCap) throw new BaseException($"Agent '{requiredCap}' capability'sine sahip değil.", 403);
     }
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()
@@ -177,14 +223,5 @@ public sealed class AgentCommandService
         Status = (int)c.Status, Priority = c.Priority, ScheduledAt = c.ScheduledAt,
         ExpiresAt = c.ExpiresAt, RetryCount = c.RetryCount, MaxRetryCount = c.MaxRetryCount,
         CorrelationId = c.CorrelationId, IdempotencyKey = c.IdempotencyKey, CreatedAt = c.CreatedAt ?? DateTime.MinValue
-    };
-
-    private static string? GetRequiredScope(string commandType) => commandType switch
-    {
-        "Ping" => "agent.command.execute",
-        "HealthCheck" => "agent.command.execute",
-        "RefreshConfiguration" => "agent.config.read",
-        "PavoConnectionTest" => "stys.pavo.connection.test",
-        _ => "agent.command.execute"
     };
 }

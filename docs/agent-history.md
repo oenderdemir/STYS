@@ -580,3 +580,62 @@ Unit tests: Passed: 1062, Failed: 0, Skipped: 0
 - Agent auto-update yok (Faz 4)
 - HTTP resiliency (Polly) yok (Faz 3)
 - Config endpoint'i hard-coded (Faz 3)
+
+---
+
+### Faz 2 Tamamlama — Capability, Strict Transitions, Idempotency (08.08.2026)
+
+#### Yapılan İyileştirmeler
+
+**Capability Altyapısı:**
+- `AgentCapability` entity: `pavo`, `printer`, `file-transfer` gibi yetenekler
+- `PavoConnectionTest` yalnızca `pavo` capability olan agent'a gönderilebilir
+- Scope + capability birlikte doğrulama (`ValidateScopeAsync` + `ValidateCapabilityAsync`)
+
+**State Machine:**
+- `AgentCommandStateMachine`: strict transition kuralları
+- `EnforceTransition()`: geçersiz transition → `InvalidOperationException`
+- Valid transitions: `Pending→Delivered→Accepted→Running→Completed/Failed`
+- Geçersiz (örn. `Failed→Accepted`) reddedilir
+
+**Idempotency:**
+- `MemoryAgentCommandExecutionStore`: `ConcurrentDictionary` ile thread-safe
+- Server-side: `AgentId + IdempotencyKey` unique index
+- Aynı idempotency key ikinci kez çalıştırılmaz
+
+**Command Delivery Concurrency:**
+- `GetPendingCommandsAsync`: Pending → Delivered (atomik status değişikliği)
+- İki paralel poll aynı command'i alamaz (Delivered olanlar tekrar poll edilmez)
+
+**Worker Davranışı:**
+- Expiration check: süresi dolmuş komutlar alınmaz
+- Unknown command → `Rejected` (POST `/api/agent/commands/{id}/reject`)
+- Handler exception → `Failed` (worker durmaz)
+- Idempotent retry: daha önce çalışmışsa cached result ile complete
+
+**PAVO Client:**
+- `IPavoClient.TestConnectionAsync()`: HTTP endpoint test, timeout, anlamlı hata
+- Stub `Task.Delay` kaldırıldı, gerçek `IHttpClientFactory` tabanlı implementasyon
+
+#### Yeni Dosyalar
+
+| Dosya | Açıklama |
+|-------|----------|
+| `backend/Agent/Entities/AgentCapability.cs` | Agent capability entity |
+| `backend/Agent/Services/AgentCommandStateMachine.cs` | Strict state transition validator |
+| `agent/STYS.Agent.Modules.Pavo/IPavoClient.cs` | `IPavoClient` + `PavoHttpClient` |
+
+#### Migration
+
+- `AddAgentCapabilities` — `AgentCapabilities` tablosu
+
+#### Test Sonuçları
+
+```
+Agent Integration: Passed: 25, Failed: 0, Skipped: 0, Total: 25
+Full Solution:      Passed: 1611, Failed: 204, Skipped: 0, Total: 1815
+Agent Regression:   0
+Unit Tests:         Passed: 1062, Failed: 0
+```
+
+#### Faz 2 Durumu: TAMAMLANDI ✅

@@ -9,6 +9,8 @@ public static class PavoModuleExtensions
     public static IServiceCollection AddPavoModule(this IServiceCollection services)
     {
         services.AddScoped<PavoConnectionTestCommandHandler>();
+        services.AddHttpClient("PavoClient");
+        services.AddScoped<IPavoClient, PavoHttpClient>();
         return services;
     }
 

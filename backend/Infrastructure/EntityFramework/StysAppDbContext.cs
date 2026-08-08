@@ -203,6 +203,7 @@ public class StysAppDbContext : DbContext
     public DbSet<AgentScope> AgentScopes => Set<AgentScope>();
     public DbSet<AgentCommand> AgentCommands => Set<AgentCommand>();
     public DbSet<AgentCommandExecution> AgentCommandExecutions => Set<AgentCommandExecution>();
+    public DbSet<AgentCapability> AgentCapabilities => Set<AgentCapability>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1978,6 +1979,14 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.MachineName).HasMaxLength(64);
             entity.HasIndex(x => x.CommandId);
             entity.HasOne(x => x.Command).WithMany(x => x.Executions).HasForeignKey(x => x.CommandId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentCapability>(entity =>
+        {
+            entity.ToTable("AgentCapabilities", entegrasyonSchema);
+            entity.Property(x => x.Capability).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.AgentId, x.Capability }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasOne(x => x.Agent).WithMany().HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PosTahsilatValor>(entity =>

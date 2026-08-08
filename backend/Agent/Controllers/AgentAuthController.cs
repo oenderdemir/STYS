@@ -127,4 +127,14 @@ public sealed class AgentAuthController : ControllerBase
         await _commandService.FailAsync(id, agentContext.AgentId, request.ErrorMessage ?? "Unknown error", cancellationToken);
         return Ok();
     }
+
+    [HttpPost("commands/{id:guid}/reject")]
+    [Authorize(Policy = AgentPolicies.AgentCommandExecute)]
+    public async Task<ActionResult> RejectCommand(Guid id, [FromBody] AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        await _commandService.RejectAsync(id, agentContext.AgentId, request.ErrorMessage ?? "Unknown command", cancellationToken);
+        return Ok();
+    }
 }

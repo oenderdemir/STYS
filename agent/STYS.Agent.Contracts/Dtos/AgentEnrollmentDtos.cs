@@ -26,6 +26,7 @@ public sealed class AgentEnrollmentCodeRequest
     public IReadOnlyCollection<string> AllowedScopes { get; set; } = [];
     public int? MaxKullanimSayisi { get; set; }
     public int? ExpirationHours { get; set; }
+    public bool RequiresApproval { get; set; }
 }
 
 public sealed class AgentEnrollmentCodeDto
@@ -39,6 +40,7 @@ public sealed class AgentEnrollmentCodeDto
     public int KullanimSayisi { get; set; }
     public int MaxKullanimSayisi { get; set; }
     public DateTime ExpiresAt { get; set; }
+    public bool RequiresApproval { get; set; }
     public int Durum { get; set; }
     public int? AgentId { get; set; }
     public DateTime CreatedAt { get; set; }

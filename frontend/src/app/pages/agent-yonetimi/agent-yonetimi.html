@@ -23,8 +23,8 @@
                 <th>Ad</th>
                 <th>Agent Key</th>
                 <th>Durum</th>
+                <th>Bağlantı</th>
                 <th>Sürüm</th>
-                <th>Son Görülme</th>
                 <th style="width: 12rem">İşlemler</th>
             </tr>
         </ng-template>
@@ -35,8 +35,10 @@
                 <td>
                     <p-tag [value]="getDurumLabel(agent.durum)" [severity]="getDurumSeverity(agent.durum)" />
                 </td>
+                <td>
+                    <p-tag [value]="agent.onlineMi ? 'Online' : 'Offline'" [severity]="agent.onlineMi ? 'success' : 'secondary'" />
+                </td>
                 <td>{{ agent.agentVersion ?? '-' }}</td>
-                <td>{{ agent.sonGorulmeTarihi ? (agent.sonGorulmeTarihi | date:'short') : '-' }}</td>
                 <td>
                     <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="editAgent(agent)" pTooltip="Düzenle"></button>
                     @if (agent.durum === 0) {
@@ -84,11 +86,17 @@
     [style]="{ width: '700px' }">
     <ng-template pTemplate="content">
         <div class="field grid">
-            <div class="col-6">
+            <div class="col-4">
                 <label for="enrKurumId">Kurum ID</label>
                 <input pInputText id="enrKurumId" type="number" [(ngModel)]="enrollmentForm.kurumId" />
             </div>
-            <div class="col-6 flex align-items-end">
+            <div class="col-4 flex align-items-end">
+                <div class="field-checkbox">
+                    <p-checkbox inputId="requiresApproval" [binary]="true" [(ngModel)]="enrollmentForm.requiresApproval" />
+                    <label for="requiresApproval">Onay gerektirsin</label>
+                </div>
+            </div>
+            <div class="col-4 flex align-items-end">
                 <button pButton pRipple label="Kod Oluştur" icon="pi pi-key" class="p-button-success" (click)="generateEnrollmentCode()"></button>
             </div>
         </div>

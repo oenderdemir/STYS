@@ -10,6 +10,8 @@ public sealed class AgentDto
     public int Durum { get; set; }
     public string? AgentVersion { get; set; }
     public DateTime? SonGorulmeTarihi { get; set; }
+    public DateTime? LastHeartbeatAt { get; set; }
+    public bool OnlineMi { get; set; }
     public string? CihazKimligi { get; set; }
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];
     public IReadOnlyCollection<string> Scopes { get; set; } = [];
@@ -25,7 +27,8 @@ public sealed class AgentListDto
     public string? KurumAd { get; set; }
     public int Durum { get; set; }
     public string? AgentVersion { get; set; }
-    public DateTime? SonGorulmeTarihi { get; set; }
+    public DateTime? LastHeartbeatAt { get; set; }
+    public bool OnlineMi { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -35,4 +38,10 @@ public sealed class AgentKaydetRequest
     public int KurumId { get; set; }
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];
     public IReadOnlyCollection<string> Scopes { get; set; } = [];
+}
+
+public sealed class AgentOfflineOptions
+{
+    public const string SectionName = "AgentOffline";
+    public int OfflineThresholdMinutes { get; set; } = 5;
 }

@@ -6,9 +6,7 @@ using STYS.Infrastructure.EntityFramework;
 
 namespace STYS.Agent.Authorization;
 
-public sealed class AgentCredentialRequirement : IAuthorizationRequirement
-{
-}
+public sealed class AgentCredentialRequirement : IAuthorizationRequirement { }
 
 public sealed class AgentCredentialValidationHandler : AuthorizationHandler<AgentCredentialRequirement>
 {
@@ -25,38 +23,30 @@ public sealed class AgentCredentialValidationHandler : AuthorizationHandler<Agen
         var credentialVersionClaim = context.User.FindFirst("credentialVersion")?.Value;
         var agentIdClaim = context.User.FindFirst("agentId")?.Value;
 
-        if (string.IsNullOrWhiteSpace(credentialIdClaim) || !int.TryParse(credentialIdClaim, out var credentialId))
-            return;
-
-        if (string.IsNullOrWhiteSpace(credentialVersionClaim) || !int.TryParse(credentialVersionClaim, out var credentialVersion))
-            return;
+        if (string.IsNullOrWhiteSpace(credentialIdClaim) || !int.TryParse(credentialIdClaim, out var credentialId)) return;
+        if (string.IsNullOrWhiteSpace(credentialVersionClaim) || !int.TryParse(credentialVersionClaim, out var credentialVersion)) return;
+        if (string.IsNullOrWhiteSpace(agentIdClaim) || !int.TryParse(agentIdClaim, out var agentId)) return;
 
         try
         {
             await using var db = await _dbContextFactory.CreateDbContextAsync();
             var credential = await db.Set<AgentCredential>()
+                .Include(x => x.Agent)
                 .FirstOrDefaultAsync(x => x.Id == credentialId && !x.IsDeleted);
 
-            if (credential is null)
-                return;
+            if (credential is null) return;
+            if (!credential.AktifMi || credential.RevokedAt.HasValue) return;
+            if (credential.ExpiresAt.HasValue && DateTime.UtcNow > credential.ExpiresAt.Value) return;
+            if (credential.CredentialVersion != credentialVersion) return;
+            if (credential.AgentId != agentId) return;
 
-            if (!credential.AktifMi || credential.RevokedAt.HasValue)
-                return;
-
-            if (credential.ExpiresAt.HasValue && DateTime.UtcNow > credential.ExpiresAt.Value)
-                return;
-
-            if (credential.CredentialVersion != credentialVersion)
-                return;
-
-            if (credential.AgentId.ToString() != agentIdClaim)
-                return;
+            var agent = credential.Agent;
+            if (agent is null || agent.IsDeleted) return;
+            if (agent.KurumId != credential.KurumId) return;
+            if (agent.Durum == AgentDurum.Disabled || agent.Durum == AgentDurum.Revoked || agent.Durum == AgentDurum.PendingApproval) return;
 
             context.Succeed(requirement);
         }
-        catch
-        {
-            // Validation failure - don't authorize
-        }
+        catch { }
     }
 }

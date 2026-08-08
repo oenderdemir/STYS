@@ -4,6 +4,8 @@ using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Tesisler.Entities;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using AgentEntity = STYS.Agent.Entities.Agent;
 
@@ -12,10 +14,12 @@ namespace STYS.Agent.Services;
 public sealed class AgentService : IAgentService
 {
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
+    private readonly ICurrentTenantAccessor _tenantAccessor;
 
-    public AgentService(IDbContextFactory<StysAppDbContext> dbContextFactory)
+    public AgentService(IDbContextFactory<StysAppDbContext> dbContextFactory, ICurrentTenantAccessor tenantAccessor)
     {
         _dbContextFactory = dbContextFactory;
+        _tenantAccessor = tenantAccessor;
     }
 
     public async Task<AgentDto> GetByIdAsync(int id, CancellationToken cancellationToken)
@@ -23,35 +27,43 @@ public sealed class AgentService : IAgentService
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Set<AgentEntity>()
             .Include(x => x.Tesisler)
+            .Include(x => x.Scopes)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
         if (agent is null)
             throw new BaseException("Agent bulunamadı.", 404);
 
+        EnforceKurumAccess(agent);
         return MapToDto(agent);
     }
 
     public async Task<IReadOnlyCollection<AgentListDto>> GetAllAsync(CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await db.Set<AgentEntity>()
-            .Where(x => !x.IsDeleted)
-            .Select(x => new AgentListDto
-            {
-                Id = x.Id,
-                Ad = x.Ad,
-                AgentKey = x.AgentKey,
-                KurumId = x.KurumId,
-                Durum = (int)x.Durum,
-                AgentVersion = x.AgentVersion,
-                SonGorulmeTarihi = x.SonGorulmeTarihi,
-                CreatedAt = x.CreatedAt ?? DateTime.MinValue
-            })
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
+        var query = db.Set<AgentEntity>().Where(x => !x.IsDeleted);
+
+        query = ApplyKurumFilter(query);
+
+        return await query.Select(x => new AgentListDto
+        {
+            Id = x.Id,
+            Ad = x.Ad,
+            AgentKey = x.AgentKey,
+            KurumId = x.KurumId,
+            Durum = (int)x.Durum,
+            AgentVersion = x.AgentVersion,
+            LastHeartbeatAt = x.LastHeartbeatAt,
+            OnlineMi = ComputeOnline(x.LastHeartbeatAt),
+            CreatedAt = x.CreatedAt ?? DateTime.MinValue
+        })
+        .OrderByDescending(x => x.CreatedAt)
+        .ToListAsync(cancellationToken);
     }
 
     public async Task<AgentDto> CreateAsync(AgentKaydetRequest request, string createdBy, CancellationToken cancellationToken)
     {
+        EnforceKurumAccess(request.KurumId);
+        await ValidateTesislerAsync(request.KurumId, request.TesisIds, cancellationToken);
+
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var agentKey = $"AGNT-{Guid.NewGuid():N}"[..16];
@@ -64,20 +76,17 @@ public sealed class AgentService : IAgentService
             CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow
         };
-
         db.Set<AgentEntity>().Add(agent);
         await db.SaveChangesAsync(cancellationToken);
 
         foreach (var tesisId in request.TesisIds)
         {
-            db.Set<AgentTesis>().Add(new AgentTesis
-            {
-                AgentId = agent.Id,
-                KurumId = request.KurumId,
-                TesisId = tesisId,
-                CreatedBy = createdBy,
-                CreatedAt = DateTime.UtcNow
-            });
+            db.Set<AgentTesis>().Add(new AgentTesis { AgentId = agent.Id, KurumId = request.KurumId, TesisId = tesisId, CreatedBy = createdBy, CreatedAt = DateTime.UtcNow });
+        }
+
+        foreach (var scope in request.Scopes)
+        {
+            db.Set<AgentScope>().Add(new AgentScope { AgentId = agent.Id, KurumId = request.KurumId, Scope = scope.ToLowerInvariant().Trim(), CreatedBy = createdBy, CreatedAt = DateTime.UtcNow });
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -87,32 +96,18 @@ public sealed class AgentService : IAgentService
     public async Task<AgentDto> UpdateAsync(int id, AgentKaydetRequest request, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.Set<AgentEntity>()
-            .Include(x => x.Tesisler)
-            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
-        if (agent is null)
-            throw new BaseException("Agent bulunamadı.", 404);
+        var agent = await db.Set<AgentEntity>().Include(x => x.Tesisler).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
+        EnforceKurumAccess(agent);
+
+        await ValidateTesislerAsync(agent.KurumId, request.TesisIds, cancellationToken);
 
         agent.Ad = request.Ad;
-        agent.KurumId = request.KurumId;
-
-        var existingTesisIds = agent.Tesisler.Where(x => !x.IsDeleted).Select(x => x.TesisId).ToHashSet();
-        foreach (var tesisId in request.TesisIds.Where(x => !existingTesisIds.Contains(x)))
-        {
-            db.Set<AgentTesis>().Add(new AgentTesis
-            {
-                AgentId = agent.Id,
-                KurumId = request.KurumId,
-                TesisId = tesisId,
-                CreatedBy = agent.UpdatedBy,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
-        foreach (var tesis in agent.Tesisler.Where(x => !request.TesisIds.Contains(x.TesisId)))
-        {
-            tesis.IsDeleted = true;
-        }
+        var existing = agent.Tesisler.Where(x => !x.IsDeleted).Select(x => x.TesisId).ToHashSet();
+        foreach (var tesisId in request.TesisIds.Where(x => !existing.Contains(x)))
+            db.Set<AgentTesis>().Add(new AgentTesis { AgentId = agent.Id, KurumId = agent.KurumId, TesisId = tesisId, CreatedBy = agent.UpdatedBy, CreatedAt = DateTime.UtcNow });
+        foreach (var t in agent.Tesisler.Where(x => !request.TesisIds.Contains(x.TesisId)))
+            t.IsDeleted = true;
 
         await db.SaveChangesAsync(cancellationToken);
         return MapToDto(agent);
@@ -122,11 +117,9 @@ public sealed class AgentService : IAgentService
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
-        if (agent is null)
-            throw new BaseException("Agent bulunamadı.", 404);
-        if (agent.Durum != AgentDurum.PendingApproval)
-            throw new BaseException("Sadece onay bekleyen agent onaylanabilir.", 400);
-
+        if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
+        EnforceKurumAccess(agent);
+        if (agent.Durum != AgentDurum.PendingApproval) throw new BaseException("Sadece onay bekleyen agent onaylanabilir.", 400);
         agent.Durum = AgentDurum.Active;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -134,142 +127,122 @@ public sealed class AgentService : IAgentService
     public async Task DisableAsync(int id, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.Set<AgentEntity>().Include(x => x.Credentialler)
-            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
-        if (agent is null)
-            throw new BaseException("Agent bulunamadı.", 404);
+        var agent = await db.Set<AgentEntity>().Include(x => x.Credentialler).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
+        EnforceKurumAccess(agent);
 
         agent.Durum = AgentDurum.Disabled;
-        foreach (var cred in agent.Credentialler.Where(x => x.AktifMi))
-        {
-            cred.AktifMi = false;
-            cred.CredentialVersion++;
-            cred.RevokedAt = DateTime.UtcNow;
-        }
+        foreach (var cred in agent.Credentialler.Where(x => x.AktifMi)) { cred.AktifMi = false; cred.CredentialVersion++; cred.RevokedAt = DateTime.UtcNow; }
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task RevokeAsync(int id, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.Set<AgentEntity>().Include(x => x.Credentialler)
-            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
-        if (agent is null)
-            throw new BaseException("Agent bulunamadı.", 404);
+        var agent = await db.Set<AgentEntity>().Include(x => x.Credentialler).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
+        EnforceKurumAccess(agent);
 
         agent.Durum = AgentDurum.Revoked;
-        foreach (var cred in agent.Credentialler)
-        {
-            cred.AktifMi = false;
-            cred.CredentialVersion++;
-            cred.RevokedAt = DateTime.UtcNow;
-        }
-
+        foreach (var cred in agent.Credentialler) { cred.AktifMi = false; cred.CredentialVersion++; cred.RevokedAt = DateTime.UtcNow; }
         await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<AgentEnrollmentCodeDto> GenerateEnrollmentCodeAsync(AgentEnrollmentCodeRequest request, string createdBy, CancellationToken cancellationToken)
     {
-        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        EnforceKurumAccess(request.KurumId);
+        await ValidateTesislerAsync(request.KurumId, request.TesisIds, cancellationToken);
 
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var code = GenerateSecureCode();
         var enrollment = new AgentEnrollment
         {
-            Code = code,
-            KurumId = request.KurumId,
+            Code = code, KurumId = request.KurumId,
             TesisIds = System.Text.Json.JsonSerializer.Serialize(request.TesisIds),
             AllowedScopes = System.Text.Json.JsonSerializer.Serialize(request.AllowedScopes),
             MaxKullanimSayisi = request.MaxKullanimSayisi ?? 1,
+            RequiresApproval = request.RequiresApproval,
             ExpiresAt = DateTime.UtcNow.AddHours(request.ExpirationHours ?? 24),
-            Durum = AgentEnrollmentDurum.Active,
-            CreatedBy = createdBy,
-            CreatedAt = DateTime.UtcNow
+            Durum = AgentEnrollmentDurum.Active, CreatedBy = createdBy, CreatedAt = DateTime.UtcNow
         };
-
         db.Set<AgentEnrollment>().Add(enrollment);
         await db.SaveChangesAsync(cancellationToken);
 
-        return new AgentEnrollmentCodeDto
-        {
-            Id = enrollment.Id,
-            Code = enrollment.Code,
-            KurumId = enrollment.KurumId,
-            TesisIds = request.TesisIds,
-            AllowedScopes = request.AllowedScopes,
-            KullanimSayisi = 0,
-            MaxKullanimSayisi = enrollment.MaxKullanimSayisi,
-            ExpiresAt = enrollment.ExpiresAt,
-            Durum = (int)enrollment.Durum,
-            CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow
-        };
+        return new AgentEnrollmentCodeDto { Id = enrollment.Id, Code = enrollment.Code, KurumId = enrollment.KurumId, TesisIds = request.TesisIds, AllowedScopes = request.AllowedScopes, RequiresApproval = request.RequiresApproval, MaxKullanimSayisi = enrollment.MaxKullanimSayisi, ExpiresAt = enrollment.ExpiresAt, Durum = (int)enrollment.Durum, CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow };
     }
 
     public async Task<IReadOnlyCollection<AgentEnrollmentCodeDto>> GetEnrollmentCodesAsync(CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var codes = await db.Set<AgentEnrollment>()
-            .Where(x => !x.IsDeleted)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
+        var query = db.Set<AgentEnrollment>().Where(x => !x.IsDeleted);
+        query = ApplyKurumFilter(query);
 
-        return codes.Select(x =>
-        {
-            var tesisIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(x.TesisIds) ?? new List<int>();
-            var allowedScopes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(x.AllowedScopes) ?? new List<string>();
-            return new AgentEnrollmentCodeDto
-            {
-                Id = x.Id,
-                Code = x.Code,
-                KurumId = x.KurumId,
-                TesisIds = tesisIds,
-                AllowedScopes = allowedScopes,
-                KullanimSayisi = x.KullanimSayisi,
-                MaxKullanimSayisi = x.MaxKullanimSayisi,
-                ExpiresAt = x.ExpiresAt,
-                Durum = (int)x.Durum,
-                AgentId = x.AgentId,
-                CreatedAt = x.CreatedAt ?? DateTime.MinValue
-            };
-        }).ToList();
+        var codes = await query.OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
+        return codes.Select(MapEnrollmentToDto).ToList();
     }
 
     public async Task RevokeEnrollmentCodeAsync(int enrollmentId, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var enrollment = await db.Set<AgentEnrollment>().FirstOrDefaultAsync(x => x.Id == enrollmentId && !x.IsDeleted, cancellationToken);
-        if (enrollment is null)
-            throw new BaseException("Enrollment kodu bulunamadı.", 404);
-
+        if (enrollment is null) throw new BaseException("Enrollment kodu bulunamadı.", 404);
+        EnforceKurumAccess(enrollment.KurumId);
         enrollment.Durum = AgentEnrollmentDurum.Revoked;
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    private void EnforceKurumAccess(AgentEntity agent) => EnforceKurumAccess(agent.KurumId);
+    private void EnforceKurumAccess(int targetKurumId)
+    {
+        if (_tenantAccessor.IsSuperAdmin()) return;
+        var accessible = _tenantAccessor.GetAccessibleKurumIds();
+        if (!accessible.Contains(targetKurumId)) throw new BaseException("Bu kuruma erişim yetkiniz yok.", 403);
+    }
+
+    private IQueryable<AgentEntity> ApplyKurumFilter(IQueryable<AgentEntity> query)
+    {
+        if (_tenantAccessor.IsSuperAdmin()) return query;
+        var ids = _tenantAccessor.GetAccessibleKurumIds();
+        return query.Where(x => ids.Contains(x.KurumId));
+    }
+
+    private IQueryable<AgentEnrollment> ApplyKurumFilter(IQueryable<AgentEnrollment> query)
+    {
+        if (_tenantAccessor.IsSuperAdmin()) return query;
+        var ids = _tenantAccessor.GetAccessibleKurumIds();
+        return query.Where(x => ids.Contains(x.KurumId));
+    }
+
+    private async Task ValidateTesislerAsync(int kurumId, IReadOnlyCollection<int> tesisIds, CancellationToken cancellationToken)
+    {
+        if (tesisIds.Count == 0) return;
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var validIds = await db.Set<Tesis>().Where(x => tesisIds.Contains(x.Id) && x.KurumId == kurumId && !x.IsDeleted).Select(x => x.Id).ToListAsync(cancellationToken);
+        var invalid = tesisIds.Where(x => !validIds.Contains(x)).ToList();
+        if (invalid.Count > 0) throw new BaseException($"Geçersiz tesis ID'leri: {string.Join(", ", invalid)}", 400);
+    }
+
     private static AgentDto MapToDto(AgentEntity agent)
     {
-        var tesisIds = agent.Tesisler?.Where(x => !x.IsDeleted).Select(x => x.TesisId).ToList() ?? new List<int>();
-
         return new AgentDto
         {
-            Id = agent.Id,
-            Ad = agent.Ad,
-            AgentKey = agent.AgentKey,
-            KurumId = agent.KurumId,
-            Durum = (int)agent.Durum,
-            AgentVersion = agent.AgentVersion,
-            SonGorulmeTarihi = agent.SonGorulmeTarihi,
-            CihazKimligi = agent.CihazKimligi,
-            TesisIds = tesisIds,
-            CreatedAt = agent.CreatedAt ?? DateTime.MinValue
+            Id = agent.Id, Ad = agent.Ad, AgentKey = agent.AgentKey, KurumId = agent.KurumId, Durum = (int)agent.Durum, AgentVersion = agent.AgentVersion, LastHeartbeatAt = agent.LastHeartbeatAt, OnlineMi = ComputeOnline(agent.LastHeartbeatAt), CihazKimligi = agent.CihazKimligi, TesisIds = agent.Tesisler?.Where(x => !x.IsDeleted).Select(x => x.TesisId).ToList() ?? [], Scopes = agent.Scopes?.Where(x => !x.IsDeleted && x.AktifMi).Select(x => x.Scope).ToList() ?? [], CreatedAt = agent.CreatedAt ?? DateTime.MinValue
         };
     }
+
+    private static AgentEnrollmentCodeDto MapEnrollmentToDto(AgentEnrollment x)
+    {
+        return new AgentEnrollmentCodeDto { Id = x.Id, Code = x.Code, KurumId = x.KurumId, TesisIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(x.TesisIds) ?? [], AllowedScopes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(x.AllowedScopes) ?? [], RequiresApproval = x.RequiresApproval, KullanimSayisi = x.KullanimSayisi, MaxKullanimSayisi = x.MaxKullanimSayisi, ExpiresAt = x.ExpiresAt, Durum = (int)x.Durum, AgentId = x.AgentId, CreatedAt = x.CreatedAt ?? DateTime.MinValue };
+    }
+
+    private static bool ComputeOnline(DateTime? lastHeartbeat) => lastHeartbeat.HasValue && (DateTime.UtcNow - lastHeartbeat.Value) <= TimeSpan.FromMinutes(5);
 
     private static string GenerateSecureCode()
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         var bytes = RandomNumberGenerator.GetBytes(16);
         var code = new char[16];
-        for (var i = 0; i < 16; i++)
-            code[i] = chars[bytes[i] % chars.Length];
+        for (var i = 0; i < 16; i++) code[i] = chars[bytes[i] % chars.Length];
         return new string(code);
     }
 }

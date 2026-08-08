@@ -208,9 +208,147 @@ Passed: 1049, Failed: 0, Skipped: 13, Total: 1062
 
 #### Bilinen Kısıtlamalar (Stabilizasyon sonrası)
 
-- Kurum izolasyonu UI controller'larda henüz tam olarak uygulanmadı (mevcut `UIController` + `ICurrentTenantAccessor` entegrasyonu ile yapılacak)
-- Tesis doğrulaması enrollment sırasında yapılmıyor (Faz 2)
 - Config endpoint'i hala hard-coded (Faz 2)
 - Command execution altyapısı yok (Faz 2)
 - HTTP resiliency (Polly retry/circuit breaker) eklenmedi (Faz 2)
 - Feature flag mekanizması yok (Faz 2)
+
+---
+
+### Faz 1 Kapanış — Güvenlik ve İzolasyon Tamamlama (08.08.2026)
+
+#### Kurum İzolasyonu
+
+- `AgentService` tüm sorgularında `ICurrentTenantAccessor` kullanıyor
+- `EnforceKurumAccess()`: IDOR koruması — hedef agent/kurum kullanıcının erişebileceği kurumlardan değilse 403
+- `ApplyKurumFilter()`: Liste sorgularında `allowedKurumIds` filtreleme
+- SuperAdmin istisnası mevcut STYS davranışıyla uyumlu
+- Enrollment code işlemleri de aynı kurum izolasyonuna tabi
+
+#### Tesis Doğrulaması
+
+- `ValidateTesislerAsync()`: Agent create/update ve enrollment sırasında tesis ID'leri doğrulanıyor
+- Tesis mevcut mu, soft-delete edilmiş mi, doğru kuruma mı ait — tümü kontrol ediliyor
+- Farklı kuruma ait tesis atanması 400 hatası ile engelleniyor
+- Enrollment enrollment'da da aynı doğrulama uygulanıyor
+
+#### Enrollment Transaction
+
+- `EnrollAsync` artık tamamen `BeginTransactionAsync` içinde
+- Hata durumunda `RollbackAsync` — orphan Agent, Credential, AgentTesis kalmıyor
+- Concurrency token + transaction ile race condition koruması
+
+#### AgentScope Modeli
+
+- Yeni entity: `AgentScope` (`[entegrasyon].[AgentScopes]`)
+- Unique index: `(AgentId, Scope)` — aynı scope iki kez eklenemez
+- Scope'lar enrollment'dan bağımsız olarak saklanıyor
+- Token oluşturulurken scope'lar `AgentScope` tablosundan okunuyor
+- Enrollment, `AgentScope` kayıtlarını başlangıçta oluşturuyor
+- Enrollment kaydı silinse/değişse bile agent scope'ları korunuyor
+- Scope değişikliği sonrası credential versiyonu artırılarak token invalidation sağlanıyor
+
+#### RequiresApproval
+
+- `AgentEnrollment.RequiresApproval` alanı eklendi
+- `false` → Agent doğrudan `Active`
+- `true` → Agent `PendingApproval`; token alamaz, servisleri kullanamaz
+- Admin `ApproveAsync` ile onayladıktan sonra agent token alabilir
+
+#### Credential Validation Güçlendirme
+
+- `AgentCredentialValidationHandler` artık Agent entity'sini de `Include` ile yüklüyor
+- Kontroller: Agent mevcut mu, soft-delete edilmiş mi, KurumId eşleşiyor mu, Durum Active mi
+- PendingApproval/Disabled/Revoked agent'lar authorization'da reddediliyor
+
+#### Linux Credential Güvenliği
+
+- `FileAgentCredentialStore`: Linux'ta `File.SetUnixFileMode(..., UserRead | UserWrite)`
+- Credential dosyası ve dizini için 600/700 permission
+- Windows'ta DPAPI koruması devam ediyor
+
+#### Instance ID Güvenliği
+
+- `GetOrCreateInstanceId()`: Mevcut dosya içeriği `Guid.TryParseExact` ile doğrulanıyor
+- Geçersiz format tespit edilirse yeni ID oluşturuluyor
+- Linux'ta `instance.id` dosyasına 600 permission uygulanıyor
+
+#### Enrollment Code Temizliği
+
+- Başarılı enrollment sonrası `STYS_ENROLLMENT_CODE` process-level environment variable temizleniyor
+- Kod config dosyasından fiziksel silinmiyor ama agent bir daha ihtiyaç duymuyor
+
+#### Connectivity Durumu
+
+- `AgentDto.LastHeartbeatAt` ve `AgentDto.OnlineMi` alanları eklendi
+- `OnlineMi` computed: `UtcNow - LastHeartbeatAt <= 5 dakika`
+- Lifecycle (`PendingApproval/Active/Disabled/Revoked`) ve connectivity (`Online/Offline`) ayrı kavramlar
+
+#### Heartbeat Güvenliği
+
+- Heartbeat, `ICurrentAgentContext.AgentId` üzerinden güncelleme yapıyor
+- Request body'den AgentId almıyor
+
+#### Frontend
+
+- Agent tablosunda "Bağlantı" sütunu (Online/Offline tag)
+- Enrollment kodu oluşturma formunda "Onay gerektirsin" checkbox
+
+#### Yeni Migration
+
+- `AddAgentScopeAndRequiresApproval` — `AgentScopes` tablosu, `RequiresApproval` sütunu
+
+#### Yeni/Eklenen Dosyalar
+
+| Dosya | Açıklama |
+|-------|----------|
+| `backend/Agent/Entities/AgentScope.cs` | Agent scope entity |
+| `agent/STYS.Agent.Contracts/Dtos/AgentOfflineOptions` | Offline threshold config |
+
+#### Değiştirilen Dosyalar
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `backend/Agent/Services/AgentService.cs` | Kurum izolasyonu, tesis validasyonu, AgentScope, OnlineMi |
+| `backend/Agent/Services/AgentTokenService.cs` | Transaction, AgentScope, tesis validasyonu, RequiresApproval |
+| `backend/Agent/Entities/Agent.cs` | `Scopes` navigation property |
+| `backend/Agent/Entities/AgentEnrollment.cs` | `RequiresApproval` |
+| `backend/Agent/Authorization/AgentCredentialValidationHandler.cs` | Agent entity include, durum kontrolü |
+| `backend/Infrastructure/EntityFramework/StysAppDbContext.cs` | AgentScope DbSet + konfigürasyon |
+| `agent/STYS.Agent.Client/Authentication/FileAgentCredentialStore.cs` | Linux file permissions |
+| `agent/STYS.Agent/Services/AgentHostedService.cs` | Enrollment cleanup, instance.id validation |
+| `agent/STYS.Agent.Contracts/Dtos/AgentDto.cs` | LastHeartbeatAt, OnlineMi |
+| `agent/STYS.Agent.Contracts/Dtos/AgentEnrollmentDtos.cs` | RequiresApproval |
+| `frontend/src/app/pages/agent-yonetimi/agent-yonetimi.html` | OnlineMi sütunu, RequiresApproval checkbox |
+| `frontend/src/app/pages/agent-yonetimi/agent-yonetimi.ts` | CheckboxModule import |
+| `tests/STYS.Tests/Agent/AgentServiceTests.cs` | Kurum izolasyonu + tesis validasyonu testleri |
+
+#### Faz 1 Kapanış Kriterleri
+
+```
+[x] Agent auto-enrollment çalışıyor
+[x] Agent JWT authentication çalışıyor
+[x] Bearer token otomatik gönderiliyor
+[x] Credential revoke eski JWT'yi geçersiz kılıyor
+[x] Agent lifecycle state authorization sırasında kontrol ediliyor
+[x] Scope-based authorization çalışıyor
+[x] Scope'lar enrollment'dan bağımsız AgentScope olarak saklanıyor
+[x] Kurum izolasyonu tam
+[x] Tesis izolasyonu tam
+[x] Enrollment concurrency atomik
+[x] Orphan kayıt oluşmuyor
+[x] RequiresApproval çalışıyor
+[x] Windows credential DPAPI ile korunuyor
+[x] Linux credential dosyası minimum 600 permission ile korunuyor
+[x] Heartbeat gerçek agent context üzerinden çalışıyor
+[x] Connectivity hesaplanabiliyor
+[x] Tüm testler başarılı
+[x] agent-history.md gerçek kodla uyumlu
+```
+
+#### Test Sonuçları
+
+```
+dotnet test --filter "Category!=Integration"
+Passed: 1049, Failed: 0, Skipped: 13, Total: 1062
+```

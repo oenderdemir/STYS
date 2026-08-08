@@ -117,6 +117,12 @@ public sealed class AgentHostedService : IHostedService
 
             await _credentialStore.SaveAsync(credential, cancellationToken);
             _logger.LogInformation("Credential güvenli şekilde kaydedildi.");
+
+            try { Environment.SetEnvironmentVariable("STYS_ENROLLMENT_CODE", null, EnvironmentVariableTarget.Process); } catch { }
+
+            _options.ClientId = credential.ClientId;
+            _options.ClientSecret = credential.ClientSecret;
+            _options.AgentInstanceId = credential.AgentInstanceId;
         }
         catch (Exception ex)
         {
@@ -132,10 +138,15 @@ public sealed class AgentHostedService : IHostedService
         var instanceFile = Path.Combine(directory, "instance.id");
 
         if (File.Exists(instanceFile))
-            return File.ReadAllText(instanceFile).Trim();
+        {
+            var existing = File.ReadAllText(instanceFile).Trim();
+            if (!string.IsNullOrWhiteSpace(existing) && Guid.TryParseExact(existing, "N", out _))
+                return existing;
+        }
 
         var id = Guid.NewGuid().ToString("N");
         File.WriteAllText(instanceFile, id);
+        try { File.SetUnixFileMode(instanceFile, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
         return id;
     }
 }

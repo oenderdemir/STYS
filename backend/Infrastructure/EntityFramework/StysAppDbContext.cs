@@ -200,6 +200,7 @@ public class StysAppDbContext : DbContext
     public DbSet<AgentCredential> AgentCredentialler => Set<AgentCredential>();
     public DbSet<AgentTesis> AgentTesisler => Set<AgentTesis>();
     public DbSet<AgentEnrollment> AgentEnrollments => Set<AgentEnrollment>();
+    public DbSet<AgentScope> AgentScopes => Set<AgentScope>();
     public DbSet<Bildirim> Bildirimler => Set<Bildirim>();
     public DbSet<BildirimTercih> BildirimTercihleri => Set<BildirimTercih>();
 
@@ -1939,6 +1940,14 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
             entity.HasIndex(x => x.Code).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasOne(x => x.Agent).WithMany(x => x.Enrollments).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AgentScope>(entity =>
+        {
+            entity.ToTable("AgentScopes", entegrasyonSchema);
+            entity.Property(x => x.Scope).HasMaxLength(256).IsRequired();
+            entity.HasIndex(x => new { x.AgentId, x.Scope }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasOne(x => x.Agent).WithMany(x => x.Scopes).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PosTahsilatValor>(entity =>

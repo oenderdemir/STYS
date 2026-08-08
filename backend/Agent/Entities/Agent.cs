@@ -19,4 +19,5 @@ public sealed class Agent : BaseEntity<int>, ITenantEntity
     public ICollection<AgentCredential> Credentialler { get; set; } = [];
     public ICollection<AgentTesis> Tesisler { get; set; } = [];
     public ICollection<AgentEnrollment> Enrollments { get; set; } = [];
+    public ICollection<AgentScope> Scopes { get; set; } = [];
 }

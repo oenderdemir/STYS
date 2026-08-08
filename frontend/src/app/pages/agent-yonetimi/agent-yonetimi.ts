@@ -13,6 +13,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { CheckboxModule } from 'primeng/checkbox';
 import {
     AgentDto,
     AgentDurumLabels,
@@ -42,7 +43,8 @@ type AgentFormState = AgentKaydetRequest & { id?: number };
         TableModule,
         TagModule,
         ToastModule,
-        ToolbarModule
+        ToolbarModule,
+        CheckboxModule
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './agent-yonetimi.html'

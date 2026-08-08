@@ -9,15 +9,17 @@ namespace STYS.Agent.Client.Authentication;
 public sealed class FileAgentCredentialStore : IAgentCredentialStore
 {
     private readonly string _storePath;
+    private readonly string _storeDir;
     private readonly ILogger<FileAgentCredentialStore> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
     public FileAgentCredentialStore(ILogger<FileAgentCredentialStore> logger)
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var directory = Path.Combine(appData, "STYS", "Agent");
-        Directory.CreateDirectory(directory);
-        _storePath = Path.Combine(directory, "credential.dat");
+        _storeDir = Path.Combine(appData, "STYS", "Agent");
+        Directory.CreateDirectory(_storeDir);
+        SecureDirectory(_storeDir);
+        _storePath = Path.Combine(_storeDir, "credential.dat");
         _logger = logger;
     }
 
@@ -25,22 +27,14 @@ public sealed class FileAgentCredentialStore : IAgentCredentialStore
     {
         try
         {
-            if (!File.Exists(_storePath))
-                return null;
-
+            if (!File.Exists(_storePath)) return null;
             var encrypted = await File.ReadAllBytesAsync(_storePath, cancellationToken);
             var plainBytes = Unprotect(encrypted);
-            if (plainBytes is null)
-                return null;
-
+            if (plainBytes is null) return null;
             var json = Encoding.UTF8.GetString(plainBytes);
             return JsonSerializer.Deserialize<AgentLocalCredential>(json, JsonOptions);
         }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Credential read failed.");
-            return null;
-        }
+        catch (Exception ex) { _logger.LogDebug(ex, "Credential read failed."); return null; }
     }
 
     public async Task SaveAsync(AgentLocalCredential credential, CancellationToken cancellationToken)
@@ -48,16 +42,14 @@ public sealed class FileAgentCredentialStore : IAgentCredentialStore
         var json = JsonSerializer.Serialize(credential, JsonOptions);
         var plainBytes = Encoding.UTF8.GetBytes(json);
         var encrypted = Protect(plainBytes);
-
         await File.WriteAllBytesAsync(_storePath, encrypted, cancellationToken);
+        SecureFile(_storePath);
         _logger.LogInformation("Credential saved securely.");
     }
 
     public Task DeleteAsync(CancellationToken cancellationToken)
     {
-        if (File.Exists(_storePath))
-            File.Delete(_storePath);
-
+        if (File.Exists(_storePath)) File.Delete(_storePath);
         return Task.CompletedTask;
     }
 
@@ -65,7 +57,6 @@ public sealed class FileAgentCredentialStore : IAgentCredentialStore
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser);
-
         return data;
     }
 
@@ -75,12 +66,26 @@ public sealed class FileAgentCredentialStore : IAgentCredentialStore
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 return ProtectedData.Unprotect(data, null, DataProtectionScope.CurrentUser);
-
             return data;
         }
-        catch
+        catch { return null; }
+    }
+
+    private static void SecureFile(string path)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return null;
+            try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
+            catch { }
+        }
+    }
+
+    private static void SecureDirectory(string path)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
+            catch { }
         }
     }
 }

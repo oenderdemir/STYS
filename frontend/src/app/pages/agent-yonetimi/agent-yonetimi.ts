@@ -10,12 +10,11 @@ import { InputTextModule } from 'primeng/inputtext';
 import { MultiSelectModule } from 'primeng/multiselect';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
-import { TabViewModule } from 'primeng/tabview';
+import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { CheckboxModule } from 'primeng/checkbox';
-import { DropdownModule } from 'primeng/dropdown';
 import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
 import {
     AgentDto,
@@ -23,7 +22,8 @@ import {
     AgentEnrollmentCodeDto,
     AgentEnrollmentCodeRequest,
     AgentListDto,
-    AgentKaydetRequest
+    AgentKaydetRequest,
+    AgentCommandDto
 } from './agent-yonetimi.dto';
 import { AgentYonetimiService } from './agent-yonetimi.service';
 import { KurumService } from '../kurum-yonetimi/kurum.service';
@@ -48,8 +48,8 @@ type AgentFormState = AgentKaydetRequest & { id?: number };
         ToastModule,
         ToolbarModule,
         CheckboxModule,
-        TabViewModule,
-        DropdownModule
+        TabsModule,
+        SelectModule
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './agent-yonetimi.html'
@@ -273,7 +273,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         return labels[status] ?? 'Unknown';
     }
 
-    getCommandStatusSeverity(status: number): string {
+    getCommandStatusSeverity(status: number): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
         switch (status) {
             case 0: case 1: return 'info';
             case 2: case 3: return 'warn';

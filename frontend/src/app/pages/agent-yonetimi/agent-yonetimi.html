@@ -57,52 +57,59 @@
 </div>
 
 <p-dialog
-    [(visible)]="dialogVisible()"
+    [visible]="dialogVisible()"
+    (onHide)="closeDialog()"
     [header]="agentForm.id ? 'Agent Düzenle' : 'Yeni Agent'"
     [modal]="true"
     styleClass="p-fluid"
     [style]="{ width: '700px' }">
     <ng-template pTemplate="content">
-        <p-tabView>
-            <p-tabPanel header="Bilgiler">
-                <div class="field">
-                    <label for="ad">Agent Adı</label>
-                    <input pInputText id="ad" [(ngModel)]="agentForm.ad" required [class.ng-invalid]="submitted() && !agentForm.ad" />
-                </div>
-                <div class="field">
-                    <label for="kurumId">Kurum ID</label>
-                    <input pInputText id="kurumId" type="number" [(ngModel)]="agentForm.kurumId" required />
-                </div>
-            </p-tabPanel>
-            <p-tabPanel header="Komutlar">
-                <div class="field grid">
-                    <div class="col-8">
-                        <p-dropdown [options]="commandTypes" [(ngModel)]="selectedCommandType" styleClass="w-full" />
+        <p-tabs value="0">
+            <p-tablist>
+                <p-tab value="0">Bilgiler</p-tab>
+                <p-tab value="1">Komutlar</p-tab>
+            </p-tablist>
+            <p-tabpanels>
+                <p-tabpanel value="0">
+                    <div class="field">
+                        <label for="ad">Agent Adı</label>
+                        <input pInputText id="ad" [(ngModel)]="agentForm.ad" required [class.ng-invalid]="submitted() && !agentForm.ad" />
                     </div>
-                    <div class="col-4">
-                        <button pButton pRipple label="Gönder" icon="pi pi-send" class="p-button-info w-full" (click)="sendCommand()"></button>
+                    <div class="field">
+                        <label for="kurumId">Kurum ID</label>
+                        <input pInputText id="kurumId" type="number" [(ngModel)]="agentForm.kurumId" required />
                     </div>
-                </div>
-                <p-table [value]="commands()" [loading]="commandsLoading()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm mt-3">
-                    <ng-template pTemplate="header">
-                        <tr>
-                            <th>Tip</th>
-                            <th>Durum</th>
-                            <th>Öncelik</th>
-                            <th>Tarih</th>
-                        </tr>
-                    </ng-template>
-                    <ng-template pTemplate="body" let-cmd>
-                        <tr>
-                            <td>{{ cmd.commandType }}</td>
-                            <td><p-tag [value]="getCommandStatusLabel(cmd.status)" [severity]="getCommandStatusSeverity(cmd.status)" /></td>
-                            <td>{{ cmd.priority }}</td>
-                            <td>{{ cmd.createdAt | date:'short' }}</td>
-                        </tr>
-                    </ng-template>
-                </p-table>
-            </p-tabPanel>
-        </p-tabView>
+                </p-tabpanel>
+                <p-tabpanel value="1">
+                    <div class="field grid">
+                        <div class="col-8">
+                            <p-select [options]="commandTypes" [(ngModel)]="selectedCommandType" styleClass="w-full" />
+                        </div>
+                        <div class="col-4">
+                            <button pButton pRipple label="Gönder" icon="pi pi-send" class="p-button-info w-full" (click)="sendCommand()"></button>
+                        </div>
+                    </div>
+                    <p-table [value]="commands()" [loading]="commandsLoading()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm mt-3">
+                        <ng-template pTemplate="header">
+                            <tr>
+                                <th>Tip</th>
+                                <th>Durum</th>
+                                <th>Öncelik</th>
+                                <th>Tarih</th>
+                            </tr>
+                        </ng-template>
+                        <ng-template pTemplate="body" let-cmd>
+                            <tr>
+                                <td>{{ cmd.commandType }}</td>
+                                <td><p-tag [value]="getCommandStatusLabel(cmd.status)" [severity]="getCommandStatusSeverity(cmd.status)" /></td>
+                                <td>{{ cmd.priority }}</td>
+                                <td>{{ cmd.createdAt | date:'short' }}</td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                </p-tabpanel>
+            </p-tabpanels>
+        </p-tabs>
     </ng-template>
     <ng-template pTemplate="footer">
         <button pButton pRipple label="İptal" icon="pi pi-times" class="p-button-text" (click)="closeDialog()"></button>
@@ -111,7 +118,8 @@
 </p-dialog>
 
 <p-dialog
-    [(visible)]="enrollmentDialogVisible()"
+    [visible]="enrollmentDialogVisible()"
+    (onHide)="enrollmentDialogVisible.set(false)"
     header="Enrollment Kodları"
     [modal]="true"
     styleClass="p-fluid"

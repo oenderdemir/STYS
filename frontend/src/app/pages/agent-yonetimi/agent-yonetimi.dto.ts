@@ -44,6 +44,7 @@ export interface AgentEnrollmentCodeRequest {
     allowedScopes: string[];
     maxKullanimSayisi?: number;
     expirationHours?: number;
+    requiresApproval?: boolean;
 }
 
 export const AgentDurumLabels: Record<number, string> = {

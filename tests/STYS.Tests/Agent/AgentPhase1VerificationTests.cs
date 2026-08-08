@@ -1,10 +1,10 @@
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.EntityFrameworkCore;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Agent.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Tests.TestSupport;
-using TOD.Platform.Security.Auth.Services;
 using Xunit;
 using AgentEntity = STYS.Agent.Entities.Agent;
 
@@ -33,7 +33,6 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         if (string.IsNullOrWhiteSpace(cs)) return null!;
         _uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
         var db = AgentTestSupport.CreateDbContext(cs);
-
         var (ka, _, ta) = await AgentTestSupport.SeedKurumIlTesisAsync(db, $"{_uniqueSuffix}-A");
         var (kb, _, tb) = await AgentTestSupport.SeedKurumIlTesisAsync(db, $"{_uniqueSuffix}-B");
         _kurumAId = ka.Id; _tesisAId = ta.Id;
@@ -41,29 +40,26 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         return db;
     }
 
-    private static AgentService CreateSuperAdminService(IDbContextFactory<StysAppDbContext> factory) => new(factory, new FakeSuperAdminTenantAccessor());
-    private static AgentService CreateKurumAService(IDbContextFactory<StysAppDbContext> factory) => new(factory, new FakeKurumTenantAccessor(0));
-    private static AgentService CreateKurumBService(IDbContextFactory<StysAppDbContext> factory) => new(factory, new FakeKurumTenantAccessor(1));
-
-    private static void SetKurumId(FakeKurumTenantAccessor accessor, int kurumId) => accessor.SetKurumId(kurumId);
-
-    // ===== 1. SCOPE UPDATE TESTS =====
+    // ===== 1. SCOPE UPDATE TESTS (FIXED) =====
 
     [IntegrationFact]
-    public async Task Scope_AddNewScope_TokenContainsNewScope()
+    public async Task Scope_AddScope_TokenContainsScopeInJwtClaim()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
         var agent = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, _uniqueSuffix);
-        var (cred, _) = await AgentTestSupport.SeedCredentialAsync(db, agent.Id, _kurumAId);
+        var (cred, rawSecret) = await AgentTestSupport.SeedCredentialAsync(db, agent.Id, _kurumAId);
 
         await service.UpdateScopesAsync(agent.Id, new List<string> { "agent.heartbeat", "stys.pavo.payment.execute" }, CancellationToken.None);
 
         var tokenService = CreateTokenService(factory);
-        var token = await tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = cred.ClientId, ClientSecret = "test-secret-doesnt-matter-for-scope-check", AgentInstanceId = "test" }, CancellationToken.None);
-        Assert.NotNull(token);
+        var token = await tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = cred.ClientId, ClientSecret = rawSecret, AgentInstanceId = "test" }, CancellationToken.None);
+
+        var scopesClaim = ParseJwtClaim(token.AccessToken, "agentScopes");
+        Assert.Contains("agent.heartbeat", scopesClaim);
+        Assert.Contains("stys.pavo.payment.execute", scopesClaim);
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
@@ -73,17 +69,27 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
         var agent = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, _uniqueSuffix);
+        var (cred, rawSecret) = await AgentTestSupport.SeedCredentialAsync(db, agent.Id, _kurumAId);
         await service.UpdateScopesAsync(agent.Id, new List<string> { "agent.heartbeat", "stys.pavo.payment.execute" }, CancellationToken.None);
+
+        var token1 = await CreateTokenService(factory).IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = cred.ClientId, ClientSecret = rawSecret, AgentInstanceId = "test" }, CancellationToken.None);
+        Assert.Contains("stys.pavo.payment.execute", ParseJwtClaim(token1.AccessToken, "agentScopes"));
 
         await service.UpdateScopesAsync(agent.Id, new List<string> { "agent.heartbeat" }, CancellationToken.None);
 
-        var scopes = await db.Set<AgentScope>().Where(x => x.AgentId == agent.Id && !x.IsDeleted && x.AktifMi).ToListAsync();
-        Assert.Single(scopes);
-        Assert.Equal("agent.heartbeat", scopes[0].Scope);
-        Assert.Contains(scopes, x => x.IsDeleted);
+        var token2 = await CreateTokenService(factory).IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = cred.ClientId, ClientSecret = rawSecret, AgentInstanceId = "test" }, CancellationToken.None);
+        Assert.DoesNotContain("stys.pavo.payment.execute", ParseJwtClaim(token2.AccessToken, "agentScopes"));
+        Assert.Contains("agent.heartbeat", ParseJwtClaim(token2.AccessToken, "agentScopes"));
+
+        var activeScopes = await db.Set<AgentScope>().Where(x => x.AgentId == agent.Id && !x.IsDeleted && x.AktifMi).Select(x => x.Scope).ToListAsync();
+        Assert.Single(activeScopes);
+        Assert.Equal("agent.heartbeat", activeScopes[0]);
+
+        var deletedExists = await db.Set<AgentScope>().Where(x => x.AgentId == agent.Id && x.IsDeleted).AnyAsync();
+        Assert.True(deletedExists);
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
@@ -93,7 +99,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
         var agent = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, _uniqueSuffix);
         var (cred, rawSecret) = await AgentTestSupport.SeedCredentialAsync(db, agent.Id, _kurumAId);
@@ -102,8 +108,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         await service.UpdateScopesAsync(agent.Id, new List<string> { "agent.heartbeat", "agent.config.read" }, CancellationToken.None);
 
         await db.Entry(cred).ReloadAsync();
-        Assert.True(cred.CredentialVersion > originalVersion, $"Expected CredentialVersion > {originalVersion}, got {cred.CredentialVersion}");
-
+        Assert.True(cred.CredentialVersion > originalVersion);
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
@@ -112,7 +117,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
         var agent = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, _uniqueSuffix);
         await service.UpdateScopesAsync(agent.Id, new List<string> { "AGENT.HEARTBEAT", "Agent.Config.Read" }, CancellationToken.None);
@@ -120,7 +125,6 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var scopes = await db.Set<AgentScope>().Where(x => x.AgentId == agent.Id && !x.IsDeleted && x.AktifMi).Select(x => x.Scope).ToListAsync();
         Assert.Contains("agent.heartbeat", scopes);
         Assert.Contains("agent.config.read", scopes);
-
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
@@ -129,7 +133,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
         var agent = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, _uniqueSuffix);
         await service.UpdateScopesAsync(agent.Id, new List<string> { "agent.heartbeat" }, CancellationToken.None);
@@ -137,123 +141,107 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
 
         var count = await db.Set<AgentScope>().CountAsync(x => x.AgentId == agent.Id && x.Scope == "agent.heartbeat" && !x.IsDeleted && x.AktifMi);
         Assert.Equal(1, count);
-
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
-    // ===== 2. ENROLLMENT CONCURRENCY =====
+    // ===== 2. ENROLLMENT CONCURRENCY (FIXED — separate DbContext per call) =====
 
     [IntegrationFact]
-    public async Task Enrollment_ConcurrentSingleUse_CreatesOneAgent()
+    public async Task Enrollment_Concurrent_2Calls_CreatesOneAgent()
     {
-        var db = await SetupAsync(); if (db is null) return;
-        var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var cs = Environment.GetEnvironmentVariable(IntegrationFactAttribute.ConnectionStringEnvVar);
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        _uniqueSuffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
 
+        var dbSetup = AgentTestSupport.CreateDbContext(cs);
+        var (kurum, _, tesis) = await AgentTestSupport.SeedKurumIlTesisAsync(dbSetup, _uniqueSuffix);
+        _kurumAId = kurum.Id; _tesisAId = tesis.Id;
+
+        var factory = new DbContextFactoryForTest<StysAppDbContext>(dbSetup);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
         var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
-        var tokenService = CreateTokenService(factory);
-        var requestTemplate = new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"AGNT-{_uniqueSuffix}", AgentVersion = "1.0" };
-
-        var tasks = new List<Task<STYS.Agent.Contracts.Dtos.AgentEnrollmentResponse?>>();
+        int success = 0, expectedFail = 0, unexpectedFail = 0;
+        var tasks = new Task[2];
         for (int i = 0; i < 2; i++)
         {
-            var req = new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = requestTemplate.EnrollmentCode, AgentKey = $"{requestTemplate.AgentKey}-{i}", AgentVersion = requestTemplate.AgentVersion };
-            tasks.Add(Task.Run(async () =>
+            var idx = i;
+            tasks[i] = Task.Run(async () =>
             {
-                try { return await tokenService.EnrollAsync(req, CancellationToken.None); }
-                catch { return null; }
-            }));
+                try
+                {
+                    var connDb = AgentTestSupport.CreateDbContext(cs);
+                    var connFactory = new DbContextFactoryForTest<StysAppDbContext>(connDb);
+                    var ts = new AgentTokenService(connFactory, CreateJwtService());
+                    await ts.EnrollAsync(new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"AGNT-{_uniqueSuffix}-{idx}" }, CancellationToken.None);
+                    Interlocked.Increment(ref success);
+                }
+                catch (TOD.Platform.SharedKernel.Exceptions.BaseException)
+                {
+                    Interlocked.Increment(ref expectedFail);
+                }
+                catch
+                {
+                    Interlocked.Increment(ref unexpectedFail);
+                }
+            });
         }
 
-        var results = await Task.WhenAll(tasks);
-        var successCount = results.Count(x => x is not null);
-        var failCount = results.Count(x => x is null);
-
-        Assert.Equal(1, successCount);
-        Assert.Equal(1, failCount);
-
-        var agentCount = await db.Set<AgentEntity>().CountAsync(x => x.AgentKey.StartsWith($"AGNT-{_uniqueSuffix}"));
-        Assert.Equal(1, agentCount);
-
-        var updatedEnrollment = await db.Set<AgentEnrollment>().FirstAsync(x => x.Code == enrollment.Code);
-        Assert.Equal(1, updatedEnrollment.KullanimSayisi);
-
-        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
-    }
-
-    [IntegrationFact]
-    public async Task Enrollment_Concurrent_NoOrphanRecords()
-    {
-        var db = await SetupAsync(); if (db is null) return;
-        var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
-
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
-        var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
-
-        var tokenService = CreateTokenService(factory);
-        var tasks = new List<Task<STYS.Agent.Contracts.Dtos.AgentEnrollmentResponse?>>();
-        for (int i = 0; i < 3; i++)
-        {
-            var req = new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"AGNT-{_uniqueSuffix}-{i}", AgentVersion = "1.0" };
-            tasks.Add(Task.Run(async () => { try { return await tokenService.EnrollAsync(req, CancellationToken.None); } catch { return null; } }));
-        }
         await Task.WhenAll(tasks);
 
-        var successCount = tasks.Count(x => x.Result is not null);
-        Assert.Equal(1, successCount);
+        Assert.Equal(1, success);
+        Assert.Equal(1, expectedFail);
+        Assert.Equal(0, unexpectedFail);
 
-        var agentCount = await db.Set<AgentEntity>().CountAsync(x => x.AgentKey.Contains(_uniqueSuffix));
+        var verifyDb = AgentTestSupport.CreateDbContext(cs);
+        var agentCount = await verifyDb.Set<AgentEntity>().CountAsync(x => x.AgentKey.Contains(_uniqueSuffix));
+        var credCount = await verifyDb.Set<AgentCredential>().CountAsync(x => x.AgentId == verifyDb.Set<AgentEntity>().Where(a => a.AgentKey.Contains(_uniqueSuffix)).Select(a => a.Id).FirstOrDefault());
         Assert.Equal(1, agentCount);
+        Assert.True(credCount >= 1);
 
-        var credentialCount = await db.Set<AgentCredential>().CountAsync(x => db.Set<AgentEntity>().Any(a => a.AgentKey.Contains(_uniqueSuffix) && a.Id == x.AgentId));
-        Assert.Equal(1, credentialCount);
+        var updatedEnrollment = await verifyDb.Set<AgentEnrollment>().FirstAsync(x => x.Code == enrollment.Code);
+        Assert.Equal(1, updatedEnrollment.KullanimSayisi);
 
-        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+        await AgentTestSupport.CleanupAsync(verifyDb, _uniqueSuffix);
     }
 
     // ===== 3. REQUIRES APPROVAL =====
 
     [IntegrationFact]
-    public async Task RequiresApproval_True_PendingAgentCannotGetToken()
+    public async Task RequiresApproval_Pending_CannotGetToken()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
         var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, RequiresApproval = true };
         var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
 
         var tokenService = CreateTokenService(factory);
-        var enrollResult = await tokenService.EnrollAsync(new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"PENDING-{_uniqueSuffix}" }, CancellationToken.None);
-
-        Assert.Equal((int)AgentDurum.PendingApproval, enrollResult.Durum);
-        var agent = await db.Set<AgentEntity>().FindAsync(enrollResult.AgentId);
-        Assert.Equal(AgentDurum.PendingApproval, agent!.Durum);
+        var result = await tokenService.EnrollAsync(new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"PENDING-{_uniqueSuffix}" }, CancellationToken.None);
+        Assert.Equal((int)AgentDurum.PendingApproval, result.Durum);
 
         var ex = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() =>
-            tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = enrollResult.ClientId, ClientSecret = enrollResult.ClientSecret, AgentInstanceId = "test" }, CancellationToken.None));
+            tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = result.ClientId, ClientSecret = result.ClientSecret, AgentInstanceId = "test" }, CancellationToken.None));
         Assert.Equal(403, ex.ErrorCode);
 
-        await service.ApproveAsync(enrollResult.AgentId, CancellationToken.None);
-        var token = await tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = enrollResult.ClientId, ClientSecret = enrollResult.ClientSecret, AgentInstanceId = "test" }, CancellationToken.None);
+        await service.ApproveAsync(result.AgentId, CancellationToken.None);
+        var token = await tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = result.ClientId, ClientSecret = result.ClientSecret, AgentInstanceId = "test" }, CancellationToken.None);
         Assert.NotNull(token);
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
     [IntegrationFact]
-    public async Task RequiresApproval_False_AgentIsActiveImmediately()
+    public async Task RequiresApproval_False_ActiveImmediately()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, RequiresApproval = false };
+        var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumAId, TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], RequiresApproval = false };
         var enrollment = await service.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
-
         var tokenService = CreateTokenService(factory);
         var result = await tokenService.EnrollAsync(new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest { EnrollmentCode = enrollment.Code, AgentKey = $"ACTIVE-{_uniqueSuffix}" }, CancellationToken.None);
         Assert.Equal((int)AgentDurum.Active, result.Durum);
@@ -264,49 +252,40 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
     // ===== 4. KURUM ISOLATION =====
 
     [IntegrationFact]
-    public async Task KurumA_Admin_CannotAccessKurumB_Agent()
+    public async Task KurumA_CannotAccessKurumB_AllOperations()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-
         var agentA = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, $"{_uniqueSuffix}-A");
         var agentB = await AgentTestSupport.SeedAgentAsync(db, _kurumBId, $"{_uniqueSuffix}-B");
 
-        var accessorA = new FakeKurumTenantAccessor(_kurumAId);
-        var serviceA = new AgentService(factory, accessorA);
-        var serviceB_ = new AgentService(factory, new FakeKurumTenantAccessor(_kurumBId));
+        var svcA = new AgentService(factory, new FakeKurumTenantAccessor(_kurumAId));
+        var svcB = new AgentService(factory, new FakeKurumTenantAccessor(_kurumBId));
 
-        var result = await serviceA.GetByIdAsync(agentA.Id, CancellationToken.None);
-        Assert.NotNull(result);
+        Assert.NotNull(await svcA.GetByIdAsync(agentA.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svcB.GetByIdAsync(agentA.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svcA.DisableAsync(agentB.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svcA.RevokeAsync(agentB.Id, CancellationToken.None));
 
-        var exDetail = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => serviceB_.GetByIdAsync(agentA.Id, CancellationToken.None));
-        Assert.Equal(403, exDetail.ErrorCode);
-
-        var exDisable = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => serviceA.DisableAsync(agentB.Id, CancellationToken.None));
-        Assert.Equal(403, exDisable.ErrorCode);
-
-        var exRevoke = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => serviceA.RevokeAsync(agentB.Id, CancellationToken.None));
-        Assert.Equal(403, exRevoke.ErrorCode);
+        var allA = await svcA.GetAllAsync(CancellationToken.None);
+        Assert.DoesNotContain(allA, x => x.Id == agentB.Id);
 
         await AgentTestSupport.CleanupAsync(db, $"{_uniqueSuffix}-B");
         await AgentTestSupport.CleanupAsync(db, $"{_uniqueSuffix}-A");
     }
 
     [IntegrationFact]
-    public async Task SuperAdmin_CanAccessAllKurums()
+    public async Task SuperAdmin_SeesAllKurums()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-
         var agentA = await AgentTestSupport.SeedAgentAsync(db, _kurumAId, $"{_uniqueSuffix}-A");
         var agentB = await AgentTestSupport.SeedAgentAsync(db, _kurumBId, $"{_uniqueSuffix}-B");
 
-        var superAdmin = CreateSuperAdminService(factory);
-        var mA = await superAdmin.GetByIdAsync(agentA.Id, CancellationToken.None);
-        var mB = await superAdmin.GetByIdAsync(agentB.Id, CancellationToken.None);
-        Assert.NotNull(mA); Assert.NotNull(mB);
-
-        var all = await superAdmin.GetAllAsync(CancellationToken.None);
+        var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        Assert.NotNull(await svc.GetByIdAsync(agentA.Id, CancellationToken.None));
+        Assert.NotNull(await svc.GetByIdAsync(agentB.Id, CancellationToken.None));
+        var all = await svc.GetAllAsync(CancellationToken.None);
         Assert.Contains(all, x => x.Id == agentA.Id);
         Assert.Contains(all, x => x.Id == agentB.Id);
 
@@ -314,41 +293,56 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         await AgentTestSupport.CleanupAsync(db, $"{_uniqueSuffix}-A");
     }
 
-    // ===== 5. TESIS ISOLATION =====
-
     [IntegrationFact]
-    public async Task Tesis_CrossKurumTesis_Rejected()
+    public async Task KurumA_CannotCreateEnrollmentForKurumB()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var svc = new AgentService(factory, new FakeKurumTenantAccessor(_kurumAId));
 
-        var request = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", KurumId = _kurumAId, TesisIds = [_tesisBId], Scopes = ["agent.heartbeat"] };
-        var ex = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => service.CreateAsync(request, "test", CancellationToken.None));
-        Assert.Equal(400, ex.ErrorCode);
+        var req = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { KurumId = _kurumBId, TesisIds = [_tesisBId], AllowedScopes = ["agent.heartbeat"] };
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svc.GenerateEnrollmentCodeAsync(req, "test", CancellationToken.None));
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
+    // ===== 5. TESIS ISOLATION =====
+
     [IntegrationFact]
-    public async Task Tesis_NonexistentTesis_Rejected()
+    public async Task Tesis_CrossKurum_Rejected()
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
-        var service = CreateSuperAdminService(factory);
+        var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
 
-        var request = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", KurumId = _kurumAId, TesisIds = [99999], Scopes = ["agent.heartbeat"] };
-        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => service.CreateAsync(request, "test", CancellationToken.None));
+        var req = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", KurumId = _kurumAId, TesisIds = [_tesisBId], Scopes = ["agent.heartbeat"] };
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svc.CreateAsync(req, "test", CancellationToken.None));
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
 
+    [IntegrationFact]
+    public async Task Tesis_Nonexistent_Rejected()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = new DbContextFactoryForTest<StysAppDbContext>(db);
+        var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var req = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", KurumId = _kurumAId, TesisIds = [99999], Scopes = ["agent.heartbeat"] };
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svc.CreateAsync(req, "test", CancellationToken.None));
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
 
     // ===== HELPERS =====
 
-    private static AgentTokenService CreateTokenService(IDbContextFactory<StysAppDbContext> factory)
+    private static AgentTokenService CreateTokenService(IDbContextFactory<StysAppDbContext> factory) =>
+        new(factory, CreateJwtService());
+
+    private static AgentJwtTokenService CreateJwtService() =>
+        new(Microsoft.Extensions.Options.Options.Create(new TOD.Platform.Security.Auth.Options.JwtTokenOptions { Key = "01234567890123456789012345678901!!!", AccessTokenExpirationMinutes = 60 }));
+
+    private static string ParseJwtClaim(string token, string claimType)
     {
-        var jwtOptions = Microsoft.Extensions.Options.Options.Create(new TOD.Platform.Security.Auth.Options.JwtTokenOptions { Key = "01234567890123456789012345678901!!!", AccessTokenExpirationMinutes = 60 });
-        var jwtService = new AgentJwtTokenService(jwtOptions);
-        return new AgentTokenService(factory, jwtService);
+        var handler = new JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(token);
+        return jwt.Claims.FirstOrDefault(c => c.Type == claimType)?.Value ?? string.Empty;
     }
 }

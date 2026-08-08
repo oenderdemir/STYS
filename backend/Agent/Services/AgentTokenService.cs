@@ -73,6 +73,7 @@ public sealed class AgentTokenService : IAgentTokenService
 
             enrollment.KullanimSayisi++;
             enrollment.AgentId = agent.Id;
+            enrollment.ConcurrencyToken = Guid.NewGuid();
             if (enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
                 enrollment.Durum = AgentEnrollmentDurum.Used;
 

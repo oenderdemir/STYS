@@ -24,8 +24,8 @@ internal sealed class FakeKurumTenantAccessor : ICurrentTenantAccessor
 
 internal sealed class DbContextFactoryForTest<TContext> : IDbContextFactory<TContext> where TContext : DbContext
 {
-    private readonly TContext _context;
-    public DbContextFactoryForTest(TContext context) => _context = context;
-    public TContext CreateDbContext() => _context;
-    public ValueTask<TContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => new(_context);
+    private readonly Func<TContext> _creator;
+    public DbContextFactoryForTest(Func<TContext> creator) => _creator = creator;
+    public TContext CreateDbContext() => _creator();
+    public ValueTask<TContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => new(_creator());
 }

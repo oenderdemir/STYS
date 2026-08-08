@@ -6,6 +6,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Kurumlar.Entities;
 using STYS.Iller.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.Security.Auth.Services;
 
 namespace STYS.Tests.TestSupport;
 
@@ -16,7 +17,7 @@ public static class AgentTestSupport
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
             .UseSqlServer(connectionString)
             .Options;
-        return new StysAppDbContext(options);
+        return new StysAppDbContext(options, currentTenantAccessor: new SuperTenantAccessor());
     }
 
     public static async Task<(Kurum kurum, Il il, Tesis tesis)> SeedKurumIlTesisAsync(
@@ -98,4 +99,12 @@ public static class AgentTestSupport
         db.Set<AgentEntity>().RemoveRange(agentEntries);
         await db.SaveChangesAsync(ct);
     }
+}
+
+internal sealed class SuperTenantAccessor : ICurrentTenantAccessor
+{
+    public int? GetCurrentKurumId() => null;
+    public IReadOnlyList<int> GetAccessibleKurumIds() => new List<int>();
+    public bool IsSuperAdmin() => true;
+    public bool IsKurumAdmin() => false;
 }

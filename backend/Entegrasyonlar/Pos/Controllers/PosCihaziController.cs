@@ -16,15 +16,15 @@ public sealed class PosCihaziController : UIController
     public PosCihaziController(IPosCihaziService service, IMapper mapper) { _service = service; _mapper = mapper; }
 
     [HttpGet("cihazlar")]
-    [Permission(StructurePermissions.KasaBankaHesapYonetimi.View)]
+    [Permission(StructurePermissions.PosYonetimi.View)]
     public async Task<ActionResult<IEnumerable<PosCihaziDto>>> GetAll() => Ok(await _service.GetAllAsync());
 
     [HttpGet("cihazlar/{id:int}")]
-    [Permission(StructurePermissions.KasaBankaHesapYonetimi.View)]
+    [Permission(StructurePermissions.PosYonetimi.View)]
     public async Task<ActionResult<PosCihaziDto>> GetById(int id) => Ok(await _service.GetByIdAsync(id));
 
     [HttpPost("cihazlar")]
-    [Permission(StructurePermissions.KasaBankaHesapYonetimi.Manage)]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
     public async Task<ActionResult<PosCihaziDto>> Create([FromBody] PosCihaziKaydetRequest req)
     {
         var dto = _mapper.Map<PosCihaziDto>(req);
@@ -32,7 +32,7 @@ public sealed class PosCihaziController : UIController
     }
 
     [HttpPut("cihazlar/{id:int}")]
-    [Permission(StructurePermissions.KasaBankaHesapYonetimi.Manage)]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
     public async Task<ActionResult<PosCihaziDto>> Update(int id, [FromBody] PosCihaziKaydetRequest req)
     {
         var dto = _mapper.Map<PosCihaziDto>(req);
@@ -41,6 +41,6 @@ public sealed class PosCihaziController : UIController
     }
 
     [HttpDelete("cihazlar/{id:int}")]
-    [Permission(StructurePermissions.KasaBankaHesapYonetimi.Manage)]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
     public async Task<ActionResult> Delete(int id) { await _service.DeleteAsync(id); return Ok(); }
 }

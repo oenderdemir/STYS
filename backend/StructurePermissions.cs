@@ -624,4 +624,11 @@ public static class StructurePermissions
         public const string ResultWrite = "Agent.ResultWrite";
     }
 
+    public static class PosYonetimi
+    {
+        public const string Menu = "PosYonetimi.Menu";
+        public const string View = "PosYonetimi.View";
+        public const string Manage = "PosYonetimi.Manage";
+    }
+
 }

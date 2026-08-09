@@ -14,8 +14,13 @@ import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
+import { AgentYonetimiService } from '../agent-yonetimi/agent-yonetimi.service';
+import { AgentListDto } from '../agent-yonetimi/agent-yonetimi.dto';
 import { KasaBankaHesapModel, KasaBankaHesapTipi } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.service';
+import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
@@ -45,18 +50,24 @@ type PosTerminalFormState = PosTerminalKaydetRequest & { id?: number };
         TabsModule,
         TagModule,
         ToastModule,
-        ToolbarModule
+        ToolbarModule,
+        TooltipModule
     ],
     providers: [ConfirmationService, MessageService],
-    templateUrl: './pos-yonetimi.html'
+    templateUrl: './pos-yonetimi.html',
+    styleUrl: './pos-yonetimi.scss'
 })
 export class PosYonetimiComponent implements OnInit {
     private readonly service = inject(PosYonetimiService);
     private readonly kasaBankaHesapService = inject(KasaBankaHesaplariService);
+    private readonly tesisService = inject(TesisYonetimiService);
+    private readonly agentService = inject(AgentYonetimiService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
 
     cihazlar = signal<PosCihaziDto[]>([]);
+    tesisler = signal<TesisDto[]>([]);
+    agents = signal<AgentListDto[]>([]);
     cihazLoading = signal(false);
     dialogVisible = signal(false);
     submitted = signal(false);
@@ -78,6 +89,8 @@ export class PosYonetimiComponent implements OnInit {
     ngOnInit(): void {
         this.load();
         this.loadSaglayicilar();
+        this.loadTesisler();
+        this.loadAgents();
         this.loadKrediKartiHesaplari();
     }
 
@@ -96,6 +109,20 @@ export class PosYonetimiComponent implements OnInit {
         });
     }
 
+    loadTesisler(): void {
+        this.tesisService.getTesisler().subscribe({
+            next: (items) => this.tesisler.set(items),
+            error: () => this.tesisler.set([])
+        });
+    }
+
+    loadAgents(): void {
+        this.agentService.getAgents().subscribe({
+            next: (items) => this.agents.set(items),
+            error: () => this.agents.set([])
+        });
+    }
+
     loadKrediKartiHesaplari(): void {
         this.kasaBankaHesapService.getByTip('KrediKarti' as KasaBankaHesapTipi, true).subscribe({
             next: (items) => this.krediKartiHesaplari.set(items),
@@ -104,7 +131,7 @@ export class PosYonetimiComponent implements OnInit {
     }
 
     openNew(): void {
-        this.form = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
+        this.form = { tesisId: this.tesisler()[0]?.id ?? 0, saglayici: 0, ad: '', seriNo: '', agentId: undefined };
         this.selectedCihaz.set(null);
         this.terminals.set([]);
         this.submitted.set(false);
@@ -196,6 +223,14 @@ export class PosYonetimiComponent implements OnInit {
 
     getSaglayiciLabel(saglayici: number): string {
         return SaglayiciLabels[saglayici] ?? '?';
+    }
+
+    getTesisLabel(tesisId: number | null | undefined): string {
+        return this.tesisler().find((item) => item.id === tesisId)?.ad ?? '-';
+    }
+
+    getAgentLabel(agentId: number | null | undefined): string {
+        return this.agents().find((item) => item.id === agentId)?.ad ?? '-';
     }
 
     loadTerminals(cihazId: number): void {
@@ -333,6 +368,22 @@ export class PosYonetimiComponent implements OnInit {
 
     getSaglayiciOptions(): Array<{ label: string; value: string }> {
         return this.saglayicilar().map((item) => ({ label: `${item.ad} (${item.kod})`, value: item.kod }));
+    }
+
+    getAgentOptions(): Array<{ label: string; value: number }> {
+        return this.agents().map((agent) => ({ label: `${agent.ad}${agent.kurumAd ? ` • ${agent.kurumAd}` : ''}`, value: agent.id }));
+    }
+
+    onTesisChanged(): void {
+        const currentAgentId = this.form.agentId;
+        if (currentAgentId == null) {
+            return;
+        }
+
+        const valid = this.getAgentOptions().some((option) => option.value === currentAgentId);
+        if (!valid) {
+            this.form.agentId = undefined;
+        }
     }
 
     private createEmptyTerminalForm(cihaz?: PosCihaziDto | null): PosTerminalFormState {

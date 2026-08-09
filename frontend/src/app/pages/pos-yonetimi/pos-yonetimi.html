@@ -2,56 +2,57 @@
 <p-confirmDialog />
 
 <div class="card">
-    <p-toolbar styleClass="mb-4">
+    <p-toolbar styleClass="mb-3">
         <ng-template pTemplate="left">
-            <button pButton pRipple label="Yeni POS Cihazı" icon="pi pi-plus" class="p-button-success mr-2" (click)="openNew()"></button>
+            <button pButton pRipple label="Yeni POS Cihazı" icon="pi pi-plus" class="p-button-success" (click)="openNew()"></button>
         </ng-template>
     </p-toolbar>
 
-    <p-table
-        [value]="cihazlar()"
-        [loading]="cihazLoading()"
-        [paginator]="true"
-        [rows]="10"
-        dataKey="id"
-        styleClass="p-datatable-gridlines"
-        [tableStyle]="{ 'min-width': '60rem' }">
+    <p-table [value]="cihazlar()" [loading]="cihazLoading()" [paginator]="true" [rows]="10" dataKey="id"
+        styleClass="p-datatable-gridlines p-datatable-striped p-datatable-sm" [tableStyle]="{ 'min-width': '50rem' }">
         <ng-template pTemplate="header">
             <tr>
-                <th>Ad</th>
-                <th>Sağlayıcı</th>
-                <th>Seri No</th>
-                <th>Tesis</th>
-                <th>Agent</th>
-                <th>Durum</th>
-                <th style="width: 8rem">İşlem</th>
+                <th>Ad</th><th>Sağlayıcı</th><th>Seri No</th><th>Tesis</th><th>Agent</th><th>Durum</th><th style="width:7rem">İşlem</th>
             </tr>
         </ng-template>
         <ng-template pTemplate="body" let-c>
             <tr>
-                <td>{{ c.ad }}</td>
-                <td><p-tag [value]="getSaglayiciLabel(c.saglayici)" [severity]="c.saglayici === 0 ? 'info' : 'secondary'" /></td>
-                <td>{{ c.seriNo }}</td>
-                <td>{{ c.tesisAd ?? c.tesisId }}</td>
-                <td>{{ c.agentAd ?? c.agentId ?? '-' }}</td>
-                <td><p-tag [value]="c.aktifMi ? 'Aktif' : 'Pasif'" [severity]="c.aktifMi ? 'success' : 'danger'" /></td>
+                <td><span class="font-medium">{{ c.ad }}</span></td>
+                <td><p-tag [value]="getSaglayiciLabel(c.saglayici)" [severity]="c.saglayici===0?'info':'secondary'" /></td>
+                <td><code class="text-sm">{{ c.seriNo }}</code></td>
+                <td>{{ c.tesisAd ?? getTesisLabel(c.tesisId) }}</td>
+                <td>{{ c.agentAd ?? getAgentLabel(c.agentId) }}</td>
+                <td><p-tag [value]="c.aktifMi?'Aktif':'Pasif'" [severity]="c.aktifMi?'success':'danger'" /></td>
                 <td>
-                    <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="edit(c)" pTooltip="Düzenle"></button>
-                    <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-danger" (click)="deleteItem(c)" pTooltip="Pasifleştir"></button>
+                    <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-sm" (click)="edit(c)" pTooltip="Düzenle"></button>
+                    <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-text p-button-sm p-button-danger" (click)="deleteItem(c)" pTooltip="Pasifleştir"></button>
                 </td>
             </tr>
         </ng-template>
     </p-table>
 </div>
 
-<p-dialog
-    [visible]="dialogVisible()"
-    (onHide)="closeDialog()"
+<p-dialog [visible]="dialogVisible()" (onHide)="closeDialog()"
     [header]="form.id ? 'POS Cihazı Detayı' : 'Yeni POS Cihazı'"
-    [modal]="true"
-    styleClass="p-fluid"
-    [style]="{ width: '980px' }">
+    [modal]="true" styleClass="p-fluid pos-dialog" [dismissableMask]="true">
     <ng-template pTemplate="content">
+        @if (selectedCihaz()) {
+            <div class="pos-header">
+                <div class="pos-header-info">
+                    <div class="pos-header-title" pTooltip="{{ selectedCihaz()?.ad }}">{{ selectedCihaz()?.ad }}</div>
+                    <div class="pos-header-sub" pTooltip="Seri: {{ selectedCihaz()?.seriNo }}">
+                        {{ selectedCihaz()?.seriNo }} &middot; {{ selectedCihaz()?.tesisAd ?? getTesisLabel(selectedCihaz()?.tesisId) }}
+                        &middot; {{ selectedCihaz()?.agentAd ?? getAgentLabel(selectedCihaz()?.agentId) }}
+                    </div>
+                </div>
+                <div class="pos-header-badges">
+                    <p-tag [value]="selectedCihaz()?.aktifMi?'Aktif':'Pasif'" [severity]="selectedCihaz()?.aktifMi?'success':'danger'" />
+                    <p-tag [value]="selectedCihaz()?.eslesmeOnayliMi?'Eşleşmiş':'Eşleşmemiş'" [severity]="selectedCihaz()?.eslesmeOnayliMi?'success':'warn'" />
+                    <p-tag [value]="getSaglayiciLabel(selectedCihaz()?.saglayici??0)" severity="info" />
+                </div>
+            </div>
+        }
+
         <p-tabs value="general">
             <p-tablist>
                 <p-tab value="general">Genel Bilgiler</p-tab>
@@ -59,163 +60,85 @@
                 <p-tab value="connection">Bağlantı</p-tab>
             </p-tablist>
             <p-tabpanels>
+                <!-- GENEL BİLGİLER -->
                 <p-tabpanel value="general">
                     <div class="grid">
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="ad">Cihaz Adı</label>
-                                <input pInputText id="ad" [(ngModel)]="form.ad" required [class.ng-invalid]="submitted() && !form.ad.trim()" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="seriNo">Seri No</label>
-                                <input pInputText id="seriNo" [(ngModel)]="form.seriNo" required [class.ng-invalid]="submitted() && !form.seriNo.trim()" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="saglayici">Sağlayıcı</label>
-                                <p-select id="saglayici" [options]="cihazSaglayiciOptions" [(ngModel)]="form.saglayici" styleClass="w-full"></p-select>
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="tesisId">Tesis ID</label>
-                                <input pInputText id="tesisId" type="number" [(ngModel)]="form.tesisId" required [class.ng-invalid]="submitted() && form.tesisId <= 0" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="agentId">Agent ID</label>
-                                <input pInputText id="agentId" type="number" [(ngModel)]="form.agentId" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="ipAdresi">IP Adresi</label>
-                                <input pInputText id="ipAdresi" [(ngModel)]="form.ipAdresi" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="httpPort">HTTP Port</label>
-                                <input pInputText id="httpPort" type="number" [(ngModel)]="form.httpPort" />
-                            </div>
-                        </div>
-                        <div class="col-12 md:col-6">
-                            <div class="field">
-                                <label for="httpsPort">HTTPS Port</label>
-                                <input pInputText id="httpsPort" type="number" [(ngModel)]="form.httpsPort" />
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <div class="field">
-                                <label for="fingerprint">Fingerprint</label>
-                                <input pInputText id="fingerprint" [(ngModel)]="form.fingerprint" />
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <div class="field">
-                                <label for="aciklama">Açıklama</label>
-                                <input pInputText id="aciklama" [(ngModel)]="form.aciklama" />
-                            </div>
-                        </div>
+                        <div class="col-12 md:col-6"><div class="field"><label for="ad">Cihaz Adı *</label><input pInputText id="ad" [(ngModel)]="form.ad" required [class.ng-invalid]="submitted()&&!form.ad.trim()" /></div></div>
+                        <div class="col-12 md:col-6"><div class="field"><label for="seriNo">Seri No *</label><input pInputText id="seriNo" [(ngModel)]="form.seriNo" required [class.ng-invalid]="submitted()&&!form.seriNo.trim()" /></div></div>
+                        <div class="col-12 md:col-6"><div class="field"><label for="saglayici">Sağlayıcı</label><p-select id="saglayici" [options]="cihazSaglayiciOptions" [(ngModel)]="form.saglayici" styleClass="w-full" /></div></div>
+                        <div class="col-12 md:col-6"><div class="field"><label for="tesisId">Tesis *</label><p-select inputId="tesisId" [options]="tesisler()" optionLabel="ad" optionValue="id" appendTo="body" [filter]="true" [(ngModel)]="form.tesisId" styleClass="w-full" placeholder="Tesis seçin" (onChange)="onTesisChanged()" /></div></div>
+                        <div class="col-12 md:col-6"><div class="field"><label for="agentId">Bağlı Agent</label><p-select inputId="agentId" [options]="getAgentOptions()" optionLabel="label" optionValue="value" appendTo="body" [filter]="true" [showClear]="true" [(ngModel)]="form.agentId" styleClass="w-full" placeholder="Agent seçin" /><small class="text-color-secondary">Cihazın bağlı olduğu agent. Boş bırakılabilir.</small></div></div>
+                        <div class="col-12 md:col-6"><div class="field"><label for="ipAdresi">IP Adresi</label><input pInputText id="ipAdresi" [(ngModel)]="form.ipAdresi" /></div></div>
+                        <div class="col-6 md:col-3"><div class="field"><label for="httpPort">HTTP Port</label><input pInputText id="httpPort" type="number" [(ngModel)]="form.httpPort" /></div></div>
+                        <div class="col-6 md:col-3"><div class="field"><label for="httpsPort">HTTPS Port</label><input pInputText id="httpsPort" type="number" [(ngModel)]="form.httpsPort" /></div></div>
+                        <div class="col-12"><div class="field"><label for="fingerprint">Fingerprint</label><input pInputText id="fingerprint" [(ngModel)]="form.fingerprint" /></div></div>
+                        <div class="col-12"><div class="field"><label for="aciklama">Açıklama</label><input pInputText id="aciklama" [(ngModel)]="form.aciklama" /></div></div>
                     </div>
                 </p-tabpanel>
 
+                <!-- TERMİNALLER -->
                 <p-tabpanel value="terminals">
                     @if (selectedCihaz()) {
                         <div class="flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <div class="text-lg font-semibold">{{ selectedCihaz()?.ad }}</div>
-                                <div class="text-sm text-color-secondary">Terminal yönetimi cihaz üzerinden yapılır.</div>
-                            </div>
-                            <button pButton pRipple label="Yeni Terminal" icon="pi pi-plus" severity="secondary" [outlined]="true" (click)="openNewTerminal()"></button>
+                            <span class="font-medium">{{ terminals().length }} terminal</span>
+                            <button pButton pRipple label="Terminal Ekle" icon="pi pi-plus" severity="secondary" [outlined]="true" (click)="openNewTerminal()"></button>
                         </div>
-
-                        <p-table [value]="terminals()" [loading]="terminalsLoading()" [paginator]="true" [rows]="5" styleClass="p-datatable-sm">
+                        @if (terminals().length === 0 && !terminalsLoading()) {
+                            <div class="empty-state">
+                                <i class="pi pi-credit-card mb-2" style="font-size:2rem"></i>
+                                <div>Henüz terminal tanımlanmamış.</div>
+                            </div>
+                        }
+                        <p-table [value]="terminals()" [loading]="terminalsLoading()" [paginator]="true" [rows]="5"
+                            styleClass="p-datatable-gridlines p-datatable-sm" [tableStyle]="{ 'min-width': '40rem' }">
                             <ng-template pTemplate="header">
                                 <tr>
-                                    <th>Acquirer/Banka</th>
-                                    <th>TerminalId</th>
-                                    <th>MerchantId</th>
-                                    <th>Kredi Kartı Hesabı</th>
-                                    <th>Aktif</th>
-                                    <th style="width: 12rem">İşlem</th>
+                                    <th>Banka / Acquirer</th><th>Terminal ID</th><th>Merchant ID</th><th>Kredi Kartı Hesabı</th><th>Durum</th><th style="width:7rem">İşlem</th>
                                 </tr>
                             </ng-template>
-                            <ng-template pTemplate="body" let-terminal>
+                            <ng-template pTemplate="body" let-t>
                                 <tr>
-                                    <td>
-                                        <div class="font-medium">{{ getTerminalSaglayiciLabel(terminal.saglayiciKodu) }}</div>
-                                        <div class="text-xs text-color-secondary">{{ terminal.saglayiciKodu }}</div>
-                                    </td>
-                                    <td>{{ terminal.terminalId }}</td>
-                                    <td>{{ terminal.merchantId ?? '-' }}</td>
-                                    <td>{{ terminal.kasaBankaHesapAd ?? terminal.kasaBankaHesapId }}</td>
-                                    <td><p-tag [value]="terminal.aktifMi ? 'Aktif' : 'Pasif'" [severity]="terminal.aktifMi ? 'success' : 'danger'" /></td>
-                                    <td>
-                                        <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="editTerminal(terminal)" pTooltip="Düzenle"></button>
-                                        <button pButton pRipple icon="pi pi-link" class="p-button-rounded p-button-secondary mr-1" (click)="startPairing(terminal)" pTooltip="Eşleştir"></button>
-                                        <button pButton pRipple icon="pi pi-refresh" class="p-button-rounded p-button-info mr-1" (click)="checkPairing(terminal)" pTooltip="Eşleşme Kontrolü"></button>
-                                        <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-danger" (click)="deleteTerminal(terminal)" pTooltip="Sil"></button>
+                                    <td><span class="font-medium">{{ getTerminalSaglayiciLabel(t.saglayiciKodu) }}</span></td>
+                                    <td><code class="text-sm">{{ t.terminalId }}</code></td>
+                                    <td>{{ t.merchantId ?? '-' }}</td>
+                                    <td>{{ t.kasaBankaHesapAd ?? '#'+t.kasaBankaHesapId }}</td>
+                                    <td><p-tag [value]="t.aktifMi?'Aktif':'Pasif'" [severity]="t.aktifMi?'success':'danger'" /></td>
+                                    <td class="terminal-actions">
+                                        <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-sm" (click)="editTerminal(t)" pTooltip="Düzenle"></button>
+                                        <button pButton pRipple icon="pi pi-link" class="p-button-rounded p-button-text p-button-sm" (click)="startPairing(t)" pTooltip="Eşleştir"></button>
+                                        <button pButton pRipple icon="pi pi-refresh" class="p-button-rounded p-button-text p-button-sm" (click)="checkPairing(t)" pTooltip="Eşleşme Kontrolü"></button>
+                                        <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-text p-button-sm p-button-danger" (click)="deleteTerminal(t)" pTooltip="Sil"></button>
                                     </td>
                                 </tr>
                             </ng-template>
                         </p-table>
                     } @else {
-                        <p class="text-color-secondary">Terminal yönetimi için önce cihazı kaydedin.</p>
+                        <div class="empty-state">Cihazı kaydettikten sonra terminal ekleyebilirsiniz.</div>
                     }
                 </p-tabpanel>
 
+                <!-- BAĞLANTI -->
                 <p-tabpanel value="connection">
                     @if (selectedCihaz()) {
-                        <div class="grid">
-                            <div class="col-12 md:col-6">
-                                <div class="field">
-                                    <label>Fingerprint</label>
-                                    <div class="p-3 surface-ground border-round">{{ selectedCihaz()?.fingerprint ?? '-' }}</div>
-                                </div>
+                        <div class="card-panel">
+                            <div class="card-row"><span class="card-label">Fingerprint</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.fingerprint">{{ selectedCihaz()?.fingerprint || 'Tanımlanmamış' }}</span></div>
+                            <div class="card-row"><span class="card-label">Target Fingerprint</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.targetFingerprint">{{ selectedCihaz()?.targetFingerprint || 'Tanımlanmamış' }}</span></div>
+                            <div class="card-row"><span class="card-label">Pairing Code</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.pairingCode">{{ selectedCihaz()?.pairingCode || '-' }}</span></div>
+                            <div class="card-row"><span class="card-label">Pairing ID</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.pairingId">{{ selectedCihaz()?.pairingId ?? '-' }}</span></div>
+                            <div class="card-row">
+                                <span class="card-label">Durum</span>
+                                <span class="card-value">
+                                    <p-tag [value]="selectedCihaz()?.aktifMi?'Aktif':'Pasif'" [severity]="selectedCihaz()?.aktifMi?'success':'danger'" />
+                                    <span class="ml-2">{{ selectedCihaz()?.eslesmeOnayliMi?'Eşleşmiş':'Eşleşmemiş' }}</span>
+                                </span>
                             </div>
-                            <div class="col-12 md:col-6">
-                                <div class="field">
-                                    <label>Target Fingerprint</label>
-                                    <div class="p-3 surface-ground border-round">{{ selectedCihaz()?.targetFingerprint ?? '-' }}</div>
-                                </div>
-                            </div>
-                            <div class="col-12 md:col-6">
-                                <div class="field">
-                                    <label>Pairing Code</label>
-                                    <div class="p-3 surface-ground border-round">{{ selectedCihaz()?.pairingCode ?? '-' }}</div>
-                                </div>
-                            </div>
-                            <div class="col-12 md:col-6">
-                                <div class="field">
-                                    <label>Pairing Id</label>
-                                    <div class="p-3 surface-ground border-round">{{ selectedCihaz()?.pairingId ?? '-' }}</div>
-                                </div>
-                            </div>
-                            <div class="col-12 md:col-6">
-                                <div class="field">
-                                    <label>Durum</label>
-                                    <div class="p-3 surface-ground border-round">
-                                        <p-tag [value]="selectedCihaz()?.aktifMi ? 'Aktif' : 'Pasif'" [severity]="selectedCihaz()?.aktifMi ? 'success' : 'danger'" />
-                                        <span class="ml-2" [class.text-green-600]="selectedCihaz()?.eslesmeOnayliMi" [class.text-orange-600]="!selectedCihaz()?.eslesmeOnayliMi">
-                                            {{ selectedCihaz()?.eslesmeOnayliMi ? 'Eşleşmiş' : 'Eşleşmemiş' }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12 md:col-6">
-                                <div class="field">
-                                    <label>Son Bağlantı</label>
-                                    <div class="p-3 surface-ground border-round">{{ selectedCihaz()?.sonBaglantiTarihi ? (selectedCihaz()?.sonBaglantiTarihi | date:'short') : '-' }}</div>
-                                </div>
+                            <div class="card-row">
+                                <span class="card-label">Son Bağlantı</span>
+                                <span class="card-value" [class.card-value-muted]="!selectedCihaz()?.sonBaglantiTarihi">{{ selectedCihaz()?.sonBaglantiTarihi ? (selectedCihaz()?.sonBaglantiTarihi|date:'short') : '-' }}</span>
                             </div>
                         </div>
                     } @else {
-                        <p class="text-color-secondary">Bağlantı bilgileri için önce cihazı kaydedin.</p>
+                        <div class="empty-state">Cihazı kaydettikten sonra bağlantı bilgileri görüntülenir.</div>
                     }
                 </p-tabpanel>
             </p-tabpanels>
@@ -227,73 +150,19 @@
     </ng-template>
 </p-dialog>
 
-<p-dialog
-    [visible]="terminalDialogVisible()"
-    (onHide)="terminalDialogVisible.set(false)"
-    [header]="terminalForm.id ? 'Terminal Düzenle' : 'Yeni Terminal'"
-    [modal]="true"
-    styleClass="p-fluid"
-    [style]="{ width: '760px' }">
+<!-- TERMİNAL DİALOG -->
+<p-dialog [visible]="terminalDialogVisible()" (onHide)="terminalDialogVisible.set(false)"
+    [header]="terminalForm.id?'Terminal Düzenle':'Yeni Terminal'"
+    [modal]="true" styleClass="p-fluid pos-terminal-dialog" [dismissableMask]="true">
     <ng-template pTemplate="content">
         <div class="grid">
-            <div class="col-12 md:col-6">
-                <div class="field">
-                    <label for="terminalSaglayici">Acquirer/Banka</label>
-                    <p-select
-                        inputId="terminalSaglayici"
-                        [options]="getSaglayiciOptions()"
-                        optionLabel="label"
-                        optionValue="value"
-                        appendTo="body"
-                        [(ngModel)]="terminalForm.saglayiciKodu"
-                        styleClass="w-full"
-                        placeholder="Sağlayıcı seçin" />
-                </div>
-            </div>
-            <div class="col-12 md:col-6">
-                <div class="field">
-                    <label for="terminalHesap">Kredi Kartı Hesabı</label>
-                    <p-select
-                        inputId="terminalHesap"
-                        [options]="getKrediKartiHesapOptions()"
-                        optionLabel="label"
-                        optionValue="value"
-                        appendTo="body"
-                        [(ngModel)]="terminalForm.kasaBankaHesapId"
-                        styleClass="w-full"
-                        placeholder="Hesap seçin" />
-                </div>
-            </div>
-            <div class="col-12 md:col-6">
-                <div class="field">
-                    <label for="terminalId">TerminalId</label>
-                    <input pInputText id="terminalId" [(ngModel)]="terminalForm.terminalId" required [class.ng-invalid]="terminalSubmitted() && !terminalForm.terminalId.trim()" />
-                </div>
-            </div>
-            <div class="col-12 md:col-6">
-                <div class="field">
-                    <label for="merchantId">MerchantId</label>
-                    <input pInputText id="merchantId" [(ngModel)]="terminalForm.merchantId" />
-                </div>
-            </div>
-            <div class="col-12">
-                <div class="field">
-                    <label for="terminalAdi">Terminal Adı</label>
-                    <input pInputText id="terminalAdi" [(ngModel)]="terminalForm.ad" required [class.ng-invalid]="terminalSubmitted() && !terminalForm.ad.trim()" />
-                </div>
-            </div>
-            <div class="col-12">
-                <div class="field">
-                    <label for="sourceFingerprint">Bağlantı Fingerprint</label>
-                    <input pInputText id="sourceFingerprint" [(ngModel)]="terminalForm.sourceFingerprint" />
-                </div>
-            </div>
-            <div class="col-12">
-                <div class="field-checkbox">
-                    <p-checkbox inputId="terminalAktifMi" [binary]="true" [(ngModel)]="terminalForm.aktifMi" />
-                    <label for="terminalAktifMi">Aktif</label>
-                </div>
-            </div>
+            <div class="col-12 md:col-6"><div class="field"><label for="terminalSaglayici">Acquirer / Banka *</label><p-select inputId="terminalSaglayici" [options]="getSaglayiciOptions()" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="terminalForm.saglayiciKodu" styleClass="w-full" placeholder="Sağlayıcı seçin" /></div></div>
+            <div class="col-12 md:col-6"><div class="field"><label for="terminalHesap">Kredi Kartı Hesabı *</label><p-select inputId="terminalHesap" [options]="getKrediKartiHesapOptions()" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="terminalForm.kasaBankaHesapId" styleClass="w-full" placeholder="Hesap seçin" /></div></div>
+            <div class="col-12 md:col-6"><div class="field"><label for="terminalId">Terminal ID *</label><input pInputText id="terminalId" [(ngModel)]="terminalForm.terminalId" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.terminalId.trim()" /></div></div>
+            <div class="col-12 md:col-6"><div class="field"><label for="merchantId">Merchant ID</label><input pInputText id="merchantId" [(ngModel)]="terminalForm.merchantId" /></div></div>
+            <div class="col-12 md:col-6"><div class="field"><label for="terminalAdi">Terminal Adı *</label><input pInputText id="terminalAdi" [(ngModel)]="terminalForm.ad" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.ad.trim()" /></div></div>
+            <div class="col-12 md:col-6"><div class="field"><label for="sourceFingerprint">Bağlantı Fingerprint</label><input pInputText id="sourceFingerprint" [(ngModel)]="terminalForm.sourceFingerprint" /></div></div>
+            <div class="col-12"><div class="field-checkbox mt-1"><p-checkbox inputId="terminalAktifMi" [binary]="true" [(ngModel)]="terminalForm.aktifMi" /><label for="terminalAktifMi">Aktif</label></div></div>
         </div>
     </ng-template>
     <ng-template pTemplate="footer">

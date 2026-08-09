@@ -1,0 +1,122 @@
+::ng-deep .pos-dialog {
+    max-width: 960px;
+    width: 95vw !important;
+}
+
+::ng-deep .pos-terminal-dialog {
+    max-width: 680px;
+    width: 90vw !important;
+}
+
+.pos-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--surface-ground, #f8f9fa);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+
+    &-info {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    &-title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &-sub {
+        font-size: 0.8rem;
+        color: var(--text-color-secondary, #6b7280);
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &-badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+}
+
+.card-panel {
+    background: var(--surface-ground, #f8f9fa);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+
+    & + & {
+        margin-top: 0.75rem;
+    }
+}
+
+.card-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+
+    & + & {
+        border-top: 1px solid var(--surface-border, #e5e7eb);
+    }
+}
+
+.card-label {
+    font-size: 0.8rem;
+    color: var(--text-color-secondary, #6b7280);
+    min-width: 120px;
+}
+
+.card-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+}
+
+.card-value-muted {
+    color: var(--text-color-secondary, #9ca3af);
+    font-style: italic;
+}
+
+.terminal-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-color-secondary, #6b7280);
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .pos-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .card-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .card-value {
+        text-align: left;
+        max-width: 100%;
+    }
+}

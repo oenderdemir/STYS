@@ -96,6 +96,7 @@ import { TesisYonetimi } from './app/pages/tesis-yonetimi/tesis-yonetimi';
 import { KurumYonetimi } from './app/pages/kurum-yonetimi/kurum-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
 import { AgentYonetimiComponent } from './app/pages/agent-yonetimi/agent-yonetimi';
+import { PosYonetimiComponent } from './app/pages/pos-yonetimi/pos-yonetimi';
 
 export const appRoutes: Routes = [
     { path: 'auth', canActivate: [guestGuard], loadChildren: () => import('./app/pages/auth/auth.routes') },
@@ -210,6 +211,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/muavin-defter', component: MuavinDefterComponent, data: { breadcrumb: ['Muhasebe Yönetimi', 'Muavin Defter'] } },
             { path: 'lisans-yonetimi', component: LisansYonetimi, data: { breadcrumb: ['Sistem', 'Lisans Yonetimi'] } },
             { path: 'agent-yonetimi', component: AgentYonetimiComponent, data: { breadcrumb: ['Sistem', 'Agent Yonetimi'] } },
+            { path: 'pos-yonetimi', component: PosYonetimiComponent, data: { breadcrumb: ['Sistem', 'POS Yonetimi'] } },
             { path: 'uikit', loadChildren: () => import('./app/pages/uikit/uikit.routes'), data: { breadcrumb: ['Ana Menu', 'UI Kit'] } },
             { path: 'documentation', component: Documentation, data: { breadcrumb: ['Sistem', 'Dokumantasyon'] } },
             { path: 'pages', loadChildren: () => import('./app/pages/pages.routes'), data: { breadcrumb: ['Ana Menu', 'Sayfalar'] } }

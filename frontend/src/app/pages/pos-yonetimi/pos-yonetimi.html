@@ -1,0 +1,51 @@
+<p-toast />
+<p-confirmDialog />
+
+<div class="card">
+    <p-toolbar styleClass="mb-4">
+        <ng-template pTemplate="left">
+            <button pButton pRipple label="Yeni POS Cihazı" icon="pi pi-plus" class="p-button-success" (click)="openNew()"></button>
+        </ng-template>
+    </p-toolbar>
+
+    <p-table [value]="cihazlar()" [loading]="loading()" [paginator]="true" [rows]="10" dataKey="id" styleClass="p-datatable-gridlines" [tableStyle]="{ 'min-width': '50rem' }">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Ad</th><th>Sağlayıcı</th><th>Seri No</th><th>IP</th><th>Tesis</th><th>Agent</th><th>Durum</th><th style="width:8rem">İşlem</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-c>
+            <tr>
+                <td>{{ c.ad }}</td>
+                <td><p-tag [value]="getSaglayiciLabel(c.saglayici)" [severity]="c.saglayici === 0 ? 'info' : 'secondary'" /></td>
+                <td>{{ c.seriNo }}</td>
+                <td>{{ c.ipAdresi ?? '-' }}</td>
+                <td>{{ c.tesisAd ?? c.tesisId }}</td>
+                <td>{{ c.agentAd ?? c.agentId ?? '-' }}</td>
+                <td><p-tag [value]="c.aktifMi ? 'Aktif' : 'Pasif'" [severity]="c.aktifMi ? 'success' : 'danger'" /></td>
+                <td>
+                    <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="edit(c)" pTooltip="Düzenle"></button>
+                    <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-danger" (click)="deleteItem(c)" pTooltip="Sil"></button>
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<p-dialog [visible]="dialogVisible()" (onHide)="dialogVisible.set(false)" [header]="form.id ? 'POS Cihazı Düzenle' : 'Yeni POS Cihazı'" [modal]="true" styleClass="p-fluid" [style]="{ width: '500px' }">
+    <ng-template pTemplate="content">
+        <div class="field"><label for="ad">Cihaz Adı</label><input pInputText id="ad" [(ngModel)]="form.ad" required [class.ng-invalid]="submitted() && !form.ad" /></div>
+        <div class="field"><label for="seriNo">Seri No</label><input pInputText id="seriNo" [(ngModel)]="form.seriNo" required /></div>
+        <div class="field"><label for="saglayici">Sağlayıcı</label><p-select id="saglayici" [options]="saglayiciOptions" [(ngModel)]="form.saglayici" styleClass="w-full" /></div>
+        <div class="field"><label for="tesisId">Tesis ID</label><input pInputText id="tesisId" type="number" [(ngModel)]="form.tesisId" /></div>
+        <div class="field"><label for="ipAdresi">IP Adresi</label><input pInputText id="ipAdresi" [(ngModel)]="form.ipAdresi" /></div>
+        <div class="field grid">
+            <div class="col-6"><label for="httpPort">HTTP Port</label><input pInputText id="httpPort" type="number" [(ngModel)]="form.httpPort" /></div>
+            <div class="col-6"><label for="httpsPort">HTTPS Port</label><input pInputText id="httpsPort" type="number" [(ngModel)]="form.httpsPort" /></div>
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <button pButton pRipple label="İptal" icon="pi pi-times" class="p-button-text" (click)="dialogVisible.set(false)"></button>
+        <button pButton pRipple label="Kaydet" icon="pi pi-check" class="p-button-success" (click)="save()"></button>
+    </ng-template>
+</p-dialog>

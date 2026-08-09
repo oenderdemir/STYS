@@ -1483,7 +1483,9 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasIndex("KasaBankaHesapId");
 
-                    b.HasIndex("PosCihaziId");
+                    b.HasIndex("PosCihaziId", "SerialNumber")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("KurumId", "SaglayiciKodu", "SerialNumber")
                         .IsUnique()
@@ -9569,7 +9571,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasOne("STYS.Entegrasyonlar.Pos.Entities.PosCihazi", "PosCihazi")
                         .WithMany("Terminaller")
-                        .HasForeignKey("PosCihaziId");
+                        .HasForeignKey("PosCihaziId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("STYS.Tesisler.Entities.Tesis", "Tesis")
                         .WithMany()

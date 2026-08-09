@@ -10,10 +10,17 @@ public sealed class PosSaglayiciDto
 public sealed class PosTerminalDto
 {
     public int Id { get; set; }
+    public int KurumId { get; set; }
     public int TesisId { get; set; }
+    public string? TesisAd { get; set; }
+    public int? PosCihaziId { get; set; }
+    public string? PosCihaziAd { get; set; }
     public int KasaBankaHesapId { get; set; }
+    public string? KasaBankaHesapAd { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
+    public string TerminalId { get; set; } = string.Empty;
+    public string? MerchantId { get; set; }
     public string SerialNumber { get; set; } = string.Empty;
     public string? SourceFingerprint { get; set; }
     public string? SourceTerminalReference { get; set; }
@@ -25,10 +32,13 @@ public sealed class PosTerminalDto
 
 public sealed class PosTerminalKaydetRequest
 {
+    public int? PosCihaziId { get; set; }
     public int TesisId { get; set; }
     public int KasaBankaHesapId { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
+    public string TerminalId { get; set; } = string.Empty;
+    public string? MerchantId { get; set; }
     public string SerialNumber { get; set; } = string.Empty;
     public string? SourceFingerprint { get; set; }
     public string? SourceTerminalReference { get; set; }

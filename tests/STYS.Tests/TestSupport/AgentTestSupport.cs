@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using AgentEntity = STYS.Agent.Entities.Agent;
@@ -16,6 +17,7 @@ public static class AgentTestSupport
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
             .UseSqlServer(connectionString)
+            .ConfigureWarnings(x => x.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
         return new StysAppDbContext(options, currentTenantAccessor: new SuperTenantAccessor());
     }

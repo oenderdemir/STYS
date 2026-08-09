@@ -1,8 +1,9 @@
+using TOD.Platform.Persistence.Rdbms.Dto;
+
 namespace STYS.Entegrasyonlar.Pos.Dtos;
 
-public sealed class PosCihaziDto
+public sealed class PosCihaziDto : BaseRdbmsDto<int>
 {
-    public int Id { get; set; }
     public int KurumId { get; set; }
     public int TesisId { get; set; }
     public string? TesisAd { get; set; }

@@ -1,3 +1,4 @@
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Services;
@@ -9,31 +10,37 @@ namespace STYS.Entegrasyonlar.Pos.Controllers;
 [Route("ui/pos")]
 public sealed class PosCihaziController : UIController
 {
-    private readonly PosCihaziService _service;
+    private readonly IPosCihaziService _service;
+    private readonly IMapper _mapper;
 
-    public PosCihaziController(PosCihaziService service) { _service = service; }
+    public PosCihaziController(IPosCihaziService service, IMapper mapper) { _service = service; _mapper = mapper; }
 
     [HttpGet("cihazlar")]
     [Permission(StructurePermissions.KasaBankaHesapYonetimi.View)]
-    public async Task<ActionResult<List<PosCihaziDto>>> GetAll([FromQuery] int? tesisId, CancellationToken ct) =>
-        Ok(await _service.GetAllAsync(tesisId, ct));
+    public async Task<ActionResult<IEnumerable<PosCihaziDto>>> GetAll() => Ok(await _service.GetAllAsync());
 
     [HttpGet("cihazlar/{id:int}")]
     [Permission(StructurePermissions.KasaBankaHesapYonetimi.View)]
-    public async Task<ActionResult<PosCihaziDto>> GetById(int id, CancellationToken ct) =>
-        Ok(await _service.GetByIdAsync(id, ct));
+    public async Task<ActionResult<PosCihaziDto>> GetById(int id) => Ok(await _service.GetByIdAsync(id));
 
     [HttpPost("cihazlar")]
     [Permission(StructurePermissions.KasaBankaHesapYonetimi.Manage)]
-    public async Task<ActionResult<PosCihaziDto>> Create([FromBody] PosCihaziKaydetRequest req, CancellationToken ct) =>
-        Ok(await _service.CreateAsync(req, ct));
+    public async Task<ActionResult<PosCihaziDto>> Create([FromBody] PosCihaziKaydetRequest req)
+    {
+        var dto = _mapper.Map<PosCihaziDto>(req);
+        return Ok(await _service.AddAsync(dto));
+    }
 
     [HttpPut("cihazlar/{id:int}")]
     [Permission(StructurePermissions.KasaBankaHesapYonetimi.Manage)]
-    public async Task<ActionResult<PosCihaziDto>> Update(int id, [FromBody] PosCihaziKaydetRequest req, CancellationToken ct) =>
-        Ok(await _service.UpdateAsync(id, req, ct));
+    public async Task<ActionResult<PosCihaziDto>> Update(int id, [FromBody] PosCihaziKaydetRequest req)
+    {
+        var dto = _mapper.Map<PosCihaziDto>(req);
+        dto.Id = id;
+        return Ok(await _service.UpdateAsync(dto));
+    }
 
     [HttpDelete("cihazlar/{id:int}")]
     [Permission(StructurePermissions.KasaBankaHesapYonetimi.Manage)]
-    public async Task<ActionResult> Delete(int id, CancellationToken ct) { await _service.DeleteAsync(id, ct); return Ok(); }
+    public async Task<ActionResult> Delete(int id) { await _service.DeleteAsync(id); return Ok(); }
 }

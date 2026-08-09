@@ -4,79 +4,355 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
+import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
-import { SelectModule } from 'primeng/select';
-import { PosCihaziDto, PosCihaziKaydetRequest, SaglayiciLabels } from './pos-yonetimi.dto';
+import { KasaBankaHesapModel, KasaBankaHesapTipi } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.dto';
+import { KasaBankaHesaplariService } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.service';
+import {
+    PosCihaziDto,
+    PosCihaziKaydetRequest,
+    PosSaglayiciDto,
+    PosTerminalDto,
+    PosTerminalKaydetRequest,
+    SaglayiciLabels
+} from './pos-yonetimi.dto';
 import { PosYonetimiService } from './pos-yonetimi.service';
+
+type PosCihaziFormState = PosCihaziKaydetRequest & { id?: number };
+type PosTerminalFormState = PosTerminalKaydetRequest & { id?: number };
 
 @Component({
     selector: 'app-pos-yonetimi',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputTextModule, TableModule, TagModule, ToastModule, ToolbarModule, SelectModule],
+    imports: [
+        CommonModule,
+        FormsModule,
+        ButtonModule,
+        CheckboxModule,
+        ConfirmDialogModule,
+        DialogModule,
+        InputTextModule,
+        SelectModule,
+        TableModule,
+        TabsModule,
+        TagModule,
+        ToastModule,
+        ToolbarModule
+    ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './pos-yonetimi.html'
 })
 export class PosYonetimiComponent implements OnInit {
     private readonly service = inject(PosYonetimiService);
+    private readonly kasaBankaHesapService = inject(KasaBankaHesaplariService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
 
     cihazlar = signal<PosCihaziDto[]>([]);
-    loading = signal(false);
+    cihazLoading = signal(false);
     dialogVisible = signal(false);
     submitted = signal(false);
-    saglayiciOptions = [{ label: 'PAVO', value: 0 }, { label: 'Diğer', value: 1 }];
+    selectedCihaz = signal<PosCihaziDto | null>(null);
 
-    form: PosCihaziKaydetRequest & { id?: number } = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
+    saglayicilar = signal<PosSaglayiciDto[]>([]);
+    krediKartiHesaplari = signal<KasaBankaHesapModel[]>([]);
+    terminals = signal<PosTerminalDto[]>([]);
+    terminalsLoading = signal(false);
+    terminalDialogVisible = signal(false);
+    terminalSubmitted = signal(false);
+    terminalSaving = signal(false);
 
-    ngOnInit(): void { this.load(); }
+    form: PosCihaziFormState = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
+    terminalForm: PosTerminalFormState = this.createEmptyTerminalForm();
+
+    readonly cihazSaglayiciOptions = [{ label: 'PAVO', value: 0 }, { label: 'Diğer', value: 1 }];
+
+    ngOnInit(): void {
+        this.load();
+        this.loadSaglayicilar();
+        this.loadKrediKartiHesaplari();
+    }
 
     load(): void {
-        this.loading.set(true);
-        this.service.getAll().pipe(finalize(() => this.loading.set(false))).subscribe({
-            next: d => this.cihazlar.set(d),
-            error: e => this.messageService.add({ severity: 'error', summary: 'Hata', detail: e.message })
+        this.cihazLoading.set(true);
+        this.service.getAll().pipe(finalize(() => this.cihazLoading.set(false))).subscribe({
+            next: (items) => this.cihazlar.set(items),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    loadSaglayicilar(): void {
+        this.service.getSaglayicilar().subscribe({
+            next: (items) => this.saglayicilar.set(items),
+            error: () => this.saglayicilar.set([])
+        });
+    }
+
+    loadKrediKartiHesaplari(): void {
+        this.kasaBankaHesapService.getByTip('KrediKarti' as KasaBankaHesapTipi, true).subscribe({
+            next: (items) => this.krediKartiHesaplari.set(items),
+            error: () => this.krediKartiHesaplari.set([])
         });
     }
 
     openNew(): void {
         this.form = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
+        this.selectedCihaz.set(null);
+        this.terminals.set([]);
         this.submitted.set(false);
         this.dialogVisible.set(true);
     }
 
     edit(cihaz: PosCihaziDto): void {
-        this.form = { id: cihaz.id, tesisId: cihaz.tesisId, agentId: cihaz.agentId, saglayici: cihaz.saglayici, ad: cihaz.ad, seriNo: cihaz.seriNo, ipAdresi: cihaz.ipAdresi, httpPort: cihaz.httpPort, httpsPort: cihaz.httpsPort, fingerprint: cihaz.fingerprint, aciklama: cihaz.aciklama };
-        this.submitted.set(false);
-        this.dialogVisible.set(true);
+        this.service.getById(cihaz.id).subscribe({
+            next: (detail) => {
+                this.selectedCihaz.set(detail);
+                this.form = {
+                    id: detail.id,
+                    tesisId: detail.tesisId,
+                    agentId: detail.agentId,
+                    saglayici: detail.saglayici,
+                    ad: detail.ad,
+                    seriNo: detail.seriNo,
+                    ipAdresi: detail.ipAdresi,
+                    httpPort: detail.httpPort,
+                    httpsPort: detail.httpsPort,
+                    fingerprint: detail.fingerprint,
+                    aciklama: detail.aciklama
+                };
+                this.submitted.set(false);
+                this.dialogVisible.set(true);
+                this.loadTerminals(detail.id);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
     }
 
     save(): void {
         this.submitted.set(true);
-        if (!this.form.ad || !this.form.seriNo) return;
-        const req: PosCihaziKaydetRequest = { tesisId: this.form.tesisId, agentId: this.form.agentId, saglayici: this.form.saglayici, ad: this.form.ad, seriNo: this.form.seriNo, ipAdresi: this.form.ipAdresi, httpPort: this.form.httpPort, httpsPort: this.form.httpsPort, fingerprint: this.form.fingerprint, aciklama: this.form.aciklama };
-        const action$ = this.form.id ? this.service.update(this.form.id, req) : this.service.create(req);
+        if (!this.form.ad.trim() || !this.form.seriNo.trim() || this.form.tesisId <= 0) {
+            return;
+        }
+
+        const request: PosCihaziKaydetRequest = {
+            tesisId: this.form.tesisId,
+            agentId: this.form.agentId,
+            saglayici: this.form.saglayici,
+            ad: this.form.ad.trim(),
+            seriNo: this.form.seriNo.trim(),
+            ipAdresi: this.form.ipAdresi,
+            httpPort: this.form.httpPort,
+            httpsPort: this.form.httpsPort,
+            fingerprint: this.form.fingerprint,
+            aciklama: this.form.aciklama
+        };
+
+        const action$ = this.form.id ? this.service.update(this.form.id, request) : this.service.create(request);
         action$.subscribe({
-            next: () => { this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Kaydedildi.' }); this.dialogVisible.set(false); this.load(); },
-            error: e => this.messageService.add({ severity: 'error', summary: 'Hata', detail: e.message })
+            next: (saved) => {
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'POS cihazı kaydedildi.' });
+                this.selectedCihaz.set(saved);
+                this.form.id = saved.id;
+                this.dialogVisible.set(true);
+                this.load();
+                this.loadTerminals(saved.id);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
     }
 
     deleteItem(cihaz: PosCihaziDto): void {
         this.confirmationService.confirm({
-            message: `"${cihaz.ad}" cihazını silmek istediğinize emin misiniz?`, header: 'Onay', icon: 'pi pi-exclamation-triangle',
+            message: `"${cihaz.ad}" cihazını silmek istediğinize emin misiniz?`,
+            header: 'Onay',
+            icon: 'pi pi-exclamation-triangle',
             accept: () => this.service.delete(cihaz.id).subscribe({
-                next: () => { this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Cihaz silindi.' }); this.load(); },
-                error: e => this.messageService.add({ severity: 'error', summary: 'Hata', detail: e.message })
+                next: () => {
+                    this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Cihaz pasifleştirildi.' });
+                    if (this.selectedCihaz()?.id === cihaz.id) {
+                        this.closeDialog();
+                    }
+                    this.load();
+                },
+                error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
             })
         });
     }
 
-    getSaglayiciLabel(s: number): string { return SaglayiciLabels[s] ?? '?'; }
+    closeDialog(): void {
+        this.dialogVisible.set(false);
+        this.selectedCihaz.set(null);
+        this.terminals.set([]);
+        this.terminalDialogVisible.set(false);
+    }
+
+    getSaglayiciLabel(saglayici: number): string {
+        return SaglayiciLabels[saglayici] ?? '?';
+    }
+
+    loadTerminals(cihazId: number): void {
+        this.terminalsLoading.set(true);
+        this.service.getTerminals(cihazId).pipe(finalize(() => this.terminalsLoading.set(false))).subscribe({
+            next: (items) => this.terminals.set(items),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    openNewTerminal(): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.terminalForm = this.createEmptyTerminalForm(cihaz);
+        this.terminalSubmitted.set(false);
+        this.terminalDialogVisible.set(true);
+    }
+
+    editTerminal(terminal: PosTerminalDto): void {
+        this.terminalForm = {
+            id: terminal.id,
+            posCihaziId: terminal.posCihaziId ?? this.selectedCihaz()?.id ?? null,
+            kasaBankaHesapId: terminal.kasaBankaHesapId,
+            saglayiciKodu: terminal.saglayiciKodu,
+            ad: terminal.ad,
+            terminalId: terminal.terminalId,
+            merchantId: terminal.merchantId ?? terminal.sourceTerminalReference ?? null,
+            serialNumber: terminal.serialNumber,
+            sourceFingerprint: terminal.sourceFingerprint ?? null,
+            sourceTerminalReference: terminal.sourceTerminalReference ?? null,
+            aktifMi: terminal.aktifMi
+        };
+        this.terminalSubmitted.set(false);
+        this.terminalDialogVisible.set(true);
+    }
+
+    saveTerminal(): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.terminalSubmitted.set(true);
+        if (!this.terminalForm.ad.trim() || !this.terminalForm.terminalId.trim() || !this.terminalForm.saglayiciKodu.trim() || this.terminalForm.kasaBankaHesapId <= 0) {
+            return;
+        }
+
+        const request: PosTerminalKaydetRequest = {
+            posCihaziId: cihaz.id,
+            kasaBankaHesapId: this.terminalForm.kasaBankaHesapId,
+            saglayiciKodu: this.terminalForm.saglayiciKodu.trim(),
+            ad: this.terminalForm.ad.trim(),
+            terminalId: this.terminalForm.terminalId.trim(),
+            merchantId: this.terminalForm.merchantId?.trim() || null,
+            serialNumber: this.terminalForm.terminalId.trim(),
+            sourceFingerprint: this.terminalForm.sourceFingerprint?.trim() || null,
+            sourceTerminalReference: this.terminalForm.merchantId?.trim() || this.terminalForm.sourceTerminalReference?.trim() || null,
+            aktifMi: this.terminalForm.aktifMi
+        };
+
+        this.terminalSaving.set(true);
+        const action$ = this.terminalForm.id
+            ? this.service.updateTerminal(cihaz.id, this.terminalForm.id, request)
+            : this.service.createTerminal(cihaz.id, request);
+
+        action$.pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => {
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Terminal kaydedildi.' });
+                this.terminalDialogVisible.set(false);
+                this.loadTerminals(cihaz.id);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    deleteTerminal(terminal: PosTerminalDto): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.confirmationService.confirm({
+            message: `"${terminal.ad}" terminalini silmek istediğinize emin misiniz?`,
+            header: 'Onay',
+            icon: 'pi pi-exclamation-triangle',
+            accept: () => this.service.deleteTerminal(cihaz.id, terminal.id).subscribe({
+                next: () => {
+                    this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Terminal pasifleştirildi.' });
+                    this.loadTerminals(cihaz.id);
+                },
+                error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+            })
+        });
+    }
+
+    startPairing(terminal: PosTerminalDto): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.terminalSaving.set(true);
+        this.service.startTerminalPairing(cihaz.id, terminal.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => this.loadTerminals(cihaz.id),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    checkPairing(terminal: PosTerminalDto): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.terminalSaving.set(true);
+        this.service.checkTerminalPairing(cihaz.id, terminal.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => this.loadTerminals(cihaz.id),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    getTerminalSaglayiciLabel(kod: string): string {
+        return this.saglayicilar().find((item) => item.kod === kod)?.ad ?? kod;
+    }
+
+    getKrediKartiHesapOptions(): Array<{ label: string; value: number }> {
+        const cihaz = this.selectedCihaz();
+        return this.krediKartiHesaplari()
+            .filter((hesap) => !cihaz?.tesisId || hesap.tesisId === cihaz.tesisId)
+            .map((hesap) => ({ label: `${hesap.ad}${hesap.kod ? ` (${hesap.kod})` : ''}`, value: hesap.id! }));
+    }
+
+    getSaglayiciOptions(): Array<{ label: string; value: string }> {
+        return this.saglayicilar().map((item) => ({ label: `${item.ad} (${item.kod})`, value: item.kod }));
+    }
+
+    private createEmptyTerminalForm(cihaz?: PosCihaziDto | null): PosTerminalFormState {
+        const hesaplar = this.krediKartiHesaplari();
+        const hesaplarFiltreli = cihaz
+            ? hesaplar.filter((hesap) => hesap.tesisId === cihaz.tesisId)
+            : hesaplar;
+        const ilkHesap = hesaplarFiltreli.find((item) => item.id != null)?.id ?? 0;
+        const ilkSaglayici = this.saglayicilar()[0]?.kod ?? 'PAVO';
+        return {
+            posCihaziId: cihaz?.id ?? null,
+            kasaBankaHesapId: ilkHesap,
+            saglayiciKodu: ilkSaglayici,
+            ad: '',
+            terminalId: '',
+            merchantId: '',
+            serialNumber: '',
+            sourceFingerprint: '',
+            sourceTerminalReference: '',
+            aktifMi: true
+        };
+    }
 }

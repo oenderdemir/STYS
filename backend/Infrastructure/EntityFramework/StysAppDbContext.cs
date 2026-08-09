@@ -1869,11 +1869,18 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.SourceTerminalReference).HasMaxLength(128);
             entity.Property(x => x.TargetFingerprint).HasMaxLength(256);
             entity.Property(x => x.PairingCode).HasMaxLength(32);
+            entity.HasIndex(x => new { x.PosCihaziId, x.SerialNumber })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.KurumId, x.SaglayiciKodu, x.SerialNumber })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.TesisId, x.KasaBankaHesapId, x.AktifMi })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasOne(x => x.PosCihazi)
+                .WithMany(x => x.Terminaller)
+                .HasForeignKey(x => x.PosCihaziId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)

@@ -153,6 +153,7 @@ public class StysAppDbContext : DbContext
     public DbSet<RezervasyonEkHizmet> RezervasyonEkHizmetler => Set<RezervasyonEkHizmet>();
     public DbSet<RezervasyonOdeme> RezervasyonOdemeler => Set<RezervasyonOdeme>();
     public DbSet<PosTerminal> PosTerminaller => Set<PosTerminal>();
+    public DbSet<PosCihazi> PosCihazlari => Set<PosCihazi>();
     public DbSet<PosOdemeIslemi> PosOdemeIslemleri => Set<PosOdemeIslemi>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
@@ -1842,6 +1843,20 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.KomisyonGiderHesapPlaniId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosCihazi>(entity =>
+        {
+            entity.ToTable("PosCihazlari", entegrasyonSchema);
+            entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SeriNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.IpAdresi).HasMaxLength(64);
+            entity.Property(x => x.Fingerprint).HasMaxLength(256);
+            entity.Property(x => x.TargetFingerprint).HasMaxLength(256);
+            entity.Property(x => x.PairingCode).HasMaxLength(32);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.KurumId, x.SeriNo }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.AgentId).HasFilter("[AgentId] IS NOT NULL");
         });
 
         modelBuilder.Entity<PosTerminal>(entity =>

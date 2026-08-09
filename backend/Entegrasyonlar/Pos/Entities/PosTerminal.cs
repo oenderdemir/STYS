@@ -9,6 +9,7 @@ public class PosTerminal : BaseEntity<int>, ITenantEntity
 {
     public int KurumId { get; set; }
     public int TesisId { get; set; }
+    public int? PosCihaziId { get; set; }
     public int KasaBankaHesapId { get; set; }
 
     [Required, MaxLength(32)]
@@ -39,4 +40,5 @@ public class PosTerminal : BaseEntity<int>, ITenantEntity
 
     public Tesis? Tesis { get; set; }
     public KasaBankaHesap? KasaBankaHesap { get; set; }
+    public PosCihazi? PosCihazi { get; set; }
 }

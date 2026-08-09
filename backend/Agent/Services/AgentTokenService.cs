@@ -35,7 +35,6 @@ public sealed class AgentTokenService : IAgentTokenService
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
 
         try
         {

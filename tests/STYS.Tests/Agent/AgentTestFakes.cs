@@ -22,6 +22,14 @@ internal sealed class FakeKurumTenantAccessor : ICurrentTenantAccessor
     public bool IsKurumAdmin() => true;
 }
 
+internal sealed class FakeNoTenantAccessor : ICurrentTenantAccessor
+{
+    public int? GetCurrentKurumId() => null;
+    public IReadOnlyList<int> GetAccessibleKurumIds() => [];
+    public bool IsSuperAdmin() => false;
+    public bool IsKurumAdmin() => false;
+}
+
 internal sealed class DbContextFactoryForTest<TContext> : IDbContextFactory<TContext> where TContext : DbContext
 {
     private readonly Func<TContext> _creator;

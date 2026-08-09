@@ -1,0 +1,142 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - button "İçindekiler tablosunu aç" [ref=e7] [cursor=pointer]
+        - link "Pavo Docs" [ref=e10] [cursor=pointer]:
+          - /url: /jzobSNOgnQwUd342oNq2
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e15]:
+            - textbox "Ara" [ref=e19]:
+              - /placeholder: Ara…
+            - generic [ref=e21]:
+              - generic [ref=e22]: Ctrl
+              - generic [ref=e24]: k
+          - alert [ref=e25]
+        - button "GitBook Asistanı sor" [ref=e26] [cursor=pointer]:
+          - img "GitBook Assistant" [ref=e27]
+      - link "Overtech" [ref=e35] [cursor=pointer]:
+        - /url: https://www.overtech.com.tr/
+    - navigation "Main" [ref=e37]:
+      - generic [ref=e38]:
+        - list "Sections" [ref=e41]:
+          - listitem [ref=e42]:
+            - link "Giriş" [ref=e43] [cursor=pointer]:
+              - /url: /jzobSNOgnQwUd342oNq2
+          - listitem [ref=e45]:
+            - button "Pavo Docs" [ref=e46] [cursor=pointer]
+        - button "Geri kaydır"
+        - button "Daha ileri kaydır"
+  - main [ref=e55]:
+    - generic [ref=e56]:
+      - text: For the complete documentation index, see
+      - link "llms.txt" [ref=e57] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/llms.txt
+      - text: . This page is also available as
+      - link "Markdown" [ref=e58] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/readme.md
+      - text: .
+    - generic [ref=e59]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - button "Sor" [ref=e63] [cursor=pointer]:
+              - img "GitBook Assistant" [ref=e64]
+            - button "Daha fazla" [ref=e72] [cursor=pointer]
+          - button "Bu sayfada" [ref=e75] [cursor=pointer]
+        - navigation "Breadcrumb" [ref=e78]:
+          - list [ref=e79]:
+            - listitem [ref=e80]:
+              - link "Giriş" [ref=e81] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2
+      - generic [ref=e83]:
+        - heading "PavoPay Dokümanına Hoşgeldiniz Başlığa doğrudan bağlantı" [level=2] [ref=e84]:
+          - generic [ref=e85]: PavoPay Dokümanına Hoşgeldiniz
+          - link "Başlığa doğrudan bağlantı" [ref=e87] [cursor=pointer]:
+            - /url: "#pavopay-dokumanina-hosgeldiniz"
+        - paragraph [ref=e91]: Pavo Finansal Teknoloji Çözümleri tarafından sunulan teknik dokümantasyon portalına hoş geldiniz. Projenize özel entegrasyon rehberine aşağıdan ulaşabilirsiniz.
+        - separator [ref=e92]
+        - heading "📄 509 Entegrasyon Dokümanı Başlığa doğrudan bağlantı" [level=3] [ref=e93]:
+          - generic [ref=e94]: 📄 509 Entegrasyon Dokümanı
+          - link "Başlığa doğrudan bağlantı" [ref=e96] [cursor=pointer]:
+            - /url: "#id-509-entegrasyon-dokumani"
+        - paragraph [ref=e100]:
+          - text: Vergi Usul Kanunu (VUK)
+          - strong [ref=e101]: 509 numaralı tebliğe
+          - text: uyumlu
+          - strong [ref=e102]: TechPos
+          - text: uygulamasına harici uygulamaların entegrasyonu için hazırlanmış kapsamlı API dokümanıdır.
+        - paragraph [ref=e104]:
+          - strong [ref=e105]: 🔧 Desteklenen Entegrasyon Yöntemleri
+        - table [ref=e109]:
+          - rowgroup [ref=e110]:
+            - row [ref=e111]:
+              - columnheader "Yöntem" [ref=e112]
+              - columnheader "Açıklama" [ref=e113]
+          - rowgroup [ref=e115]:
+            - row [ref=e116]:
+              - cell [ref=e117]:
+                - paragraph [ref=e120]:
+                  - strong [ref=e121]: REST
+              - cell [ref=e122]:
+                - paragraph [ref=e125]: HTTP üzerinden JSON tabanlı iletişim — farklı platformlar arası entegrasyon için ideal
+            - row [ref=e126]:
+              - cell [ref=e127]:
+                - paragraph [ref=e130]:
+                  - strong [ref=e131]: Intent (P2P)
+              - cell [ref=e132]:
+                - paragraph [ref=e135]: Android uygulamalar arası doğrudan iletişim — aynı cihazdaki uygulamalar için ideal
+            - row [ref=e136]:
+              - cell [ref=e137]:
+                - paragraph [ref=e140]:
+                  - strong [ref=e141]: Cloud
+              - cell [ref=e142]:
+                - paragraph [ref=e145]: Sunucu aracılığıyla iletişim — uzak mesafe ve merkezi yönetim senaryoları için ideal
+            - row [ref=e146]:
+              - cell [ref=e147]:
+                - paragraph [ref=e150]:
+                  - strong [ref=e151]: UniCloud
+              - cell [ref=e152]:
+                - paragraph [ref=e155]: Yeni nesil cloud entegrasyonu — gelişmiş özellikler ve daha kolay entegrasyon
+        - paragraph [ref=e157]:
+          - strong [ref=e158]: 📦 Doküman Kapsamı
+        - list [ref=e159]:
+          - listitem [ref=e160]:
+            - generic [ref=e161]: •
+            - paragraph [ref=e165]: Ödeme başlatma, sonuç sorgulama, iptal ve iade işlemleri
+          - listitem [ref=e166]:
+            - generic [ref=e167]: •
+            - paragraph [ref=e171]: Ön provizyon açma/kapama, gün sonu alma
+          - listitem [ref=e172]:
+            - generic [ref=e173]: •
+            - paragraph [ref=e177]: Cihaz eşleştirme, parametre güncelleme, kart okuma
+          - listitem [ref=e178]:
+            - generic [ref=e179]: •
+            - paragraph [ref=e183]: Puan sorgulama, barkod/QR kod okutma
+          - listitem [ref=e184]:
+            - generic [ref=e185]: •
+            - paragraph [ref=e189]: Hata kodları ve entegrasyon ayarları
+        - paragraph [ref=e190]:
+          - link "Dokümana Git →" [ref=e191] [cursor=pointer]:
+            - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/
+        - separator [ref=e193]
+        - paragraph [ref=e195]:
+          - text: "📩 İletişim:"
+          - link "info@pavo.com.tr" [ref=e197] [cursor=pointer]:
+            - /url: mailto:info@pavo.com.tr
+    - generic [ref=e200]:
+      - paragraph [ref=e201]:
+        - text: Son güncelleme
+        - time [ref=e202]: 24 gün önce
+      - generic [ref=e204]:
+        - paragraph [ref=e205]: Bu yararlı oldu mu?
+        - generic [ref=e206]:
+          - button "Evet, oldu!" [ref=e207] [cursor=pointer]
+          - button "Emin değilim" [ref=e211] [cursor=pointer]
+          - button "Hayır" [ref=e215] [cursor=pointer]
+  - contentinfo [ref=e219]:
+    - radiogroup [ref=e224]:
+      - radio "Açık temaya geç" [ref=e225] [cursor=pointer]
+      - radio "Sistem temasına geç" [ref=e228] [cursor=pointer]
+      - radio "Koyu temaya geç" [ref=e231] [cursor=pointer]

@@ -83,6 +83,14 @@ public class StysAppDbContext : DbContext
 
     public bool IsSuperAdmin => _currentTenantAccessor?.IsSuperAdmin() == true;
 
+    /// <summary>
+    /// Anonymous or system-level flows may intentionally create tenant-owned rows after validating
+    /// the target tenant out-of-band (for example, agent enrollment keyed by an enrollment code).
+    /// This flag keeps the default tenant guard strict while allowing those flows to opt in
+    /// explicitly on the short-lived DbContext instance they own.
+    /// </summary>
+    public bool AllowExplicitTenantWritesWithoutAmbientTenant { get; set; }
+
     public DbSet<Country> Countries => Set<Country>();
     public DbSet<Il> Iller => Set<Il>();
     public DbSet<Kurum> Kurumlar => Set<Kurum>();
@@ -3602,6 +3610,11 @@ public class StysAppDbContext : DbContext
             }
 
             if (IsSuperAdmin && tenantEntity.KurumId > 0)
+            {
+                return;
+            }
+
+            if (AllowExplicitTenantWritesWithoutAmbientTenant && tenantEntity.KurumId > 0)
             {
                 return;
             }

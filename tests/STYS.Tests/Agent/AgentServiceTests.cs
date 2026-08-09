@@ -32,7 +32,7 @@ public sealed class AgentServiceTests : IAsyncLifetime
         _kurumId = kurum.Id; _tesisId = tesis.Id;
 
         var factory = new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(cs));
-        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var service = new AgentService(factory, new FakeKurumTenantAccessor(_kurumId));
 
         var request = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = $"Test-Agent-{_uniqueSuffix}", TesisIds = [_tesisId], Scopes = ["agent.heartbeat"] };
         var result = await service.CreateAsync(request, "test-user", CancellationToken.None);
@@ -59,7 +59,7 @@ public sealed class AgentServiceTests : IAsyncLifetime
         var agent = await AgentTestSupport.SeedAgentAsync(db, _kurumId, _uniqueSuffix);
 
         var factory = new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(cs));
-        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var service = new AgentService(factory, new FakeKurumTenantAccessor(_kurumId));
         var result = await service.GetByIdAsync(agent.Id, CancellationToken.None);
 
         Assert.NotNull(result);
@@ -107,7 +107,7 @@ public sealed class AgentServiceTests : IAsyncLifetime
         var (kurumB, _, tesisB) = await AgentTestSupport.SeedKurumIlTesisAsync(db, $"{_uniqueSuffix}-B");
 
         var factory = new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(cs));
-        var service = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var service = new AgentService(factory, new FakeKurumTenantAccessor(kurumA.Id));
         var request = new STYS.Agent.Contracts.Dtos.AgentKaydetRequest { Ad = "Test", TesisIds = [tesisB.Id], Scopes = ["agent.heartbeat"] };
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => service.CreateAsync(request, "test", CancellationToken.None));
 

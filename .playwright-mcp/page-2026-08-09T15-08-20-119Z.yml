@@ -1,0 +1,164 @@
+- generic [active] [ref=f1e1]:
+  - banner [ref=f1e2]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - button "İçindekiler tablosunu aç" [ref=f1e7] [cursor=pointer]
+        - link "Pavo Docs" [ref=f1e10] [cursor=pointer]:
+          - /url: /jzobSNOgnQwUd342oNq2
+      - generic [ref=f1e12]:
+        - generic [ref=f1e13]:
+          - generic [ref=f1e15]:
+            - textbox "Ara" [ref=f1e19]:
+              - /placeholder: Ara…
+            - generic [ref=f1e21]:
+              - generic [ref=f1e22]: Ctrl
+              - generic [ref=f1e24]: k
+          - alert [ref=f1e25]
+        - button "GitBook Asistanı sor" [ref=f1e26] [cursor=pointer]:
+          - img "GitBook Assistant" [ref=f1e27]
+      - link "Overtech" [ref=f1e35] [cursor=pointer]:
+        - /url: https://www.overtech.com.tr/
+    - navigation "Main" [ref=f1e37]:
+      - generic [ref=f1e38]:
+        - list "Sections" [ref=f1e41]:
+          - listitem [ref=f1e42]:
+            - link "Giriş" [ref=f1e43] [cursor=pointer]:
+              - /url: /jzobSNOgnQwUd342oNq2
+          - listitem [ref=f1e45]:
+            - button "Pavo Docs" [pressed] [ref=f1e46] [cursor=pointer]
+        - button "Geri kaydır"
+        - button "Daha ileri kaydır"
+  - main [ref=f1e55]:
+    - generic [ref=f1e56]:
+      - text: For the complete documentation index, see
+      - link "llms.txt" [ref=f1e57] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/llms.txt
+      - text: . This page is also available as
+      - link "Markdown" [ref=f1e58] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/pavo-509-entegrasyon-dokumani.md
+      - text: .
+    - generic [ref=f1e59]:
+      - generic [ref=f1e60]:
+        - generic [ref=f1e61]:
+          - generic [ref=f1e62]:
+            - button "Sor" [ref=f1e63] [cursor=pointer]:
+              - img "GitBook Assistant" [ref=f1e64]
+            - button "Daha fazla" [ref=f1e72] [cursor=pointer]
+          - button "Bu sayfada" [ref=f1e75] [cursor=pointer]
+        - navigation "Breadcrumb" [ref=f1e78]:
+          - list [ref=f1e79]:
+            - listitem [ref=f1e80]: Pavo Docs
+            - listitem [ref=f1e83]:
+              - link "Pavo 509 Entegrasyon Dokümanı" [ref=f1e84] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani
+        - heading "Pavo 509 Entegrasyon Dokümanı" [level=1] [ref=f1e85]
+        - paragraph [ref=f1e86]: TechPos Uygulaması Entegrasyon API Dokümanı — VUK 509 Uyumlu
+      - generic [ref=f1e88]:
+        - heading "Kullanım Koşulları Başlığa doğrudan bağlantı" [level=2] [ref=f1e89]:
+          - generic [ref=f1e90]: Kullanım Koşulları
+          - link "Başlığa doğrudan bağlantı" [ref=f1e92] [cursor=pointer]:
+            - /url: "#kullanim-kosullari"
+        - generic [ref=f1e96]:
+          - generic [ref=f1e97]: 190KB
+          - generic [ref=f1e101]:
+            - link "VUK 509 Uyumlu API Dokümantasyonu.pdf" [ref=f1e103] [cursor=pointer]:
+              - /url: https://3630853829-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FFVJMclyshPQTroC2D8bk%2Fuploads%2FZ0TRDy11AYNFVhfhZvxI%2FVUK%20509%20Uyumlu%20API%20Dok%C3%BCmantasyonu.pdf?alt=media&token=9c6bc90d-bcca-4391-8b47-3be2979b3ace
+            - generic [ref=f1e104]: PDF
+          - generic [ref=f1e105]:
+            - button "İndir" [ref=f1e106] [cursor=pointer]
+            - link "Aç" [ref=f1e110] [cursor=pointer]:
+              - /url: https://3630853829-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FFVJMclyshPQTroC2D8bk%2Fuploads%2FZ0TRDy11AYNFVhfhZvxI%2FVUK%20509%20Uyumlu%20API%20Dok%C3%BCmantasyonu.pdf?alt=media&token=9c6bc90d-bcca-4391-8b47-3be2979b3ace
+        - paragraph [ref=f1e115]:
+          - text: Vergi Usul Kanunu (VUK) 509 numaralı tebliği ile uyumlu
+          - strong [ref=f1e116]: TechPos
+          - text: uygulamasına entegrasyon sağlanabilmesi için gerekli olan API dokümanıdır.
+        - paragraph [ref=f1e118]: "Bu doküman aşağıdaki konuları kapsamaktadır:"
+        - list [ref=f1e119]:
+          - listitem [ref=f1e120]:
+            - generic [ref=f1e121]: •
+            - paragraph [ref=f1e125]:
+              - strong [ref=f1e126]: Entegrasyon Yöntemleri
+              - text: — REST, Intent, Cloud ve UniCloud
+          - listitem [ref=f1e127]:
+            - generic [ref=f1e128]: •
+            - paragraph [ref=f1e132]:
+              - strong [ref=f1e133]: Entegrasyon Methodları
+              - text: — Satış, iptal, iade ve diğer tüm işlem API'leri
+          - listitem [ref=f1e134]:
+            - generic [ref=f1e135]: •
+            - paragraph [ref=f1e139]:
+              - strong [ref=f1e140]: Hata Kodları
+              - text: — Tüm hata kodları ve açıklamaları
+        - separator [ref=f1e141]
+        - heading "Hızlı Başlangıç Başlığa doğrudan bağlantı" [level=2] [ref=f1e142]:
+          - generic [ref=f1e143]: Hızlı Başlangıç
+          - link "Başlığa doğrudan bağlantı" [ref=f1e145] [cursor=pointer]:
+            - /url: "#hizli-baslangic"
+        - paragraph [ref=f1e149]: "Entegrasyon yönteminizi seçerek başlayın:"
+        - generic [ref=f1e151]:
+          - generic [ref=f1e154]:
+            - img "Cover" [ref=f1e155]
+            - generic [ref=f1e156]:
+              - paragraph [ref=f1e159]: Rest
+              - link "Rest Entegrasyonu" [ref=f1e161] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/509-entegrasyon-yontemleri/rest-entegrasyonu
+              - paragraph [ref=f1e164]: HTTP üzerinden JSON tabanlı iletişim. Farklı platformlar arası entegrasyon için ideal.
+          - generic [ref=f1e167]:
+            - img "Cover" [ref=f1e168]
+            - generic [ref=f1e169]:
+              - paragraph [ref=f1e172]: Intent (P2P)
+              - link "Intent (P2P) Entegrasyonu" [ref=f1e174] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/509-entegrasyon-yontemleri/intent-p2p-entegrasyonu
+              - paragraph [ref=f1e177]: Android uygulamalar arası doğrudan iletişim. Aynı cihazdaki uygulamalar için ideal.
+          - generic [ref=f1e180]:
+            - img "Cover" [ref=f1e181]
+            - generic [ref=f1e182]:
+              - paragraph [ref=f1e185]: Cloud
+              - link "Cloud Entegrasyonu" [ref=f1e187] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/509-entegrasyon-yontemleri/cloud-entegrasyonu
+              - paragraph [ref=f1e190]: Sunucu aracılığıyla iletişim. Uzak mesafe ve merkezi yönetim senaryoları için ideal.
+          - generic [ref=f1e193]:
+            - img "Cover" [ref=f1e194]
+            - generic [ref=f1e195]:
+              - paragraph [ref=f1e198]: UniCloud
+              - link "UniCloud Entegrasyonu" [ref=f1e200] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/509-entegrasyon-yontemleri/cloud-entegrasyonu-1
+              - paragraph [ref=f1e203]: Yeni nesil cloud entegrasyonu. Gelişmiş özellikler ve daha kolay entegrasyon.
+          - generic [ref=f1e206]:
+            - img "Cover" [ref=f1e207]
+            - generic [ref=f1e208]:
+              - paragraph [ref=f1e211]: UniPos
+              - link "Unipos Rest Entegrasyonu" [ref=f1e213] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/509-entegrasyon-yontemleri/rest-entegrasyonu-1
+              - paragraph [ref=f1e216]: UniPos, farklı banka POS uygulamalarının tek bir cihaz ve ortal bir arayüz üzerinden kullanılmasını sağlayan çok bankalı ödeme çözümüdür.
+        - note "Bilgi" [ref=f1e217]:
+          - paragraph [ref=f1e223]:
+            - text: Hangi yöntemi seçeceğinizden emin değilseniz
+            - link "Entegrasyon Yöntemi Seçimi" [ref=f1e225] [cursor=pointer]:
+              - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/509-entegrasyon-yontemleri/entegrasyon-yontemi-secimi
+            - text: sayfasına göz atın.
+        - separator [ref=f1e226]
+        - paragraph [ref=f1e228]:
+          - text: "İletişim :"
+          - term [ref=f1e229]:
+            - code [ref=f1e230]: +90 850 611 0 444
+        - paragraph [ref=f1e232]:
+          - text: "Mail :"
+          - link [ref=f1e234] [cursor=pointer]:
+            - /url: mailto:info@pavo.com.tr
+            - code [ref=f1e235]: info@pavo.com.tr
+    - generic [ref=f1e238]:
+      - paragraph [ref=f1e239]:
+        - text: Son güncelleme
+        - time [ref=f1e240]: 9 gün önce
+      - generic [ref=f1e242]:
+        - paragraph [ref=f1e243]: Bu yararlı oldu mu?
+        - generic [ref=f1e244]:
+          - button "Evet, oldu!" [ref=f1e245] [cursor=pointer]
+          - button "Emin değilim" [ref=f1e249] [cursor=pointer]
+          - button "Hayır" [ref=f1e253] [cursor=pointer]
+  - contentinfo [ref=f1e257]:
+    - radiogroup [ref=f1e262]:
+      - radio "Açık temaya geç" [ref=f1e263] [cursor=pointer]
+      - radio "Sistem temasına geç" [ref=f1e266] [cursor=pointer]
+      - radio "Koyu temaya geç" [ref=f1e269] [cursor=pointer]

@@ -49,7 +49,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentService(factory, new FakeKurumTenantAccessor(_kurumAId));
 
         var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await svc.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
@@ -109,7 +109,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentService(factory, new FakeKurumTenantAccessor(_kurumAId));
 
         var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await svc.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
@@ -164,7 +164,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentService(factory, new FakeKurumTenantAccessor(_kurumAId));
 
         var codeReq = new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest { TesisIds = [_tesisAId], AllowedScopes = ["agent.heartbeat"], MaxKullanimSayisi = 1, ExpirationHours = 1 };
         var enrollment = await svc.GenerateEnrollmentCodeAsync(codeReq, "test", CancellationToken.None);
@@ -219,6 +219,65 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
         var context2 = CreateAuthContext(jwtClaims);
         await handler.HandleAsync(context2);
         Assert.False(context2.HasSucceeded);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
+    public async Task EnrollmentAndTokenAuth_IgnoreTenantQueryFilters_WhenContextHasNoTenant()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+
+        var enrollmentService = new AgentService(NewFactory(), new FakeKurumTenantAccessor(_kurumAId));
+        var noTenantFactory = new DbContextFactoryForTest<StysAppDbContext>(() =>
+        {
+            var options = new DbContextOptionsBuilder<StysAppDbContext>()
+                .UseSqlServer(_cs)
+                .Options;
+            return new StysAppDbContext(options, currentTenantAccessor: new FakeNoTenantAccessor());
+        });
+
+        var enrollmentCode = await enrollmentService.GenerateEnrollmentCodeAsync(
+            new STYS.Agent.Contracts.Dtos.AgentEnrollmentCodeRequest
+            {
+                TesisIds = [_tesisAId],
+                AllowedScopes = ["agent.heartbeat", "agent.command.read", "agent.command.execute", "agent.result.write", "agent.config.read"],
+                MaxKullanimSayisi = 1,
+                ExpirationHours = 1
+            },
+            "test",
+            CancellationToken.None);
+
+        var tokenService = new AgentTokenService(noTenantFactory, CreateJwtService());
+        var enrollResponse = await tokenService.EnrollAsync(
+            new STYS.Agent.Contracts.Dtos.AgentEnrollmentRequest
+            {
+                EnrollmentCode = enrollmentCode.Code,
+                AgentKey = $"NO-TENANT-{_uniqueSuffix}"
+            },
+            CancellationToken.None);
+
+        Assert.Equal((int)AgentDurum.Active, enrollResponse.Durum);
+        Assert.False(string.IsNullOrWhiteSpace(enrollResponse.ClientId));
+        Assert.False(string.IsNullOrWhiteSpace(enrollResponse.ClientSecret));
+
+        var token = await tokenService.IssueTokenAsync(
+            new STYS.Agent.Contracts.Dtos.AgentTokenRequest
+            {
+                ClientId = enrollResponse.ClientId,
+                ClientSecret = enrollResponse.ClientSecret,
+                AgentInstanceId = "test-instance"
+            },
+            CancellationToken.None);
+
+        Assert.False(string.IsNullOrWhiteSpace(token.AccessToken));
+
+        var handler = new AgentCredentialValidationHandler(noTenantFactory);
+        var claims = ParseJwt(token.AccessToken);
+        var context = CreateAuthContext(claims);
+        await handler.HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }

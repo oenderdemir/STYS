@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
@@ -62,6 +63,7 @@ public sealed class AgentCommandService
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await AcquirePollLockAsync(db, agentId, ct);
 
         var now = DateTime.UtcNow;
         var commands = await db.Set<AgentCommand>()
@@ -201,6 +203,46 @@ public sealed class AgentCommandService
     {
         if (_notifier is null) return;
         _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(dto, CancellationToken.None); } catch { } });
+    }
+
+    private static async Task AcquirePollLockAsync(StysAppDbContext db, int agentId, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+            await connection.OpenAsync(ct);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+            command.CommandText = """
+                DECLARE @lockResult int;
+                EXEC @lockResult = sp_getapplock
+                    @Resource = @resource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction',
+                    @LockTimeout = 10000;
+                SELECT @lockResult;
+                """;
+            var resource = command.CreateParameter();
+            resource.ParameterName = "@resource";
+            resource.Value = $"agent-command-poll:{agentId}";
+            command.Parameters.Add(resource);
+
+            var result = await command.ExecuteScalarAsync(ct);
+            if (result is null)
+                throw new InvalidOperationException("Agent command poll lock alınamadı.");
+
+            var code = Convert.ToInt32(result);
+            if (code < 0)
+                throw new InvalidOperationException($"Agent command poll lock alınamadı. Code={code}");
+        }
+        finally
+        {
+            if (shouldClose)
+                await connection.CloseAsync();
+        }
     }
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()

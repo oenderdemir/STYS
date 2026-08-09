@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, OnDestroy, inject, signal, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, effect, DestroyRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { finalize, timer } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -27,8 +27,9 @@ import {
     AgentCommandDto
 } from './agent-yonetimi.dto';
 import { AgentYonetimiService } from './agent-yonetimi.service';
-import { KurumService } from '../kurum-yonetimi/kurum.service';
+import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 type AgentFormState = AgentKaydetRequest & { id?: number };
 
@@ -49,18 +50,19 @@ type AgentFormState = AgentKaydetRequest & { id?: number };
         ToastModule,
         ToolbarModule,
         CheckboxModule,
-        TabsModule,
-        SelectModule
+        TabsModule
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './agent-yonetimi.html'
 })
 export class AgentYonetimiComponent implements OnInit, OnDestroy {
     private readonly service = inject(AgentYonetimiService);
+    private readonly tesisService = inject(TesisYonetimiService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly realtime = inject(AgentRealtimeService);
     private readonly authService = inject(AuthService);
+    private readonly destroyRef = inject(DestroyRef);
 
     agents = signal<AgentListDto[]>([]);
     loading = signal(false);
@@ -75,11 +77,25 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
 
     agentForm: AgentFormState = { ad: '', tesisIds: [], scopes: [] };
     enrollmentForm: AgentEnrollmentCodeRequest = { tesisIds: [], allowedScopes: [] };
+    enrollmentTesisler: TesisDto[] = [];
+    readonly enrollmentScopeOptions = [
+        { label: 'agent.heartbeat', value: 'agent.heartbeat' },
+        { label: 'agent.command.read', value: 'agent.command.read' },
+        { label: 'agent.command.execute', value: 'agent.command.execute' },
+        { label: 'agent.result.write', value: 'agent.result.write' },
+        { label: 'agent.config.read', value: 'agent.config.read' }
+    ];
 
     durumLabels = AgentDurumLabels;
     commandTypes = ['Ping', 'HealthCheck', 'RefreshConfiguration', 'PavoConnectionTest'];
+    private readonly agentRefreshEffectInitialized = { value: false };
+    private readonly refreshIntervalMs = 30000;
 
     constructor() {
+        timer(this.refreshIntervalMs, this.refreshIntervalMs)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe(() => this.refreshAgents());
+
         effect(() => {
             const update = this.realtime.commandUpdates();
             if (update && this.viewingAgentId() && update.agentId === this.viewingAgentId()) {
@@ -89,10 +105,20 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
                 });
             }
         });
+
+        effect(() => {
+            this.realtime.agentChanged();
+            if (!this.agentRefreshEffectInitialized.value) {
+                this.agentRefreshEffectInitialized.value = true;
+                return;
+            }
+
+            this.loadAgents();
+        });
     }
 
     ngOnInit(): void {
-        this.loadAgents();
+        this.refreshAgents();
     }
 
     ngOnDestroy(): void {
@@ -105,6 +131,14 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
             next: (data) => this.agents.set(data),
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
+    }
+
+    refreshAgents(): void {
+        this.loadAgents();
+        const viewingAgentId = this.viewingAgentId();
+        if (viewingAgentId) {
+            this.loadCommands(viewingAgentId);
+        }
     }
 
     openNew(): void {
@@ -199,9 +233,10 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     }
 
     openEnrollmentDialog(): void {
-        this.enrollmentForm = { tesisIds: [], allowedScopes: [] };
+        this.enrollmentForm = this.createDefaultEnrollmentForm();
         this.enrollmentDialogVisible.set(true);
         this.loadEnrollmentCodes();
+        this.loadEnrollmentTesisler();
     }
 
     loadEnrollmentCodes(): void {
@@ -211,12 +246,30 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         });
     }
 
+    loadEnrollmentTesisler(): void {
+        this.tesisService.getTesisler().subscribe({
+            next: (data) => {
+                const sorted = [...data].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
+                this.enrollmentTesisler = sorted;
+                if (this.enrollmentForm.tesisIds.length === 0 && sorted.length > 0) {
+                    const firstTesisId = sorted.find((x) => x.id != null)?.id;
+                    if (firstTesisId != null) {
+                        this.enrollmentForm = { ...this.enrollmentForm, tesisIds: [firstTesisId] };
+                    }
+                }
+            },
+            error: () => {
+                this.enrollmentTesisler = [];
+            }
+        });
+    }
+
     generateEnrollmentCode(): void {
         this.service.generateEnrollmentCode(this.enrollmentForm).subscribe({
             next: (code) => {
                 this.messageService.add({ severity: 'success', summary: 'Kod Oluşturuldu', detail: code.code });
                 this.loadEnrollmentCodes();
-                this.enrollmentForm = { tesisIds: [], allowedScopes: [] };
+                this.enrollmentForm = this.createDefaultEnrollmentForm();
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -288,5 +341,14 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         this.dialogVisible.set(false);
         this.viewingAgentId.set(null);
         this.realtime.leaveAgentGroup();
+    }
+
+    private createDefaultEnrollmentForm(): AgentEnrollmentCodeRequest {
+        const firstTesisId = this.enrollmentTesisler.find((x) => x.id != null)?.id;
+        return {
+            tesisIds: firstTesisId != null ? [firstTesisId] : [],
+            allowedScopes: this.enrollmentScopeOptions.map((x) => x.value),
+            requiresApproval: false
+        };
     }
 }

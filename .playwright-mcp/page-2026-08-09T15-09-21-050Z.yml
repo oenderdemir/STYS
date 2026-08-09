@@ -1,0 +1,346 @@
+- generic [active] [ref=f4e1]:
+  - banner [ref=f4e2]:
+    - generic [ref=f4e5]:
+      - generic [ref=f4e6]:
+        - button "İçindekiler tablosunu aç" [ref=f4e7] [cursor=pointer]
+        - link "Pavo Docs" [ref=f4e10] [cursor=pointer]:
+          - /url: /jzobSNOgnQwUd342oNq2
+      - generic [ref=f4e12]:
+        - generic [ref=f4e13]:
+          - generic [ref=f4e15]:
+            - textbox "Ara" [ref=f4e19]:
+              - /placeholder: Ara…
+            - generic [ref=f4e21]:
+              - generic [ref=f4e22]: Ctrl
+              - generic [ref=f4e24]: k
+          - alert [ref=f4e25]
+        - button "GitBook Asistanı sor" [ref=f4e26] [cursor=pointer]:
+          - img "GitBook Assistant" [ref=f4e27]
+      - link "Overtech" [ref=f4e35] [cursor=pointer]:
+        - /url: https://www.overtech.com.tr/
+    - navigation "Main" [ref=f4e37]:
+      - generic [ref=f4e38]:
+        - list "Sections" [ref=f4e41]:
+          - listitem [ref=f4e42]:
+            - link "Giriş" [ref=f4e43] [cursor=pointer]:
+              - /url: /jzobSNOgnQwUd342oNq2
+          - listitem [ref=f4e45]:
+            - button "Pavo Docs" [pressed] [ref=f4e46] [cursor=pointer]
+        - button "Geri kaydır"
+        - button "Daha ileri kaydır"
+  - main [ref=f4e55]:
+    - generic [ref=f4e56]:
+      - text: For the complete documentation index, see
+      - link "llms.txt" [ref=f4e57] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/llms.txt
+      - text: . This page is also available as
+      - link "Markdown" [ref=f4e58] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/entegrasyon-metotlari/rest/pairing-cihaz-eslestirme.md
+      - text: .
+    - generic [ref=f4e59]:
+      - generic [ref=f4e60]:
+        - generic [ref=f4e61]:
+          - generic [ref=f4e62]:
+            - button "Sor" [ref=f4e63] [cursor=pointer]:
+              - img "GitBook Assistant" [ref=f4e64]
+            - button "Daha fazla" [ref=f4e72] [cursor=pointer]
+          - button "Bu sayfada" [ref=f4e75] [cursor=pointer]
+        - navigation "Breadcrumb" [ref=f4e78]:
+          - list [ref=f4e79]:
+            - listitem [ref=f4e80]: Pavo Docs
+            - listitem [ref=f4e83]:
+              - link "Pavo 509 Entegrasyon Dokümanı" [ref=f4e84] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani
+            - listitem [ref=f4e87]:
+              - link "ENTEGRASYON METOTLARI" [ref=f4e88] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/entegrasyon-metotlari
+            - listitem [ref=f4e91]:
+              - link "Rest" [ref=f4e92] [cursor=pointer]:
+                - /url: /jzobSNOgnQwUd342oNq2/pavo-509-entegrasyon-dokumani/entegrasyon-metotlari/rest
+        - heading "Pairing - Cihaz Eşleştirme" [level=1] [ref=f4e93]
+      - generic [ref=f4e95]:
+        - paragraph [ref=f4e97]: Cihaz Eşleştirme servisi, cihazın sistem ile ilk kez eşleşmesini sağlayan temel bir işlemdir. Cihazlar aynı ağ üzerinden IP almalıdır. Eşleşme normal şartlarda bir kereye mahsus yapılması yeterlidir. Ancak TransactionSequence değeri sürekli artacağı için günde en az bir kere run edilmesi hem bu değeri sıfırlayacak hem de cihazların doğru şekilde haberleştiği teyit edilmiş olacaktır.
+        - separator [ref=f4e98]
+        - table [ref=f4e102]:
+          - rowgroup [ref=f4e103]:
+            - row [ref=f4e104]:
+              - columnheader "Method" [ref=f4e105]
+              - columnheader "Pairing" [ref=f4e106]
+          - rowgroup [ref=f4e108]:
+            - row [ref=f4e109]:
+              - cell [ref=f4e110]:
+                - paragraph [ref=f4e113]:
+                  - strong [ref=f4e114]: Secure
+              - cell [ref=f4e115]:
+                - paragraph [ref=f4e118]:
+                  - link "https://192.168.XX.XX:4568/Pairing" [ref=f4e120] [cursor=pointer]:
+                    - /url: https://192.168.xx.xx:4568/Pairing
+            - row [ref=f4e123]:
+              - cell [ref=f4e124]:
+                - paragraph [ref=f4e127]:
+                  - strong [ref=f4e128]: Non-Secure
+              - cell [ref=f4e129]:
+                - paragraph [ref=f4e132]:
+                  - link "http://192.168.XX.XX:4567/Pairing" [ref=f4e134] [cursor=pointer]:
+                    - /url: http://192.168.xx.xx:4567/Pairing
+        - note "Uyarı" [ref=f4e137]:
+          - paragraph [ref=f4e143]:
+            - text: Güvenlik açısından her zaman
+            - strong [ref=f4e144]: Secure (HTTPS)
+            - text: bağlantıyı kullanmanız önerilir.
+        - heading "Servis Giriş Parametreleri Başlığa doğrudan bağlantı" [level=3] [ref=f4e145]:
+          - generic [ref=f4e146]: Servis Giriş Parametreleri
+          - link "Başlığa doğrudan bağlantı" [ref=f4e148] [cursor=pointer]:
+            - /url: "#servis-giris-parametreleri"
+        - paragraph [ref=f4e152]: Her istekte gönderilmesi gereken işlem, cihaz, ödeme ve ek slip bilgilerini içerir.
+        - note "Tehlike" [ref=f4e153]:
+          - heading [level=4] [ref=f4e157]:
+            - generic [ref=f4e158]:
+              - strong [ref=f4e159]: Zorunlu alanlar
+              - code [ref=f4e160]:
+                - strong [ref=f4e161]: "*"
+              - strong [ref=f4e162]: simgesi ile belirtilmiştir.
+            - link "Başlığa doğrudan bağlantı" [ref=f4e164] [cursor=pointer]:
+              - /url: "#zorunlu-alanlar-simgesi-ile-belirtilmistir"
+        - table [ref=f4e170]:
+          - rowgroup [ref=f4e171]:
+            - row [ref=f4e172]:
+              - columnheader "Alan" [ref=f4e173]
+              - columnheader "Tip" [ref=f4e174]
+              - columnheader "Açıklama" [ref=f4e175]
+          - rowgroup [ref=f4e177]:
+            - row [ref=f4e178]:
+              - cell [ref=f4e179]:
+                - paragraph [ref=f4e182]:
+                  - strong [ref=f4e183]: TransactionHandle
+                  - strong [ref=f4e185]: "*"
+              - cell [ref=f4e186]:
+                - paragraph [ref=f4e189]:
+                  - strong [ref=f4e190]: object
+              - cell [ref=f4e191]:
+                - paragraph [ref=f4e194]:
+                  - strong [ref=f4e195]: TransactionHandle bilgisidir.
+            - row [ref=f4e196]:
+              - cell [ref=f4e197]:
+                - paragraph [ref=f4e200]:
+                  - text: SerialNumber
+                  - strong [ref=f4e202]: "*"
+              - cell [ref=f4e203]:
+                - paragraph [ref=f4e206]: string
+              - cell [ref=f4e207]:
+                - paragraph [ref=f4e210]: Bağlanılacak cihazın POS seri numarasıdır.
+            - row [ref=f4e211]:
+              - cell [ref=f4e212]:
+                - paragraph [ref=f4e215]:
+                  - text: Fingerprint
+                  - strong [ref=f4e217]: "*"
+              - cell [ref=f4e218]:
+                - paragraph [ref=f4e221]: string
+              - cell [ref=f4e222]:
+                - paragraph [ref=f4e225]:
+                  - text: "Eşleştirmede kullanılacak fingerprint bilgisidir. Herhangi bir değer belirlenebilir. Örneğin:"
+                  - code [ref=f4e226]: Test
+                  - text: . Sonraki tüm isteklerde aynı fingerprint değeri gönderilmelidir.
+            - row [ref=f4e227]:
+              - cell [ref=f4e228]:
+                - paragraph [ref=f4e231]:
+                  - text: TransactionSequence
+                  - strong [ref=f4e233]: "*"
+              - cell [ref=f4e234]:
+                - paragraph [ref=f4e237]: integer
+              - cell [ref=f4e238]:
+                - paragraph [ref=f4e241]:
+                  - text: Başlatılmak istenen işlem sıra numarasıdır. Diğer isteklerde pairing işlemindeki sequence değeri
+                  - code [ref=f4e242]: "1"
+                  - text: artırılarak gönderilmelidir.
+            - row [ref=f4e243]:
+              - cell [ref=f4e244]:
+                - paragraph [ref=f4e247]:
+                  - text: TransactionDate
+                  - strong [ref=f4e249]: "*"
+              - cell [ref=f4e250]:
+                - paragraph [ref=f4e253]: dateTime
+              - cell [ref=f4e254]:
+                - paragraph [ref=f4e257]:
+                  - text: İşlemin gönderildiği güncel tarih ve saat bilgisidir. Maksimum tolerans süresi
+                  - code [ref=f4e258]: "300"
+                  - text: saniyedir.
+        - heading "Örnek Request Başlığa doğrudan bağlantı" [level=3] [ref=f4e259]:
+          - generic [ref=f4e260]: Örnek Request
+          - link "Başlığa doğrudan bağlantı" [ref=f4e262] [cursor=pointer]:
+            - /url: "#ornek-request"
+        - generic [ref=f4e266]:
+          - generic [ref=f4e267]:
+            - button "GitBook Assistant Sor" [ref=f4e268] [cursor=pointer]:
+              - img "GitBook Assistant" [ref=f4e269]
+              - generic [ref=f4e276]: Sor
+            - button "Kopyala" [ref=f4e277] [cursor=pointer]
+          - code [ref=f4e280]:
+            - generic [ref=f4e281]: "{"
+            - generic [ref=f4e283]: "\"TransactionHandle\": {"
+            - generic [ref=f4e285]: "\"SerialNumber\": \"N500Z010503\","
+            - generic [ref=f4e287]: "\"TransactionDate\": \"2022-07-18T15:21:00.346314\","
+            - generic [ref=f4e289]: "\"TransactionSequence\": 1,"
+            - generic [ref=f4e291]: "\"Fingerprint\": \"test\""
+            - generic [ref=f4e293]: "}"
+            - generic [ref=f4e295]: "}"
+        - heading "Servis Çıkış Parametreleri Başlığa doğrudan bağlantı" [level=3] [ref=f4e297]:
+          - generic [ref=f4e298]: Servis Çıkış Parametreleri
+          - link "Başlığa doğrudan bağlantı" [ref=f4e300] [cursor=pointer]:
+            - /url: "#servis-cikis-parametreleri"
+        - paragraph [ref=f4e304]: Servis yanıtında dönen işlem sonucu, hata bilgisi ve POS işlem bilgilerini içerir.
+        - note "Tehlike" [ref=f4e305]:
+          - paragraph [ref=f4e311]:
+            - strong [ref=f4e312]: Null değer dönebilecek alanlar
+            - code [ref=f4e313]:
+              - strong [ref=f4e314]: "*"
+            - strong [ref=f4e315]: simgesi ile gösterilmiştir.
+        - table [ref=f4e319]:
+          - rowgroup [ref=f4e320]:
+            - row [ref=f4e321]:
+              - columnheader "Alan" [ref=f4e322]
+              - columnheader "Tip" [ref=f4e323]
+              - columnheader "Açıklama" [ref=f4e324]
+          - rowgroup [ref=f4e326]:
+            - row [ref=f4e327]:
+              - cell [ref=f4e328]:
+                - paragraph [ref=f4e331]: HasError
+              - cell [ref=f4e332]:
+                - paragraph [ref=f4e335]: boolean
+              - cell [ref=f4e336]:
+                - paragraph [ref=f4e339]: Yapılan işlemde hata olup olmadığını belirtir.
+            - row [ref=f4e340]:
+              - cell [ref=f4e341]:
+                - paragraph [ref=f4e344]: HasAbondon
+              - cell [ref=f4e345]:
+                - paragraph [ref=f4e348]: boolean
+              - cell [ref=f4e349]:
+                - paragraph [ref=f4e352]: Yapılan işlemden vazgeçilip vazgeçilmediğini veya işlemin terk edilip edilmediğini belirtir.
+            - row [ref=f4e353]:
+              - cell [ref=f4e354]:
+                - paragraph [ref=f4e357]:
+                  - text: ErrorCode
+                  - strong [ref=f4e359]: "*"
+              - cell [ref=f4e360]:
+                - paragraph [ref=f4e363]: integer
+              - cell [ref=f4e364]:
+                - paragraph [ref=f4e367]: Yapılan işlemdeki hata kodudur. Dokümanın sonunda açıklama eklenmiştir.
+            - row [ref=f4e368]:
+              - cell [ref=f4e369]:
+                - paragraph [ref=f4e372]:
+                  - text: Message
+                  - strong [ref=f4e374]: "*"
+              - cell [ref=f4e375]:
+                - paragraph [ref=f4e378]: string
+              - cell [ref=f4e379]:
+                - paragraph [ref=f4e382]: Varsa hata mesajıdır.
+            - row [ref=f4e383]:
+              - cell [ref=f4e384]:
+                - paragraph [ref=f4e387]:
+                  - strong [ref=f4e388]: TransactionHandle
+              - cell [ref=f4e389]:
+                - paragraph [ref=f4e392]:
+                  - strong [ref=f4e393]: object
+              - cell [ref=f4e394]:
+                - paragraph [ref=f4e397]:
+                  - strong [ref=f4e398]: POS’un kendi TransactionHandle bilgisidir.
+            - row [ref=f4e399]:
+              - cell [ref=f4e400]:
+                - paragraph [ref=f4e403]: SerialNumber
+              - cell [ref=f4e404]:
+                - paragraph [ref=f4e407]: string
+              - cell [ref=f4e408]:
+                - paragraph [ref=f4e411]: Bağlanılan cihazın POS seri numarasıdır.
+            - row [ref=f4e412]:
+              - cell [ref=f4e413]:
+                - paragraph [ref=f4e416]: Fingerprint
+              - cell [ref=f4e417]:
+                - paragraph [ref=f4e420]: string
+              - cell [ref=f4e421]:
+                - paragraph [ref=f4e424]: Bağlanılan cihazın POS fingerprint bilgisidir.
+            - row [ref=f4e425]:
+              - cell [ref=f4e426]:
+                - paragraph [ref=f4e429]: TransactionSequence
+              - cell [ref=f4e430]:
+                - paragraph [ref=f4e433]: integer
+              - cell [ref=f4e434]:
+                - paragraph [ref=f4e437]: İşlem sıra numarasıdır. POS kendi response’larını sıralı gönderir. İstekte gönderilen transaction sequence ile ilgisi yoktur.
+            - row [ref=f4e438]:
+              - cell [ref=f4e439]:
+                - paragraph [ref=f4e442]: TransactionDate
+              - cell [ref=f4e443]:
+                - paragraph [ref=f4e446]: dateTime
+              - cell [ref=f4e447]:
+                - paragraph [ref=f4e450]: POS’un güncel zaman bilgisidir.
+            - row [ref=f4e451]:
+              - cell [ref=f4e452]:
+                - paragraph [ref=f4e455]: Errors
+              - cell [ref=f4e456]:
+                - paragraph [ref=f4e459]: array
+              - cell [ref=f4e460]:
+                - paragraph [ref=f4e463]: Varsa hata listesidir.
+        - heading "Örnek Başarılı Response Başlığa doğrudan bağlantı" [level=3] [ref=f4e464]:
+          - generic [ref=f4e465]: Örnek Başarılı Response
+          - link "Başlığa doğrudan bağlantı" [ref=f4e467] [cursor=pointer]:
+            - /url: "#ornek-basarili-response"
+        - generic [ref=f4e471]:
+          - generic [ref=f4e472]:
+            - button "GitBook Assistant Sor" [ref=f4e473] [cursor=pointer]:
+              - img "GitBook Assistant" [ref=f4e474]
+              - generic [ref=f4e481]: Sor
+            - button "Kopyala" [ref=f4e482] [cursor=pointer]
+          - code [ref=f4e485]:
+            - generic [ref=f4e486]: "{"
+            - generic [ref=f4e488]: "\"HasAbondon\": false,"
+            - generic [ref=f4e490]: "\"HasError\": false,"
+            - generic [ref=f4e492]: "\"ErrorCode\": null,"
+            - generic [ref=f4e494]: "\"Message\": \"Eşleştirme tamamlandı.\","
+            - generic [ref=f4e496]: "\"TransactionHandle\": {"
+            - generic [ref=f4e498]: "\"SerialNumber\": \"N500W442141\","
+            - generic [ref=f4e500]: "\"Fingerprint\": \"XGD/la0920/la0920:7.1.2/N2G47H/109:user/dev-keys\","
+            - generic [ref=f4e502]: "\"TransactionSequence\": 1,"
+            - generic [ref=f4e504]: "\"TransactionDate\": \"2022-08-01T17:00:02.654701\""
+            - generic [ref=f4e506]: "}"
+            - generic [ref=f4e508]: "}"
+        - heading "Örnek Başarısız Response Başlığa doğrudan bağlantı" [level=3] [ref=f4e510]:
+          - generic [ref=f4e511]: Örnek Başarısız Response
+          - link "Başlığa doğrudan bağlantı" [ref=f4e513] [cursor=pointer]:
+            - /url: "#ornek-basarisiz-response"
+        - generic [ref=f4e517]:
+          - generic [ref=f4e518]:
+            - button "GitBook Assistant Sor" [ref=f4e519] [cursor=pointer]:
+              - img "GitBook Assistant" [ref=f4e520]
+              - generic [ref=f4e527]: Sor
+            - button "Kopyala" [ref=f4e528] [cursor=pointer]
+          - code [ref=f4e531]:
+            - generic [ref=f4e532]: "{"
+            - generic [ref=f4e534]: "\"HasAbondon\": true,"
+            - generic [ref=f4e536]: "\"HasError\": true,"
+            - generic [ref=f4e538]: "\"ErrorCode\": 5057,"
+            - generic [ref=f4e540]: "\"Message\": \"Pos ve harici cihaz zaman uyuşmazlığı. Tolerans aralığı 300 saniyedir.\","
+            - generic [ref=f4e542]: "\"TransactionHandle\": {"
+            - generic [ref=f4e544]: "\"SerialNumber\": \"N500Z010503\","
+            - generic [ref=f4e546]: "\"Fingerprint\": \"XGD/la0920/la0920:7.1.2/N2G47H/130:user/dev-keys\","
+            - generic [ref=f4e548]: "\"TransactionSequence\": 3,"
+            - generic [ref=f4e550]: "\"TransactionDate\": \"2022-08-02T09:49:03.418618\""
+            - generic [ref=f4e552]: "},"
+            - generic [ref=f4e554]: "\"Errors\": ["
+            - generic [ref=f4e556]: "\"Pos ve harici cihaz zaman uyuşmazlığı. Tolerans aralığı 300 saniyedir.\""
+            - generic [ref=f4e558]: "]"
+            - generic [ref=f4e560]: "}"
+        - paragraph
+    - generic [ref=f4e562]:
+      - paragraph [ref=f4e563]:
+        - text: Son güncelleme
+        - time [ref=f4e564]: 24 gün önce
+      - generic [ref=f4e566]:
+        - paragraph [ref=f4e567]: Bu yararlı oldu mu?
+        - generic [ref=f4e568]:
+          - button "Evet, oldu!" [ref=f4e569] [cursor=pointer]
+          - button "Emin değilim" [ref=f4e573] [cursor=pointer]
+          - button "Hayır" [ref=f4e577] [cursor=pointer]
+  - contentinfo [ref=f4e581]:
+    - radiogroup [ref=f4e586]:
+      - radio "Açık temaya geç" [ref=f4e587] [cursor=pointer]
+      - radio "Sistem temasına geç" [ref=f4e590] [cursor=pointer]
+      - radio "Koyu temaya geç" [ref=f4e593] [cursor=pointer]

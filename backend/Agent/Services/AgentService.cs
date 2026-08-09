@@ -264,7 +264,10 @@ public sealed class AgentService : IAgentService
         return new AgentEnrollmentCodeDto { Id = x.Id, Code = x.Code, KurumId = x.KurumId, TesisIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(x.TesisIds) ?? [], AllowedScopes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(x.AllowedScopes) ?? [], RequiresApproval = x.RequiresApproval, KullanimSayisi = x.KullanimSayisi, MaxKullanimSayisi = x.MaxKullanimSayisi, ExpiresAt = x.ExpiresAt, Durum = (int)x.Durum, AgentId = x.AgentId, CreatedAt = x.CreatedAt ?? DateTime.MinValue };
     }
 
-    private static bool ComputeOnline(DateTime? lastHeartbeat) => lastHeartbeat.HasValue && (DateTime.UtcNow - lastHeartbeat.Value) <= TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan OnlineHeartbeatTolerance = TimeSpan.FromSeconds(90);
+
+    private static bool ComputeOnline(DateTime? lastHeartbeat) =>
+        lastHeartbeat.HasValue && (DateTime.UtcNow - lastHeartbeat.Value) <= OnlineHeartbeatTolerance;
 
     private static bool SyncScopes(StysAppDbContext db, AgentEntity agent, IReadOnlyCollection<string> requestedScopes)
     {

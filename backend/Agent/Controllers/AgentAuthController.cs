@@ -17,15 +17,18 @@ public sealed class AgentAuthController : ControllerBase
     private readonly IAgentTokenService _tokenService;
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly AgentCommandService _commandService;
+    private readonly IAgentRealtimeNotifier _realtimeNotifier;
 
     public AgentAuthController(
         IAgentTokenService tokenService,
         IDbContextFactory<StysAppDbContext> dbContextFactory,
-        AgentCommandService commandService)
+        AgentCommandService commandService,
+        IAgentRealtimeNotifier realtimeNotifier)
     {
         _tokenService = tokenService;
         _dbContextFactory = dbContextFactory;
         _commandService = commandService;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     [HttpPost("enroll")]
@@ -63,6 +66,7 @@ public sealed class AgentAuthController : ControllerBase
             agent.AgentVersion = request.AgentVersion;
             agent.CihazKimligi ??= request.CihazKimligi;
             await db.SaveChangesAsync(cancellationToken);
+            await _realtimeNotifier.AgentChangedAsync(cancellationToken);
         }
 
         return Ok(new AgentHeartbeatResponse

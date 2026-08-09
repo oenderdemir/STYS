@@ -17,6 +17,7 @@ export class AgentRealtimeService {
     private readonly destroyRef = inject(DestroyRef);
 
     readonly commandUpdates = signal<AgentCommandDto | null>(null);
+    readonly agentChanged = signal(0);
 
     constructor() {
         effect(() => {
@@ -25,9 +26,7 @@ export class AgentRealtimeService {
                 this.stopConnection();
                 return;
             }
-            if (this.currentAgentId !== null) {
-                void this.ensureConnection();
-            }
+            void this.ensureConnection();
         });
     }
 
@@ -72,6 +71,10 @@ export class AgentRealtimeService {
 
         connection.on('AgentCommandUpdated', (payload: AgentCommandDto) => {
             this.commandUpdates.set(payload);
+        });
+
+        connection.on('AgentChanged', () => {
+            this.agentChanged.update((value) => value + 1);
         });
 
         connection.onclose(() => {

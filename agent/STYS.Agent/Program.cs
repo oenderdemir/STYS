@@ -18,6 +18,7 @@ builder.Services.Configure<StysAgentClientOptions>(
     builder.Configuration.GetSection(StysAgentClientOptions.SectionName));
 
 builder.Services.AddSingleton<AgentTokenStore>();
+builder.Services.AddSingleton<IAgentAuthenticationState, AgentAuthenticationState>();
 builder.Services.AddSingleton<IAgentCredentialStore, FileAgentCredentialStore>();
 builder.Services.AddTransient<AgentAuthenticationHandler>();
 
@@ -29,8 +30,7 @@ builder.Services.AddHttpClient<IStysAgentApiClient, StysAgentApiClient>((sp, cli
 })
 .AddHttpMessageHandler<AgentAuthenticationHandler>();
 
-builder.Services.AddSingleton<AgentHostedService>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentHostedService>());
+builder.Services.AddHostedService<AgentHostedService>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<CommandPollingWorker>();
 

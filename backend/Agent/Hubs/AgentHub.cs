@@ -14,6 +14,7 @@ public sealed class AgentHub : Hub
 {
     public const string HubRoute = "/ui/agent-hub";
     public const string EventName = "AgentCommandUpdated";
+    public const string AgentChangedEventName = "AgentChanged";
 
     private readonly IDbContextFactory<StysAppDbContext> _dbFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
@@ -74,6 +75,30 @@ public sealed class AgentCommandRealtimeNotifier : IAgentCommandRealtimeNotifier
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Agent command SignalR yayını başarısız: CommandId={CommandId}", command.Id);
+        }
+    }
+}
+
+public sealed class AgentRealtimeNotifier : IAgentRealtimeNotifier
+{
+    private readonly IHubContext<AgentHub> _hubContext;
+    private readonly ILogger<AgentRealtimeNotifier> _logger;
+
+    public AgentRealtimeNotifier(IHubContext<AgentHub> hubContext, ILogger<AgentRealtimeNotifier> logger)
+    {
+        _hubContext = hubContext;
+        _logger = logger;
+    }
+
+    public async Task AgentChangedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _hubContext.Clients.All.SendAsync(AgentHub.AgentChangedEventName, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Agent SignalR refresh yayını başarısız.");
         }
     }
 }

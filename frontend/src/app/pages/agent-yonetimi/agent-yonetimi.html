@@ -7,6 +7,9 @@
             <button pButton pRipple label="Yeni Agent" icon="pi pi-plus" class="p-button-success mr-2" (click)="openNew()"></button>
             <button pButton pRipple label="Enrollment Kodları" icon="pi pi-key" class="p-button-help" (click)="openEnrollmentDialog()"></button>
         </ng-template>
+        <ng-template pTemplate="right">
+            <button pButton pRipple label="Yenile" icon="pi pi-refresh" class="p-button-secondary" [loading]="loading()" (click)="refreshAgents()"></button>
+        </ng-template>
     </p-toolbar>
 
     <p-table
@@ -122,13 +125,45 @@
     [style]="{ width: '700px' }">
     <ng-template pTemplate="content">
         <div class="field grid">
+            <div class="col-12 md:col-6">
+                <label for="enrollmentTesisler">Tesisler</label>
+                <p-multiselect
+                    inputId="enrollmentTesisler"
+                    [options]="enrollmentTesisler"
+                    optionLabel="ad"
+                    optionValue="id"
+                    [filter]="true"
+                    [showToggleAll]="false"
+                    [maxSelectedLabels]="2"
+                    appendTo="body"
+                    [(ngModel)]="enrollmentForm.tesisIds"
+                    styleClass="w-full"
+                    placeholder="TRT kurumuna bağlı tesis seçin" />
+            </div>
+            <div class="col-12 md:col-6">
+                <label for="enrollmentScopes">Scope'lar</label>
+                <p-multiselect
+                    inputId="enrollmentScopes"
+                    [options]="enrollmentScopeOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    [showToggleAll]="false"
+                    [maxSelectedLabels]="3"
+                    appendTo="body"
+                    [(ngModel)]="enrollmentForm.allowedScopes"
+                    styleClass="w-full"
+                    placeholder="Gerekli scope'ları seçin" />
+            </div>
+        </div>
+
+        <div class="field grid mt-3">
             <div class="col-6 flex align-items-end">
                 <div class="field-checkbox">
                     <p-checkbox inputId="requiresApproval" [binary]="true" [(ngModel)]="enrollmentForm.requiresApproval" />
                     <label for="requiresApproval">Onay gerektirsin</label>
                 </div>
             </div>
-            <div class="col-6 flex align-items-end">
+            <div class="col-6 flex align-items-end justify-content-end">
                 <button pButton pRipple label="Kod Oluştur" icon="pi pi-key" class="p-button-success" (click)="generateEnrollmentCode()"></button>
             </div>
         </div>

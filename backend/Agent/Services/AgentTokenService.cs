@@ -17,22 +17,30 @@ public sealed class AgentTokenService : IAgentTokenService
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly IAgentJwtTokenService _jwtTokenService;
     private readonly IAgentEnrollmentExecutionHook? _hook;
+    private readonly IAgentRealtimeNotifier? _realtimeNotifier;
 
-    public AgentTokenService(IDbContextFactory<StysAppDbContext> dbContextFactory, IAgentJwtTokenService jwtTokenService, IAgentEnrollmentExecutionHook? hook = null)
+    public AgentTokenService(
+        IDbContextFactory<StysAppDbContext> dbContextFactory,
+        IAgentJwtTokenService jwtTokenService,
+        IAgentEnrollmentExecutionHook? hook = null,
+        IAgentRealtimeNotifier? realtimeNotifier = null)
     {
         _dbContextFactory = dbContextFactory;
         _jwtTokenService = jwtTokenService;
         _hook = hook;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
 
         try
         {
             var enrollment = await db.Set<AgentEnrollment>()
+                .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(x => x.Code == request.EnrollmentCode && !x.IsDeleted, cancellationToken);
 
             if (enrollment is null)
@@ -50,14 +58,38 @@ public sealed class AgentTokenService : IAgentTokenService
             await ValidateTesisIdsAsync(db, enrollment.KurumId, allowedTesisIds, cancellationToken);
 
             var agentDurum = enrollment.RequiresApproval ? AgentDurum.PendingApproval : AgentDurum.Active;
-            var agent = new AgentEntity
+            var agent = await db.Set<AgentEntity>()
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.KurumId == enrollment.KurumId && x.AgentKey == request.AgentKey && !x.IsDeleted, cancellationToken);
+
+            if (agent is null)
             {
-                Ad = request.AgentKey, AgentKey = request.AgentKey, KurumId = enrollment.KurumId, Durum = agentDurum,
-                AgentVersion = request.AgentVersion, CihazKimligi = request.CihazKimligi, PublicKey = request.PublicKey,
-                CreatedBy = "agent-enrollment", CreatedAt = DateTime.UtcNow
-            };
-            db.Set<AgentEntity>().Add(agent);
-            await db.SaveChangesAsync(cancellationToken);
+                agent = new AgentEntity
+                {
+                    Ad = request.AgentKey,
+                    AgentKey = request.AgentKey,
+                    KurumId = enrollment.KurumId,
+                    Durum = agentDurum,
+                    AgentVersion = request.AgentVersion,
+                    CihazKimligi = request.CihazKimligi,
+                    PublicKey = request.PublicKey,
+                    CreatedBy = "agent-enrollment",
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.Set<AgentEntity>().Add(agent);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                await RemoveExistingAgentEnrollmentDataAsync(db, agent.Id, cancellationToken);
+                agent.Ad = request.AgentKey;
+                agent.Durum = agentDurum;
+                agent.AgentVersion = request.AgentVersion;
+                agent.CihazKimligi = request.CihazKimligi;
+                agent.PublicKey = request.PublicKey;
+                agent.IsDeleted = false;
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
             foreach (var tesisId in allowedTesisIds)
                 db.Set<AgentTesis>().Add(new AgentTesis { AgentId = agent.Id, KurumId = enrollment.KurumId, TesisId = tesisId, CreatedBy = "agent-enrollment", CreatedAt = DateTime.UtcNow });
@@ -85,6 +117,9 @@ public sealed class AgentTokenService : IAgentTokenService
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
+            if (_realtimeNotifier is not null)
+                await _realtimeNotifier.AgentChangedAsync(cancellationToken);
+
             return new AgentEnrollmentResponse { AgentId = agent.Id, ClientId = clientId, ClientSecret = clientSecret, AgentKey = agent.AgentKey, Durum = (int)agent.Durum, Message = agent.Durum == AgentDurum.Active ? "Agent başarıyla kaydedildi." : "Agent kaydedildi, onay bekleniyor." };
         }
         catch
@@ -94,11 +129,38 @@ public sealed class AgentTokenService : IAgentTokenService
         }
     }
 
+    private static async Task RemoveExistingAgentEnrollmentDataAsync(StysAppDbContext db, int agentId, CancellationToken ct)
+    {
+        var existingCredentials = await db.Set<AgentCredential>()
+            .IgnoreQueryFilters()
+            .Where(x => x.AgentId == agentId && !x.IsDeleted)
+            .ToListAsync(ct);
+        var existingScopes = await db.Set<AgentScope>()
+            .IgnoreQueryFilters()
+            .Where(x => x.AgentId == agentId && !x.IsDeleted)
+            .ToListAsync(ct);
+        var existingTesis = await db.Set<AgentTesis>()
+            .IgnoreQueryFilters()
+            .Where(x => x.AgentId == agentId && !x.IsDeleted)
+            .ToListAsync(ct);
+
+        if (existingCredentials.Count > 0)
+            db.RemoveRange(existingCredentials);
+        if (existingScopes.Count > 0)
+            db.RemoveRange(existingScopes);
+        if (existingTesis.Count > 0)
+            db.RemoveRange(existingTesis);
+
+        if (existingCredentials.Count > 0 || existingScopes.Count > 0 || existingTesis.Count > 0)
+            await db.SaveChangesAsync(ct);
+    }
+
     public async Task<AgentTokenResponse> IssueTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var credential = await db.Set<AgentCredential>()
+            .IgnoreQueryFilters()
             .Include(x => x.Agent)
             .FirstOrDefaultAsync(x => x.ClientId == request.ClientId && !x.IsDeleted, cancellationToken);
         if (credential is null) throw new BaseException("Geçersiz client kimliği.", 401);
@@ -117,10 +179,12 @@ public sealed class AgentTokenService : IAgentTokenService
         if (agent.Durum == AgentDurum.PendingApproval) throw new BaseException("Agent henüz onaylanmamış.", 403);
 
         var tesisIds = await db.Set<AgentTesis>()
+            .IgnoreQueryFilters()
             .Where(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted)
             .Select(x => x.TesisId).ToListAsync(cancellationToken);
 
         var scopes = await db.Set<AgentScope>()
+            .IgnoreQueryFilters()
             .Where(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted)
             .Select(x => x.Scope).ToListAsync(cancellationToken);
 
@@ -138,7 +202,11 @@ public sealed class AgentTokenService : IAgentTokenService
     private static async Task ValidateTesisIdsAsync(StysAppDbContext db, int kurumId, List<int> tesisIds, CancellationToken ct)
     {
         if (tesisIds.Count == 0) return;
-        var valid = await db.Set<Tesis>().Where(x => tesisIds.Contains(x.Id) && x.KurumId == kurumId && !x.IsDeleted).Select(x => x.Id).ToListAsync(ct);
+        var valid = await db.Set<Tesis>()
+            .IgnoreQueryFilters()
+            .Where(x => tesisIds.Contains(x.Id) && x.KurumId == kurumId && !x.IsDeleted)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
         var invalid = tesisIds.Where(x => !valid.Contains(x)).ToList();
         if (invalid.Count > 0) throw new BaseException($"Geçersiz tesis ID'leri: {string.Join(", ", invalid)}", 400);
     }

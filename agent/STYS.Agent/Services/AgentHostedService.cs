@@ -1,19 +1,20 @@
-using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
 using STYS.Agent.Contracts.Dtos;
 
 namespace STYS.Agent.Services;
 
-public sealed class AgentHostedService : IHostedService
+public sealed class AgentHostedService : BackgroundService
 {
     private readonly IStysAgentApiClient _client;
     private readonly IAgentCredentialStore _credentialStore;
     private readonly StysAgentClientOptions _options;
     private readonly AgentTokenStore _tokenStore;
+    private readonly IAgentAuthenticationState _authenticationState;
     private readonly ILogger<AgentHostedService> _logger;
 
     public AgentHostedService(
@@ -21,71 +22,100 @@ public sealed class AgentHostedService : IHostedService
         IAgentCredentialStore credentialStore,
         IOptions<StysAgentClientOptions> options,
         AgentTokenStore tokenStore,
+        IAgentAuthenticationState authenticationState,
         ILogger<AgentHostedService> logger)
     {
         _client = client;
         _credentialStore = credentialStore;
         _options = options.Value;
         _tokenStore = tokenStore;
+        _authenticationState = authenticationState;
         _logger = logger;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("STYS Agent başlatılıyor...");
-
-        var credential = await _credentialStore.GetAsync(cancellationToken);
-
-        if (credential is null)
-        {
-            await TryEnrollAsync(cancellationToken);
-            credential = await _credentialStore.GetAsync(cancellationToken);
-        }
-
-        if (credential is null)
-        {
-            _logger.LogWarning("Agent enrollment başarısız — konfigürasyon kontrol edilmeli.");
-            return;
-        }
-
-        _options.ClientId = credential.ClientId;
-        _options.ClientSecret = credential.ClientSecret;
-        _options.AgentInstanceId = credential.AgentInstanceId;
-
-        try
-        {
-            var tokenResponse = await _client.GetTokenAsync(new AgentTokenRequest
-            {
-                ClientId = credential.ClientId,
-                ClientSecret = credential.ClientSecret,
-                AgentInstanceId = credential.AgentInstanceId,
-                AgentVersion = _options.AgentVersion
-            }, cancellationToken);
-
-            _tokenStore.SetToken(tokenResponse);
-            _logger.LogInformation("Agent başarıyla kimlik doğruladı (AgentId: {AgentId}).", credential.AgentId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Agent kimlik doğrulama başarısız.");
-        }
+        await ExecuteAuthenticationLoopAsync(stoppingToken);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    private async Task ExecuteAuthenticationLoopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("STYS Agent durduruluyor.");
-        return Task.CompletedTask;
+        while (!cancellationToken.IsCancellationRequested && !_authenticationState.IsReady)
+        {
+            var credential = await _credentialStore.GetAsync(cancellationToken);
+            if (!IsUsableCredential(credential))
+            {
+                if (credential is not null)
+                {
+                    _logger.LogWarning("Kayıtlı credential geçersiz görünüyor, temizleniyor.");
+                    await _credentialStore.DeleteAsync(cancellationToken);
+                }
+
+                credential = null;
+            }
+
+            if (credential is null)
+            {
+                if (!await TryEnrollAsync(cancellationToken))
+                {
+                    await WaitBeforeRetryAsync(cancellationToken);
+                    continue;
+                }
+
+                credential = await _credentialStore.GetAsync(cancellationToken);
+                if (credential is null)
+                {
+                    await WaitBeforeRetryAsync(cancellationToken);
+                    continue;
+                }
+            }
+
+            _options.ClientId = credential.ClientId;
+            _options.ClientSecret = credential.ClientSecret;
+            _options.AgentInstanceId = credential.AgentInstanceId;
+
+            try
+            {
+                var tokenResponse = await _client.GetTokenAsync(new AgentTokenRequest
+                {
+                    ClientId = credential.ClientId,
+                    ClientSecret = credential.ClientSecret,
+                    AgentInstanceId = credential.AgentInstanceId,
+                    AgentVersion = _options.AgentVersion
+                }, cancellationToken);
+
+                _tokenStore.SetToken(tokenResponse);
+                _authenticationState.MarkAuthenticated();
+                _logger.LogInformation("Agent başarıyla kimlik doğruladı (AgentId: {AgentId}).", credential.AgentId);
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (await TryRecoverByReenrollingAsync(ex, cancellationToken))
+                    continue;
+
+                _logger.LogWarning(ex, "Agent kimlik doğrulama başarısız. Yeniden denenecek.");
+                await WaitBeforeRetryAsync(cancellationToken);
+            }
+        }
     }
 
-    private async Task TryEnrollAsync(CancellationToken cancellationToken)
+    private static bool IsUsableCredential(AgentLocalCredential? credential) =>
+        credential is not null &&
+        !string.IsNullOrWhiteSpace(credential.ClientId) &&
+        !string.IsNullOrWhiteSpace(credential.ClientSecret) &&
+        !string.IsNullOrWhiteSpace(credential.AgentInstanceId);
+
+    private async Task<bool> TryEnrollAsync(CancellationToken cancellationToken)
     {
         var enrollmentCode = _options.EnrollmentCode
             ?? Environment.GetEnvironmentVariable("STYS_ENROLLMENT_CODE");
 
         if (string.IsNullOrWhiteSpace(enrollmentCode))
         {
-            _logger.LogInformation("Enrollment kodu bulunamadı — kayıt yapılmayacak.");
-            return;
+            _logger.LogInformation("Enrollment kodu bulunamadı — kimlik doğrulama bekleniyor.");
+            return false;
         }
 
         _logger.LogInformation("Enrollment kodu bulundu, kayıt başlatılıyor...");
@@ -123,18 +153,44 @@ public sealed class AgentHostedService : IHostedService
             _options.ClientId = credential.ClientId;
             _options.ClientSecret = credential.ClientSecret;
             _options.AgentInstanceId = credential.AgentInstanceId;
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Enrollment başarısız.");
+            _logger.LogWarning(ex, "Enrollment başarısız. Yeniden denenecek.");
+            return false;
         }
     }
+
+    private static Task WaitBeforeRetryAsync(CancellationToken cancellationToken) =>
+        Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+
+    private async Task<bool> TryRecoverByReenrollingAsync(Exception ex, CancellationToken cancellationToken)
+    {
+        if (!IsAuthenticationFailure(ex))
+            return false;
+
+        var enrollmentCode = _options.EnrollmentCode
+            ?? Environment.GetEnvironmentVariable("STYS_ENROLLMENT_CODE");
+
+        if (string.IsNullOrWhiteSpace(enrollmentCode))
+            return false;
+
+        _logger.LogWarning("Kayıtlı credential geçersiz görünüyor ve enrollment code mevcut. Credential temizlenip yeniden enrollment deneniyor.");
+        await _credentialStore.DeleteAsync(cancellationToken);
+        return await TryEnrollAsync(cancellationToken);
+    }
+
+    private static bool IsAuthenticationFailure(Exception ex) =>
+        ex is HttpRequestException httpEx &&
+        httpEx.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
 
     private static string GetOrCreateInstanceId()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var directory = Path.Combine(appData, "STYS", "Agent");
         Directory.CreateDirectory(directory);
+        TrySecureDirectory(directory);
         var instanceFile = Path.Combine(directory, "instance.id");
 
         if (File.Exists(instanceFile))
@@ -146,7 +202,25 @@ public sealed class AgentHostedService : IHostedService
 
         var id = Guid.NewGuid().ToString("N");
         File.WriteAllText(instanceFile, id);
-        try { File.SetUnixFileMode(instanceFile, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
+        TrySecureFile(instanceFile);
         return id;
+    }
+
+    private static void TrySecureFile(string path)
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            return;
+
+        try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
+        catch { }
+    }
+
+    private static void TrySecureDirectory(string path)
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            return;
+
+        try { File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
+        catch { }
     }
 }

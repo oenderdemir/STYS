@@ -1,0 +1,68 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - button "İçindekiler tablosunu aç" [ref=e7] [cursor=pointer]
+        - link "Pavo Docs" [ref=e10] [cursor=pointer]:
+          - /url: /jzobSNOgnQwUd342oNq2
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e15]:
+            - textbox "Ara" [ref=e19]:
+              - /placeholder: Ara…
+            - generic [ref=e21]:
+              - generic [ref=e22]: Ctrl
+              - generic [ref=e24]: k
+          - alert [ref=e25]
+        - button "GitBook Asistanı sor" [ref=e26] [cursor=pointer]:
+          - img "GitBook Assistant" [ref=e27]
+      - link "Overtech" [ref=e35] [cursor=pointer]:
+        - /url: https://www.overtech.com.tr/
+  - main [ref=e40]:
+    - generic [ref=e41]:
+      - text: For the complete documentation index, see
+      - link "llms.txt" [ref=e42] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/llms.txt
+      - text: . This page is also available as
+      - link "Markdown" [ref=e43] [cursor=pointer]:
+        - /url: https://docs.pavopay.dev/jzobSNOgnQwUd342oNq2/readme.md
+      - text: .
+    - generic [ref=e44]:
+      - generic [ref=e47]:
+        - button "Sor" [ref=e48] [cursor=pointer]:
+          - img "GitBook Assistant" [ref=e49]
+        - button "Daha fazla" [ref=e57] [cursor=pointer]
+      - generic [ref=e61]:
+        - heading "PavoPay Dokümanına Hoşgeldiniz Başlığa doğrudan bağlantı" [level=2] [ref=e62]:
+          - generic [ref=e63]: PavoPay Dokümanına Hoşgeldiniz
+          - link "Başlığa doğrudan bağlantı" [ref=e65] [cursor=pointer]:
+            - /url: "#pavopay-dokumanina-hosgeldiniz"
+        - paragraph [ref=e69]: Pavo Finansal Teknoloji Çözümleri tarafından sunulan teknik dokümantasyon portalına hoş geldiniz. Projenize özel entegrasyon rehberine aşağıdan ulaşabilirsiniz.
+        - separator [ref=e70]
+        - blockquote [ref=e71]:
+          - paragraph [ref=e73]:
+            - text: ⚠️
+            - strong [ref=e74]: Erişebileceğiniz bir doküman bulunamadı
+          - paragraph [ref=e76]: Şu anda bu sayfada size özel görüntülenebilecek bir doküman tanımlı değil.
+          - paragraph [ref=e78]: Eğer bu durumu beklemiyorsanız ya da farklı bir proje için dokümana ihtiyacınız varsa, lütfen bizimle iletişime geçin.
+          - paragraph [ref=e80]: 📩 info@pavo.com.tr
+        - separator [ref=e81]
+        - paragraph [ref=e83]:
+          - text: "📩 İletişim:"
+          - link "info@pavo.com.tr" [ref=e85] [cursor=pointer]:
+            - /url: mailto:info@pavo.com.tr
+    - generic [ref=e88]:
+      - paragraph [ref=e89]:
+        - text: Son güncelleme
+        - time [ref=e90]: 24 gün önce
+      - generic [ref=e92]:
+        - paragraph [ref=e93]: Bu yararlı oldu mu?
+        - generic [ref=e94]:
+          - button "Evet, oldu!" [ref=e95] [cursor=pointer]
+          - button "Emin değilim" [ref=e99] [cursor=pointer]
+          - button "Hayır" [ref=e103] [cursor=pointer]
+  - contentinfo [ref=e107]:
+    - radiogroup [ref=e112]:
+      - radio "Açık temaya geç" [ref=e113] [cursor=pointer]
+      - radio "Sistem temasına geç" [ref=e116] [cursor=pointer]
+      - radio "Koyu temaya geç" [ref=e119] [cursor=pointer]

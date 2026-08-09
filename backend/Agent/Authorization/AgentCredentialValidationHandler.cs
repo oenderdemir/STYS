@@ -31,6 +31,7 @@ public sealed class AgentCredentialValidationHandler : AuthorizationHandler<Agen
         {
             await using var db = await _dbContextFactory.CreateDbContextAsync();
             var credential = await db.Set<AgentCredential>()
+                .IgnoreQueryFilters()
                 .Include(x => x.Agent)
                 .FirstOrDefaultAsync(x => x.Id == credentialId && !x.IsDeleted);
 

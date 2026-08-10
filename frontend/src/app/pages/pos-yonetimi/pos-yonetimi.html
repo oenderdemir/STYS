@@ -1,31 +1,100 @@
 <p-toast />
 <p-confirmDialog />
 
-<div class="card">
-    <p-toolbar styleClass="mb-3">
-        <ng-template pTemplate="left">
-            <button pButton pRipple label="Yeni POS Cihazı" icon="pi pi-plus" class="p-button-success" (click)="openNew()"></button>
-        </ng-template>
-    </p-toolbar>
+<div class="card pos-page-header">
+    <div class="pos-page-header__content">
+        <div class="pos-page-header__eyebrow">POS cihazları ve terminaller</div>
+        <h2>POS Yönetimi</h2>
+        <p>POS cihazlarını, bağlı agent ilişkisini ve terminal bağlantılarını tek ekrandan yönetin.</p>
+    </div>
 
-    <p-table [value]="cihazlar()" [loading]="cihazLoading()" [paginator]="true" [rows]="10" dataKey="id"
-        styleClass="p-datatable-gridlines p-datatable-striped p-datatable-sm" [tableStyle]="{ 'min-width': '50rem' }">
+    <div class="pos-page-header__actions">
+        <div class="field pos-page-filter">
+            <label for="tesisFilter">Tesis filtresi</label>
+            <p-select
+                inputId="tesisFilter"
+                [options]="tesisFilterOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="selectedTesisFilterId()"
+                (ngModelChange)="selectedTesisFilterId.set($event ?? null)"
+                [appendTo]="'body'"
+                [filter]="true"
+                [showClear]="true"
+                placeholder="Tüm tesisler"
+                styleClass="w-full"
+            />
+        </div>
+        <button pButton pRipple label="Yeni POS Cihazı" icon="pi pi-plus" class="p-button-success" (click)="openNew()"></button>
+    </div>
+</div>
+
+<div class="pos-stats">
+    <div class="card pos-stat">
+        <span class="pos-stat__label">Toplam cihaz</span>
+        <span class="pos-stat__value">{{ cihazOzet().toplam }}</span>
+    </div>
+    <div class="card pos-stat">
+        <span class="pos-stat__label">Aktif cihaz</span>
+        <span class="pos-stat__value">{{ cihazOzet().aktif }}</span>
+    </div>
+    <div class="card pos-stat">
+        <span class="pos-stat__label">Eşleşmiş cihaz</span>
+        <span class="pos-stat__value">{{ cihazOzet().eslesmis }}</span>
+    </div>
+    <div class="card pos-stat">
+        <span class="pos-stat__label">Toplam terminal</span>
+        <span class="pos-stat__value">{{ cihazOzet().terminal }}</span>
+    </div>
+</div>
+
+<div class="card pos-list-card">
+    <p-table [value]="filteredCihazlar()" [loading]="cihazLoading()" [paginator]="true" [rows]="10" dataKey="id"
+        styleClass="p-datatable-gridlines p-datatable-striped p-datatable-sm pos-table" [tableStyle]="{ 'min-width': '72rem' }">
         <ng-template pTemplate="header">
             <tr>
-                <th>Ad</th><th>Sağlayıcı</th><th>Seri No</th><th>Tesis</th><th>Agent</th><th>Durum</th><th style="width:7rem">İşlem</th>
+                <th>Cihaz</th><th>Tesis</th><th>Agent</th><th>Sağlayıcı</th><th>Seri No</th><th>Terminaller</th><th>Durum</th><th style="width:7rem">İşlem</th>
             </tr>
         </ng-template>
         <ng-template pTemplate="body" let-c>
             <tr>
-                <td><span class="font-medium">{{ c.ad }}</span></td>
+                <td>
+                    <div class="entity-cell">
+                        <span class="entity-cell__title">{{ c.ad }}</span>
+                        <span class="entity-cell__subtitle">ID: {{ c.id }}</span>
+                    </div>
+                </td>
+                <td>
+                    <div class="entity-cell">
+                        <p-tag [value]="c.tesisAd ?? getTesisLabel(c.tesisId)" severity="info" />
+                        <span class="entity-cell__subtitle">Tesis ataması</span>
+                    </div>
+                </td>
+                <td>
+                    <div class="entity-cell">
+                        <p-tag [value]="c.agentAd ?? 'Atanmadı'" [severity]="c.agentId ? 'success' : 'secondary'" />
+                        <span class="entity-cell__subtitle">{{ c.agentId ? getAgentLabel(c.agentId) : 'Agent ilişkilendirilmedi' }}</span>
+                    </div>
+                </td>
                 <td><p-tag [value]="getSaglayiciLabel(c.saglayici)" [severity]="c.saglayici===0?'info':'secondary'" /></td>
                 <td><code class="text-sm">{{ c.seriNo }}</code></td>
-                <td>{{ c.tesisAd ?? getTesisLabel(c.tesisId) }}</td>
-                <td>{{ c.agentAd ?? getAgentLabel(c.agentId) }}</td>
-                <td><p-tag [value]="c.aktifMi?'Aktif':'Pasif'" [severity]="c.aktifMi?'success':'danger'" /></td>
+                <td>{{ c.terminalSayisi }}</td>
                 <td>
+                    <div class="status-stack">
+                        <p-tag [value]="c.aktifMi?'Aktif':'Pasif'" [severity]="c.aktifMi?'success':'danger'" />
+                        <p-tag [value]="c.eslesmeOnayliMi?'Eşleşmiş':'Eşleşmemiş'" [severity]="c.eslesmeOnayliMi?'success':'warn'" />
+                    </div>
+                </td>
+                <td class="table-actions">
                     <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-sm" (click)="edit(c)" pTooltip="Düzenle"></button>
                     <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-text p-button-sm p-button-danger" (click)="deleteItem(c)" pTooltip="Pasifleştir"></button>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="8">
+                    <div class="empty-state">Seçili filtreye uygun POS cihazı bulunamadı.</div>
                 </td>
             </tr>
         </ng-template>
@@ -60,17 +129,47 @@
             <p-tabpanels>
                 <!-- GENEL BİLGİLER -->
                 <p-tabpanel value="general">
-                    <div class="form-grid">
-                        <div class="field"><label for="ad">Cihaz Adı *</label><input pInputText id="ad" [(ngModel)]="form.ad" required [class.ng-invalid]="submitted()&&!form.ad.trim()" /></div>
-                        <div class="field"><label for="seriNo">Seri No *</label><input pInputText id="seriNo" [(ngModel)]="form.seriNo" required [class.ng-invalid]="submitted()&&!form.seriNo.trim()" /></div>
-                        <div class="field"><label for="saglayici">Sağlayıcı</label><p-select id="saglayici" [options]="cihazSaglayiciOptions" [(ngModel)]="form.saglayici" styleClass="w-full" /></div>
-                        <div class="field"><label for="tesisId">Tesis *</label><p-select inputId="tesisId" [options]="tesisler()" optionLabel="ad" optionValue="id" appendTo="body" [filter]="true" [(ngModel)]="form.tesisId" styleClass="w-full" placeholder="Tesis seçin" (onChange)="onTesisChanged()" /></div>
-                        <div class="field"><label for="agentId">Bağlı Agent</label><p-select inputId="agentId" [options]="getAgentOptions()" optionLabel="label" optionValue="value" appendTo="body" [filter]="true" [showClear]="true" [(ngModel)]="form.agentId" styleClass="w-full" placeholder="Agent seçin" /><small>Cihazın bağlı olduğu agent. Boş bırakılabilir.</small></div>
-                        <div class="field"><label for="ipAdresi">IP Adresi</label><input pInputText id="ipAdresi" [(ngModel)]="form.ipAdresi" /></div>
-                        <div class="field"><label for="httpPort">HTTP Port</label><input pInputText id="httpPort" type="number" [(ngModel)]="form.httpPort" /></div>
-                        <div class="field"><label for="httpsPort">HTTPS Port</label><input pInputText id="httpsPort" type="number" [(ngModel)]="form.httpsPort" /></div>
-                        <div class="field field-full"><label for="fingerprint">Fingerprint</label><input pInputText id="fingerprint" [(ngModel)]="form.fingerprint" /></div>
-                        <div class="field field-full"><label for="aciklama">Açıklama</label><input pInputText id="aciklama" [(ngModel)]="form.aciklama" /></div>
+                    <div class="form-section">
+                        <div class="section-header">
+                            <div>
+                                <h4>Kimlik</h4>
+                                <p>Cihazın temel tanımlayıcı bilgileri.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="field"><label for="ad">Cihaz Adı *</label><input pInputText id="ad" [(ngModel)]="form.ad" required [class.ng-invalid]="submitted()&&!form.ad.trim()" /></div>
+                            <div class="field"><label for="seriNo">Seri No *</label><input pInputText id="seriNo" [(ngModel)]="form.seriNo" required [class.ng-invalid]="submitted()&&!form.seriNo.trim()" /></div>
+                            <div class="field"><label for="saglayici">Sağlayıcı</label><p-select id="saglayici" [options]="cihazSaglayiciOptions" [(ngModel)]="form.saglayici" styleClass="w-full" /></div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <div class="section-header">
+                            <div>
+                                <h4>Yerleşim ve bağlantı</h4>
+                                <p>Tesis ve agent ilişkisini burada yönetirsiniz.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="field"><label for="tesisId">Tesis *</label><p-select inputId="tesisId" [options]="tesisler()" optionLabel="ad" optionValue="id" appendTo="body" [filter]="true" [(ngModel)]="form.tesisId" styleClass="w-full" placeholder="Tesis seçin" (onChange)="onTesisChanged()" /></div>
+                            <div class="field"><label for="agentId">Bağlı Agent <span class="field-hint">(isteğe bağlı)</span></label><p-select inputId="agentId" [options]="getAgentOptions()" optionLabel="label" optionValue="value" appendTo="body" [filter]="true" [showClear]="true" [(ngModel)]="form.agentId" styleClass="w-full" placeholder="Agent seçin" /><small>Bu alan yalnızca cihaz belirli bir agent ile ilişkilendirilecekse kullanılır.</small></div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <div class="section-header">
+                            <div>
+                                <h4>Teknik bilgiler</h4>
+                                <p>IP ve fingerprint gibi operasyonel alanlar.</p>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="field"><label for="ipAdresi">IP Adresi</label><input pInputText id="ipAdresi" [(ngModel)]="form.ipAdresi" /></div>
+                            <div class="field"><label for="httpPort">HTTP Port</label><input pInputText id="httpPort" type="number" [(ngModel)]="form.httpPort" /></div>
+                            <div class="field"><label for="httpsPort">HTTPS Port</label><input pInputText id="httpsPort" type="number" [(ngModel)]="form.httpsPort" /></div>
+                            <div class="field field-full"><label for="fingerprint">Fingerprint</label><input pInputText id="fingerprint" [(ngModel)]="form.fingerprint" /></div>
+                            <div class="field field-full"><label for="aciklama">Açıklama</label><input pInputText id="aciklama" [(ngModel)]="form.aciklama" /></div>
+                        </div>
                     </div>
                 </p-tabpanel>
 
@@ -85,16 +184,26 @@
                             <div class="empty-state"><i class="pi pi-credit-card mb-2" style="font-size:2rem"></i><div>Henüz terminal tanımlanmamış.</div></div>
                         }
                         <p-table [value]="terminals()" [loading]="terminalsLoading()" [paginator]="true" [rows]="5"
-                            styleClass="p-datatable-gridlines p-datatable-sm" [tableStyle]="{ 'min-width': '40rem' }">
+                            styleClass="p-datatable-gridlines p-datatable-sm pos-terminal-table" [tableStyle]="{ 'min-width': '48rem' }">
                             <ng-template pTemplate="header">
-                                <tr><th>Banka / Acquirer</th><th>Terminal ID</th><th>Merchant ID</th><th>Kredi Kartı Hesabı</th><th>Durum</th><th style="width:7rem">İşlem</th></tr>
+                                <tr><th>Acquirer / Banka</th><th>Terminal ID</th><th>Merchant ID</th><th>Kredi Kartı Hesabı</th><th>Durum</th><th style="width:7rem">İşlem</th></tr>
                             </ng-template>
                             <ng-template pTemplate="body" let-t>
                                 <tr>
-                                    <td><span class="font-medium">{{ getTerminalSaglayiciLabel(t.saglayiciKodu) }}</span></td>
+                                    <td>
+                                        <div class="entity-cell">
+                                            <span class="entity-cell__title">{{ getTerminalSaglayiciLabel(t.saglayiciKodu) }}</span>
+                                            <span class="entity-cell__subtitle">{{ t.saglayiciKodu }}</span>
+                                        </div>
+                                    </td>
                                     <td><code class="text-sm">{{ t.terminalId }}</code></td>
                                     <td>{{ t.merchantId ?? '-' }}</td>
-                                    <td>{{ t.kasaBankaHesapAd ?? '#'+t.kasaBankaHesapId }}</td>
+                                    <td>
+                                        <div class="entity-cell">
+                                            <span class="entity-cell__title">{{ t.kasaBankaHesapAd ?? ('#' + t.kasaBankaHesapId) }}</span>
+                                            <span class="entity-cell__subtitle">{{ t.tesisAd ?? getTesisLabel(t.tesisId) }}</span>
+                                        </div>
+                                    </td>
                                     <td><p-tag [value]="t.aktifMi?'Aktif':'Pasif'" [severity]="t.aktifMi?'success':'danger'" /></td>
                                     <td class="terminal-actions">
                                         <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-sm" (click)="editTerminal(t)" pTooltip="Düzenle"></button>
@@ -113,13 +222,34 @@
                 <!-- BAĞLANTI -->
                 <p-tabpanel value="connection">
                     @if (selectedCihaz()) {
-                        <div class="card-panel">
-                            <div class="card-row"><span class="card-label">Fingerprint</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.fingerprint">{{ selectedCihaz()?.fingerprint || 'Tanımlanmamış' }}</span></div>
-                            <div class="card-row"><span class="card-label">Target Fingerprint</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.targetFingerprint">{{ selectedCihaz()?.targetFingerprint || 'Tanımlanmamış' }}</span></div>
-                            <div class="card-row"><span class="card-label">Pairing Code</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.pairingCode">{{ selectedCihaz()?.pairingCode || '-' }}</span></div>
-                            <div class="card-row"><span class="card-label">Pairing ID</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.pairingId">{{ selectedCihaz()?.pairingId ?? '-' }}</span></div>
-                            <div class="card-row"><span class="card-label">Durum</span><span class="card-value"><p-tag [value]="selectedCihaz()?.aktifMi?'Aktif':'Pasif'" [severity]="selectedCihaz()?.aktifMi?'success':'danger'" /><span class="ml-2">{{ selectedCihaz()?.eslesmeOnayliMi?'Eşleşmiş':'Eşleşmemiş' }}</span></span></div>
-                            <div class="card-row"><span class="card-label">Son Bağlantı</span><span class="card-value" [class.card-value-muted]="!selectedCihaz()?.sonBaglantiTarihi">{{ selectedCihaz()?.sonBaglantiTarihi ? (selectedCihaz()?.sonBaglantiTarihi|date:'short') : '-' }}</span></div>
+                        <div class="connection-grid">
+                            <div class="connection-item">
+                                <span class="connection-item__label">Fingerprint</span>
+                                <span class="connection-item__value" [class.connection-item__value--muted]="!selectedCihaz()?.fingerprint">{{ selectedCihaz()?.fingerprint || 'Tanımlanmamış' }}</span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">Target Fingerprint</span>
+                                <span class="connection-item__value" [class.connection-item__value--muted]="!selectedCihaz()?.targetFingerprint">{{ selectedCihaz()?.targetFingerprint || 'Tanımlanmamış' }}</span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">Pairing Code</span>
+                                <span class="connection-item__value" [class.connection-item__value--muted]="!selectedCihaz()?.pairingCode">{{ selectedCihaz()?.pairingCode || '-' }}</span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">Pairing ID</span>
+                                <span class="connection-item__value" [class.connection-item__value--muted]="!selectedCihaz()?.pairingId">{{ selectedCihaz()?.pairingId ?? '-' }}</span>
+                            </div>
+                            <div class="connection-item connection-item--wide">
+                                <span class="connection-item__label">Durum</span>
+                                <span class="connection-item__value">
+                                    <p-tag [value]="selectedCihaz()?.aktifMi?'Aktif':'Pasif'" [severity]="selectedCihaz()?.aktifMi?'success':'danger'" />
+                                    <span class="ml-2">{{ selectedCihaz()?.eslesmeOnayliMi?'Eşleşmiş':'Eşleşmemiş' }}</span>
+                                </span>
+                            </div>
+                            <div class="connection-item connection-item--wide">
+                                <span class="connection-item__label">Son Bağlantı</span>
+                                <span class="connection-item__value" [class.connection-item__value--muted]="!selectedCihaz()?.sonBaglantiTarihi">{{ selectedCihaz()?.sonBaglantiTarihi ? (selectedCihaz()?.sonBaglantiTarihi|date:'short') : '-' }}</span>
+                            </div>
                         </div>
                     } @else {
                         <div class="empty-state">Cihazı kaydettikten sonra bağlantı bilgileri görüntülenir.</div>

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -68,6 +68,7 @@ export class PosYonetimiComponent implements OnInit {
     cihazlar = signal<PosCihaziDto[]>([]);
     tesisler = signal<TesisDto[]>([]);
     agents = signal<AgentListDto[]>([]);
+    selectedTesisFilterId = signal<number | null>(null);
     cihazLoading = signal(false);
     dialogVisible = signal(false);
     submitted = signal(false);
@@ -85,6 +86,29 @@ export class PosYonetimiComponent implements OnInit {
     terminalForm: PosTerminalFormState = this.createEmptyTerminalForm();
 
     readonly cihazSaglayiciOptions = [{ label: 'PAVO', value: 0 }, { label: 'Diğer', value: 1 }];
+    readonly filteredCihazlar = computed(() => {
+        const tesisId = this.selectedTesisFilterId();
+        if (!tesisId) {
+            return this.cihazlar();
+        }
+
+        return this.cihazlar().filter((item) => item.tesisId === tesisId);
+    });
+
+    readonly cihazOzet = computed(() => {
+        const cihazlar = this.cihazlar();
+        return {
+            toplam: cihazlar.length,
+            aktif: cihazlar.filter((item) => item.aktifMi).length,
+            eslesmis: cihazlar.filter((item) => item.eslesmeOnayliMi).length,
+            terminal: cihazlar.reduce((sum, item) => sum + (item.terminalSayisi ?? 0), 0)
+        };
+    });
+
+    readonly tesisFilterOptions = computed(() => [
+        { label: 'Tüm tesisler', value: null },
+        ...this.tesisler().map((item) => ({ label: item.ad, value: item.id ?? null }))
+    ]);
 
     ngOnInit(): void {
         this.load();
@@ -111,7 +135,13 @@ export class PosYonetimiComponent implements OnInit {
 
     loadTesisler(): void {
         this.tesisService.getTesisler().subscribe({
-            next: (items) => this.tesisler.set(items),
+            next: (items) => {
+                this.tesisler.set(items);
+                const selectedFilterId = this.selectedTesisFilterId();
+                if (selectedFilterId != null && !items.some((item) => item.id === selectedFilterId)) {
+                    this.selectedTesisFilterId.set(null);
+                }
+            },
             error: () => this.tesisler.set([])
         });
     }
@@ -131,7 +161,13 @@ export class PosYonetimiComponent implements OnInit {
     }
 
     openNew(): void {
-        this.form = { tesisId: this.tesisler()[0]?.id ?? 0, saglayici: 0, ad: '', seriNo: '', agentId: undefined };
+        this.form = {
+            tesisId: this.selectedTesisFilterId() ?? this.tesisler()[0]?.id ?? 0,
+            saglayici: 0,
+            ad: '',
+            seriNo: '',
+            agentId: undefined
+        };
         this.selectedCihaz.set(null);
         this.terminals.set([]);
         this.submitted.set(false);
@@ -230,7 +266,12 @@ export class PosYonetimiComponent implements OnInit {
     }
 
     getAgentLabel(agentId: number | null | undefined): string {
-        return this.agents().find((item) => item.id === agentId)?.ad ?? '-';
+        const agent = this.agents().find((item) => item.id === agentId);
+        if (!agent) {
+            return '-';
+        }
+
+        return agent.kurumAd ? `${agent.ad} • ${agent.kurumAd}` : agent.ad;
     }
 
     loadTerminals(cihazId: number): void {
@@ -363,7 +404,11 @@ export class PosYonetimiComponent implements OnInit {
         const cihaz = this.selectedCihaz();
         return this.krediKartiHesaplari()
             .filter((hesap) => !cihaz?.tesisId || hesap.tesisId === cihaz.tesisId)
-            .map((hesap) => ({ label: `${hesap.ad}${hesap.kod ? ` (${hesap.kod})` : ''}`, value: hesap.id! }));
+            .map((hesap) => {
+                const tesisAdi = this.getTesisLabel(hesap.tesisId);
+                const tesisEtiketi = tesisAdi && tesisAdi !== '-' ? ` • ${tesisAdi}` : '';
+                return { label: `${hesap.ad}${hesap.kod ? ` (${hesap.kod})` : ''}${tesisEtiketi}`, value: hesap.id! };
+            });
     }
 
     getSaglayiciOptions(): Array<{ label: string; value: string }> {

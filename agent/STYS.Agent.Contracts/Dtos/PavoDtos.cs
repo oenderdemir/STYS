@@ -13,8 +13,6 @@ public sealed class PavoTransactionHandle
 public abstract class PavoDeviceRequestBase
 {
     public int PosCihaziId { get; set; }
-    public int KurumId { get; set; }
-    public int TesisId { get; set; }
     public string IpAddress { get; set; } = string.Empty;
     public int? HttpPort { get; set; }
     public int? HttpsPort { get; set; }

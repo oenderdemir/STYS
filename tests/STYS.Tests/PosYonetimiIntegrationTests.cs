@@ -218,6 +218,26 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
+    public async Task TerminalKaydetAsync_HesapsizOlusturulabilir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var service = CreateTerminalService(db, fixture.KurumId);
+
+        var saved = await service.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, null, suffix, "TERM-NO-ACC"), CancellationToken.None);
+
+        Assert.Null(saved.KasaBankaHesapId);
+        Assert.Equal("Hesap eşleştirilmedi", saved.KasaBankaHesapAd);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
     public async Task DeleteAsync_CihazSoftDeleteYaparVeTerminalleriKoru()
     {
         var cs = ConnectionString();
@@ -283,12 +303,65 @@ public sealed class PosYonetimiIntegrationTests
         Assert.NotNull(firstPayload);
         Assert.NotNull(secondPayload);
         Assert.Equal(fixture.DeviceId, firstPayload!.PosCihaziId);
-        Assert.Equal(1, firstPayload.TransactionHandle.TransactionSequence);
+        Assert.Equal(0, firstPayload.TransactionHandle.TransactionSequence);
         Assert.Equal("127.0.0.1", firstPayload.IpAddress);
         Assert.Equal(fixture.DeviceId, secondPayload!.PosCihaziId);
-        Assert.Equal(2, secondPayload.TransactionHandle.TransactionSequence);
+        Assert.Equal(1, secondPayload.TransactionHandle.TransactionSequence);
 
         await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task PavoSequence_ParallelUnique_veRestartSonrasiDevamEder()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var seedDb = AgentTestSupport.CreateDbContext(cs);
+        await seedDb.Database.MigrateAsync();
+        var fixture = await SeedAsync(seedDb, suffix);
+
+        var device = await seedDb.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        device.IpAdresi = "127.0.0.1";
+        device.HttpPort = 4567;
+        device.Fingerprint = "FP-DEVICE";
+        await seedDb.SaveChangesAsync();
+
+        var pairingService = CreateCihazService(seedDb, cs, fixture.KurumId);
+        await pairingService.PairingAsync(fixture.DeviceId, "test", CancellationToken.None);
+
+        await using var db1 = AgentTestSupport.CreateDbContext(cs);
+        await using var db2 = AgentTestSupport.CreateDbContext(cs);
+        var service1 = CreateCihazService(db1, cs, fixture.KurumId);
+        var service2 = CreateCihazService(db2, cs, fixture.KurumId);
+
+        var pingTask = service1.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+        var infoTask = service2.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
+        await Task.WhenAll(pingTask, infoTask);
+
+        var pingPayload = JsonSerializer.Deserialize<PavoPingRequest>(pingTask.Result.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var infoPayload = JsonSerializer.Deserialize<PavoGetDeviceInfoRequest>(infoTask.Result.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(pingPayload);
+        Assert.NotNull(infoPayload);
+        Assert.Equal(1, pingPayload!.TransactionHandle.TransactionSequence);
+        Assert.Equal(2, infoPayload!.TransactionHandle.TransactionSequence);
+
+        await using (var verifyDb = AgentTestSupport.CreateDbContext(cs))
+        {
+            var refreshed = await verifyDb.PosCihazlari.AsNoTracking().SingleAsync(x => x.Id == fixture.DeviceId);
+            Assert.Equal(2, refreshed.TransactionSequence);
+        }
+
+        await using var db3 = AgentTestSupport.CreateDbContext(cs);
+        var restartService = CreateCihazService(db3, cs, fixture.KurumId);
+        var restartPing = await restartService.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+        var restartPayload = JsonSerializer.Deserialize<PavoPingRequest>(restartPing.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(restartPayload);
+        Assert.Equal(3, restartPayload!.TransactionHandle.TransactionSequence);
+
+        await CleanupAsync(seedDb, suffix);
     }
 
     [IntegrationFact]
@@ -343,13 +416,6 @@ public sealed class PosYonetimiIntegrationTests
             [
                 new PavoDeviceTerminalInfo
                 {
-                    TerminalId = "TERM-OLD",
-                    MerchantId = "MER-UPDATED",
-                    AcquirerId = "ACQ-UPDATED",
-                    AcquirerName = "Updated Acquirer"
-                },
-                new PavoDeviceTerminalInfo
-                {
                     TerminalId = "TERM-NEW",
                     MerchantId = "MER-NEW",
                     AcquirerId = "ACQ-NEW",
@@ -376,16 +442,91 @@ public sealed class PosYonetimiIntegrationTests
             .OrderBy(x => x.SerialNumber)
             .ToListAsync();
 
-        Assert.Equal(2, terminals.Count);
-        var existing = terminals.Single(x => x.SerialNumber == "TERM-OLD");
+        Assert.Single(terminals);
         var discovered = terminals.Single(x => x.SerialNumber == "TERM-NEW");
 
-        Assert.Equal(fixture.MainKrediHesapId, existing.KasaBankaHesapId);
-        Assert.Equal("ACQ-UPDATED", existing.AcquirerId);
-        Assert.Equal("Updated Acquirer", existing.AcquirerName);
-        Assert.Equal(fixture.MainKrediHesapId, discovered.KasaBankaHesapId);
+        var missing = await verifyDb.PosTerminaller.AsNoTracking().SingleAsync(x => x.SerialNumber == "TERM-OLD");
+        Assert.False(missing.IsDeleted);
+        Assert.False(missing.AktifMi);
+        Assert.Equal(fixture.MainKrediHesapId, missing.KasaBankaHesapId);
+        Assert.Equal("OLD-ACQ", missing.AcquirerId);
+        Assert.Equal("Old Acquirer", missing.AcquirerName);
+
+        Assert.Null(discovered.KasaBankaHesapId);
         Assert.Equal("ACQ-NEW", discovered.AcquirerId);
         Assert.Equal("New Acquirer", discovered.AcquirerName);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task PavoResult_CrossAgentEngellenir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        device.IpAdresi = "127.0.0.1";
+        device.HttpPort = 4567;
+        await db.SaveChangesAsync();
+
+        var deviceService = CreateCihazService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var command = await deviceService.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
+        await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+
+        var deviceRow = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        deviceRow.AgentId = fixture.OtherTesisAgentId;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => agentService.CompleteAsync(command.Id, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = command.Id,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(new PavoGetDeviceInfoResponse(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None));
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task PavoResult_CrossKurumEngellenir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        device.IpAdresi = "127.0.0.1";
+        device.HttpPort = 4567;
+        await db.SaveChangesAsync();
+
+        var deviceService = CreateCihazService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var command = await deviceService.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
+        await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+
+        var deviceRow = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        deviceRow.KurumId = fixture.KurumId + 999999;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => agentService.CompleteAsync(command.Id, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = command.Id,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(new PavoGetDeviceInfoResponse(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None));
 
         await CleanupAsync(db, suffix);
     }
@@ -415,7 +556,7 @@ public sealed class PosYonetimiIntegrationTests
     private static PosTerminalService CreateTerminalService(StysAppDbContext db, int kurumId) =>
         new(db, [new FakePavoSaglayici()], new FakeKurumTenantAccessor(kurumId));
 
-    private static PosTerminalKaydetRequest BuildTerminalRequest(Fixture fixture, int hesapId, string suffix, string terminalId) =>
+    private static PosTerminalKaydetRequest BuildTerminalRequest(Fixture fixture, int? hesapId, string suffix, string terminalId) =>
         new()
         {
             PosCihaziId = fixture.DeviceId,

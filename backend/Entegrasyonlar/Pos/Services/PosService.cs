@@ -205,7 +205,7 @@ public sealed class PosService : IPosService
             TesisId = terminal.TesisId,
             RezervasyonId = request.RezervasyonId,
             PosTerminalId = terminal.Id,
-            KasaBankaHesapId = terminal.KasaBankaHesapId,
+            KasaBankaHesapId = terminal.KasaBankaHesapId ?? throw new BaseException("Ödeme başlatmak için terminale bağlı kredi kartı hesabı seçilmelidir.", 400),
             CariKartId = cariKartId,
             IslemReferansi = $"STYS-{terminal.TesisId}-{Guid.NewGuid():N}",
             Tutar = request.Tutar,

@@ -200,8 +200,8 @@
                                     <td>{{ t.merchantId ?? '-' }}</td>
                                     <td>
                                         <div class="entity-cell">
-                                            <span class="entity-cell__title">{{ t.kasaBankaHesapAd ?? ('#' + t.kasaBankaHesapId) }}</span>
-                                            <span class="entity-cell__subtitle">{{ t.tesisAd ?? getTesisLabel(t.tesisId) }}</span>
+                                            <span class="entity-cell__title">{{ t.kasaBankaHesapAd ?? 'Hesap eşleştirilmedi' }}</span>
+                                            <span class="entity-cell__subtitle">{{ t.kasaBankaHesapAd ? (t.tesisAd ?? getTesisLabel(t.tesisId)) : 'Kullanıcı daha sonra hesabı bağlayabilir' }}</span>
                                         </div>
                                     </td>
                                     <td><p-tag [value]="t.aktifMi?'Aktif':'Pasif'" [severity]="t.aktifMi?'success':'danger'" /></td>
@@ -281,7 +281,7 @@
     <ng-template pTemplate="content">
         <div class="form-grid">
             <div class="field"><label for="terminalSaglayici">Acquirer / Banka *</label><p-select inputId="terminalSaglayici" [options]="getSaglayiciOptions()" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="terminalForm.saglayiciKodu" styleClass="w-full" placeholder="Sağlayıcı seçin" /></div>
-            <div class="field"><label for="terminalHesap">Kredi Kartı Hesabı *</label><p-select inputId="terminalHesap" [options]="getKrediKartiHesapOptions()" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="terminalForm.kasaBankaHesapId" styleClass="w-full" placeholder="Hesap seçin" /></div>
+            <div class="field"><label for="terminalHesap">Kredi Kartı Hesabı</label><p-select inputId="terminalHesap" [options]="getKrediKartiHesapOptions()" optionLabel="label" optionValue="value" appendTo="body" [showClear]="true" [(ngModel)]="terminalForm.kasaBankaHesapId" styleClass="w-full" placeholder="Hesap eşleştirilmedi" /><small>Boş bırakılabilir; daha sonra manuel eşleştirme yapılabilir.</small></div>
             <div class="field"><label for="terminalId">Terminal ID *</label><input pInputText id="terminalId" [(ngModel)]="terminalForm.terminalId" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.terminalId.trim()" /></div>
             <div class="field"><label for="merchantId">Merchant ID</label><input pInputText id="merchantId" [(ngModel)]="terminalForm.merchantId" /></div>
             <div class="field"><label for="terminalAdi">Terminal Adı *</label><input pInputText id="terminalAdi" [(ngModel)]="terminalForm.ad" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.ad.trim()" /></div>

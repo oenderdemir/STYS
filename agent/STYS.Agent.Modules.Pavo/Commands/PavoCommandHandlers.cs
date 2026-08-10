@@ -52,8 +52,6 @@ public sealed class PavoPairingCommandHandler : IAgentCommandHandler<PavoPairing
     private static PavoPairingRequest ToRequest(PavoPairingCommand command) => new()
     {
         PosCihaziId = command.PosCihaziId,
-        KurumId = command.KurumId,
-        TesisId = command.TesisId,
         IpAddress = command.IpAddress,
         HttpPort = command.HttpPort,
         HttpsPort = command.HttpsPort,
@@ -110,8 +108,6 @@ public sealed class PavoPingCommandHandler : IAgentCommandHandler<PavoPingComman
     private static PavoPingRequest ToRequest(PavoPingCommand command) => new()
     {
         PosCihaziId = command.PosCihaziId,
-        KurumId = command.KurumId,
-        TesisId = command.TesisId,
         IpAddress = command.IpAddress,
         HttpPort = command.HttpPort,
         HttpsPort = command.HttpsPort,
@@ -167,8 +163,6 @@ public sealed class PavoGetDeviceInfoCommandHandler : IAgentCommandHandler<PavoG
     private static PavoGetDeviceInfoRequest ToRequest(PavoGetDeviceInfoCommand command) => new()
     {
         PosCihaziId = command.PosCihaziId,
-        KurumId = command.KurumId,
-        TesisId = command.TesisId,
         IpAddress = command.IpAddress,
         HttpPort = command.HttpPort,
         HttpsPort = command.HttpsPort,

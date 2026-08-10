@@ -764,3 +764,60 @@ Agent Regression:  0
 
 - Full solution testi bu çalışmada mevcut PAVO değişikliklerinden bağımsız bazı eBelge politika testleri nedeniyle tam yeşil değil.
 - Gerçek PAVO cihazı/LAN karşısında canlı ortam doğrulaması yapılmadı; entegrasyon kodu gerçek cihaz çağrılarını destekleyecek şekilde hazırlanmıştır.
+
+---
+
+## 2026-08-10 — PAVO REST Phase 1 Hardening
+
+### Terminal discovery değişiklikleri
+
+- Yeni keşfedilen terminal artık otomatik kredi kartı hesabı seçmiyor.
+- `GetDeviceInfo` sonucu ile oluşan `PosTerminal`, hesap eşleştirmesi olmadan kaydediliyor.
+- Keşif sırasında mevcut terminalin hesap eşlemesi korunuyor.
+- Cihazdan artık gelmeyen terminal soft delete olarak pasifleniyor; fiziksel delete yapılmıyor.
+
+### Nullable hesap eşleşmesi
+
+- `PosTerminal.KasaBankaHesapId` nullable hale getirildi.
+- POS yönetimi ekranında hesabı olmayan terminal açıkça `Hesap eşleştirilmedi` olarak gösteriliyor.
+- Terminal formunda kredi kartı hesabı alanı opsiyonel hale getirildi.
+- Manuel hesap bağlama, keşif sonrası UI üzerinden yapılabiliyor.
+
+### Command payload sadeleştirme
+
+- PAVO command/request payloadlarından `KurumId` ve `TesisId` alanları kaldırıldı.
+- Agent artık yalnız teknik cihaz alanlarını taşıyor.
+- Tenant ve tesis doğrulaması backend tarafında kalmaya devam ediyor.
+
+### Result güvenliği
+
+- Command completion sırasında hedef agent, `PosCihaziId`, cihazın bağlı olduğu agent ve kurum/tesis kapsamı tekrar doğrulanıyor.
+- Başka agent veya başka kurum kapsamındaki sonuçlar uygulanmıyor.
+- Request payload içindeki tenant bilgilerine güvenilmiyor.
+
+### Sequence davranışı
+
+- `Pairing` artık sequence tüketmiyor; sequence reset başlangıcı olarak kullanılıyor.
+- `Ping` ve `GetDeviceInfo` sequence artırmaya devam ediyor.
+- Sequence DB’de persistent kalıyor.
+- Parallel komutlarda sequence çakışması engelleniyor.
+
+### Migration
+
+- `MakePosTerminalKasaBankaHesapIdOptional` migration’ı eklendi.
+- `PosTerminaller.KasaBankaHesapId` nullable yapıldı.
+
+### Test sonuçları
+
+- `dotnet build backend/STYS.csproj -c Release` → geçti
+- `dotnet build tests/STYS.Tests/STYS.Tests.csproj -c Release` → geçti
+- `npm run build` → geçti
+- `npm test -- --watch=false --browsers=ChromeHeadless` → geçti
+- `dotnet test STYS.sln --configuration Release --filter "Category=Integration&Domain=Agent"` → skipped, ortam DB bağlantısı yok
+- `dotnet test STYS.sln --configuration Release` → mevcut 4 eBelge politika testi fail ediyor
+
+### Bilinen kısıtlar
+
+- Gerçek PAVO cihazı/LAN üzerinde canlı doğrulama yapılmadı.
+- Full solution testi halen bu hardening değişikliklerinden bağımsız eBelge politika fail’leri içeriyor.
+- Terminal hesabı opsiyonel olsa da ödeme başlatma akışı terminal üzerinde hesap gerektiriyor ve bunu backend doğruluyor.

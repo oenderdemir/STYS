@@ -50,7 +50,7 @@ export interface PosTerminalDto {
     tesisAd?: string | null;
     posCihaziId?: number | null;
     posCihaziAd?: string | null;
-    kasaBankaHesapId: number;
+    kasaBankaHesapId?: number | null;
     kasaBankaHesapAd?: string | null;
     saglayiciKodu: string;
     acquirerId?: string | null;
@@ -69,7 +69,7 @@ export interface PosTerminalDto {
 
 export interface PosTerminalKaydetRequest {
     posCihaziId?: number | null;
-    kasaBankaHesapId: number;
+    kasaBankaHesapId?: number | null;
     saglayiciKodu: string;
     ad: string;
     terminalId: string;

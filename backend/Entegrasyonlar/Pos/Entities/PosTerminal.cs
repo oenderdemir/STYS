@@ -10,7 +10,7 @@ public class PosTerminal : BaseEntity<int>, ITenantEntity
     public int KurumId { get; set; }
     public int TesisId { get; set; }
     public int? PosCihaziId { get; set; }
-    public int KasaBankaHesapId { get; set; }
+    public int? KasaBankaHesapId { get; set; }
 
     [Required, MaxLength(32)]
     public string SaglayiciKodu { get; set; } = string.Empty;

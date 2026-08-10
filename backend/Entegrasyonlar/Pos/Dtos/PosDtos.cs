@@ -15,7 +15,7 @@ public sealed class PosTerminalDto
     public string? TesisAd { get; set; }
     public int? PosCihaziId { get; set; }
     public string? PosCihaziAd { get; set; }
-    public int KasaBankaHesapId { get; set; }
+    public int? KasaBankaHesapId { get; set; }
     public string? KasaBankaHesapAd { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string? AcquirerId { get; set; }
@@ -36,7 +36,7 @@ public sealed class PosTerminalKaydetRequest
 {
     public int? PosCihaziId { get; set; }
     public int TesisId { get; set; }
-    public int KasaBankaHesapId { get; set; }
+    public int? KasaBankaHesapId { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
     public string TerminalId { get; set; } = string.Empty;

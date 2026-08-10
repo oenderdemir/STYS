@@ -358,7 +358,7 @@ export class PosYonetimiComponent implements OnInit {
         this.terminalForm = {
             id: terminal.id,
             posCihaziId: terminal.posCihaziId ?? this.selectedCihaz()?.id ?? null,
-            kasaBankaHesapId: terminal.kasaBankaHesapId,
+            kasaBankaHesapId: terminal.kasaBankaHesapId ?? null,
             saglayiciKodu: terminal.saglayiciKodu,
             ad: terminal.ad,
             terminalId: terminal.terminalId,
@@ -379,13 +379,13 @@ export class PosYonetimiComponent implements OnInit {
         }
 
         this.terminalSubmitted.set(true);
-        if (!this.terminalForm.ad.trim() || !this.terminalForm.terminalId.trim() || !this.terminalForm.saglayiciKodu.trim() || this.terminalForm.kasaBankaHesapId <= 0) {
+        if (!this.terminalForm.ad.trim() || !this.terminalForm.terminalId.trim() || !this.terminalForm.saglayiciKodu.trim()) {
             return;
         }
 
         const request: PosTerminalKaydetRequest = {
             posCihaziId: cihaz.id,
-            kasaBankaHesapId: this.terminalForm.kasaBankaHesapId,
+            kasaBankaHesapId: this.terminalForm.kasaBankaHesapId ?? null,
             saglayiciKodu: this.terminalForm.saglayiciKodu.trim(),
             ad: this.terminalForm.ad.trim(),
             terminalId: this.terminalForm.terminalId.trim(),
@@ -519,15 +519,10 @@ export class PosYonetimiComponent implements OnInit {
     }
 
     private createEmptyTerminalForm(cihaz?: PosCihaziDto | null): PosTerminalFormState {
-        const hesaplar = this.krediKartiHesaplari();
-        const hesaplarFiltreli = cihaz
-            ? hesaplar.filter((hesap) => hesap.tesisId === cihaz.tesisId)
-            : hesaplar;
-        const ilkHesap = hesaplarFiltreli.find((item) => item.id != null)?.id ?? 0;
         const ilkSaglayici = this.saglayicilar()[0]?.kod ?? 'PAVO';
         return {
             posCihaziId: cihaz?.id ?? null,
-            kasaBankaHesapId: ilkHesap,
+            kasaBankaHesapId: null,
             saglayiciKodu: ilkSaglayici,
             ad: '',
             terminalId: '',

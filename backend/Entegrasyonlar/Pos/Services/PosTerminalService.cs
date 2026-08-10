@@ -64,7 +64,7 @@ public sealed class PosTerminalService
         var saglayiciKodu = request.SaglayiciKodu.Trim().ToUpperInvariant();
         var saglayici = GetSaglayici(saglayiciKodu);
 
-        var hesap = await GetKrediKartiHesabiAsync(request.KasaBankaHesapId, cihaz, cancellationToken);
+        var hesap = await ResolveKrediKartiHesabiAsync(request.KasaBankaHesapId, cihaz, cancellationToken);
 
         PosTerminal terminal;
         if (id.HasValue)
@@ -102,9 +102,9 @@ public sealed class PosTerminalService
         terminal.KurumId = cihaz.KurumId;
         terminal.TesisId = cihaz.TesisId;
         terminal.PosCihaziId = cihaz.Id;
-        terminal.KasaBankaHesapId = hesap.Id;
-        terminal.AcquirerId = hesap.Kod;
-        terminal.AcquirerName = hesap.BankaAdi ?? hesap.Ad;
+        terminal.KasaBankaHesapId = hesap?.Id;
+        terminal.AcquirerId = hesap?.Kod;
+        terminal.AcquirerName = hesap is null ? null : (hesap.BankaAdi ?? hesap.Ad);
         terminal.SaglayiciKodu = saglayiciKodu;
         terminal.Ad = request.Ad.Trim();
         terminal.SerialNumber = terminalId;
@@ -211,11 +211,16 @@ public sealed class PosTerminalService
             ?? throw new BaseException("POS terminali bulunamadı.", 404);
     }
 
-    private async Task<KasaBankaHesap> GetKrediKartiHesabiAsync(int kasaBankaHesapId, PosCihazi cihaz, CancellationToken cancellationToken)
+    private async Task<KasaBankaHesap?> ResolveKrediKartiHesabiAsync(int? kasaBankaHesapId, PosCihazi cihaz, CancellationToken cancellationToken)
     {
+        if (!kasaBankaHesapId.HasValue)
+        {
+            return null;
+        }
+
         var hesap = await _dbContext.KasaBankaHesaplari
             .Include(x => x.Tesis)
-            .FirstOrDefaultAsync(x => x.Id == kasaBankaHesapId && !x.IsDeleted && x.AktifMi && x.Tip == KasaBankaHesapTipleri.KrediKarti, cancellationToken)
+            .FirstOrDefaultAsync(x => x.Id == kasaBankaHesapId.Value && !x.IsDeleted && x.AktifMi && x.Tip == KasaBankaHesapTipleri.KrediKarti, cancellationToken)
             ?? throw new BaseException("Aktif kredi kartı/POS hesabı bulunamadı.", 404);
 
         if (hesap.TesisId != cihaz.TesisId)

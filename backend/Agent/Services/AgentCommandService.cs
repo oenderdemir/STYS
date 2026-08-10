@@ -156,13 +156,17 @@ public sealed class AgentCommandService
         var target = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
         AgentCommandStateMachine.EnforceTransition(cmd.Status, target, cmd.Id);
 
+        var pavoDevice = request.Success && IsPavoCommand(cmd.CommandType)
+            ? ResolveValidatedPavoDeviceForCommand(db, cmd)
+            : null;
+
         var prev = cmd.Status;
         cmd.Status = target;
         cmd.CompletedAt = DateTime.UtcNow;
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, request, ct);
+        ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoDevice, ct);
         AddExecution(db, cmd, target.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -224,7 +228,7 @@ public sealed class AgentCommandService
             throw new BaseException($"Agent '{c}' capability'sine sahip değil.", 403);
     }
 
-    private void ApplyPavoCommandResultIfNeeded(StysAppDbContext db, AgentCommand cmd, AgentCommandCompleteRequest request, CancellationToken ct)
+    private void ApplyPavoCommandResultIfNeeded(StysAppDbContext db, AgentCommand cmd, AgentCommandCompleteRequest request, PosCihazi? validatedDevice, CancellationToken ct)
     {
         if (!request.Success)
         {
@@ -236,13 +240,13 @@ public sealed class AgentCommandService
             switch (cmd.CommandType)
             {
                 case "PavoPairing":
-                    ApplyPavoPairingResult(db, cmd, request.ResultPayload);
+                    ApplyPavoPairingResult(db, cmd, validatedDevice, request.ResultPayload);
                     break;
                 case "PavoPing":
-                    ApplyPavoPingResult(db, cmd);
+                    ApplyPavoPingResult(db, validatedDevice);
                     break;
                 case "PavoGetDeviceInfo":
-                    ApplyPavoGetDeviceInfoResult(db, cmd, request.ResultPayload, ct);
+                    ApplyPavoGetDeviceInfoResult(db, validatedDevice, request.ResultPayload, ct);
                     break;
             }
         }
@@ -252,22 +256,10 @@ public sealed class AgentCommandService
         }
     }
 
-    private void ApplyPavoPairingResult(StysAppDbContext db, AgentCommand cmd, string? resultPayload)
+    private void ApplyPavoPairingResult(StysAppDbContext db, AgentCommand cmd, PosCihazi? device, string? resultPayload)
     {
         var response = DeserializePayload<PavoPairingResponse>(resultPayload);
-        if (response is null)
-        {
-            return;
-        }
-
-        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
-        if (!deviceId.HasValue)
-        {
-            return;
-        }
-
-        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted);
-        if (device is null)
+        if (response is null || device is null)
         {
             return;
         }
@@ -280,15 +272,8 @@ public sealed class AgentCommandService
         device.SonBaglantiTarihi = DateTime.UtcNow;
     }
 
-    private void ApplyPavoPingResult(StysAppDbContext db, AgentCommand cmd)
+    private void ApplyPavoPingResult(StysAppDbContext db, PosCihazi? device)
     {
-        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
-        if (!deviceId.HasValue)
-        {
-            return;
-        }
-
-        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted);
         if (device is null)
         {
             return;
@@ -297,22 +282,10 @@ public sealed class AgentCommandService
         device.SonBaglantiTarihi = DateTime.UtcNow;
     }
 
-    private void ApplyPavoGetDeviceInfoResult(StysAppDbContext db, AgentCommand cmd, string? resultPayload, CancellationToken ct)
+    private void ApplyPavoGetDeviceInfoResult(StysAppDbContext db, PosCihazi? device, string? resultPayload, CancellationToken ct)
     {
         var response = DeserializePayload<PavoGetDeviceInfoResponse>(resultPayload);
-        if (response is null)
-        {
-            return;
-        }
-
-        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
-        if (!deviceId.HasValue)
-        {
-            return;
-        }
-
-        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted);
-        if (device is null)
+        if (response is null || device is null)
         {
             return;
         }
@@ -344,13 +317,12 @@ public sealed class AgentCommandService
             var terminal = existing.FirstOrDefault(x => x.SerialNumber.Equals(terminalId, StringComparison.OrdinalIgnoreCase));
             if (terminal is null)
             {
-                var kasaHesapId = ResolveDefaultKrediKartiHesapId(db, device.TesisId);
                 terminal = new PosTerminal
                 {
                     KurumId = device.KurumId,
                     TesisId = device.TesisId,
                     PosCihaziId = device.Id,
-                    KasaBankaHesapId = kasaHesapId,
+                    KasaBankaHesapId = null,
                     SaglayiciKodu = "PAVO",
                     Ad = terminalInfo.MerchantId?.Trim().Length > 0 ? terminalInfo.MerchantId!.Trim() : terminalId,
                     SerialNumber = terminalId,
@@ -386,18 +358,56 @@ public sealed class AgentCommandService
         }
     }
 
-    private int ResolveDefaultKrediKartiHesapId(StysAppDbContext db, int tesisId)
+    private PosCihazi ResolveValidatedPavoDeviceForCommand(StysAppDbContext db, AgentCommand cmd)
     {
-        var hesap = db.Set<STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap>()
-            .FirstOrDefault(x => x.TesisId == tesisId && !x.IsDeleted && x.AktifMi && x.Tip == STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesapTipleri.KrediKarti);
+        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload)
+            ?? throw new BaseException("PAVO komut payload'ında cihaz kimliği bulunamadı.", 400);
 
-        if (hesap is null)
+        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId && !x.IsDeleted)
+            ?? throw new BaseException("PAVO cihazı bulunamadı.", 404);
+
+        if (device.AgentId != cmd.AgentId)
         {
-            throw new BaseException("Terminal keşfi için uygun kredi kartı hesabı bulunamadı.", 400);
+            throw new BaseException("PAVO sonuç hedef agent ile eşleşmiyor.", 400);
         }
 
-        return hesap.Id;
+        if (device.KurumId != cmd.KurumId)
+        {
+            throw new BaseException("PAVO sonuç kurum kapsamı ile eşleşmiyor.", 400);
+        }
+
+        var agent = db.Set<AgentEntity>().FirstOrDefault(x => x.Id == cmd.AgentId && !x.IsDeleted)
+            ?? throw new BaseException("PAVO agent bulunamadı.", 404);
+
+        if (agent.KurumId != device.KurumId)
+        {
+            throw new BaseException("PAVO sonuç agent kurum kapsamı ile eşleşmiyor.", 400);
+        }
+
+        if (agent.Durum != AgentDurum.Active)
+        {
+            throw new BaseException("PAVO sonuç işlenirken hedef agent aktif değil.", 400);
+        }
+
+        var agentTesisBaglantisiVarMi = db.Set<AgentTesis>().Any(x =>
+            x.AgentId == agent.Id
+            && x.KurumId == device.KurumId
+            && x.TesisId == device.TesisId
+            && x.AktifMi
+            && !x.IsDeleted);
+
+        if (!agentTesisBaglantisiVarMi)
+        {
+            throw new BaseException("PAVO sonuç işlenirken agent tesis kapsamı geçersiz.", 400);
+        }
+
+        return device;
     }
+
+    private static bool IsPavoCommand(string commandType) =>
+        string.Equals(commandType, "PavoPairing", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoPing", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoGetDeviceInfo", StringComparison.OrdinalIgnoreCase);
 
     private static T? DeserializePayload<T>(string? payload) where T : class
     {

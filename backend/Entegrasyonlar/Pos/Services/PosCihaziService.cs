@@ -71,7 +71,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var device = await GetCommandTargetAsync(id, cancellationToken);
         EnsurePavoCommandReady(device);
-        var sequence = await ReserveTransactionSequenceAsync(device.Id, cancellationToken);
+        var sequence = await ResetTransactionSequenceAsync(device.Id, cancellationToken);
         var request = BuildPairingRequest(device, sequence);
         return await SendCommandAsync(device.AgentId!.Value, "PavoPairing", request, requestedBy, cancellationToken);
     }
@@ -217,6 +217,16 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         return sequence;
     }
 
+    private async Task<long> ResetTransactionSequenceAsync(int cihazId, CancellationToken cancellationToken)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var cihaz = await _db.PosCihazlari.FirstAsync(x => x.Id == cihazId && !x.IsDeleted, cancellationToken);
+        cihaz.TransactionSequence = 0;
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return cihaz.TransactionSequence;
+    }
+
     private static PavoTransactionHandle BuildTransactionHandle(PosCihazi cihaz, long sequence) => new()
     {
         SerialNumber = cihaz.SeriNo,
@@ -228,8 +238,6 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private static PavoPairingRequest BuildPairingRequest(PosCihazi cihaz, long sequence) => new()
     {
         PosCihaziId = cihaz.Id,
-        KurumId = cihaz.KurumId,
-        TesisId = cihaz.TesisId,
         IpAddress = cihaz.IpAdresi ?? string.Empty,
         HttpPort = cihaz.HttpPort,
         HttpsPort = cihaz.HttpsPort,
@@ -241,8 +249,6 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private static PavoPingRequest BuildPingRequest(PosCihazi cihaz, long sequence) => new()
     {
         PosCihaziId = cihaz.Id,
-        KurumId = cihaz.KurumId,
-        TesisId = cihaz.TesisId,
         IpAddress = cihaz.IpAdresi ?? string.Empty,
         HttpPort = cihaz.HttpPort,
         HttpsPort = cihaz.HttpsPort,
@@ -253,8 +259,6 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private static PavoGetDeviceInfoRequest BuildGetDeviceInfoRequest(PosCihazi cihaz, long sequence) => new()
     {
         PosCihaziId = cihaz.Id,
-        KurumId = cihaz.KurumId,
-        TesisId = cihaz.TesisId,
         IpAddress = cihaz.IpAdresi ?? string.Empty,
         HttpPort = cihaz.HttpPort,
         HttpsPort = cihaz.HttpsPort,

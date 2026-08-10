@@ -8,14 +8,21 @@ public static class PavoModuleExtensions
 {
     public static IServiceCollection AddPavoModule(this IServiceCollection services)
     {
-        services.AddScoped<PavoConnectionTestCommandHandler>();
-        services.AddHttpClient("PavoClient");
-        services.AddScoped<IPavoClient, PavoHttpClient>();
+        services.AddScoped<PavoPairingCommandHandler>();
+        services.AddScoped<PavoPingCommandHandler>();
+        services.AddScoped<PavoGetDeviceInfoCommandHandler>();
+        services.AddHttpClient("PavoClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<IPavoRestClient, PavoRestClient>();
         return services;
     }
 
     public static void RegisterPavoCommands(AgentCommandHandlerRegistry registry)
     {
-        registry.Register<PavoConnectionTestCommand, PavoConnectionTestCommandHandler>("PavoConnectionTest");
+        registry.Register<PavoPairingCommand, PavoPairingCommandHandler>("PavoPairing");
+        registry.Register<PavoPingCommand, PavoPingCommandHandler>("PavoPing");
+        registry.Register<PavoGetDeviceInfoCommand, PavoGetDeviceInfoCommandHandler>("PavoGetDeviceInfo");
     }
 }

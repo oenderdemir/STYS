@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
+using STYS.Agent.Contracts.Dtos;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Services;
 using TOD.Platform.AspNetCore.Authorization;
@@ -43,4 +44,24 @@ public sealed class PosCihaziController : UIController
     [HttpDelete("cihazlar/{id:int}")]
     [Permission(StructurePermissions.PosYonetimi.Manage)]
     public async Task<ActionResult> Delete(int id) { await _service.DeleteAsync(id); return Ok(); }
+
+    [HttpPost("cihazlar/{id:int}/pairing")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> Pairing(int id, CancellationToken cancellationToken) =>
+        Ok(await _service.PairingAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpPost("cihazlar/{id:int}/ping")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> Ping(int id, CancellationToken cancellationToken) =>
+        Ok(await _service.PingAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpPost("cihazlar/{id:int}/device-info")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> GetDeviceInfo(int id, CancellationToken cancellationToken) =>
+        Ok(await _service.GetDeviceInfoAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpPost("cihazlar/{id:int}/terminal-discovery")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> TerminalDiscovery(int id, CancellationToken cancellationToken) =>
+        Ok(await _service.GetDeviceInfoAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
 }

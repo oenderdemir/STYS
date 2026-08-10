@@ -1854,6 +1854,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Fingerprint).HasMaxLength(256);
             entity.Property(x => x.TargetFingerprint).HasMaxLength(256);
             entity.Property(x => x.PairingCode).HasMaxLength(32);
+            entity.Property(x => x.TransactionSequence).HasDefaultValue(0);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.HasIndex(x => new { x.KurumId, x.SeriNo }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.AgentId).HasFilter("[AgentId] IS NOT NULL");
@@ -1863,6 +1864,8 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("PosTerminaller", entegrasyonSchema);
             entity.Property(x => x.SaglayiciKodu).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.AcquirerId).HasMaxLength(64);
+            entity.Property(x => x.AcquirerName).HasMaxLength(128);
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.SerialNumber).HasMaxLength(64).IsRequired();
             entity.Property(x => x.SourceFingerprint).HasMaxLength(128);

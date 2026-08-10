@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Agent.Services;
@@ -52,7 +53,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -80,7 +81,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -98,7 +99,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -123,7 +124,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -145,7 +146,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -157,7 +158,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
             tasks[i] = Task.Run(async () =>
             {
                 var f = new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(_cs));
-                var s = new AgentCommandService(f, new FakeSuperAdminTenantAccessor());
+                var s = new AgentCommandService(f, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
                 var r = await s.GetPendingCommandsAsync(agentId, CancellationToken.None);
                 return r.Count;
             });
@@ -178,7 +179,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -199,7 +200,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
@@ -218,7 +219,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     {
         var db = await SetupAsync(); if (db is null) return;
         var factory = NewFactory();
-        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor());
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);

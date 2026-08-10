@@ -1,7 +1,11 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
+using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
+using STYS.Agent.Services;
 using AgentEntity = STYS.Agent.Entities.Agent;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
@@ -41,12 +45,7 @@ public sealed class PosYonetimiIntegrationTests
         var fixture = await SeedAsync(seedDb, suffix);
 
         await using var repoDb = AgentTestSupport.CreateDbContext(cs);
-        var mapper = CreateMapper();
-        var service = new PosCihaziService(
-            new PosCihaziRepository(repoDb, mapper),
-            mapper,
-            new FakeKurumTenantAccessor(fixture.KurumId),
-            repoDb);
+        var service = CreateCihazService(repoDb, cs, fixture.KurumId);
 
         var dto = new PosCihaziDto
         {
@@ -77,12 +76,7 @@ public sealed class PosYonetimiIntegrationTests
         var fixture = await SeedAsync(seedDb, suffix);
 
         await using var repoDb = AgentTestSupport.CreateDbContext(cs);
-        var mapper = CreateMapper();
-        var service = new PosCihaziService(
-            new PosCihaziRepository(repoDb, mapper),
-            mapper,
-            new FakeKurumTenantAccessor(fixture.KurumId),
-            repoDb);
+        var service = CreateCihazService(repoDb, cs, fixture.KurumId);
 
         var updated = await service.UpdateAsync(new PosCihaziDto
         {
@@ -127,12 +121,7 @@ public sealed class PosYonetimiIntegrationTests
         var fixture = await SeedAsync(seedDb, suffix);
 
         await using var repoDb = AgentTestSupport.CreateDbContext(cs);
-        var mapper = CreateMapper();
-        var service = new PosCihaziService(
-            new PosCihaziRepository(repoDb, mapper),
-            mapper,
-            new FakeKurumTenantAccessor(fixture.KurumId),
-            repoDb);
+        var service = CreateCihazService(repoDb, cs, fixture.KurumId);
 
         var dto = new PosCihaziDto
         {
@@ -243,12 +232,7 @@ public sealed class PosYonetimiIntegrationTests
 
         await using (var repoDb = AgentTestSupport.CreateDbContext(cs))
         {
-            var mapper = CreateMapper();
-            var cihazService = new PosCihaziService(
-                new PosCihaziRepository(repoDb, mapper),
-                mapper,
-                new FakeKurumTenantAccessor(fixture.KurumId),
-                repoDb);
+            var cihazService = CreateCihazService(repoDb, cs, fixture.KurumId);
 
             await cihazService.DeleteAsync(fixture.DeviceId);
         }
@@ -264,12 +248,168 @@ public sealed class PosYonetimiIntegrationTests
         await CleanupAsync(db, suffix);
     }
 
+    [IntegrationFact]
+    public async Task PavoPairing_CommandUretir_SequenceArttirir_vePayloadCihazBazlidir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        device.IpAdresi = "127.0.0.1";
+        device.HttpPort = 4567;
+        device.HttpsPort = null;
+        device.Fingerprint = "FP-DEVICE";
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var first = await service.PairingAsync(fixture.DeviceId, "test", CancellationToken.None);
+        var second = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+
+        Assert.Equal("PavoPairing", first.CommandType);
+        Assert.Equal("PavoPing", second.CommandType);
+
+        await using var verifyDb = AgentTestSupport.CreateDbContext(cs);
+        var refreshed = await verifyDb.PosCihazlari.AsNoTracking().SingleAsync(x => x.Id == fixture.DeviceId);
+        Assert.Equal(2, refreshed.TransactionSequence);
+
+        var firstPayload = JsonSerializer.Deserialize<PavoPairingRequest>(first.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var secondPayload = JsonSerializer.Deserialize<PavoPingRequest>(second.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(firstPayload);
+        Assert.NotNull(secondPayload);
+        Assert.Equal(fixture.DeviceId, firstPayload!.PosCihaziId);
+        Assert.Equal(1, firstPayload.TransactionHandle.TransactionSequence);
+        Assert.Equal("127.0.0.1", firstPayload.IpAddress);
+        Assert.Equal(fixture.DeviceId, secondPayload!.PosCihaziId);
+        Assert.Equal(2, secondPayload.TransactionHandle.TransactionSequence);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task PavoGetDeviceInfoCompletion_TerminalDiscoveryYaparVeHesabiKorumayaDevamEder()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
+        device.IpAdresi = "127.0.0.1";
+        device.HttpPort = 4567;
+        device.Fingerprint = "FP-DEVICE";
+        await db.SaveChangesAsync();
+
+        var terminal = new PosTerminal
+        {
+            KurumId = fixture.KurumId,
+            TesisId = fixture.MainTesisId,
+            PosCihaziId = fixture.DeviceId,
+            KasaBankaHesapId = fixture.MainKrediHesapId,
+            SaglayiciKodu = "PAVO",
+            AcquirerId = "OLD-ACQ",
+            AcquirerName = "Old Acquirer",
+            Ad = "Existing Terminal",
+            SerialNumber = "TERM-OLD",
+            SourceTerminalReference = "MER-OLD",
+            SourceFingerprint = "FP-OLD",
+            AktifMi = true,
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow
+        };
+        db.PosTerminaller.Add(terminal);
+        await db.SaveChangesAsync();
+
+        var deviceService = CreateCihazService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+
+        var command = await deviceService.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
+        await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+
+        var response = new PavoGetDeviceInfoResponse
+        {
+            Fingerprint = "FP-NEW",
+            TargetFingerprint = "TFP-NEW",
+            Terminals =
+            [
+                new PavoDeviceTerminalInfo
+                {
+                    TerminalId = "TERM-OLD",
+                    MerchantId = "MER-UPDATED",
+                    AcquirerId = "ACQ-UPDATED",
+                    AcquirerName = "Updated Acquirer"
+                },
+                new PavoDeviceTerminalInfo
+                {
+                    TerminalId = "TERM-NEW",
+                    MerchantId = "MER-NEW",
+                    AcquirerId = "ACQ-NEW",
+                    AcquirerName = "New Acquirer"
+                }
+            ]
+        };
+
+        await agentService.CompleteAsync(command.Id, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = command.Id,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None);
+
+        await using var verifyDb = AgentTestSupport.CreateDbContext(cs);
+        var updatedDevice = await verifyDb.PosCihazlari.AsNoTracking().SingleAsync(x => x.Id == fixture.DeviceId);
+        Assert.Equal("FP-NEW", updatedDevice.Fingerprint);
+        Assert.Equal("TFP-NEW", updatedDevice.TargetFingerprint);
+        Assert.NotNull(updatedDevice.SonBaglantiTarihi);
+
+        var terminals = await verifyDb.PosTerminaller.AsNoTracking()
+            .Where(x => x.PosCihaziId == fixture.DeviceId && !x.IsDeleted)
+            .OrderBy(x => x.SerialNumber)
+            .ToListAsync();
+
+        Assert.Equal(2, terminals.Count);
+        var existing = terminals.Single(x => x.SerialNumber == "TERM-OLD");
+        var discovered = terminals.Single(x => x.SerialNumber == "TERM-NEW");
+
+        Assert.Equal(fixture.MainKrediHesapId, existing.KasaBankaHesapId);
+        Assert.Equal("ACQ-UPDATED", existing.AcquirerId);
+        Assert.Equal("Updated Acquirer", existing.AcquirerName);
+        Assert.Equal(fixture.MainKrediHesapId, discovered.KasaBankaHesapId);
+        Assert.Equal("ACQ-NEW", discovered.AcquirerId);
+        Assert.Equal("New Acquirer", discovered.AcquirerName);
+
+        await CleanupAsync(db, suffix);
+    }
+
     private static string? ConnectionString() => Environment.GetEnvironmentVariable("STYS_INTEGRATION_TEST_CONNECTION_STRING");
 
     private static IMapper CreateMapper()
     {
         var config = new MapperConfiguration(cfg => cfg.AddMaps(typeof(PosCihaziProfile).Assembly), NullLoggerFactory.Instance);
         return config.CreateMapper();
+    }
+
+    private static AgentCommandService CreateAgentCommandService(string connectionString, int kurumId) =>
+        new(new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(connectionString)), new FakeKurumTenantAccessor(kurumId), NullLogger<AgentCommandService>.Instance);
+
+    private static PosCihaziService CreateCihazService(StysAppDbContext db, string connectionString, int kurumId)
+    {
+        var mapper = CreateMapper();
+        return new PosCihaziService(
+            new PosCihaziRepository(db, mapper),
+            mapper,
+            new FakeKurumTenantAccessor(kurumId),
+            db,
+            CreateAgentCommandService(connectionString, kurumId));
     }
 
     private static PosTerminalService CreateTerminalService(StysAppDbContext db, int kurumId) =>
@@ -342,6 +482,13 @@ public sealed class PosYonetimiIntegrationTests
             CreatedAt = DateTime.UtcNow
         };
         db.Set<AgentEntity>().AddRange(mainAgent, otherTesisAgent, otherKurumAgent);
+        await db.SaveChangesAsync();
+        db.Set<AgentScope>().AddRange(
+            new AgentScope { AgentId = mainAgent.Id, Scope = "agent.command.execute", AktifMi = true, CreatedBy = "test", CreatedAt = DateTime.UtcNow },
+            new AgentScope { AgentId = mainAgent.Id, Scope = "agent.command.read", AktifMi = true, CreatedBy = "test", CreatedAt = DateTime.UtcNow },
+            new AgentScope { AgentId = mainAgent.Id, Scope = "agent.result.write", AktifMi = true, CreatedBy = "test", CreatedAt = DateTime.UtcNow },
+            new AgentScope { AgentId = mainAgent.Id, Scope = "agent.heartbeat", AktifMi = true, CreatedBy = "test", CreatedAt = DateTime.UtcNow });
+        db.Set<AgentCapability>().Add(new AgentCapability { AgentId = mainAgent.Id, Capability = "pavo", AktifMi = true, CreatedBy = "test", CreatedAt = DateTime.UtcNow });
         await db.SaveChangesAsync();
         db.Set<AgentTesis>().AddRange(
             new AgentTesis { AgentId = mainAgent.Id, KurumId = kurum.Id, TesisId = mainTesis.Id, AktifMi = true, CreatedBy = "test", CreatedAt = DateTime.UtcNow },
@@ -431,6 +578,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             await db.Set<AgentTesis>().IgnoreQueryFilters().Where(x => agentIds.Contains(x.AgentId)).ExecuteDeleteAsync();
             await db.Set<AgentCredential>().IgnoreQueryFilters().Where(x => agentIds.Contains(x.AgentId)).ExecuteDeleteAsync();
+            await db.Set<AgentCapability>().IgnoreQueryFilters().Where(x => agentIds.Contains(x.AgentId)).ExecuteDeleteAsync();
             await db.Set<AgentScope>().IgnoreQueryFilters().Where(x => agentIds.Contains(x.AgentId)).ExecuteDeleteAsync();
             await db.Set<AgentEnrollment>().IgnoreQueryFilters().Where(x => x.AgentId.HasValue && agentIds.Contains(x.AgentId.Value)).ExecuteDeleteAsync();
             await db.Set<AgentEntity>().IgnoreQueryFilters().Where(x => agentIds.Contains(x.Id)).ExecuteDeleteAsync();

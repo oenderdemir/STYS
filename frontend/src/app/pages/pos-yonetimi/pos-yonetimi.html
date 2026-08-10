@@ -51,16 +51,16 @@
 <div class="card pos-list-card">
     <p-table [value]="filteredCihazlar()" [loading]="cihazLoading()" [paginator]="true" [rows]="10" dataKey="id"
         styleClass="p-datatable-gridlines p-datatable-striped p-datatable-sm pos-table" [tableStyle]="{ 'min-width': '72rem' }">
-        <ng-template pTemplate="header">
-            <tr>
-                <th>Cihaz</th><th>Tesis</th><th>Agent</th><th>Sağlayıcı</th><th>Seri No</th><th>Terminaller</th><th>Durum</th><th style="width:7rem">İşlem</th>
-            </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-c>
-            <tr>
-                <td>
-                    <div class="entity-cell">
-                        <span class="entity-cell__title">{{ c.ad }}</span>
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Cihaz</th><th>Tesis</th><th>Agent</th><th>Sağlayıcı</th><th>Seri No</th><th>Terminaller</th><th>Durum</th><th style="width:7rem">İşlem</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-c>
+                    <tr>
+                        <td>
+                            <div class="entity-cell">
+                                <span class="entity-cell__title">{{ c.ad }}</span>
                         <span class="entity-cell__subtitle">ID: {{ c.id }}</span>
                     </div>
                 </td>
@@ -188,12 +188,12 @@
                             <ng-template pTemplate="header">
                                 <tr><th>Acquirer / Banka</th><th>Terminal ID</th><th>Merchant ID</th><th>Kredi Kartı Hesabı</th><th>Durum</th><th style="width:7rem">İşlem</th></tr>
                             </ng-template>
-                            <ng-template pTemplate="body" let-t>
+                <ng-template pTemplate="body" let-t>
                                 <tr>
                                     <td>
                                         <div class="entity-cell">
-                                            <span class="entity-cell__title">{{ getTerminalSaglayiciLabel(t.saglayiciKodu) }}</span>
-                                            <span class="entity-cell__subtitle">{{ t.saglayiciKodu }}</span>
+                                            <span class="entity-cell__title">{{ t.acquirerName ?? getTerminalSaglayiciLabel(t.saglayiciKodu) }}</span>
+                                            <span class="entity-cell__subtitle">{{ t.acquirerId ?? t.saglayiciKodu }}</span>
                                         </div>
                                     </td>
                                     <td><code class="text-sm">{{ t.terminalId }}</code></td>
@@ -207,8 +207,6 @@
                                     <td><p-tag [value]="t.aktifMi?'Aktif':'Pasif'" [severity]="t.aktifMi?'success':'danger'" /></td>
                                     <td class="terminal-actions">
                                         <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-text p-button-sm" (click)="editTerminal(t)" pTooltip="Düzenle"></button>
-                                        <button pButton pRipple icon="pi pi-link" class="p-button-rounded p-button-text p-button-sm" (click)="startPairing(t)" pTooltip="Eşleştir"></button>
-                                        <button pButton pRipple icon="pi pi-refresh" class="p-button-rounded p-button-text p-button-sm" (click)="checkPairing(t)" pTooltip="Eşleşme Kontrolü"></button>
                                         <button pButton pRipple icon="pi pi-trash" class="p-button-rounded p-button-text p-button-sm p-button-danger" (click)="deleteTerminal(t)" pTooltip="Sil"></button>
                                     </td>
                                 </tr>
@@ -222,6 +220,12 @@
                 <!-- BAĞLANTI -->
                 <p-tabpanel value="connection">
                     @if (selectedCihaz()) {
+                        <div class="connection-actions">
+                            <button pButton pRipple label="Eşleştir" icon="pi pi-link" class="p-button-outlined" (click)="startPairing()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Bağlantı Testi" icon="pi pi-signal" class="p-button-outlined" (click)="ping()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Cihaz Bilgisini Getir" icon="pi pi-info-circle" class="p-button-outlined" (click)="getDeviceInfo()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Terminalleri Senkronize Et" icon="pi pi-sync" class="p-button-outlined" (click)="syncTerminals()" [disabled]="terminalSaving()"></button>
+                        </div>
                         <div class="connection-grid">
                             <div class="connection-item">
                                 <span class="connection-item__label">Fingerprint</span>
@@ -238,6 +242,10 @@
                             <div class="connection-item">
                                 <span class="connection-item__label">Pairing ID</span>
                                 <span class="connection-item__value" [class.connection-item__value--muted]="!selectedCihaz()?.pairingId">{{ selectedCihaz()?.pairingId ?? '-' }}</span>
+                            </div>
+                            <div class="connection-item connection-item--wide">
+                                <span class="connection-item__label">Transaction Sequence</span>
+                                <span class="connection-item__value">{{ selectedCihaz()?.transactionSequence ?? 0 }}</span>
                             </div>
                             <div class="connection-item connection-item--wide">
                                 <span class="connection-item__label">Durum</span>
@@ -278,6 +286,7 @@
             <div class="field"><label for="merchantId">Merchant ID</label><input pInputText id="merchantId" [(ngModel)]="terminalForm.merchantId" /></div>
             <div class="field"><label for="terminalAdi">Terminal Adı *</label><input pInputText id="terminalAdi" [(ngModel)]="terminalForm.ad" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.ad.trim()" /></div>
             <div class="field"><label for="sourceFingerprint">Bağlantı Fingerprint</label><input pInputText id="sourceFingerprint" [(ngModel)]="terminalForm.sourceFingerprint" /></div>
+            <div class="field-full"><small>Terminal düzenleme, cihaz ile aynı kurum ve tesis kapsamındaki kredi kartı hesabına bağlanır. Keşif sırasında bu eşleşme korunur.</small></div>
             <div class="field-full flex align-items-center"><p-checkbox inputId="terminalAktifMi" [binary]="true" [(ngModel)]="terminalForm.aktifMi" /><label for="terminalAktifMi" class="ml-2">Aktif</label></div>
         </div>
     </ng-template>

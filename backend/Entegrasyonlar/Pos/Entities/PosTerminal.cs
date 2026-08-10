@@ -15,6 +15,12 @@ public class PosTerminal : BaseEntity<int>, ITenantEntity
     [Required, MaxLength(32)]
     public string SaglayiciKodu { get; set; } = string.Empty;
 
+    [MaxLength(64)]
+    public string? AcquirerId { get; set; }
+
+    [MaxLength(128)]
+    public string? AcquirerName { get; set; }
+
     [Required, MaxLength(128)]
     public string Ad { get; set; } = string.Empty;
 

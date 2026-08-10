@@ -87,7 +87,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     ];
 
     durumLabels = AgentDurumLabels;
-    commandTypes = ['Ping', 'HealthCheck', 'RefreshConfiguration', 'PavoConnectionTest'];
+    commandTypes = ['Ping', 'HealthCheck', 'RefreshConfiguration', 'PavoPairing', 'PavoPing', 'PavoGetDeviceInfo'];
     private readonly agentRefreshEffectInitialized = { value: false };
     private readonly refreshIntervalMs = 30000;
 

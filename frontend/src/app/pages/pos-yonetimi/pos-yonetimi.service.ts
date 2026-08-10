@@ -78,17 +78,27 @@ export class PosYonetimiService {
         }));
     }
 
-    startTerminalPairing(cihazId: number, id: number): Observable<PosTerminalDto> {
-        return this.http.post<ApiResponse<PosTerminalDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/terminaller/${id}/eslestir`, {}).pipe(map(r => {
-            if (r.success && r.data) return r.data;
-            throw new Error(tryReadApiMessage(r) ?? 'Terminal eşleştirme başlatılamadı.');
+    startPairing(cihazId: number): Observable<void> {
+        return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/pairing`, {}).pipe(map(r => {
+            if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Eşleştirme başlatılamadı.');
         }));
     }
 
-    checkTerminalPairing(cihazId: number, id: number): Observable<PosTerminalDto> {
-        return this.http.post<ApiResponse<PosTerminalDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/terminaller/${id}/eslestirme-kontrol`, {}).pipe(map(r => {
-            if (r.success && r.data) return r.data;
-            throw new Error(tryReadApiMessage(r) ?? 'Terminal eşleşme durumu alınamadı.');
+    ping(cihazId: number): Observable<void> {
+        return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/ping`, {}).pipe(map(r => {
+            if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Bağlantı testi başlatılamadı.');
+        }));
+    }
+
+    getDeviceInfo(cihazId: number): Observable<void> {
+        return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/device-info`, {}).pipe(map(r => {
+            if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Cihaz bilgisi alınamadı.');
+        }));
+    }
+
+    syncTerminals(cihazId: number): Observable<void> {
+        return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/terminal-discovery`, {}).pipe(map(r => {
+            if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Terminal senkronizasyonu başlatılamadı.');
         }));
     }
 }

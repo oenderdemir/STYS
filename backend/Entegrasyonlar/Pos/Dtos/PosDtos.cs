@@ -18,6 +18,8 @@ public sealed class PosTerminalDto
     public int KasaBankaHesapId { get; set; }
     public string? KasaBankaHesapAd { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
+    public string? AcquirerId { get; set; }
+    public string? AcquirerName { get; set; }
     public string Ad { get; set; } = string.Empty;
     public string TerminalId { get; set; } = string.Empty;
     public string? MerchantId { get; set; }

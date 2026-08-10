@@ -707,3 +707,60 @@ Full Solution:     1619 passed, 204 failed (baseline)
 Unit Tests:        1062 passed
 Agent Regression:  0
 ```
+
+---
+
+## 2026-08-10 — PAVO REST Phase 1
+
+### Kapsam
+
+- Angular POS yönetimi
+- STYS Backend cihaz komut orkestrasyonu
+- STYS.Agent PAVO REST LAN entegrasyonu
+- Pairing
+- Ping
+- GetDeviceInfo
+- Terminal Discovery
+- TransactionSequence
+
+### Mimari
+
+- UI, cihaz bazlı PAVO aksiyonlarını backend üzerinden tetikliyor.
+- Backend, agent command üreterek iş akışını agent'a taşıyor.
+- Agent, PAVO REST endpoint'lerini doğrudan LAN üzerinden çağırıyor.
+- Başarılı sonuçlar backend'e command completion payload olarak dönüyor.
+- Backend, cihaz ve terminal state'ini bu completion sonucuna göre güncelliyor.
+
+### Yapılan Değişiklikler
+
+- `PavoRestClient` eklendi ve LAN üstünden gerçek REST çağrıları başlatıldı.
+- `PavoPairing`, `PavoPing`, `PavoGetDeviceInfo` command tipleri eklendi.
+- Command worker bu üç PAVO command'ını işleyebilir hale getirildi.
+- `PosCihazi.TransactionSequence` alanı eklendi.
+- `PosTerminal.AcquirerId` ve `PosTerminal.AcquirerName` alanları eklendi.
+- Backend cihaz endpoint'lerine `pairing`, `ping`, `device-info`, `terminal-discovery` aksiyonları eklendi.
+- `AgentCommandService`, PAVO completion sonucuna göre cihaz/terminal state'i uygulayacak şekilde güncellendi.
+- POS yönetimi ekranı cihaz bazlı aksiyonlar ve terminal acquirer görünümü ile güncellendi.
+- SignalR command refresh korunarak ekran yenileme olmadan durum güncellemeleri alınır hale getirildi.
+- EF migration eklendi: `AddPavoRestPhase1PosFields`
+
+### Güvenlik ve Kapsam Kontrolleri
+
+- Cihaz işlemleri kurum ve tesis kapsamı ile doğrulanıyor.
+- Agent aynı kurum ve tesis kapsamında değilse command üretilmiyor.
+- PAVO sonuçları yalnız başarılı completion sonrası state'e uygulanıyor.
+- Credential, secret, token, enrollment code ve JWT değerleri raporlanmıyor.
+
+### Testler
+
+- `dotnet build agent/STYS.Agent/STYS.Agent.csproj -c Release`
+- `dotnet build backend/STYS.csproj -c Release`
+- `npm run build`
+- `npm test -- --watch=false --browsers=ChromeHeadless`
+- `dotnet test STYS.sln --configuration Release --filter "Category=Integration&Domain=Agent"`
+- `dotnet test STYS.sln --configuration Release`
+
+### Notlar
+
+- Full solution testi bu çalışmada mevcut PAVO değişikliklerinden bağımsız bazı eBelge politika testleri nedeniyle tam yeşil değil.
+- Gerçek PAVO cihazı/LAN karşısında canlı ortam doğrulaması yapılmadı; entegrasyon kodu gerçek cihaz çağrılarını destekleyecek şekilde hazırlanmıştır.

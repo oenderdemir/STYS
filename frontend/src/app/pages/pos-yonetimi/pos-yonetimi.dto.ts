@@ -16,6 +16,7 @@ export interface PosCihaziDto {
     targetFingerprint?: string;
     pairingId?: number | null;
     pairingCode?: string | null;
+    transactionSequence: number;
     eslesmeOnayliMi: boolean;
     aktifMi: boolean;
     sonBaglantiTarihi?: string;
@@ -52,6 +53,8 @@ export interface PosTerminalDto {
     kasaBankaHesapId: number;
     kasaBankaHesapAd?: string | null;
     saglayiciKodu: string;
+    acquirerId?: string | null;
+    acquirerName?: string | null;
     ad: string;
     terminalId: string;
     merchantId?: string | null;

@@ -34,6 +34,7 @@ public sealed class PosCihazi : BaseEntity<int>, ITenantEntity
     public string? PairingCode { get; set; }
 
     public long? PairingId { get; set; }
+    public long TransactionSequence { get; set; }
     public bool EslesmeOnayliMi { get; set; }
     public bool AktifMi { get; set; } = true;
     public DateTime? SonBaglantiTarihi { get; set; }

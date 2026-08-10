@@ -237,6 +237,13 @@
     padding: 1rem;
 }
 
+.connection-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+}
+
 .connection-item {
     display: flex;
     flex-direction: column;
@@ -271,6 +278,7 @@
 .terminal-actions {
     display: flex;
     gap: 0.15rem;
+    flex-wrap: wrap;
 }
 
 .empty-state {

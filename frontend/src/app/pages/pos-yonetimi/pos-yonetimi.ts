@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -17,6 +17,7 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { TooltipModule } from 'primeng/tooltip';
 import { AgentYonetimiService } from '../agent-yonetimi/agent-yonetimi.service';
 import { AgentListDto } from '../agent-yonetimi/agent-yonetimi.dto';
+import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
 import { KasaBankaHesapModel, KasaBankaHesapTipi } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.service';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
@@ -62,8 +63,10 @@ export class PosYonetimiComponent implements OnInit {
     private readonly kasaBankaHesapService = inject(KasaBankaHesaplariService);
     private readonly tesisService = inject(TesisYonetimiService);
     private readonly agentService = inject(AgentYonetimiService);
+    private readonly agentRealtime = inject(AgentRealtimeService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
+    private readonly handledCommandRefreshKeys = new Set<string>();
 
     cihazlar = signal<PosCihaziDto[]>([]);
     tesisler = signal<TesisDto[]>([]);
@@ -109,6 +112,37 @@ export class PosYonetimiComponent implements OnInit {
         { label: 'Tüm tesisler', value: null },
         ...this.tesisler().map((item) => ({ label: item.ad, value: item.id ?? null }))
     ]);
+
+    constructor() {
+        effect(() => {
+            const update = this.agentRealtime.commandUpdates();
+            const cihaz = this.selectedCihaz();
+
+            if (!update || !cihaz?.agentId) {
+                return;
+            }
+
+            if (update.agentId !== cihaz.agentId) {
+                return;
+            }
+
+            if (!['PavoPairing', 'PavoPing', 'PavoGetDeviceInfo'].includes(update.commandType)) {
+                return;
+            }
+
+            if (![4, 5, 6, 7, 8].includes(update.status)) {
+                return;
+            }
+
+            const key = `${update.id}:${update.status}`;
+            if (this.handledCommandRefreshKeys.has(key)) {
+                return;
+            }
+
+            this.handledCommandRefreshKeys.add(key);
+            this.reloadSelectedDevice(cihaz.id);
+        });
+    }
 
     ngOnInit(): void {
         this.load();
@@ -169,6 +203,7 @@ export class PosYonetimiComponent implements OnInit {
             agentId: undefined
         };
         this.selectedCihaz.set(null);
+        this.agentRealtime.leaveAgentGroup();
         this.terminals.set([]);
         this.submitted.set(false);
         this.dialogVisible.set(true);
@@ -178,6 +213,12 @@ export class PosYonetimiComponent implements OnInit {
         this.service.getById(cihaz.id).subscribe({
             next: (detail) => {
                 this.selectedCihaz.set(detail);
+                this.handledCommandRefreshKeys.clear();
+                if (detail.agentId) {
+                    this.agentRealtime.joinAgentGroup(detail.agentId);
+                } else {
+                    this.agentRealtime.leaveAgentGroup();
+                }
                 this.form = {
                     id: detail.id,
                     tesisId: detail.tesisId,
@@ -223,6 +264,10 @@ export class PosYonetimiComponent implements OnInit {
             next: (saved) => {
                 this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'POS cihazı kaydedildi.' });
                 this.selectedCihaz.set(saved);
+                this.handledCommandRefreshKeys.clear();
+                if (saved.agentId) {
+                    this.agentRealtime.joinAgentGroup(saved.agentId);
+                }
                 this.form.id = saved.id;
                 this.dialogVisible.set(true);
                 this.load();
@@ -253,6 +298,7 @@ export class PosYonetimiComponent implements OnInit {
     closeDialog(): void {
         this.dialogVisible.set(false);
         this.selectedCihaz.set(null);
+        this.agentRealtime.leaveAgentGroup();
         this.terminals.set([]);
         this.terminalDialogVisible.set(false);
     }
@@ -278,6 +324,21 @@ export class PosYonetimiComponent implements OnInit {
         this.terminalsLoading.set(true);
         this.service.getTerminals(cihazId).pipe(finalize(() => this.terminalsLoading.set(false))).subscribe({
             next: (items) => this.terminals.set(items),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    private reloadSelectedDevice(cihazId: number): void {
+        this.service.getById(cihazId).subscribe({
+            next: (detail) => {
+                this.selectedCihaz.set(detail);
+                if (detail.agentId) {
+                    this.agentRealtime.joinAgentGroup(detail.agentId);
+                } else {
+                    this.agentRealtime.leaveAgentGroup();
+                }
+                this.loadTerminals(cihazId);
+            },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
     }
@@ -370,28 +431,54 @@ export class PosYonetimiComponent implements OnInit {
         });
     }
 
-    startPairing(terminal: PosTerminalDto): void {
+    startPairing(): void {
         const cihaz = this.selectedCihaz();
         if (!cihaz?.id) {
             return;
         }
 
         this.terminalSaving.set(true);
-        this.service.startTerminalPairing(cihaz.id, terminal.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
-            next: () => this.loadTerminals(cihaz.id),
+        this.service.startPairing(cihaz.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => this.messageService.add({ severity: 'success', summary: 'Komut gönderildi', detail: 'Eşleştirme komutu agent’a iletildi.' }),
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
     }
 
-    checkPairing(terminal: PosTerminalDto): void {
+    ping(): void {
         const cihaz = this.selectedCihaz();
         if (!cihaz?.id) {
             return;
         }
 
         this.terminalSaving.set(true);
-        this.service.checkTerminalPairing(cihaz.id, terminal.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
-            next: () => this.loadTerminals(cihaz.id),
+        this.service.ping(cihaz.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => this.messageService.add({ severity: 'success', summary: 'Komut gönderildi', detail: 'Bağlantı testi agent’a iletildi.' }),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    getDeviceInfo(): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.terminalSaving.set(true);
+        this.service.getDeviceInfo(cihaz.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => this.messageService.add({ severity: 'success', summary: 'Komut gönderildi', detail: 'Cihaz bilgisi alma komutu agent’a iletildi.' }),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    syncTerminals(): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.terminalSaving.set(true);
+        this.service.syncTerminals(cihaz.id).pipe(finalize(() => this.terminalSaving.set(false))).subscribe({
+            next: () => this.messageService.add({ severity: 'success', summary: 'Komut gönderildi', detail: 'Terminal senkronizasyonu agent’a iletildi.' }),
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
     }

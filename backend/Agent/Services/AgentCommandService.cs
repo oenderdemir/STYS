@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
+using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Infrastructure.EntityFramework;
+using System.Text.Json;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using AgentEntity = STYS.Agent.Entities.Agent;
@@ -15,21 +18,38 @@ public sealed class AgentCommandService
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly IAgentCommandRealtimeNotifier? _notifier;
+    private readonly ILogger<AgentCommandService> _logger;
 
     private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Ping"] = "agent.command.execute", ["HealthCheck"] = "agent.command.execute",
-        ["RefreshConfiguration"] = "agent.config.read", ["PavoConnectionTest"] = "stys.pavo.connection.test"
+        ["RefreshConfiguration"] = "agent.config.read",
+        ["PavoPairing"] = "agent.command.execute",
+        ["PavoPing"] = "agent.command.execute",
+        ["PavoGetDeviceInfo"] = "agent.command.execute",
+        ["PavoConnectionTest"] = "stys.pavo.connection.test"
     };
 
     private static readonly Dictionary<string, string> CommandCapabilityMap = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["PavoPairing"] = "pavo",
+        ["PavoPing"] = "pavo",
+        ["PavoGetDeviceInfo"] = "pavo",
         ["PavoConnectionTest"] = "pavo"
     };
 
-    public AgentCommandService(IDbContextFactory<StysAppDbContext> dbContextFactory, ICurrentTenantAccessor tenantAccessor, IAgentCommandRealtimeNotifier? notifier = null)
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _notifier = notifier;
+        PropertyNameCaseInsensitive = true
+    };
+
+    public AgentCommandService(
+        IDbContextFactory<StysAppDbContext> dbContextFactory,
+        ICurrentTenantAccessor tenantAccessor,
+        ILogger<AgentCommandService> logger,
+        IAgentCommandRealtimeNotifier? notifier = null)
+    {
+        _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _logger = logger; _notifier = notifier;
     }
 
     public async Task<AgentCommandDto> SendAsync(AgentCommandSendRequest request, string requestedBy, CancellationToken ct)
@@ -111,7 +131,9 @@ public sealed class AgentCommandService
         AddExecution(db, cmd, "Accepted", prev, agentId);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
-    }    public async Task SetRunningAsync(Guid commandId, int agentId, CancellationToken ct)
+    }
+
+    public async Task SetRunningAsync(Guid commandId, int agentId, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
@@ -123,7 +145,9 @@ public sealed class AgentCommandService
         AddExecution(db, cmd, "Running", prev, agentId);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
-    }    public async Task CompleteAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
+    }
+
+    public async Task CompleteAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
@@ -138,6 +162,7 @@ public sealed class AgentCommandService
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
+        ApplyPavoCommandResultIfNeeded(db, cmd, request, ct);
         AddExecution(db, cmd, target.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -197,6 +222,213 @@ public sealed class AgentCommandService
         if (!CommandCapabilityMap.TryGetValue(commandType, out var c)) return;
         if (!await db.Set<AgentCapability>().AnyAsync(x => x.AgentId == agentId && x.Capability == c && x.AktifMi && !x.IsDeleted, ct))
             throw new BaseException($"Agent '{c}' capability'sine sahip değil.", 403);
+    }
+
+    private void ApplyPavoCommandResultIfNeeded(StysAppDbContext db, AgentCommand cmd, AgentCommandCompleteRequest request, CancellationToken ct)
+    {
+        if (!request.Success)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (cmd.CommandType)
+            {
+                case "PavoPairing":
+                    ApplyPavoPairingResult(db, cmd, request.ResultPayload);
+                    break;
+                case "PavoPing":
+                    ApplyPavoPingResult(db, cmd);
+                    break;
+                case "PavoGetDeviceInfo":
+                    ApplyPavoGetDeviceInfoResult(db, cmd, request.ResultPayload, ct);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PAVO command sonucu uygulanamadı. CommandType={CommandType}, CommandId={CommandId}", cmd.CommandType, cmd.Id);
+        }
+    }
+
+    private void ApplyPavoPairingResult(StysAppDbContext db, AgentCommand cmd, string? resultPayload)
+    {
+        var response = DeserializePayload<PavoPairingResponse>(resultPayload);
+        if (response is null)
+        {
+            return;
+        }
+
+        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
+        if (!deviceId.HasValue)
+        {
+            return;
+        }
+
+        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted);
+        if (device is null)
+        {
+            return;
+        }
+
+        device.Fingerprint = response.Fingerprint ?? device.Fingerprint;
+        device.TargetFingerprint = response.TargetFingerprint ?? device.TargetFingerprint;
+        device.PairingId = response.PairingId ?? device.PairingId;
+        device.PairingCode = response.PairingCode ?? device.PairingCode;
+        device.EslesmeOnayliMi = response.OnayliMi;
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+    }
+
+    private void ApplyPavoPingResult(StysAppDbContext db, AgentCommand cmd)
+    {
+        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
+        if (!deviceId.HasValue)
+        {
+            return;
+        }
+
+        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted);
+        if (device is null)
+        {
+            return;
+        }
+
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+    }
+
+    private void ApplyPavoGetDeviceInfoResult(StysAppDbContext db, AgentCommand cmd, string? resultPayload, CancellationToken ct)
+    {
+        var response = DeserializePayload<PavoGetDeviceInfoResponse>(resultPayload);
+        if (response is null)
+        {
+            return;
+        }
+
+        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
+        if (!deviceId.HasValue)
+        {
+            return;
+        }
+
+        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted);
+        if (device is null)
+        {
+            return;
+        }
+
+        device.Fingerprint = response.Fingerprint ?? device.Fingerprint;
+        device.TargetFingerprint = response.TargetFingerprint ?? device.TargetFingerprint;
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+
+        SyncDiscoveredTerminals(db, device, response.Terminals);
+    }
+
+    private void SyncDiscoveredTerminals(StysAppDbContext db, PosCihazi device, IReadOnlyCollection<PavoDeviceTerminalInfo> discoveredTerminals)
+    {
+        var existing = db.PosTerminaller
+            .Where(x => x.PosCihaziId == device.Id && !x.IsDeleted)
+            .ToList();
+
+        var discoveredIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var terminalInfo in discoveredTerminals)
+        {
+            if (string.IsNullOrWhiteSpace(terminalInfo.TerminalId))
+            {
+                continue;
+            }
+
+            var terminalId = terminalInfo.TerminalId.Trim();
+            discoveredIds.Add(terminalId);
+
+            var terminal = existing.FirstOrDefault(x => x.SerialNumber.Equals(terminalId, StringComparison.OrdinalIgnoreCase));
+            if (terminal is null)
+            {
+                var kasaHesapId = ResolveDefaultKrediKartiHesapId(db, device.TesisId);
+                terminal = new PosTerminal
+                {
+                    KurumId = device.KurumId,
+                    TesisId = device.TesisId,
+                    PosCihaziId = device.Id,
+                    KasaBankaHesapId = kasaHesapId,
+                    SaglayiciKodu = "PAVO",
+                    Ad = terminalInfo.MerchantId?.Trim().Length > 0 ? terminalInfo.MerchantId!.Trim() : terminalId,
+                    SerialNumber = terminalId,
+                    SourceTerminalReference = terminalInfo.MerchantId,
+                    AcquirerId = terminalInfo.AcquirerId,
+                    AcquirerName = terminalInfo.AcquirerName,
+                    AktifMi = true,
+                    CreatedBy = "agent",
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.PosTerminaller.Add(terminal);
+                continue;
+            }
+
+            terminal.AcquirerId = terminalInfo.AcquirerId;
+            terminal.AcquirerName = terminalInfo.AcquirerName;
+            terminal.KurumId = device.KurumId;
+            terminal.TesisId = device.TesisId;
+            terminal.PosCihaziId = device.Id;
+            terminal.SourceTerminalReference = terminalInfo.MerchantId ?? terminal.SourceTerminalReference;
+            if (!string.IsNullOrWhiteSpace(terminalInfo.MerchantId))
+            {
+                terminal.Ad = terminalInfo.MerchantId.Trim();
+            }
+
+            terminal.AktifMi = true;
+            terminal.IsDeleted = false;
+        }
+
+        foreach (var terminal in existing.Where(x => !discoveredIds.Contains(x.SerialNumber)))
+        {
+            terminal.AktifMi = false;
+        }
+    }
+
+    private int ResolveDefaultKrediKartiHesapId(StysAppDbContext db, int tesisId)
+    {
+        var hesap = db.Set<STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap>()
+            .FirstOrDefault(x => x.TesisId == tesisId && !x.IsDeleted && x.AktifMi && x.Tip == STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesapTipleri.KrediKarti);
+
+        if (hesap is null)
+        {
+            throw new BaseException("Terminal keşfi için uygun kredi kartı hesabı bulunamadı.", 400);
+        }
+
+        return hesap.Id;
+    }
+
+    private static T? DeserializePayload<T>(string? payload) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        return JsonSerializer.Deserialize<T>(payload, JsonOptions);
+    }
+
+    private static int? TryGetDeviceIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("PosCihaziId", out var idElement) && idElement.TryGetInt32(out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
     }
 
     private void NotifyIfNeeded(AgentCommandDto dto)

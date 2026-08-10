@@ -103,6 +103,8 @@ public sealed class PosTerminalService
         terminal.TesisId = cihaz.TesisId;
         terminal.PosCihaziId = cihaz.Id;
         terminal.KasaBankaHesapId = hesap.Id;
+        terminal.AcquirerId = hesap.Kod;
+        terminal.AcquirerName = hesap.BankaAdi ?? hesap.Ad;
         terminal.SaglayiciKodu = saglayiciKodu;
         terminal.Ad = request.Ad.Trim();
         terminal.SerialNumber = terminalId;
@@ -258,6 +260,8 @@ public sealed class PosTerminalService
                    KasaBankaHesapId = terminal.KasaBankaHesapId,
                    KasaBankaHesapAd = hesap != null ? hesap.Ad : null,
                    SaglayiciKodu = terminal.SaglayiciKodu,
+                   AcquirerId = terminal.AcquirerId ?? (hesap != null ? hesap.Kod : null),
+                   AcquirerName = terminal.AcquirerName ?? (hesap != null ? (hesap.BankaAdi ?? hesap.Ad) : null),
                    Ad = terminal.Ad,
                    TerminalId = terminal.SerialNumber,
                    MerchantId = terminal.SourceTerminalReference,

@@ -2,6 +2,7 @@ using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Services;
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -14,6 +15,7 @@ public sealed class CommandPollingWorker : BackgroundService
     private readonly IAgentCommandHandlerRegistry _handlerRegistry;
     private readonly IAgentCommandExecutionStore _executionStore;
     private readonly ILogger<CommandPollingWorker> _logger;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public CommandPollingWorker(
         IStysAgentApiClient client,
@@ -94,8 +96,14 @@ public sealed class CommandPollingWorker : BackgroundService
                 case "RefreshConfiguration":
                     await ExecuteTypedCommandAsync(dto, new RefreshConfigurationCommand(), _handlerRegistry.Resolve<RefreshConfigurationCommand>(dto.CommandType), cancellationToken);
                     break;
-                case "PavoConnectionTest":
-                    await ExecuteTypedCommandAsync(dto, new Modules.Pavo.Commands.PavoConnectionTestCommand(), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoConnectionTestCommand>(dto.CommandType), cancellationToken);
+                case "PavoPairing":
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType), cancellationToken);
+                    break;
+                case "PavoPing":
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType), cancellationToken);
+                    break;
+                case "PavoGetDeviceInfo":
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType), cancellationToken);
                     break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
@@ -142,9 +150,25 @@ public sealed class CommandPollingWorker : BackgroundService
         }
         else
         {
-            await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = result.ErrorMessage, ErrorCode = result.ErrorCode }, cancellationToken);
+            await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest
+            {
+                Id = dto.Id,
+                Success = false,
+                ResultPayload = result.ResultPayload,
+                ErrorMessage = result.ErrorMessage,
+                ErrorCode = result.ErrorCode
+            }, cancellationToken);
             _logger.LogWarning("Komut başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
         }
+    }
+
+    private static TCommand DeserializeCommand<TCommand>(string? payload)
+        where TCommand : IAgentCommand, new()
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+            return new TCommand();
+
+        return JsonSerializer.Deserialize<TCommand>(payload, JsonOptions) ?? new TCommand();
     }
 }
 

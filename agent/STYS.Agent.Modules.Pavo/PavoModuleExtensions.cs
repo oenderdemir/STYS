@@ -11,6 +11,8 @@ public static class PavoModuleExtensions
         services.AddScoped<PavoPairingCommandHandler>();
         services.AddScoped<PavoPingCommandHandler>();
         services.AddScoped<PavoGetDeviceInfoCommandHandler>();
+        services.AddScoped<PavoStartPaymentCommandHandler>();
+        services.AddScoped<PavoGetPaymentResultCommandHandler>();
         services.AddHttpClient("PavoClient", client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
@@ -24,5 +26,7 @@ public static class PavoModuleExtensions
         registry.Register<PavoPairingCommand, PavoPairingCommandHandler>("PavoPairing");
         registry.Register<PavoPingCommand, PavoPingCommandHandler>("PavoPing");
         registry.Register<PavoGetDeviceInfoCommand, PavoGetDeviceInfoCommandHandler>("PavoGetDeviceInfo");
+        registry.Register<PavoStartPaymentCommand, PavoStartPaymentCommandHandler>("PavoStartPayment");
+        registry.Register<PavoGetPaymentResultCommand, PavoGetPaymentResultCommandHandler>("PavoGetPaymentResult");
     }
 }

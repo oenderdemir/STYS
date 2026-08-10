@@ -821,3 +821,49 @@ Agent Regression:  0
 - Gerçek PAVO cihazı/LAN üzerinde canlı doğrulama yapılmadı.
 - Full solution testi halen bu hardening değişikliklerinden bağımsız eBelge politika fail’leri içeriyor.
 - Terminal hesabı opsiyonel olsa da ödeme başlatma akışı terminal üzerinde hesap gerektiriyor ve bunu backend doğruluyor.
+
+---
+
+## 2026-08-10 — PAVO REST Phase 2 — Payment
+
+### Payment akışı
+
+- `StartPayment` ve `GetPaymentResult` agent command’leri eklendi.
+- Backend tarafında POS ödeme testi akışı için `PosPaymentTestService` eklendi.
+- UI üzerinden `POS Yönetimi > POS Cihazı Detayı > Test İşlemleri` sekmesiyle manuel ödeme başlatma ve sonuç sorgulama desteklendi.
+- `SaleReference` kalıcı ve yeniden denemede aynı kalan immutable iş referansı olarak ele alındı.
+
+### Güvenlik ve kapsam doğrulamaları
+
+- Agent command sonucu işlenirken hedef agent, cihaz ve kurum/tesis kapsamı yeniden doğrulanıyor.
+- `PosCihaziId`, `AgentCommandId`, `SaleReference`, `AcquirerId`, `TerminalId`, `MerchantId`, `PavoResultCode`, `PavoMessage`, `BaslatilmaTarihi` alanları `PosOdemeIslemi` üzerinde tutuluyor.
+- Terminal ve cihaz eşleşmeleri backend tarafında doğrulanıyor; payload içindeki tenant bilgilerine güvenilmiyor.
+
+### UI ve realtime
+
+- POS cihaz detay ekranına ödeme test formu ve işlem listesi eklendi.
+- SignalR command/result güncellemeleriyle ekran refresh olmadan yeniden güncelleniyor.
+- Start / result akışında son işlem kartı ve durum listesi gösteriliyor.
+
+### Sequence davranışı
+
+- Ödeme komutlarında transaction sequence serialization korunuyor.
+- Paralel ödeme denemelerinde sequence çakışması oluşmaması için seri üretim transaction içinde tutuluyor.
+
+### Migration
+
+- `AddPavoRestPhase2PaymentFields` migration’ı eklendi.
+- `PosOdemeIslemleri` tablosuna ödeme sonucu ve agent command takip alanları eklendi.
+- `KurumId + SaleReference` için nullable filtreli unique index oluşturuldu.
+
+### Test sonuçları
+
+- `dotnet test STYS.sln --configuration Release --filter "Category=Integration&Domain=Agent"` → skipped, test connection string yok
+- `dotnet test STYS.sln --configuration Release` → geçti
+- `npm run build` → geçti
+- `npm test -- --watch=false --browsers=ChromeHeadless` → geçti
+
+### Bilinen kısıtlar
+
+- Bu ortamda gerçek SQL Server entegrasyon bağlantısı tanımlı olmadığı için payment integration testleri çalıştırılamadı.
+- Gerçek PAVO cihazı/LAN karşısında canlı doğrulama yapılmadı.

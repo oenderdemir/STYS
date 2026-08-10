@@ -105,6 +105,12 @@ public sealed class CommandPollingWorker : BackgroundService
                 case "PavoGetDeviceInfo":
                     await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType), cancellationToken);
                     break;
+                case "PavoStartPayment":
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType), cancellationToken);
+                    break;
+                case "PavoGetPaymentResult":
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType), cancellationToken);
+                    break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
                     await _client.RejectCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = $"Unknown command: {dto.CommandType}", ErrorCode = "UNKNOWN_COMMAND" }, cancellationToken);

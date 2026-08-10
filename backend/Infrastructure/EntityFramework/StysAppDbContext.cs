@@ -1898,6 +1898,7 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("PosOdemeIslemleri", entegrasyonSchema);
             entity.Property(x => x.IslemReferansi).HasMaxLength(96).IsRequired();
+            entity.Property(x => x.SaleReference).HasMaxLength(96);
             entity.Property(x => x.SaglayiciIslemId).HasMaxLength(128);
             entity.Property(x => x.Tutar).HasPrecision(18, 2);
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
@@ -1906,6 +1907,11 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.RetrievalReferenceNo).HasMaxLength(64);
             entity.Property(x => x.AcquirerReference).HasMaxLength(64);
             entity.Property(x => x.AuthorizationCode).HasMaxLength(64);
+            entity.Property(x => x.AcquirerId).HasMaxLength(64);
+            entity.Property(x => x.TerminalId).HasMaxLength(128);
+            entity.Property(x => x.MerchantId).HasMaxLength(128);
+            entity.Property(x => x.PavoResultCode).HasMaxLength(64);
+            entity.Property(x => x.PavoMessage).HasMaxLength(1024);
             entity.Property(x => x.HataMesaji).HasMaxLength(1024);
             entity.Property(x => x.SaglayiciDurumKodu).HasMaxLength(64);
             entity.Property(x => x.SonSorgulamaHatasi).HasMaxLength(1024);
@@ -1913,6 +1919,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
             entity.HasIndex(x => new { x.KurumId, x.IslemReferansi })
                 .IsUnique();
+            entity.HasIndex(x => new { x.KurumId, x.SaleReference })
+                .IsUnique()
+                .HasFilter("[SaleReference] IS NOT NULL");
             entity.HasIndex(x => x.SaglayiciIslemId)
                 .HasFilter("[SaglayiciIslemId] IS NOT NULL");
             entity.HasIndex(x => new { x.TesisId, x.Durum });
@@ -1921,6 +1930,10 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.RezervasyonOdemeId)
                 .IsUnique()
                 .HasFilter("[RezervasyonOdemeId] IS NOT NULL");
+            entity.HasOne(x => x.PosCihazi)
+                .WithMany()
+                .HasForeignKey(x => x.PosCihaziId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PosTerminal)
                 .WithMany()
                 .HasForeignKey(x => x.PosTerminalId)

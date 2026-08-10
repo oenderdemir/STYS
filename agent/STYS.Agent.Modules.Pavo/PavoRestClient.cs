@@ -33,6 +33,12 @@ public sealed class PavoRestClient : IPavoRestClient
     public Task<PavoGetDeviceInfoResponse> GetDeviceInfoAsync(PavoGetDeviceInfoRequest request, CancellationToken cancellationToken) =>
         SendAsync<PavoGetDeviceInfoRequest, PavoGetDeviceInfoResponse>("GetDeviceInfo", request, cancellationToken);
 
+    public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken) =>
+        SendAsync<PavoStartPaymentRequest, PavoStartPaymentResponse>("StartPayment", request, cancellationToken);
+
+    public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
+        SendAsync<PavoGetPaymentResultRequest, PavoGetPaymentResultResponse>("GetPaymentResult", request, cancellationToken);
+
     private async Task<TResponse> SendAsync<TRequest, TResponse>(string method, TRequest request, CancellationToken cancellationToken)
         where TRequest : PavoDeviceRequestBase
         where TResponse : PavoBaseResponse, new()

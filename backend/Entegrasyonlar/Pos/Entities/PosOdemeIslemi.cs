@@ -9,14 +9,19 @@ public class PosOdemeIslemi : BaseEntity<int>, ITenantEntity
 {
     public int KurumId { get; set; }
     public int TesisId { get; set; }
+    public int? PosCihaziId { get; set; }
     public int RezervasyonId { get; set; }
     public int PosTerminalId { get; set; }
     public int KasaBankaHesapId { get; set; }
     public int? CariKartId { get; set; }
     public int? RezervasyonOdemeId { get; set; }
+    public Guid? AgentCommandId { get; set; }
 
     [Required, MaxLength(96)]
     public string IslemReferansi { get; set; } = string.Empty;
+
+    [MaxLength(96)]
+    public string? SaleReference { get; set; }
 
     [MaxLength(128)]
     public string? SaglayiciIslemId { get; set; }
@@ -41,6 +46,23 @@ public class PosOdemeIslemi : BaseEntity<int>, ITenantEntity
     [MaxLength(64)]
     public string? AuthorizationCode { get; set; }
 
+    [MaxLength(64)]
+    public string? AcquirerId { get; set; }
+
+    [MaxLength(128)]
+    public string? TerminalId { get; set; }
+
+    [MaxLength(128)]
+    public string? MerchantId { get; set; }
+
+    [MaxLength(64)]
+    public string? PavoResultCode { get; set; }
+
+    [MaxLength(1024)]
+    public string? PavoMessage { get; set; }
+
+    public DateTime? BaslatilmaTarihi { get; set; }
+
     [MaxLength(1024)]
     public string? HataMesaji { get; set; }
 
@@ -60,6 +82,7 @@ public class PosOdemeIslemi : BaseEntity<int>, ITenantEntity
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
 
     public PosTerminal? PosTerminal { get; set; }
+    public PosCihazi? PosCihazi { get; set; }
     public KasaBankaHesap? KasaBankaHesap { get; set; }
     public Rezervasyon? Rezervasyon { get; set; }
     public RezervasyonOdeme? RezervasyonOdeme { get; set; }
@@ -69,8 +92,15 @@ public static class PosOdemeDurumlari
 {
     public const string Olusturuldu = "Olusturuldu";
     public const string PosIslemiBekleniyor = "PosIslemiBekleniyor";
+    public const string Pending = "Pending";
+    public const string SentToAgent = "SentToAgent";
+    public const string Processing = "Processing";
     public const string Basarili = "Basarili";
     public const string Basarisiz = "Basarisiz";
+    public const string Successful = "Successful";
+    public const string Failed = "Failed";
+    public const string Unknown = "Unknown";
+    public const string Cancelled = "Cancelled";
     public const string Muhasebelestirildi = "Muhasebelestirildi";
     public const string MutabakatGerekli = "MutabakatGerekli";
 }

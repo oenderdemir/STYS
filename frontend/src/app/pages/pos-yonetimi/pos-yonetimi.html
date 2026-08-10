@@ -125,6 +125,7 @@
                 <p-tab value="general">Genel Bilgiler</p-tab>
                 <p-tab value="terminals">Terminaller</p-tab>
                 <p-tab value="connection">Bağlantı</p-tab>
+                <p-tab value="payments">Test İşlemleri</p-tab>
             </p-tablist>
             <p-tabpanels>
                 <!-- GENEL BİLGİLER -->
@@ -261,6 +262,147 @@
                         </div>
                     } @else {
                         <div class="empty-state">Cihazı kaydettikten sonra bağlantı bilgileri görüntülenir.</div>
+                    }
+                </p-tabpanel>
+
+                <!-- TEST İŞLEMLERİ -->
+                <p-tabpanel value="payments">
+                    @if (selectedCihaz()) {
+                        <div class="form-section">
+                            <div class="section-header">
+                                <div>
+                                    <h4>Manuel ödeme testi</h4>
+                                    <p>Bu alan gerçek POS cihazında küçük tutarlı ödeme başlatmak ve sonucu sorgulamak için kullanılır.</p>
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="paymentTerminal">Terminal *</label>
+                                    <p-select inputId="paymentTerminal"
+                                        [options]="getPaymentTerminalOptions()"
+                                        optionLabel="label"
+                                        optionValue="value"
+                                        appendTo="body"
+                                        [filter]="true"
+                                        [(ngModel)]="paymentForm.posTerminalId"
+                                        styleClass="w-full"
+                                        placeholder="Terminal seçin" />
+                                </div>
+                                <div class="field">
+                                    <label for="paymentAmount">Tutar *</label>
+                                    <input pInputText id="paymentAmount" type="number" min="0.01" step="0.01" [(ngModel)]="paymentForm.tutar" [class.ng-invalid]="paymentSubmitted() && paymentForm.tutar <= 0" />
+                                </div>
+                                <div class="field field-full">
+                                    <label for="paymentDescription">Açıklama</label>
+                                    <input pInputText id="paymentDescription" [(ngModel)]="paymentForm.aciklama" />
+                                </div>
+                            </div>
+
+                            <div class="flex justify-content-end gap-2 mt-3">
+                                <button pButton pRipple label="Ödeme Başlat" icon="pi pi-credit-card" class="p-button-success" [loading]="paymentSaving()" (click)="startPaymentTest()"></button>
+                            </div>
+                        </div>
+
+                        <div class="form-section" *ngIf="currentPaymentTest() as payment">
+                            <div class="section-header">
+                                <div>
+                                    <h4>Son işlem</h4>
+                                    <p>Başlatılan veya sorgulanan son ödeme kaydı.</p>
+                                </div>
+                            </div>
+
+                            <div class="connection-grid payment-grid">
+                                <div class="connection-item">
+                                    <span class="connection-item__label">SaleReference</span>
+                                    <span class="connection-item__value">{{ payment.saleReference || '-' }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">Durum</span>
+                                    <span class="connection-item__value">
+                                        <p-tag [value]="payment.durum" [severity]="getPaymentStatusSeverity(payment.durum)" />
+                                    </span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">Tutar</span>
+                                    <span class="connection-item__value">{{ payment.tutar | number:'1.2-2' }} {{ payment.paraBirimi }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">Terminal</span>
+                                    <span class="connection-item__value">{{ getPaymentTerminalLabel(payment) }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">Başlama zamanı</span>
+                                    <span class="connection-item__value">{{ payment.baslatilmaTarihi ? (payment.baslatilmaTarihi | date:'short') : '-' }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">Sonuç zamanı</span>
+                                    <span class="connection-item__value">{{ payment.tamamlanmaTarihi ? (payment.tamamlanmaTarihi | date:'short') : '-' }}</span>
+                                </div>
+                                <div class="connection-item connection-item--wide">
+                                    <span class="connection-item__label">PAVO mesajı</span>
+                                    <span class="connection-item__value">{{ payment.pavoMessage || payment.hataMesaji || '-' }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">RetrievalReferenceNo</span>
+                                    <span class="connection-item__value">{{ payment.retrievalReferenceNo || '-' }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">AcquirerReference</span>
+                                    <span class="connection-item__value">{{ payment.acquirerReference || '-' }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">AuthorizationCode</span>
+                                    <span class="connection-item__value">{{ payment.authorizationCode || '-' }}</span>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-content-end gap-2 mt-3">
+                                <button pButton pRipple label="Sonucu Sorgula" icon="pi pi-refresh" class="p-button-outlined" [loading]="paymentSaving()" (click)="queryPaymentTestResult(payment)"></button>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="section-header">
+                                <div>
+                                    <h4>Son işlemler</h4>
+                                    <p>En yeni birkaç test kaydı.</p>
+                                </div>
+                            </div>
+
+                            @if (paymentTestsLoading()) {
+                                <div class="empty-state">Ödeme geçmişi yükleniyor...</div>
+                            } @else if (paymentTests().length === 0) {
+                                <div class="empty-state">Henüz test işlemi yok.</div>
+                            } @else {
+                                <p-table [value]="paymentTests()" [loading]="paymentTestsLoading()" [paginator]="false" styleClass="p-datatable-gridlines p-datatable-sm pos-table" [tableStyle]="{ 'min-width': '60rem' }">
+                                    <ng-template pTemplate="header">
+                                        <tr>
+                                            <th>Tarih</th>
+                                            <th>SaleReference</th>
+                                            <th>Terminal</th>
+                                            <th>Tutar</th>
+                                            <th>Durum</th>
+                                            <th style="width:8rem">İşlem</th>
+                                        </tr>
+                                    </ng-template>
+                                    <ng-template pTemplate="body" let-p>
+                                        <tr>
+                                            <td>{{ p.baslatilmaTarihi ? (p.baslatilmaTarihi | date:'short') : '-' }}</td>
+                                            <td><code class="text-sm">{{ p.saleReference || '-' }}</code></td>
+                                            <td>{{ getPaymentTerminalLabel(p) }}</td>
+                                            <td>{{ p.tutar | number:'1.2-2' }} {{ p.paraBirimi }}</td>
+                                            <td><p-tag [value]="p.durum" [severity]="getPaymentStatusSeverity(p.durum)" /></td>
+                                            <td>
+                                                <button pButton pRipple icon="pi pi-refresh" class="p-button-rounded p-button-text p-button-sm" (click)="queryPaymentTestResult(p)" pTooltip="Sonucu sorgula"></button>
+                                            </td>
+                                        </tr>
+                                    </ng-template>
+                                </p-table>
+                            }
+                        </div>
+                    } @else {
+                        <div class="empty-state">Cihazı kaydettikten sonra ödeme testleri kullanılabilir.</div>
                     }
                 </p-tabpanel>
             </p-tabpanels>

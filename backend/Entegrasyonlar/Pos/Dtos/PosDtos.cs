@@ -59,19 +59,41 @@ public sealed class PosOdemeBaslatRequest
 public sealed class PosOdemeIslemiDto
 {
     public int Id { get; set; }
+    public int? PosCihaziId { get; set; }
     public int RezervasyonId { get; set; }
     public int PosTerminalId { get; set; }
     public int KasaBankaHesapId { get; set; }
+    public Guid? AgentCommandId { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string? SaglayiciIslemId { get; set; }
     public string? SaglayiciDurumKodu { get; set; }
     public string IslemReferansi { get; set; } = string.Empty;
+    public string? SaleReference { get; set; }
     public decimal Tutar { get; set; }
     public string ParaBirimi { get; set; } = "TRY";
     public string Durum { get; set; } = string.Empty;
+    public string? PavoResultCode { get; set; }
+    public string? PavoMessage { get; set; }
     public string? HataMesaji { get; set; }
+    public string? AcquirerId { get; set; }
+    public string? TerminalId { get; set; }
+    public string? MerchantId { get; set; }
+    public string? RetrievalReferenceNo { get; set; }
+    public string? AcquirerReference { get; set; }
+    public string? AuthorizationCode { get; set; }
+    public DateTime? BaslatilmaTarihi { get; set; }
+    public DateTime? TamamlanmaTarihi { get; set; }
     public DateTime? SonSorgulamaTarihi { get; set; }
     public int SorgulamaDenemeSayisi { get; set; }
     public int? RezervasyonOdemeId { get; set; }
     public bool TamamlandiMi { get; set; }
+}
+
+public sealed class PosPaymentBaslatRequest
+{
+    public int PosTerminalId { get; set; }
+    public decimal Tutar { get; set; }
+    public string? ParaBirimi { get; set; } = "TRY";
+    public string? Aciklama { get; set; }
+    public int? PosOdemeIslemiId { get; set; }
 }

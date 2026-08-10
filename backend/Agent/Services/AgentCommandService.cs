@@ -27,6 +27,8 @@ public sealed class AgentCommandService
         ["PavoPairing"] = "agent.command.execute",
         ["PavoPing"] = "agent.command.execute",
         ["PavoGetDeviceInfo"] = "agent.command.execute",
+        ["PavoStartPayment"] = "agent.command.execute",
+        ["PavoGetPaymentResult"] = "agent.command.execute",
         ["PavoConnectionTest"] = "stys.pavo.connection.test"
     };
 
@@ -35,6 +37,8 @@ public sealed class AgentCommandService
         ["PavoPairing"] = "pavo",
         ["PavoPing"] = "pavo",
         ["PavoGetDeviceInfo"] = "pavo",
+        ["PavoStartPayment"] = "pavo",
+        ["PavoGetPaymentResult"] = "pavo",
         ["PavoConnectionTest"] = "pavo"
     };
 
@@ -156,8 +160,8 @@ public sealed class AgentCommandService
         var target = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
         AgentCommandStateMachine.EnforceTransition(cmd.Status, target, cmd.Id);
 
-        var pavoDevice = request.Success && IsPavoCommand(cmd.CommandType)
-            ? ResolveValidatedPavoDeviceForCommand(db, cmd)
+        var pavoContext = IsPavoCommand(cmd.CommandType)
+            ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
         var prev = cmd.Status;
@@ -166,7 +170,7 @@ public sealed class AgentCommandService
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoDevice, ct);
+        ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, target.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -179,10 +183,15 @@ public sealed class AgentCommandService
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Failed, cmd.Id);
 
+        var pavoContext = IsPavoCommand(cmd.CommandType)
+            ? ResolveValidatedPavoCommandTarget(db, cmd)
+            : null;
+
         var prev = cmd.Status;
         cmd.Status = AgentCommandStatus.Failed;
         cmd.CompletedAt = DateTime.UtcNow;
         cmd.ErrorMessage = errorMessage;
+        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, "Failed", prev, agentId, errorMessage: errorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -195,10 +204,15 @@ public sealed class AgentCommandService
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Rejected, cmd.Id);
 
+        var pavoContext = IsPavoCommand(cmd.CommandType)
+            ? ResolveValidatedPavoCommandTarget(db, cmd)
+            : null;
+
         var prev = cmd.Status;
         cmd.Status = AgentCommandStatus.Rejected;
         cmd.CompletedAt = DateTime.UtcNow;
         cmd.ErrorMessage = errorMessage;
+        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, "Rejected", prev, agentId, errorMessage: errorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -228,15 +242,27 @@ public sealed class AgentCommandService
             throw new BaseException($"Agent '{c}' capability'sine sahip değil.", 403);
     }
 
-    private void ApplyPavoCommandResultIfNeeded(StysAppDbContext db, AgentCommand cmd, AgentCommandCompleteRequest request, PosCihazi? validatedDevice, CancellationToken ct)
+    private void ApplyPavoCommandResultIfNeeded(
+        StysAppDbContext db,
+        AgentCommand cmd,
+        AgentCommandCompleteRequest request,
+        PosCihazi? validatedDevice,
+        PosOdemeIslemi? validatedPayment,
+        CancellationToken ct)
     {
-        if (!request.Success)
-        {
-            return;
-        }
-
         try
         {
+            if (IsPaymentCommand(cmd.CommandType))
+            {
+                ApplyPavoPaymentResult(db, cmd, request, validatedDevice, validatedPayment);
+                return;
+            }
+
+            if (!request.Success)
+            {
+                return;
+            }
+
             switch (cmd.CommandType)
             {
                 case "PavoPairing":
@@ -295,6 +321,105 @@ public sealed class AgentCommandService
         device.SonBaglantiTarihi = DateTime.UtcNow;
 
         SyncDiscoveredTerminals(db, device, response.Terminals);
+    }
+
+    private void ApplyPavoPaymentResult(
+        StysAppDbContext db,
+        AgentCommand cmd,
+        AgentCommandCompleteRequest request,
+        PosCihazi? device,
+        PosOdemeIslemi? payment)
+    {
+        if (device is null || payment is null)
+        {
+            return;
+        }
+
+        PavoPaymentResponseBase? response = cmd.CommandType.Equals("PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+            ? DeserializePayload<PavoStartPaymentResponse>(request.ResultPayload)
+            : DeserializePayload<PavoGetPaymentResultResponse>(request.ResultPayload);
+
+        if (payment.PosCihaziId != device.Id || payment.KurumId != device.KurumId || payment.TesisId != device.TesisId)
+        {
+            throw new BaseException("PAVO ödeme sonucu farklı bir cihaza ait.", 400);
+        }
+
+        var terminal = db.PosTerminaller.FirstOrDefault(x => x.Id == payment.PosTerminalId && !x.IsDeleted)
+            ?? throw new BaseException("PAVO ödeme terminali bulunamadı.", 404);
+        if (terminal.PosCihaziId != device.Id || terminal.KurumId != device.KurumId || terminal.TesisId != device.TesisId)
+        {
+            throw new BaseException("PAVO ödeme terminali cihaz kapsamıyla eşleşmiyor.", 400);
+        }
+
+        if (payment.SaleReference is null && response?.Data?.SaleReference is not null)
+        {
+            payment.SaleReference = response.Data.SaleReference;
+        }
+
+        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase) || !payment.AgentCommandId.HasValue)
+        {
+            payment.AgentCommandId = cmd.Id;
+        }
+        payment.PosTerminalId = terminal.Id;
+        payment.AcquirerId = response?.Data?.AcquirerId ?? payment.AcquirerId;
+        payment.TerminalId = response?.Data?.TerminalId ?? payment.TerminalId;
+        payment.MerchantId = response?.Data?.MerchantId ?? payment.MerchantId;
+        payment.PavoResultCode = response?.Data?.ResultCode ?? request.ErrorCode ?? response?.ErrorCode;
+        payment.PavoMessage = response?.Data?.Message ?? request.ErrorMessage ?? response?.Message;
+        payment.RetrievalReferenceNo = response?.Data?.RetrievalReferenceNo ?? payment.RetrievalReferenceNo;
+        payment.AcquirerReference = response?.Data?.AcquirerReference ?? payment.AcquirerReference;
+        payment.AuthorizationCode = response?.Data?.AuthorizationCode ?? payment.AuthorizationCode;
+        payment.SonSorgulamaTarihi = DateTime.UtcNow;
+        payment.SaglayiciDurumKodu = response?.Data?.TransactionStatus ?? payment.SaglayiciDurumKodu;
+        payment.SonSaglayiciYaniti = request.ResultPayload;
+
+        if (!request.Success)
+        {
+            payment.Durum = IsTimeoutLike(request.ErrorCode, request.ErrorMessage) ? PosOdemeDurumlari.Unknown : PosOdemeDurumlari.Failed;
+            payment.HataMesaji = Truncate(request.ErrorMessage, 1024);
+            payment.TamamlanmaTarihi ??= DateTime.UtcNow;
+            return;
+        }
+
+        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase))
+        {
+            if (response?.Data?.IsSuccessful == true || response?.Data?.IsPending == true)
+            {
+                payment.Durum = PosOdemeDurumlari.Processing;
+                payment.TamamlanmaTarihi = null;
+                payment.HataMesaji = null;
+                return;
+            }
+
+            payment.Durum = response?.Data?.IsUnknown == true || response?.HasAbondon == true
+                ? PosOdemeDurumlari.Unknown
+                : PosOdemeDurumlari.Failed;
+            payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message, 1024);
+            payment.TamamlanmaTarihi = DateTime.UtcNow;
+            return;
+        }
+
+        if (response?.Data?.IsSuccessful == true)
+        {
+            payment.Durum = PosOdemeDurumlari.Successful;
+            payment.TamamlanmaTarihi = DateTime.UtcNow;
+            payment.HataMesaji = null;
+            return;
+        }
+
+        if (response?.Data?.IsPending == true)
+        {
+            payment.Durum = PosOdemeDurumlari.Processing;
+            payment.TamamlanmaTarihi = null;
+            payment.HataMesaji = null;
+            return;
+        }
+
+        payment.Durum = response?.Data?.IsUnknown == true || response?.HasAbondon == true
+            ? PosOdemeDurumlari.Unknown
+            : PosOdemeDurumlari.Failed;
+        payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message ?? request.ErrorMessage, 1024);
+        payment.TamamlanmaTarihi = DateTime.UtcNow;
     }
 
     private void SyncDiscoveredTerminals(StysAppDbContext db, PosCihazi device, IReadOnlyCollection<PavoDeviceTerminalInfo> discoveredTerminals)
@@ -404,10 +529,97 @@ public sealed class AgentCommandService
         return device;
     }
 
+    private PavoCommandValidationContext ResolveValidatedPavoCommandTarget(StysAppDbContext db, AgentCommand cmd)
+    {
+        var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload)
+            ?? throw new BaseException("PAVO komut payload'ında cihaz kimliği bulunamadı.", 400);
+
+        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId && !x.IsDeleted)
+            ?? throw new BaseException("PAVO cihazı bulunamadı.", 404);
+
+        if (device.AgentId != cmd.AgentId)
+        {
+            throw new BaseException("PAVO sonuç hedef agent ile eşleşmiyor.", 400);
+        }
+
+        if (device.KurumId != cmd.KurumId)
+        {
+            throw new BaseException("PAVO sonuç kurum kapsamı ile eşleşmiyor.", 400);
+        }
+
+        var agent = db.Set<AgentEntity>().FirstOrDefault(x => x.Id == cmd.AgentId && !x.IsDeleted)
+            ?? throw new BaseException("PAVO agent bulunamadı.", 404);
+
+        if (agent.KurumId != device.KurumId)
+        {
+            throw new BaseException("PAVO sonuç agent kurum kapsamı ile eşleşmiyor.", 400);
+        }
+
+        if (agent.Durum != AgentDurum.Active)
+        {
+            throw new BaseException("PAVO sonuç işlenirken hedef agent aktif değil.", 400);
+        }
+
+        var agentTesisBaglantisiVarMi = db.Set<AgentTesis>().Any(x =>
+            x.AgentId == agent.Id
+            && x.KurumId == device.KurumId
+            && x.TesisId == device.TesisId
+            && x.AktifMi
+            && !x.IsDeleted);
+
+        if (!agentTesisBaglantisiVarMi)
+        {
+            throw new BaseException("PAVO sonuç işlenirken agent tesis kapsamı geçersiz.", 400);
+        }
+
+        PosOdemeIslemi? payment = null;
+        if (IsPaymentCommand(cmd.CommandType))
+        {
+            var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload)
+                ?? throw new BaseException("PAVO komut payload'ında ödeme kimliği bulunamadı.", 400);
+            var payloadSaleReference = TryGetSaleReferenceFromCommandPayload(cmd.Payload);
+            var payloadTerminalId = TryGetTerminalIdFromCommandPayload(cmd.Payload);
+
+            payment = db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId && !x.IsDeleted)
+                ?? throw new BaseException("PAVO ödeme kaydı bulunamadı.", 404);
+
+            if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+                && payment.AgentCommandId.HasValue
+                && payment.AgentCommandId.Value != cmd.Id)
+            {
+                throw new BaseException("PAVO ödeme sonucu başka bir komuta bağlı.", 400);
+            }
+
+            if (payment.PosCihaziId != device.Id || payment.KurumId != device.KurumId || payment.TesisId != device.TesisId)
+            {
+                throw new BaseException("PAVO ödeme kaydı cihaz/tenant kapsamıyla eşleşmiyor.", 400);
+            }
+
+            if (!string.IsNullOrWhiteSpace(payloadSaleReference)
+                && !string.Equals(payloadSaleReference, payment.SaleReference, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BaseException("PAVO ödeme sale reference doğrulanamadı.", 400);
+            }
+
+            if (payloadTerminalId.HasValue && payloadTerminalId.Value != payment.PosTerminalId)
+            {
+                throw new BaseException("PAVO ödeme terminali doğrulanamadı.", 400);
+            }
+        }
+
+        return new PavoCommandValidationContext(device, payment);
+    }
+
     private static bool IsPavoCommand(string commandType) =>
         string.Equals(commandType, "PavoPairing", StringComparison.OrdinalIgnoreCase)
         || string.Equals(commandType, "PavoPing", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(commandType, "PavoGetDeviceInfo", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(commandType, "PavoGetDeviceInfo", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPaymentCommand(string commandType) =>
+        string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase);
 
     private static T? DeserializePayload<T>(string? payload) where T : class
     {
@@ -486,6 +698,83 @@ public sealed class AgentCommandService
                 await connection.CloseAsync();
         }
     }
+
+    private static int? TryGetPaymentIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("PosOdemeIslemiId", out var idElement) && idElement.TryGetInt32(out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static string? TryGetSaleReferenceFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("SaleReference", out var value))
+            {
+                return value.GetString();
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static int? TryGetTerminalIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("PosTerminalId", out var idElement) && idElement.TryGetInt32(out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static bool IsTimeoutLike(string? errorCode, string? message) =>
+        string.Equals(errorCode, "TIMEOUT", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(errorCode, "NETWORK", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(errorCode, "CONNECTION_REFUSED", StringComparison.OrdinalIgnoreCase)
+        || (!string.IsNullOrWhiteSpace(message) && message.Contains("timeout", StringComparison.OrdinalIgnoreCase));
+
+    private static string? Truncate(string? value, int maxLength) =>
+        string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
+
+    private sealed record PavoCommandValidationContext(PosCihazi Device, PosOdemeIslemi? Payment);
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()
     {

@@ -531,6 +531,397 @@ public sealed class PosYonetimiIntegrationTests
         await CleanupAsync(db, suffix);
     }
 
+    [IntegrationFact]
+    public async Task Payment_StartPaymentCommandOlusturur()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-1"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None);
+
+        Assert.NotNull(payment.AgentCommandId);
+        Assert.NotNull(payment.SaleReference);
+        Assert.Equal(PosOdemeDurumlari.SentToAgent, payment.Durum);
+
+        var command = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId);
+        Assert.Equal("PavoStartPayment", command.CommandType);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_TerminalWithoutAccountEngellenir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, null, suffix, "PAY-NO-ACC"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None));
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_CrossKurumEngellenir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        db.Set<PosTerminal>().Add(new PosTerminal
+        {
+            KurumId = fixture.KurumId + 999999,
+            TesisId = fixture.OtherKurumTesisId,
+            PosCihaziId = fixture.DeviceId,
+            KasaBankaHesapId = fixture.OtherKurumHesapId,
+            SaglayiciKodu = "PAVO",
+            Ad = $"Cross-{suffix}",
+            SerialNumber = $"X-{suffix}",
+            SourceTerminalReference = $"X-{suffix}",
+            AktifMi = true,
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var terminal = await db.Set<PosTerminal>().OrderByDescending(x => x.Id).FirstAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None));
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_WrongAgentEngellenir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-AG"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.AgentId = fixture.OtherTesisAgentId;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None));
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_SaleReferenceRetrySameKalir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-RETRY"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        var first = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None);
+
+        var retryRow = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == first.Id);
+        retryRow.AgentCommandId = null;
+        retryRow.Durum = PosOdemeDurumlari.Unknown;
+        await db.SaveChangesAsync();
+
+        var retry = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            PosOdemeIslemiId = first.Id
+        }, "test", CancellationToken.None);
+
+        Assert.Equal(first.SaleReference, retry.SaleReference);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_DuplicateStartEngellenir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-DUP"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        var first = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None);
+
+        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            PosOdemeIslemiId = first.Id
+        }, "test", CancellationToken.None));
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_StartSuccess_ThenGetResultSuccessful()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-OK"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None);
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, payment.AgentCommandId!.Value, true, JsonSerializer.Serialize(new PavoStartPaymentResponse
+        {
+            Data = new PavoPaymentOperationData
+            {
+                SaleReference = payment.SaleReference,
+                IsSuccessful = true,
+                IsPending = true,
+                ResultCode = "00",
+                Message = "accepted",
+                TransactionStatus = "PROCESSING"
+            }
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var afterStart = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Processing, afterStart.Durum);
+
+        var queried = await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        var resultCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().OrderByDescending(x => x.CreatedAt).FirstAsync(x => x.CommandType == "PavoGetPaymentResult");
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, resultCommand.Id, true, JsonSerializer.Serialize(new PavoGetPaymentResultResponse
+        {
+            Data = new PavoPaymentOperationData
+            {
+                SaleReference = payment.SaleReference,
+                IsSuccessful = true,
+                ResultCode = "00",
+                Message = "ok",
+                RetrievalReferenceNo = "RRN-1",
+                AcquirerReference = "ARC-1",
+                AuthorizationCode = "AUTH-1"
+            }
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var afterResult = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(payment.Id, queried.Id);
+        Assert.Equal(PosOdemeDurumlari.Successful, afterResult.Durum);
+        Assert.Equal("RRN-1", afterResult.RetrievalReferenceNo);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_GetResultFailUpdatesSamePayment()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-FAIL"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None);
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, payment.AgentCommandId!.Value, true, JsonSerializer.Serialize(new PavoStartPaymentResponse
+        {
+            Data = new PavoPaymentOperationData
+            {
+                SaleReference = payment.SaleReference,
+                IsSuccessful = true,
+                IsPending = true,
+                ResultCode = "00",
+                Message = "accepted",
+                TransactionStatus = "PROCESSING"
+            }
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        var resultCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().OrderByDescending(x => x.CreatedAt).FirstAsync(x => x.CommandType == "PavoGetPaymentResult");
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, resultCommand.Id, false, errorMessage: "rejected");
+
+        var afterResult = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Failed, afterResult.Durum);
+        Assert.Equal(payment.Id, afterResult.Id);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_StartTimeout_UnknownOlur()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-TIMEOUT"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration"
+        }, "test", CancellationToken.None);
+
+        await agentService.FailAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, "timeout", CancellationToken.None);
+
+        var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Unknown, after.Durum);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_ParallelSequenceValuesDifferent()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-SEQ"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        var tasks = new[]
+        {
+            Task.Run(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+            {
+                PosTerminalId = terminal.Id,
+                Tutar = 1.00m,
+                ParaBirimi = "TRY",
+                Aciklama = "integration-1"
+            }, "test", CancellationToken.None)),
+            Task.Run(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+            {
+                PosTerminalId = terminal.Id,
+                Tutar = 2.00m,
+                ParaBirimi = "TRY",
+                Aciklama = "integration-2"
+            }, "test", CancellationToken.None))
+        };
+
+        await Task.WhenAll(tasks);
+
+        var commands = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .Where(x => x.CommandType == "PavoStartPayment" && x.AgentId == fixture.MainAgentId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+        Assert.Equal(2, commands.Count);
+        var firstPayload = JsonSerializer.Deserialize<PavoStartPaymentRequest>(commands[0].Payload!, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var secondPayload = JsonSerializer.Deserialize<PavoStartPaymentRequest>(commands[1].Payload!, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotEqual(firstPayload!.TransactionHandle.TransactionSequence, secondPayload!.TransactionHandle.TransactionSequence);
+
+        await CleanupAsync(db, suffix);
+    }
+
     private static string? ConnectionString() => Environment.GetEnvironmentVariable("STYS_INTEGRATION_TEST_CONNECTION_STRING");
 
     private static IMapper CreateMapper()
@@ -555,6 +946,9 @@ public sealed class PosYonetimiIntegrationTests
 
     private static PosTerminalService CreateTerminalService(StysAppDbContext db, int kurumId) =>
         new(db, [new FakePavoSaglayici()], new FakeKurumTenantAccessor(kurumId));
+
+    private static PosPaymentTestService CreatePaymentService(StysAppDbContext db, string connectionString, int kurumId) =>
+        new(db, CreateAgentCommandService(connectionString, kurumId), new FakeKurumTenantAccessor(kurumId));
 
     private static PosTerminalKaydetRequest BuildTerminalRequest(Fixture fixture, int? hesapId, string suffix, string terminalId) =>
         new()
@@ -751,6 +1145,29 @@ public sealed class PosYonetimiIntegrationTests
         {
             await db.Set<Il>().IgnoreQueryFilters().Where(x => ilIds.Contains(x.Id)).ExecuteDeleteAsync();
         }
+    }
+
+    private static async Task CompletePaymentCommandAsync(
+        StysAppDbContext db,
+        AgentCommandService agentService,
+        int agentId,
+        Guid commandId,
+        bool success,
+        string? resultPayload = null,
+        string? errorCode = null,
+        string? errorMessage = null)
+    {
+        await agentService.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        await agentService.AcceptAsync(commandId, agentId, CancellationToken.None);
+        await agentService.SetRunningAsync(commandId, agentId, CancellationToken.None);
+        await agentService.CompleteAsync(commandId, agentId, new AgentCommandCompleteRequest
+        {
+            Id = commandId,
+            Success = success,
+            ResultPayload = resultPayload,
+            ErrorCode = errorCode,
+            ErrorMessage = errorMessage
+        }, CancellationToken.None);
     }
 
     private sealed record Fixture(

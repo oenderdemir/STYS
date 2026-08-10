@@ -170,3 +170,122 @@ public sealed class PavoGetDeviceInfoCommandHandler : IAgentCommandHandler<PavoG
         TransactionHandle = command.TransactionHandle
     };
 }
+
+public sealed class PavoStartPaymentCommandHandler : IAgentCommandHandler<PavoStartPaymentCommand>
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly IPavoRestClient _client;
+    private readonly ILogger<PavoStartPaymentCommandHandler> _logger;
+
+    public PavoStartPaymentCommandHandler(IPavoRestClient client, ILogger<PavoStartPaymentCommandHandler> logger)
+    {
+        _client = client;
+        _logger = logger;
+    }
+
+    public async Task<AgentCommandResult> HandleAsync(PavoStartPaymentCommand command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("PAVO ödeme başlatılıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
+            var response = await _client.StartPaymentAsync(ToRequest(command), cancellationToken);
+            var payload = JsonSerializer.Serialize(response, JsonOptions);
+            if (response.HasAbondon || response.HasError)
+            {
+                return new AgentCommandResult
+                {
+                    Success = false,
+                    ResultPayload = payload,
+                    ErrorCode = response.ErrorCode ?? response.Data?.ResultCode ?? "PAVO_START_PAYMENT_FAILED",
+                    ErrorMessage = response.Message ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı."
+                };
+            }
+
+            return AgentCommandResult.Ok(payload);
+        }
+        catch (PavoRestClientException ex)
+        {
+            _logger.LogWarning(ex, "PAVO start payment transport error");
+            return new AgentCommandResult
+            {
+                Success = false,
+                ErrorCode = ex.ErrorCode,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+    private static PavoStartPaymentRequest ToRequest(PavoStartPaymentCommand command) => new()
+    {
+        PosCihaziId = command.PosCihaziId,
+        PosOdemeIslemiId = command.PosOdemeIslemiId,
+        PosTerminalId = command.PosTerminalId,
+        SaleReference = command.SaleReference,
+        IpAddress = command.IpAddress,
+        HttpPort = command.HttpPort,
+        HttpsPort = command.HttpsPort,
+        UseHttps = command.UseHttps,
+        Amount = command.Amount,
+        CurrencyCode = command.CurrencyCode,
+        Description = command.Description,
+        TransactionHandle = command.TransactionHandle
+    };
+}
+
+public sealed class PavoGetPaymentResultCommandHandler : IAgentCommandHandler<PavoGetPaymentResultCommand>
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly IPavoRestClient _client;
+    private readonly ILogger<PavoGetPaymentResultCommandHandler> _logger;
+
+    public PavoGetPaymentResultCommandHandler(IPavoRestClient client, ILogger<PavoGetPaymentResultCommandHandler> logger)
+    {
+        _client = client;
+        _logger = logger;
+    }
+
+    public async Task<AgentCommandResult> HandleAsync(PavoGetPaymentResultCommand command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("PAVO ödeme sonucu sorgulanıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
+            var response = await _client.GetPaymentResultAsync(ToRequest(command), cancellationToken);
+            var payload = JsonSerializer.Serialize(response, JsonOptions);
+            if (response.HasAbondon || response.HasError)
+            {
+                return new AgentCommandResult
+                {
+                    Success = false,
+                    ResultPayload = payload,
+                    ErrorCode = response.ErrorCode ?? response.Data?.ResultCode ?? "PAVO_GET_PAYMENT_RESULT_FAILED",
+                    ErrorMessage = response.Message ?? response.Data?.Message ?? "PAVO ödeme sonucu alınamadı."
+                };
+            }
+
+            return AgentCommandResult.Ok(payload);
+        }
+        catch (PavoRestClientException ex)
+        {
+            _logger.LogWarning(ex, "PAVO get payment result transport error");
+            return new AgentCommandResult
+            {
+                Success = false,
+                ErrorCode = ex.ErrorCode,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+    private static PavoGetPaymentResultRequest ToRequest(PavoGetPaymentResultCommand command) => new()
+    {
+        PosCihaziId = command.PosCihaziId,
+        PosOdemeIslemiId = command.PosOdemeIslemiId,
+        PosTerminalId = command.PosTerminalId,
+        SaleReference = command.SaleReference,
+        IpAddress = command.IpAddress,
+        HttpPort = command.HttpPort,
+        HttpsPort = command.HttpsPort,
+        UseHttps = command.UseHttps,
+        TransactionHandle = command.TransactionHandle
+    };
+}

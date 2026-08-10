@@ -3,7 +3,15 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { PosCihaziDto, PosCihaziKaydetRequest, PosSaglayiciDto, PosTerminalDto, PosTerminalKaydetRequest } from './pos-yonetimi.dto';
+import {
+    PosCihaziDto,
+    PosCihaziKaydetRequest,
+    PosOdemeIslemiDto,
+    PosPaymentBaslatRequestDto,
+    PosSaglayiciDto,
+    PosTerminalDto,
+    PosTerminalKaydetRequest
+} from './pos-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
 export class PosYonetimiService {
@@ -99,6 +107,29 @@ export class PosYonetimiService {
     syncTerminals(cihazId: number): Observable<void> {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/terminal-discovery`, {}).pipe(map(r => {
             if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Terminal senkronizasyonu başlatılamadı.');
+        }));
+    }
+
+    getPaymentTests(cihazId: number, take = 5): Observable<PosOdemeIslemiDto[]> {
+        return this.http.get<ApiResponse<PosOdemeIslemiDto[]>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/payment-test`, {
+            params: { take }
+        }).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Ödeme geçmişi alınamadı.');
+        }));
+    }
+
+    startPaymentTest(cihazId: number, req: PosPaymentBaslatRequestDto): Observable<PosOdemeIslemiDto> {
+        return this.http.post<ApiResponse<PosOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/payment-test`, req).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Ödeme başlatılamadı.');
+        }));
+    }
+
+    getPaymentTestResult(cihazId: number, posOdemeIslemiId: number): Observable<PosOdemeIslemiDto> {
+        return this.http.post<ApiResponse<PosOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/payment-test/${posOdemeIslemiId}/result`, {}).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Ödeme sonucu sorgulanamadı.');
         }));
     }
 }

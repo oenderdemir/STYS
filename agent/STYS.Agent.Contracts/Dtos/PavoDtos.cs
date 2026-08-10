@@ -33,6 +33,41 @@ public sealed class PavoGetDeviceInfoRequest : PavoDeviceRequestBase
 {
 }
 
+public sealed class PavoPaymentOperationData
+{
+    public string? SaleReference { get; set; }
+    public bool IsSuccessful { get; set; }
+    public bool IsPending { get; set; }
+    public bool IsUnknown { get; set; }
+    public string? ResultCode { get; set; }
+    public string? Message { get; set; }
+    public string? RetrievalReferenceNo { get; set; }
+    public string? AcquirerReference { get; set; }
+    public string? AuthorizationCode { get; set; }
+    public string? AcquirerId { get; set; }
+    public string? TerminalId { get; set; }
+    public string? MerchantId { get; set; }
+    public string? TransactionStatus { get; set; }
+}
+
+public abstract class PavoPaymentRequestBase : PavoDeviceRequestBase
+{
+    public int PosOdemeIslemiId { get; set; }
+    public int PosTerminalId { get; set; }
+    public string SaleReference { get; set; } = string.Empty;
+}
+
+public sealed class PavoStartPaymentRequest : PavoPaymentRequestBase
+{
+    public decimal Amount { get; set; }
+    public string CurrencyCode { get; set; } = "TRY";
+    public string? Description { get; set; }
+}
+
+public sealed class PavoGetPaymentResultRequest : PavoPaymentRequestBase
+{
+}
+
 public abstract class PavoBaseResponse
 {
     public bool HasError { get; set; }
@@ -75,4 +110,17 @@ public sealed class PavoDeviceTerminalInfo
     public string? MerchantId { get; set; }
     public string? AcquirerId { get; set; }
     public string? AcquirerName { get; set; }
+}
+
+public abstract class PavoPaymentResponseBase : PavoBaseResponse
+{
+    public PavoPaymentOperationData? Data { get; set; }
+}
+
+public sealed class PavoStartPaymentResponse : PavoPaymentResponseBase
+{
+}
+
+public sealed class PavoGetPaymentResultResponse : PavoPaymentResponseBase
+{
 }

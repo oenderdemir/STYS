@@ -12,9 +12,15 @@ namespace STYS.Entegrasyonlar.Pos.Controllers;
 public sealed class PosCihaziController : UIController
 {
     private readonly IPosCihaziService _service;
+    private readonly IPosPaymentTestService _paymentService;
     private readonly IMapper _mapper;
 
-    public PosCihaziController(IPosCihaziService service, IMapper mapper) { _service = service; _mapper = mapper; }
+    public PosCihaziController(IPosCihaziService service, IPosPaymentTestService paymentService, IMapper mapper)
+    {
+        _service = service;
+        _paymentService = paymentService;
+        _mapper = mapper;
+    }
 
     [HttpGet("cihazlar")]
     [Permission(StructurePermissions.PosYonetimi.View)]
@@ -64,4 +70,28 @@ public sealed class PosCihaziController : UIController
     [Permission(StructurePermissions.PosYonetimi.Manage)]
     public async Task<ActionResult<AgentCommandDto>> TerminalDiscovery(int id, CancellationToken cancellationToken) =>
         Ok(await _service.GetDeviceInfoAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpGet("cihazlar/{id:int}/payment-test")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<ActionResult<IReadOnlyCollection<PosOdemeIslemiDto>>> GetPaymentTests(
+        int id,
+        CancellationToken cancellationToken,
+        [FromQuery] int take = 5) =>
+        Ok(await _paymentService.GetRecentAsync(id, take, cancellationToken));
+
+    [HttpPost("cihazlar/{id:int}/payment-test")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<PosOdemeIslemiDto>> StartPaymentTest(
+        int id,
+        [FromBody] PosPaymentBaslatRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await _paymentService.StartAsync(id, request, User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpPost("cihazlar/{id:int}/payment-test/{posOdemeIslemiId:int}/result")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<PosOdemeIslemiDto>> GetPaymentResult(
+        int id,
+        int posOdemeIslemiId,
+        CancellationToken cancellationToken) =>
+        Ok(await _paymentService.GetResultAsync(id, posOdemeIslemiId, User?.Identity?.Name ?? "system", cancellationToken));
 }

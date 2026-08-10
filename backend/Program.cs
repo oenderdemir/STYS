@@ -129,6 +129,7 @@ builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((service
 });
 builder.Services.AddScoped<IPosOdemeSaglayicisi, PavoPosOdemeSaglayicisi>();
 builder.Services.AddScoped<IPosService, PosService>();
+builder.Services.AddScoped<IPosPaymentTestService, PosPaymentTestService>();
 builder.Services.AddScoped<PosTerminalService>();
 builder.Services.AddHostedService<PosOdemeDurumTakipHostedService>();
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);

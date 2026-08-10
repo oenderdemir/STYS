@@ -25,6 +25,8 @@ import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
+    PosOdemeIslemiDto,
+    PosPaymentBaslatRequestDto,
     PosSaglayiciDto,
     PosTerminalDto,
     PosTerminalKaydetRequest,
@@ -34,6 +36,7 @@ import { PosYonetimiService } from './pos-yonetimi.service';
 
 type PosCihaziFormState = PosCihaziKaydetRequest & { id?: number };
 type PosTerminalFormState = PosTerminalKaydetRequest & { id?: number };
+type PosPaymentFormState = PosPaymentBaslatRequestDto;
 
 @Component({
     selector: 'app-pos-yonetimi',
@@ -84,9 +87,15 @@ export class PosYonetimiComponent implements OnInit {
     terminalDialogVisible = signal(false);
     terminalSubmitted = signal(false);
     terminalSaving = signal(false);
+    paymentTests = signal<PosOdemeIslemiDto[]>([]);
+    paymentTestsLoading = signal(false);
+    paymentSaving = signal(false);
+    currentPaymentTest = signal<PosOdemeIslemiDto | null>(null);
+    paymentSubmitted = signal(false);
 
     form: PosCihaziFormState = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
     terminalForm: PosTerminalFormState = this.createEmptyTerminalForm();
+    paymentForm: PosPaymentFormState = this.createEmptyPaymentForm();
 
     readonly cihazSaglayiciOptions = [{ label: 'PAVO', value: 0 }, { label: 'Diğer', value: 1 }];
     readonly filteredCihazlar = computed(() => {
@@ -126,11 +135,11 @@ export class PosYonetimiComponent implements OnInit {
                 return;
             }
 
-            if (!['PavoPairing', 'PavoPing', 'PavoGetDeviceInfo'].includes(update.commandType)) {
+            if (!['PavoPairing', 'PavoPing', 'PavoGetDeviceInfo', 'PavoStartPayment', 'PavoGetPaymentResult'].includes(update.commandType)) {
                 return;
             }
 
-            if (![4, 5, 6, 7, 8].includes(update.status)) {
+            if (![1, 2, 3, 4, 5, 6, 7, 8].includes(update.status)) {
                 return;
             }
 
@@ -205,6 +214,10 @@ export class PosYonetimiComponent implements OnInit {
         this.selectedCihaz.set(null);
         this.agentRealtime.leaveAgentGroup();
         this.terminals.set([]);
+        this.paymentTests.set([]);
+        this.currentPaymentTest.set(null);
+        this.paymentForm = this.createEmptyPaymentForm();
+        this.paymentSubmitted.set(false);
         this.submitted.set(false);
         this.dialogVisible.set(true);
     }
@@ -214,6 +227,8 @@ export class PosYonetimiComponent implements OnInit {
             next: (detail) => {
                 this.selectedCihaz.set(detail);
                 this.handledCommandRefreshKeys.clear();
+                this.paymentForm = this.createEmptyPaymentForm();
+                this.paymentSubmitted.set(false);
                 if (detail.agentId) {
                     this.agentRealtime.joinAgentGroup(detail.agentId);
                 } else {
@@ -235,6 +250,7 @@ export class PosYonetimiComponent implements OnInit {
                 this.submitted.set(false);
                 this.dialogVisible.set(true);
                 this.loadTerminals(detail.id);
+                this.loadPaymentTests(detail.id);
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -265,6 +281,8 @@ export class PosYonetimiComponent implements OnInit {
                 this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'POS cihazı kaydedildi.' });
                 this.selectedCihaz.set(saved);
                 this.handledCommandRefreshKeys.clear();
+                this.paymentForm = this.createEmptyPaymentForm();
+                this.paymentSubmitted.set(false);
                 if (saved.agentId) {
                     this.agentRealtime.joinAgentGroup(saved.agentId);
                 }
@@ -272,6 +290,7 @@ export class PosYonetimiComponent implements OnInit {
                 this.dialogVisible.set(true);
                 this.load();
                 this.loadTerminals(saved.id);
+                this.loadPaymentTests(saved.id);
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -300,6 +319,10 @@ export class PosYonetimiComponent implements OnInit {
         this.selectedCihaz.set(null);
         this.agentRealtime.leaveAgentGroup();
         this.terminals.set([]);
+        this.paymentTests.set([]);
+        this.currentPaymentTest.set(null);
+        this.paymentForm = this.createEmptyPaymentForm();
+        this.paymentSubmitted.set(false);
         this.terminalDialogVisible.set(false);
     }
 
@@ -323,7 +346,15 @@ export class PosYonetimiComponent implements OnInit {
     loadTerminals(cihazId: number): void {
         this.terminalsLoading.set(true);
         this.service.getTerminals(cihazId).pipe(finalize(() => this.terminalsLoading.set(false))).subscribe({
-            next: (items) => this.terminals.set(items),
+            next: (items) => {
+                this.terminals.set(items);
+                if (items.length > 0 && !items.some((item) => item.id === this.paymentForm.posTerminalId)) {
+                    this.paymentForm.posTerminalId = items[0]?.id ?? 0;
+                }
+                if ((this.paymentForm.posTerminalId ?? 0) <= 0 && items.length > 0) {
+                    this.paymentForm.posTerminalId = items[0]?.id ?? 0;
+                }
+            },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
     }
@@ -338,6 +369,7 @@ export class PosYonetimiComponent implements OnInit {
                     this.agentRealtime.leaveAgentGroup();
                 }
                 this.loadTerminals(cihazId);
+                this.loadPaymentTests(cihazId);
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -483,8 +515,113 @@ export class PosYonetimiComponent implements OnInit {
         });
     }
 
+    loadPaymentTests(cihazId: number): void {
+        this.paymentTestsLoading.set(true);
+        this.service.getPaymentTests(cihazId).pipe(finalize(() => this.paymentTestsLoading.set(false))).subscribe({
+            next: (items) => {
+                this.paymentTests.set(items);
+                const currentId = this.currentPaymentTest()?.id;
+                if (currentId != null) {
+                    const current = items.find((item) => item.id === currentId);
+                    if (current) {
+                        this.currentPaymentTest.set(current);
+                        return;
+                    }
+                }
+
+                this.currentPaymentTest.set(items[0] ?? null);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    startPaymentTest(): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.paymentSubmitted.set(true);
+        if (!this.paymentForm.posTerminalId || this.paymentForm.tutar <= 0) {
+            return;
+        }
+
+        const request: PosPaymentBaslatRequestDto = {
+            posTerminalId: this.paymentForm.posTerminalId,
+            tutar: this.paymentForm.tutar,
+            paraBirimi: this.paymentForm.paraBirimi?.trim() || 'TRY',
+            aciklama: this.paymentForm.aciklama?.trim() || null,
+            posOdemeIslemiId: this.paymentForm.posOdemeIslemiId ?? null
+        };
+
+        this.paymentSaving.set(true);
+        this.service.startPaymentTest(cihaz.id, request).pipe(finalize(() => this.paymentSaving.set(false))).subscribe({
+            next: (payment) => {
+                this.paymentForm.posOdemeIslemiId = payment.id;
+                this.currentPaymentTest.set(payment);
+                this.upsertPaymentTest(payment);
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Ödeme başlatma komutu gönderildi.' });
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    queryPaymentTestResult(payment: PosOdemeIslemiDto): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id || !payment.id) {
+            return;
+        }
+
+        this.paymentSaving.set(true);
+        this.service.getPaymentTestResult(cihaz.id, payment.id).pipe(finalize(() => this.paymentSaving.set(false))).subscribe({
+            next: (updated) => {
+                this.currentPaymentTest.set(updated);
+                this.upsertPaymentTest(updated);
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Ödeme sonucu sorgulandı.' });
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
     getTerminalSaglayiciLabel(kod: string): string {
         return this.saglayicilar().find((item) => item.kod === kod)?.ad ?? kod;
+    }
+
+    getPaymentTerminalLabel(payment: PosOdemeIslemiDto): string {
+        const terminal = this.terminals().find((item) => item.id === payment.posTerminalId);
+        if (terminal) {
+            return `${terminal.ad} • ${terminal.terminalId}`;
+        }
+
+        return payment.terminalId ?? `Terminal #${payment.posTerminalId}`;
+    }
+
+    getPaymentTerminalOptions(): Array<{ label: string; value: number }> {
+        return this.terminals().map((terminal) => ({
+            label: `${terminal.ad} • ${terminal.terminalId}${terminal.kasaBankaHesapAd ? ` • ${terminal.kasaBankaHesapAd}` : ''}`,
+            value: terminal.id
+        }));
+    }
+
+    getPaymentStatusSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+        switch (durum) {
+            case 'Successful':
+            case 'Basarili':
+            case 'Muhasebelestirildi':
+                return 'success';
+            case 'Processing':
+            case 'Pending':
+            case 'SentToAgent':
+                return 'info';
+            case 'Unknown':
+                return 'warn';
+            case 'Failed':
+            case 'Basarisiz':
+            case 'MutabakatGerekli':
+                return 'danger';
+            default:
+                return 'secondary';
+        }
     }
 
     getKrediKartiHesapOptions(): Array<{ label: string; value: number }> {
@@ -518,6 +655,15 @@ export class PosYonetimiComponent implements OnInit {
         }
     }
 
+    private upsertPaymentTest(payment: PosOdemeIslemiDto): void {
+        const current = this.paymentTests();
+        const existingIndex = current.findIndex((item) => item.id === payment.id);
+        const next = existingIndex >= 0
+            ? current.map((item) => item.id === payment.id ? payment : item)
+            : [payment, ...current];
+        this.paymentTests.set(next.slice(0, 5));
+    }
+
     private createEmptyTerminalForm(cihaz?: PosCihaziDto | null): PosTerminalFormState {
         const ilkSaglayici = this.saglayicilar()[0]?.kod ?? 'PAVO';
         return {
@@ -531,6 +677,16 @@ export class PosYonetimiComponent implements OnInit {
             sourceFingerprint: '',
             sourceTerminalReference: '',
             aktifMi: true
+        };
+    }
+
+    private createEmptyPaymentForm(): PosPaymentFormState {
+        return {
+            posTerminalId: 0,
+            tutar: 100,
+            paraBirimi: 'TRY',
+            aciklama: 'PAVO test ödemesi',
+            posOdemeIslemiId: null
         };
     }
 }

@@ -193,7 +193,7 @@ public class EBelgeKurumPolitikaYonetimServisiIntegrationTests : IAsyncLifetime
             EBelgeEntegrasyonYontemi.HariciMuhasebeSistemi, true, new DateTime(2020, 1, 1), null, "")));
     }
 
-    [Theory]
+    [IntegrationTheory]
     [InlineData(EBelgeEntegrasyonYontemi.Kullanilmayacak)]
     [InlineData(EBelgeEntegrasyonYontemi.GibPortal)]
     public async Task KullanilmayacakVeyaGibPortalIcinHariciSistemKoduDoluysaReddedilir(EBelgeEntegrasyonYontemi yontem)
@@ -205,7 +205,7 @@ public class EBelgeKurumPolitikaYonetimServisiIntegrationTests : IAsyncLifetime
             yontem, true, new DateTime(2020, 1, 1), "GEREKSIZ-KOD", "")));
     }
 
-    [Theory]
+    [IntegrationTheory]
     [InlineData(EBelgeEntegrasyonYontemi.OzelEntegrator)]
     [InlineData(EBelgeEntegrasyonYontemi.DogrudanGib)]
     public async Task GercekAdapterOlmayanYontemlerAktifOlarakAktiveEdilemez(EBelgeEntegrasyonYontemi yontem)

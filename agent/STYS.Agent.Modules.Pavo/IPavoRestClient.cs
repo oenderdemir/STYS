@@ -7,6 +7,8 @@ public interface IPavoRestClient
     Task<PavoPairingResponse> PairingAsync(PavoPairingRequest request, CancellationToken cancellationToken);
     Task<PavoPingResponse> PingAsync(PavoPingRequest request, CancellationToken cancellationToken);
     Task<PavoGetDeviceInfoResponse> GetDeviceInfoAsync(PavoGetDeviceInfoRequest request, CancellationToken cancellationToken);
+    Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken);
+    Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken);
 }
 
 public sealed class PavoRestClientException : Exception

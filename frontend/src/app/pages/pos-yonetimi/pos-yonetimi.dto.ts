@@ -80,4 +80,44 @@ export interface PosTerminalKaydetRequest {
     aktifMi: boolean;
 }
 
+export interface PosPaymentBaslatRequestDto {
+    posTerminalId: number;
+    tutar: number;
+    paraBirimi?: string | null;
+    aciklama?: string | null;
+    posOdemeIslemiId?: number | null;
+}
+
+export interface PosOdemeIslemiDto {
+    id: number;
+    posCihaziId?: number | null;
+    rezervasyonId: number;
+    posTerminalId: number;
+    kasaBankaHesapId: number;
+    agentCommandId?: string | null;
+    saglayiciKodu: string;
+    saglayiciIslemId?: string | null;
+    saglayiciDurumKodu?: string | null;
+    islemReferansi: string;
+    saleReference?: string | null;
+    tutar: number;
+    paraBirimi: string;
+    durum: string;
+    pavoResultCode?: string | null;
+    pavoMessage?: string | null;
+    hataMesaji?: string | null;
+    acquirerId?: string | null;
+    terminalId?: string | null;
+    merchantId?: string | null;
+    retrievalReferenceNo?: string | null;
+    acquirerReference?: string | null;
+    authorizationCode?: string | null;
+    baslatilmaTarihi?: string | null;
+    tamamlanmaTarihi?: string | null;
+    sonSorgulamaTarihi?: string | null;
+    sorgulamaDenemeSayisi: number;
+    rezervasyonOdemeId?: number | null;
+    tamamlandiMi: boolean;
+}
+
 export const SaglayiciLabels: Record<number, string> = { 0: 'PAVO', 1: 'Diğer' };

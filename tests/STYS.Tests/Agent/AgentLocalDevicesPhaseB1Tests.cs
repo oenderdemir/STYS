@@ -317,6 +317,7 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     {
         return new LocalDeviceManagementService(
             store ?? CreateStore(),
+            CreateTerminalStore(),
             new LocalDeviceConnectionTesterRegistry([new FixedTester(LocalDeviceProvider.Pavo)]),
             pairingStore ?? CreatePairingStore(),
             client);
@@ -327,6 +328,9 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
 
     private FilePavoLocalPairingStore CreatePairingStore() =>
         new(CreatePathResolver(), NullLogger<FilePavoLocalPairingStore>.Instance);
+
+    private FileLocalDeviceTerminalStore CreateTerminalStore() =>
+        new(CreatePathResolver(), NullLogger<FileLocalDeviceTerminalStore>.Instance);
 
     private TempAgentPathResolver CreatePathResolver() => new(_tempDir);
 
@@ -352,6 +356,7 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
         public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
         public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
         public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");
+        public string LocalDeviceTerminalsStorePath => Path.Combine(DataDirectory, "local-device-terminals.json");
         public string PavoPairingStorePath => Path.Combine(DataDirectory, "pavo-pairing.dat");
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
     }

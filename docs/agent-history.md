@@ -1293,3 +1293,90 @@ Agent Regression:  0
 - Pairing sonrasında terminal discovery bir sonraki fazda tamamlanacak.
 - Angular build/test komutları bu turda ayrıca koşturulacak.
 - Full solution test koşusunda üç mevcut failure var; bu değişiklik setinden kaynaklı görünmüyor.
+
+## 2026-08-11 — PAVO Local Provisioning Faz B2
+
+### Terminal discovery
+
+- Pair edilmiş PAVO POS cihazı için doğrudan local `GetDeviceInfo` yanıtından terminal keşfi eklendi.
+- Keşif akışı merkezi `AgentCommand` kullanmadan local UI üzerinden çalışıyor.
+- Terminal keşfi yalnızca `PairingStatus = Paired` olduğunda çalışıyor.
+
+### Terminal identity / reconciliation
+
+- Local terminal modeli `LocalDeviceTerminal` olarak ayrıldı.
+- Canonical kimlik `LocalDeviceId + AcquirerId + TerminalId` mantığıyla üretildi.
+- Tekrar discovery yapıldığında aynı terminal güncelleniyor, duplicate oluşmuyor.
+- Yanıt içinde artık olmayan terminal silinmiyor; `Active = false` yapılıyor.
+
+### Local terminal persistence
+
+- Terminal metadata ayrı `local-device-terminals.json` store’una yazılıyor.
+- Store atomic write kullanıyor.
+- Public terminal metadata ile pairing secret state birbirinden ayrıldı.
+
+### Provisioning candidate contract
+
+- `PavoDeviceProvisioningCandidate` eklendi.
+- Candidate içinde:
+  - local device kimliği
+  - provider/display/host/port/protocol/serial/device name
+  - paired timestamp
+  - terminal listesi
+  - seçilen tesis
+  - fingerprint / client secret / JWT / enrollment code / agent / kurum bilgileri yok
+
+### Tesis selection
+
+- Local UI’da `/api/agent/me` üzerinden tesis listesi alınıyor.
+- Provisioning preview için tesis seçimi local olarak doğrulanıyor.
+- Agent kapsamı dışındaki tesis reddediliyor.
+
+### Security
+
+- Terminal store secret içermiyor.
+- Provisioning candidate secret içermiyor.
+- Fingerprint, token ve benzeri hassas değerler log / UI üzerinden sızdırılmıyor.
+- Discovery tarafında unpaired cihazda gereksiz PAVO çağrısı yapılmıyor.
+
+### Sequence
+
+- Terminal discovery çağrıları secure pairing store üzerinden yeni transaction sequence reserve ediyor.
+- Sequence restart sonrası korunuyor.
+- Aynı cihaz için paralel sequence reservation unique kalıyor.
+
+### UI
+
+- `Yerel Cihazlar` ekranına:
+  - `Terminalleri Keşfet`
+  - terminal listesi
+  - provisioning preview
+  - tesis dropdown
+  eklendi.
+- `STYS'e Kaydet` aksiyonu bu fazda pasif bırakıldı.
+
+### Tests
+
+- Unpaired discovery rejection
+- Paired discovery success
+- Duplicate discovery reconciliation
+- Missing terminal inactive reconciliation
+- Terminal store secret leakage prevention
+- Provisioning candidate secret leakage prevention
+- Invalid tesis rejection
+- Discovery sequence increment
+- Restart sonrası terminal metadata korunumu
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentLocalDevicesPhaseB2Tests"` geçti.
+- `dotnet test STYS.sln --configuration Release` geçti.
+- `npm run build` geçti; mevcut bundle budget uyarısı devam ediyor.
+- `npm test -- --watch=false --browsers=ChromeHeadless` geçti.
+
+### Real PAVO device test status
+
+- Bu turda gerçek LAN PAVO cihazı ile manuel test yapılmadı.
+
+### Known limitations
+
+- Merkezi `PosCihazi` provisioning bu fazda yapılmıyor.
+- Terminal discovery sonrası central sync bir sonraki fazda ele alınacak.
+- Angular build budget uyarısı mevcut.

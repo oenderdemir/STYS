@@ -4,7 +4,10 @@ const state = {
   diagnosticsTimer: null,
   localDevicesTimer: null,
   localDeviceEditingId: null,
-  selectedLocalDeviceId: null
+  selectedLocalDeviceId: null,
+  selectedLocalDeviceTerminals: [],
+  agentSelf: null,
+  selectedProvisioningTesisId: null
 };
 
 const RESET_CONFIRMATION_TEXT = "Bu işlem yerel Agent kimlik bilgilerini silecek. Merkezi STYS kaydı silinmeyecektir. Agent yeniden enrollment gerektirecektir.";
@@ -195,6 +198,9 @@ function mapLocalDeviceError(error) {
   if (message.includes("bulunamadı")) return "Cihaz bulunamadı.";
   if (message.includes("eşleştirilmiş")) return "Bu cihaz zaten eşleştirilmiş.";
   if (message.includes("önce cihaz bilgisini getir") || message.includes("cihaz bilgisi alınmalıdır")) return "Önce cihaz bilgisini alın.";
+  if (message.includes("önce pavo cihazı ile pairing yapılmalıdır")) return "Önce PAVO cihazı ile pairing yapılmalıdır.";
+  if (message.includes("tesis seçimi zorunludur")) return "Tesis seçimi zorunludur.";
+  if (message.includes("agent kapsamı")) return "Seçilen tesis agent kapsamı dışında.";
   return error?.message || "İşlem başarısız.";
 }
 
@@ -331,25 +337,172 @@ function renderLocalDeviceDetail(device) {
   if (pairBtn) {
     pairBtn.textContent = isPaired ? "Yeniden Pairing" : "Pairing Başlat";
     pairBtn.dataset.forceRePair = isPaired ? "true" : "false";
+    pairBtn.disabled = false;
   }
+
+  const discoverBtn = $("local-device-detail-discover-btn");
+  if (discoverBtn) {
+    discoverBtn.disabled = !isPaired;
+  }
+
+  const candidateBtn = $("local-device-provisioning-preview-btn");
+  if (candidateBtn) {
+    candidateBtn.disabled = !isPaired;
+  }
+}
+
+function localDeviceTerminalStatusBadge(terminal) {
+  if (!terminal) return { text: "-", kind: "muted" };
+  return terminal.active ? { text: "Aktif", kind: "ok" } : { text: "Pasif", kind: "muted" };
+}
+
+function renderLocalDeviceTerminalRows(terminals) {
+  const body = $("local-device-terminals-table-body");
+  if (!body) return;
+
+  const items = Array.isArray(terminals) ? terminals : [];
+  state.selectedLocalDeviceTerminals = items;
+  body.innerHTML = items.length
+    ? items.map((terminal) => {
+        const badge = localDeviceTerminalStatusBadge(terminal);
+        return `
+          <tr>
+            <td>${escapeHtml(terminal.acquirerName || terminal.acquirerId || "-")}</td>
+            <td class="mono">${escapeHtml(terminal.terminalId || "-")}</td>
+            <td class="mono">${escapeHtml(terminal.merchantId || "-")}</td>
+            <td><span class="badge ${badge.kind}">${escapeHtml(badge.text)}</span></td>
+            <td>${escapeHtml(formatDateTime(terminal.lastDiscoveredAt))}</td>
+            <td>${terminal.active ? "Evet" : "Hayır"}</td>
+          </tr>`;
+      }).join("")
+    : `<tr><td colspan="6" class="muted">Keşfedilmiş terminal yok.</td></tr>`;
+}
+
+function renderProvisioningTesisOptions() {
+  const select = $("provisioning-tesis-id");
+  if (!select) return;
+
+  const tesisler = Array.isArray(state.agentSelf?.tesisler || state.agentSelf?.Tesisler)
+    ? (state.agentSelf?.tesisler || state.agentSelf?.Tesisler)
+    : [];
+
+  const previous = select.value;
+  select.innerHTML = tesisler.length
+    ? tesisler.map((tesis) => `<option value="${escapeHtml(String(tesis.id ?? tesis.Id))}">${escapeHtml(tesis.ad || tesis.Ad || String(tesis.id ?? tesis.Id))}</option>`).join("")
+    : '<option value="">Tesis yok</option>';
+
+  const validPrevious = tesisler.some((tesis) => String(tesis.id ?? tesis.Id) === String(previous));
+  if (validPrevious) {
+    select.value = previous;
+  } else if (tesisler.length > 0) {
+    select.value = String(tesisler[0].id ?? tesisler[0].Id);
+  } else {
+    select.value = "";
+  }
+
+  state.selectedProvisioningTesisId = select.value ? Number(select.value) : null;
+}
+
+function renderProvisioningCandidate(candidate) {
+  const pre = $("provisioning-preview-json");
+  if (!pre) return;
+
+  if (!candidate) {
+    pre.textContent = "Henüz önizleme oluşturulmadı.";
+    return;
+  }
+
+  pre.textContent = JSON.stringify(candidate, null, 2);
 }
 
 async function loadLocalDeviceDetail(id) {
   if (!id) {
     state.selectedLocalDeviceId = null;
     renderLocalDeviceDetail(null);
+    renderLocalDeviceTerminalRows([]);
+    renderProvisioningCandidate(null);
+    setStatus("provisioning-preview-status", "Önizleme bekleniyor.", "muted");
     return null;
   }
 
   const device = await getJson(`/api/local-devices/${encodeURIComponent(id)}`);
   state.selectedLocalDeviceId = device.id || id;
   renderLocalDeviceDetail(device);
+  renderProvisioningCandidate(null);
+  setStatus("provisioning-preview-status", "Önizleme bekleniyor.", "muted");
+  await loadLocalDeviceTerminals(state.selectedLocalDeviceId).catch(() => {});
   return device;
 }
 
 async function selectLocalDevice(id) {
   state.selectedLocalDeviceId = id;
   return await loadLocalDeviceDetail(id);
+}
+
+async function loadAgentSelf() {
+  const self = await getJson("/api/agent/me");
+  state.agentSelf = self;
+  renderProvisioningTesisOptions();
+  const status = $("provisioning-agent-status");
+  if (status) {
+    status.textContent = self?.kurumAd || self?.KurumAd ? `Agent kapsamı hazır: ${self?.kurumAd || self?.KurumAd}` : "Agent kapsamı hazır.";
+    status.className = "status ok";
+  }
+  return self;
+}
+
+async function loadLocalDeviceTerminals(id) {
+  if (!id) {
+    state.selectedLocalDeviceTerminals = [];
+    renderLocalDeviceTerminalRows([]);
+    renderProvisioningCandidate(null);
+    setStatus("local-device-terminals-status", "Keşif bekleniyor.", "muted");
+    return [];
+  }
+
+  const terminals = await getJson(`/api/local-devices/${encodeURIComponent(id)}/terminals`);
+  renderLocalDeviceTerminalRows(terminals || []);
+  setStatus("local-device-terminals-status", terminals?.length ? "Terminal listesi güncellendi." : "Keşfedilmiş terminal yok.", terminals?.length ? "ok" : "muted");
+  return terminals || [];
+}
+
+async function discoverLocalDeviceTerminals(id) {
+  if (!id) {
+    throw new Error("Önce bir cihaz seçin.");
+  }
+
+  setStatus("local-devices-status", "Terminaller keşfediliyor...", "muted");
+  const terminals = await getJson(`/api/local-devices/${encodeURIComponent(id)}/terminals/discover`, {
+    method: "POST"
+  });
+  setStatus("local-devices-status", "Terminal discovery tamamlandı.", "ok");
+  setStatus("local-device-terminals-status", terminals?.length ? "Terminal discovery tamamlandı." : "Keşfedilmiş terminal yok.", terminals?.length ? "ok" : "muted");
+  setText("local-device-last-action", `Terminal discovery: ${id}`);
+  await loadLocalDevices();
+  await loadLocalDeviceTerminals(id);
+  await selectLocalDevice(id).catch(() => {});
+  return terminals;
+}
+
+async function loadProvisioningCandidateForSelectedDevice() {
+  if (!state.selectedLocalDeviceId) {
+    throw new Error("Önce bir cihaz seçin.");
+  }
+
+  const tesisId = state.selectedProvisioningTesisId || Number($("provisioning-tesis-id")?.value || 0);
+  if (!tesisId) {
+    throw new Error("Tesis seçimi zorunludur.");
+  }
+
+  if (!state.agentSelf) {
+    await loadAgentSelf();
+  }
+
+  setStatus("provisioning-preview-status", "Önizleme hazırlanıyor...", "muted");
+  const candidate = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/provisioning-candidate?tesisId=${encodeURIComponent(String(tesisId))}`);
+  renderProvisioningCandidate(candidate);
+  setStatus("provisioning-preview-status", "Provisioning önizlemesi hazır.", "ok");
+  return candidate;
 }
 
 function renderLocalDeviceRows(devices) {
@@ -440,9 +593,13 @@ async function loadLocalDevices() {
     const selected = (Array.isArray(data) ? data : []).find((item) => String(item.id) === String(state.selectedLocalDeviceId));
     if (selected) {
       renderLocalDeviceDetail(selected);
+      await loadLocalDeviceTerminals(state.selectedLocalDeviceId).catch(() => {});
     } else {
       state.selectedLocalDeviceId = null;
       renderLocalDeviceDetail(null);
+      renderLocalDeviceTerminalRows([]);
+      renderProvisioningCandidate(null);
+      setStatus("provisioning-preview-status", "Önizleme bekleniyor.", "muted");
     }
   }
 
@@ -540,6 +697,7 @@ async function loadSelectedLocalDeviceInfo() {
   setStatus("local-devices-status", "Cihaz bilgisi alındı.", "ok");
   await loadLocalDevices();
   await selectLocalDevice(device.id || state.selectedLocalDeviceId).catch(() => {});
+  await loadLocalDeviceTerminals(state.selectedLocalDeviceId).catch(() => {});
   return device;
 }
 
@@ -567,6 +725,7 @@ async function pairSelectedLocalDevice() {
   setStatus("local-devices-status", "Pairing tamamlandı.", "ok");
   await loadLocalDevices();
   await selectLocalDevice(device.id || state.selectedLocalDeviceId).catch(() => {});
+  await loadLocalDeviceTerminals(state.selectedLocalDeviceId).catch(() => {});
   return device;
 }
 
@@ -771,6 +930,11 @@ function bindLocalDevicesPage() {
       setStatus("local-devices-status", error.message, "error");
     });
   });
+  $("local-device-terminals-refresh-btn")?.addEventListener("click", () => {
+    loadLocalDeviceTerminals(state.selectedLocalDeviceId).catch((error) => {
+      setStatus("local-device-terminals-status", mapLocalDeviceError(error), "error");
+    });
+  });
   $("local-device-cancel-btn")?.addEventListener("click", (event) => {
     event.preventDefault();
     resetLocalDeviceForm();
@@ -790,6 +954,19 @@ function bindLocalDevicesPage() {
     pairSelectedLocalDevice().catch((error) => {
       setStatus("local-devices-status", mapLocalDeviceError(error), "error");
       setText("local-device-detail-last-result", localDeviceOperationMessage(error));
+    });
+  });
+  $("local-device-detail-discover-btn")?.addEventListener("click", () => {
+    discoverLocalDeviceTerminals(state.selectedLocalDeviceId).catch((error) => {
+      setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+    });
+  });
+  $("provisioning-tesis-id")?.addEventListener("change", () => {
+    state.selectedProvisioningTesisId = Number($("provisioning-tesis-id")?.value || 0) || null;
+  });
+  $("provisioning-preview-btn")?.addEventListener("click", () => {
+    loadProvisioningCandidateForSelectedDevice().catch((error) => {
+      setStatus("provisioning-preview-status", mapLocalDeviceError(error), "error");
     });
   });
   resetLocalDeviceForm();
@@ -927,6 +1104,9 @@ async function refreshAll() {
   }
 
   if ($("local-devices-root")) {
+    tasks.push(loadAgentSelf().catch((error) => {
+      setStatus("provisioning-agent-status", error.message, "error");
+    }));
     tasks.push(loadLocalDevices().catch((error) => {
       setStatus("local-devices-status", error.message, "error");
     }));
@@ -966,6 +1146,9 @@ async function bootstrap() {
   }
 
   if ($("local-devices-root")) {
+    await loadAgentSelf().catch((error) => {
+      setStatus("provisioning-agent-status", error.message, "error");
+    });
     bindLocalDevicesPage();
     await loadLocalDevices().catch((error) => {
       setStatus("local-devices-status", error.message, "error");

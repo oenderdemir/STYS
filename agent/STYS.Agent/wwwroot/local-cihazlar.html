@@ -113,6 +113,7 @@
         <div class="wizard-actions">
           <button id="local-device-detail-test-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
           <button id="local-device-detail-info-btn" type="button" class="secondary">Cihaz Bilgisini Getir</button>
+          <button id="local-device-detail-discover-btn" type="button" class="secondary">Terminalleri Keşfet</button>
           <button id="local-device-detail-pair-btn" type="button">Pairing Başlat</button>
         </div>
       </div>
@@ -151,6 +152,58 @@
           <div id="local-device-detail-last-pairing-error" class="status muted">-</div>
         </div>
       </div>
+    </section>
+
+    <section class="card section">
+      <div class="section-head">
+        <div>
+          <h2>Terminaller</h2>
+          <p class="muted">Keşif yalnızca paired PAVO POS cihazları için çalışır. Kaybolan terminal hemen silinmez, pasiflenir.</p>
+        </div>
+        <div class="wizard-actions">
+          <button id="local-device-terminals-refresh-btn" type="button" class="secondary">Yenile</button>
+        </div>
+      </div>
+      <div id="local-device-terminals-status" class="status muted">Hazır.</div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Banka</th>
+              <th>Terminal ID</th>
+              <th>Merchant ID</th>
+              <th>Durum</th>
+              <th>Son Keşif</th>
+              <th>Aktif</th>
+            </tr>
+          </thead>
+          <tbody id="local-device-terminals-table-body">
+            <tr><td colspan="6" class="muted">Keşfedilmiş terminal yok.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card section">
+      <div class="section-head">
+        <div>
+          <h2>STYS'e Kayıt Önizleme</h2>
+          <p class="muted">Bu ekran merkezi kayıt oluşturmaz. Sadece güvenli provisioning candidate gösterir.</p>
+        </div>
+      </div>
+      <div id="provisioning-agent-status" class="status muted">Agent kapsamı bekleniyor.</div>
+      <div class="section split">
+        <div class="field">
+          <label for="provisioning-tesis-id">Tesis</label>
+          <select id="provisioning-tesis-id"></select>
+        </div>
+        <div class="wizard-actions align-end">
+          <button id="provisioning-preview-btn" type="button">Provisioning Önizle</button>
+          <button id="provisioning-save-btn" type="button" class="secondary" disabled>STYS'e Kaydet</button>
+        </div>
+      </div>
+      <div id="provisioning-preview-status" class="status muted">Önizleme bekleniyor.</div>
+      <pre id="provisioning-preview-json" class="json-preview">Henüz önizleme oluşturulmadı.</pre>
     </section>
 
     <section class="card section">

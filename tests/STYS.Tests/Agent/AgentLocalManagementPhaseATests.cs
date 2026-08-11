@@ -251,6 +251,7 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
         public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
         public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
         public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");
+        public string LocalDeviceTerminalsStorePath => Path.Combine(DataDirectory, "local-device-terminals.json");
         public string PavoPairingStorePath => Path.Combine(DataDirectory, "pavo-pairing.dat");
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
     }

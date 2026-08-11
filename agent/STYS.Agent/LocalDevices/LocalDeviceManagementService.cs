@@ -6,17 +6,20 @@ namespace STYS.Agent.LocalDevices;
 public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 {
     private readonly ILocalDeviceStore _store;
+    private readonly ILocalDeviceTerminalStore _terminalStore;
     private readonly ILocalDeviceConnectionTesterRegistry _testerRegistry;
     private readonly IPavoLocalPairingStore _pairingStore;
     private readonly IPavoRestClient _pavoRestClient;
 
     public LocalDeviceManagementService(
         ILocalDeviceStore store,
+        ILocalDeviceTerminalStore terminalStore,
         ILocalDeviceConnectionTesterRegistry testerRegistry,
         IPavoLocalPairingStore pairingStore,
         IPavoRestClient pavoRestClient)
     {
         _store = store;
+        _terminalStore = terminalStore;
         _testerRegistry = testerRegistry;
         _pairingStore = pairingStore;
         _pavoRestClient = pavoRestClient;
@@ -27,6 +30,9 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
     public Task<LocalDevice?> GetByIdAsync(string id, CancellationToken cancellationToken) =>
         _store.GetByIdAsync(id, cancellationToken);
+
+    public Task<IReadOnlyCollection<LocalDeviceTerminal>> GetTerminalsAsync(string localDeviceId, CancellationToken cancellationToken) =>
+        _terminalStore.GetByLocalDeviceIdAsync(localDeviceId, cancellationToken);
 
     public async Task<LocalDevice> SaveAsync(LocalDeviceUpsertRequest request, CancellationToken cancellationToken)
     {
@@ -64,13 +70,70 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         var device = await GetDeviceOrThrowAsync(id, cancellationToken);
         ValidatePavoLocalDevice(device, "Cihaz bilgisi");
 
+        var execution = await ExecuteDeviceInfoAsync(device, requirePairing: false, cancellationToken);
+        return execution.UpdatedDevice;
+    }
+
+    public async Task<IReadOnlyCollection<LocalDeviceTerminal>> DiscoverTerminalsAsync(string id, CancellationToken cancellationToken)
+    {
+        var device = await GetDeviceOrThrowAsync(id, cancellationToken);
+        ValidatePavoLocalDevice(device, "Terminal discovery");
+
+        var execution = await ExecuteDeviceInfoAsync(device, requirePairing: true, cancellationToken);
+        var terminals = MapDiscoveredTerminals(device.Id, execution.Response.Terminals);
+        return await _terminalStore.ReconcileAsync(device.Id, terminals, cancellationToken);
+    }
+
+    public async Task<PavoDeviceProvisioningCandidate> BuildProvisioningCandidateAsync(string id, int tesisId, AgentSelfDto agentSelf, CancellationToken cancellationToken)
+    {
+        var device = await GetDeviceOrThrowAsync(id, cancellationToken);
+        ValidatePavoLocalDevice(device, "Provisioning preview");
+
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
+        if (pairingState is null || pairingState.PairingStatus != LocalDevicePairingStatus.Paired)
+        {
+            throw new InvalidOperationException("Önce PAVO cihazı ile pairing yapılmalıdır.");
+        }
+
+        ValidateTesisSelection(agentSelf, tesisId);
+
+        var terminals = await _terminalStore.GetByLocalDeviceIdAsync(device.Id, cancellationToken);
+        return new PavoDeviceProvisioningCandidate
+        {
+            LocalDeviceId = device.Id,
+            Provider = "PAVO",
+            DisplayName = device.DisplayName,
+            Host = device.Host,
+            HttpPort = device.HttpPort,
+            HttpsPort = device.HttpsPort,
+            Protocol = device.Protocol == LocalDeviceProtocol.Https ? "HTTPS" : "HTTP",
+            SerialNumber = device.SerialNumber,
+            DeviceName = device.DeviceName,
+            PairedAt = pairingState.PairingAt,
+            TesisId = tesisId,
+            Terminals = terminals
+                .OrderByDescending(x => x.Active)
+                .ThenBy(x => x.AcquirerName)
+                .ThenBy(x => x.TerminalId, StringComparer.OrdinalIgnoreCase)
+                .Select(MapCandidateTerminal)
+                .ToList()
+        };
+    }
+
+    private async Task<DeviceInfoExecution> ExecuteDeviceInfoAsync(LocalDevice device, bool requirePairing, CancellationToken cancellationToken)
+    {
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
+        if (requirePairing)
+        {
+            EnsurePaired(pairingState);
+        }
+
         var connection = await TestCoreAsync(device, persistResult: true, cancellationToken);
         if (!connection.Success)
         {
             throw new InvalidOperationException(connection.Message);
         }
 
-        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
         var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
         var response = await _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, pairingState, reserved.TransactionSequence), cancellationToken);
 
@@ -88,7 +151,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
         await _store.UpdateAsync(updatedDevice, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(response.Fingerprint) || !string.IsNullOrWhiteSpace(response.TargetFingerprint))
+        if (!string.IsNullOrWhiteSpace(response.Fingerprint) || !string.IsNullOrWhiteSpace(response.TargetFingerprint) || pairingState is not null)
         {
             await _pairingStore.UpsertAsync(new PavoLocalPairingState
             {
@@ -104,24 +167,75 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
                 UpdatedAt = now
             }, cancellationToken);
         }
-        else if (pairingState is not null)
+
+        return new DeviceInfoExecution(updatedDevice, response, pairingState, reserved.TransactionSequence);
+    }
+
+    private static IReadOnlyCollection<LocalDeviceTerminal> MapDiscoveredTerminals(string localDeviceId, IReadOnlyCollection<PavoDeviceTerminalInfo>? terminals)
+    {
+        if (terminals is null || terminals.Count == 0)
         {
-            await _pairingStore.UpsertAsync(new PavoLocalPairingState
-            {
-                DeviceId = updatedDevice.Id,
-                Fingerprint = pairingState.Fingerprint,
-                TargetFingerprint = pairingState.TargetFingerprint,
-                TransactionSequence = Math.Max(reserved.TransactionSequence, pairingState.TransactionSequence),
-                PairingStatus = pairingState.PairingStatus,
-                PairingAt = pairingState.PairingAt,
-                LastPairingAttemptAt = pairingState.LastPairingAttemptAt,
-                LastPairingError = pairingState.LastPairingError,
-                LastDeviceInfoAt = now,
-                UpdatedAt = now
-            }, cancellationToken);
+            return [];
         }
 
-        return updatedDevice;
+        return terminals
+            .Where(x => !string.IsNullOrWhiteSpace(x.TerminalId))
+            .Select(x =>
+            {
+                var terminalId = x.TerminalId.Trim();
+                var acquirerId = NormalizeText(x.AcquirerId);
+                var sourceReference = $"{localDeviceId.Trim()}::{acquirerId ?? string.Empty}::{terminalId}";
+
+                return new LocalDeviceTerminal
+                {
+                    LocalDeviceId = localDeviceId,
+                    AcquirerId = acquirerId,
+                    AcquirerName = NormalizeText(x.AcquirerName),
+                    TerminalId = terminalId,
+                    MerchantId = NormalizeText(x.MerchantId),
+                    SourceReference = sourceReference,
+                    Active = true
+                };
+            })
+            .ToList();
+    }
+
+    private static PavoDeviceProvisioningCandidateTerminal MapCandidateTerminal(LocalDeviceTerminal terminal) => new()
+    {
+        AcquirerId = terminal.AcquirerId,
+        AcquirerName = terminal.AcquirerName,
+        TerminalId = terminal.TerminalId,
+        MerchantId = terminal.MerchantId,
+        SourceReference = terminal.SourceReference,
+        Active = terminal.Active,
+        LastDiscoveredAt = terminal.LastDiscoveredAt
+    };
+
+    private static void ValidateTesisSelection(AgentSelfDto agentSelf, int tesisId)
+    {
+        if (agentSelf is null)
+        {
+            throw new InvalidOperationException("Agent bilgisi alınamadı.");
+        }
+
+        if (tesisId <= 0)
+        {
+            throw new InvalidOperationException("Tesis seçimi zorunludur.");
+        }
+
+        var allowed = agentSelf.Tesisler?.Any(x => x.Id == tesisId) == true;
+        if (!allowed)
+        {
+            throw new InvalidOperationException("Seçilen tesis mevcut agent kapsamı içinde değil.");
+        }
+    }
+
+    private static void EnsurePaired(PavoLocalPairingState? pairingState)
+    {
+        if (pairingState is null || pairingState.PairingStatus != LocalDevicePairingStatus.Paired)
+        {
+            throw new InvalidOperationException("Önce PAVO cihazı ile pairing yapılmalıdır.");
+        }
     }
 
     public async Task<LocalDevice> PairAsync(string id, bool forceRePair, CancellationToken cancellationToken)
@@ -199,6 +313,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     {
         await _store.DeleteAsync(id, cancellationToken);
         await _pairingStore.DeleteAsync(id, cancellationToken);
+        await _terminalStore.DeleteByLocalDeviceIdAsync(id, cancellationToken);
     }
 
     private async Task<LocalDeviceConnectionTestResult> TestCoreAsync(LocalDevice device, bool persistResult, CancellationToken cancellationToken)
@@ -509,6 +624,12 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         return value;
     }
 
+    private static string? NormalizeText(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
     private static int NormalizePort(int? value, int defaultValue)
     {
         var port = value.GetValueOrDefault(defaultValue);
@@ -531,4 +652,10 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         LocalDeviceProvider Provider,
         string? SerialNumber,
         bool IsNew);
+
+    private sealed record DeviceInfoExecution(
+        LocalDevice UpdatedDevice,
+        PavoGetDeviceInfoResponse Response,
+        PavoLocalPairingState? PairingState,
+        long ReservedTransactionSequence);
 }

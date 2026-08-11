@@ -1,4 +1,5 @@
 using STYS.Agent.Configuration;
+using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
 using STYS.Agent.LocalDevices;
 using STYS.Agent.Services;
@@ -105,6 +106,29 @@ public static class AgentLocalManagementApplication
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetDiagnosticsAsync(cancellationToken)));
 
+        app.MapGet("/api/agent/me", async (
+            IStysAgentApiClient client,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var self = await client.GetMeAsync(cancellationToken);
+                return Results.Ok(self);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (AgentApiException ex)
+            {
+                return Results.Json(new { message = ex.Message, traceId = ex.TraceId }, statusCode: (int)ex.StatusCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
         bootstrapApi.MapPost("/reset", async (
             AgentBootstrapResetRequest request,
             IAgentBootstrapManagementService service,
@@ -204,6 +228,73 @@ public static class AgentLocalManagementApplication
             catch (ArgumentException ex)
             {
                 return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        localDeviceApi.MapGet("/{id}/terminals", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var terminals = await service.GetTerminalsAsync(id, cancellationToken);
+                return Results.Ok(terminals);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        localDeviceApi.MapPost("/{id}/terminals/discover", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var terminals = await service.DiscoverTerminalsAsync(id, cancellationToken);
+                return Results.Ok(terminals);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        localDeviceApi.MapGet("/{id}/provisioning-candidate", async (
+            string id,
+            int tesisId,
+            ILocalDeviceManagementService service,
+            IStysAgentApiClient client,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var self = await client.GetMeAsync(cancellationToken);
+                var candidate = await service.BuildProvisioningCandidateAsync(id, tesisId, self, cancellationToken);
+                return Results.Ok(candidate);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (AgentApiException ex)
+            {
+                return Results.Json(new { message = ex.Message, traceId = ex.TraceId }, statusCode: (int)ex.StatusCode);
             }
             catch (InvalidOperationException ex)
             {

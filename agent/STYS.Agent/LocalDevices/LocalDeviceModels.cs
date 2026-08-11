@@ -97,3 +97,18 @@ public sealed class LocalDeviceConnectionTestResult
     public string Message { get; set; } = string.Empty;
     public DateTimeOffset TestedAt { get; set; }
 }
+
+public sealed class LocalDeviceTerminal
+{
+    public string Id { get; set; } = string.Empty;
+    public string LocalDeviceId { get; set; } = string.Empty;
+    public string? AcquirerId { get; set; }
+    public string? AcquirerName { get; set; }
+    public string TerminalId { get; set; } = string.Empty;
+    public string? MerchantId { get; set; }
+    public string SourceReference { get; set; } = string.Empty;
+    public bool Active { get; set; } = true;
+    public DateTimeOffset? LastDiscoveredAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

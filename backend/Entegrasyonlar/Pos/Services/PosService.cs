@@ -358,7 +358,7 @@ public sealed class PosService : IPosService
         CancellationToken cancellationToken)
     {
         await _rezervasyonService.KaydetOdemeAsync(
-            islem.RezervasyonId,
+            islem.RezervasyonId ?? throw new BaseException("POS ödeme işlemi rezervasyon bilgisi içermiyor.", 400),
             new RezervasyonOdemeKaydetRequestDto
             {
                 OdemeTutari = islem.Tutar,

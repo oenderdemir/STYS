@@ -209,10 +209,16 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private async Task<long> ReserveTransactionSequenceAsync(int cihazId, CancellationToken cancellationToken)
     {
         await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var cihaz = await _db.PosCihazlari.FirstAsync(x => x.Id == cihazId && !x.IsDeleted, cancellationToken);
-        cihaz.TransactionSequence++;
-        var sequence = cihaz.TransactionSequence;
-        await _db.SaveChangesAsync(cancellationToken);
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE [entegrasyon].[PosCihazlari]
+            SET [TransactionSequence] = [TransactionSequence] + 1
+            WHERE [Id] = {cihazId} AND [IsDeleted] = 0
+            """, cancellationToken);
+        var sequence = await _db.PosCihazlari
+            .AsNoTracking()
+            .Where(x => x.Id == cihazId && !x.IsDeleted)
+            .Select(x => x.TransactionSequence)
+            .SingleAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return sequence;
     }
@@ -220,11 +226,18 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private async Task<long> ResetTransactionSequenceAsync(int cihazId, CancellationToken cancellationToken)
     {
         await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var cihaz = await _db.PosCihazlari.FirstAsync(x => x.Id == cihazId && !x.IsDeleted, cancellationToken);
-        cihaz.TransactionSequence = 0;
-        await _db.SaveChangesAsync(cancellationToken);
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE [entegrasyon].[PosCihazlari]
+            SET [TransactionSequence] = 0
+            WHERE [Id] = {cihazId} AND [IsDeleted] = 0
+            """, cancellationToken);
+        var sequence = await _db.PosCihazlari
+            .AsNoTracking()
+            .Where(x => x.Id == cihazId && !x.IsDeleted)
+            .Select(x => x.TransactionSequence)
+            .SingleAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
-        return cihaz.TransactionSequence;
+        return sequence;
     }
 
     private static PavoTransactionHandle BuildTransactionHandle(PosCihazi cihaz, long sequence) => new()

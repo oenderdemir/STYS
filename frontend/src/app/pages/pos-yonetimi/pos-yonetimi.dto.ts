@@ -86,6 +86,7 @@ export interface PosPaymentBaslatRequestDto {
     paraBirimi?: string | null;
     aciklama?: string | null;
     posOdemeIslemiId?: number | null;
+    idempotencyKey: string;
 }
 
 export interface PosOdemeIslemiDto {

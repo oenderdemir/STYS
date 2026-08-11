@@ -1899,6 +1899,7 @@ public class StysAppDbContext : DbContext
             entity.ToTable("PosOdemeIslemleri", entegrasyonSchema);
             entity.Property(x => x.IslemReferansi).HasMaxLength(96).IsRequired();
             entity.Property(x => x.SaleReference).HasMaxLength(96);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(64);
             entity.Property(x => x.SaglayiciIslemId).HasMaxLength(128);
             entity.Property(x => x.Tutar).HasPrecision(18, 2);
             entity.Property(x => x.ParaBirimi).HasMaxLength(3).IsRequired();
@@ -1919,9 +1920,12 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
             entity.HasIndex(x => new { x.KurumId, x.IslemReferansi })
                 .IsUnique();
-            entity.HasIndex(x => new { x.KurumId, x.SaleReference })
+            entity.HasIndex(x => x.SaleReference)
                 .IsUnique()
-                .HasFilter("[SaleReference] IS NOT NULL");
+                .HasFilter("[SaleReference] IS NOT NULL AND [IsDeleted] = 0");
+            entity.HasIndex(x => x.IdempotencyKey)
+                .IsUnique()
+                .HasFilter("[IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0");
             entity.HasIndex(x => x.SaglayiciIslemId)
                 .HasFilter("[SaglayiciIslemId] IS NOT NULL");
             entity.HasIndex(x => new { x.TesisId, x.Durum });

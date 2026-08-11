@@ -7,6 +7,7 @@ using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Rezervasyonlar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Tesisler.Entities;
@@ -56,69 +57,94 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             throw new BaseException("Ödeme tutarı sıfırdan büyük olmalıdır.", 400);
         }
 
+        var idempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey);
+        if (idempotencyKey is null)
+        {
+            throw new BaseException("IdempotencyKey zorunludur.", 400);
+        }
+
         var cihaz = await GetDeviceAsync(cihazId, cancellationToken);
         var terminal = await GetTerminalAsync(request.PosTerminalId, cancellationToken);
         EnsureTerminalBelongsToDevice(cihaz, terminal);
         _ = await GetValidatedAgentAsync(cihaz, cancellationToken);
         var hesap = await GetValidatedAccountAsync(terminal, cancellationToken);
+        var rezervasyonId = await ResolveReservationIdAsync(cihaz.TesisId, cancellationToken);
 
         var now = DateTime.UtcNow;
-        PosOdemeIslemi? islem = null;
-        if (request.PosOdemeIslemiId.HasValue)
+        PosOdemeIslemi? islem;
+        var loadedFromConflict = false;
+
+        try
         {
-            islem = await _db.PosOdemeIslemleri
-                .Include(x => x.PosTerminal)
-                .FirstOrDefaultAsync(x => x.Id == request.PosOdemeIslemiId.Value, cancellationToken)
-                ?? throw new BaseException("POS ödeme işlemi bulunamadı.", 404);
-
-            if (islem.PosCihaziId != cihaz.Id || islem.PosTerminalId != terminal.Id || islem.KurumId != cihaz.KurumId || islem.TesisId != cihaz.TesisId)
+            await using (var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken))
             {
-                throw new BaseException("Ödeme işlemi seçilen cihaz/terminal kapsamıyla eşleşmiyor.", 400);
-            }
+                islem = await LoadExistingPaymentForStartAsync(request, idempotencyKey, cancellationToken);
 
-            if (islem.AgentCommandId.HasValue)
-            {
-                throw new BaseException("Bu ödeme zaten başlatılmış.", 409);
+                if (islem is null)
+                {
+                    var saleReference = GenerateSaleReference(cihaz.Id, terminal.Id, now);
+                    islem = new PosOdemeIslemi
+                    {
+                        KurumId = cihaz.KurumId,
+                        TesisId = cihaz.TesisId,
+                        PosCihaziId = cihaz.Id,
+                        PosTerminalId = terminal.Id,
+                        KasaBankaHesapId = hesap.Id,
+                        SaleReference = saleReference,
+                        IdempotencyKey = idempotencyKey,
+                        RezervasyonId = rezervasyonId,
+                        Tutar = request.Tutar,
+                        ParaBirimi = NormalizeCurrency(request.ParaBirimi),
+                        Durum = PosOdemeDurumlari.Pending,
+                        Aciklama = Normalize(request.Aciklama),
+                        BaslatilmaTarihi = now,
+                        AcquirerId = terminal.AcquirerId,
+                        TerminalId = terminal.SerialNumber,
+                        MerchantId = terminal.SourceTerminalReference,
+                        CreatedBy = requestedBy,
+                        CreatedAt = now
+                    };
+                    _db.PosOdemeIslemleri.Add(islem);
+                    await _db.SaveChangesAsync(cancellationToken);
+                    await tx.CommitAsync(cancellationToken);
+                }
+                else
+                {
+                    ValidateExistingPaymentForStart(islem, cihaz, terminal, hesap, request, idempotencyKey);
+                    if (string.IsNullOrWhiteSpace(islem.IdempotencyKey))
+                    {
+                        islem.IdempotencyKey = idempotencyKey;
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+                    await tx.CommitAsync(cancellationToken);
+                }
             }
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            loadedFromConflict = true;
+            islem = await LoadExistingPaymentForStartAsync(request, idempotencyKey, cancellationToken);
         }
 
         if (islem is null)
         {
-            var saleReference = GenerateSaleReference(cihaz.Id, terminal.Id, now);
-            islem = new PosOdemeIslemi
-            {
-                KurumId = cihaz.KurumId,
-                TesisId = cihaz.TesisId,
-                PosCihaziId = cihaz.Id,
-                PosTerminalId = terminal.Id,
-                KasaBankaHesapId = hesap.Id,
-                SaleReference = saleReference,
-                Tutar = request.Tutar,
-                ParaBirimi = NormalizeCurrency(request.ParaBirimi),
-                Durum = PosOdemeDurumlari.Pending,
-                Aciklama = Normalize(request.Aciklama),
-                BaslatilmaTarihi = now,
-                AcquirerId = terminal.AcquirerId,
-                TerminalId = terminal.SerialNumber,
-                MerchantId = terminal.SourceTerminalReference,
-                CreatedBy = requestedBy,
-                CreatedAt = now
-            };
-            _db.PosOdemeIslemleri.Add(islem);
-            await _db.SaveChangesAsync(cancellationToken);
+            throw new BaseException("Ödeme işlemi oluşturulamadı.", 500);
         }
-        else
+
+        if (loadedFromConflict)
         {
-            islem.SaleReference ??= GenerateSaleReference(cihaz.Id, terminal.Id, now);
-            islem.Durum = PosOdemeDurumlari.Pending;
-            islem.BaslatilmaTarihi ??= now;
-            islem.AcquirerId = terminal.AcquirerId;
-            islem.TerminalId = terminal.SerialNumber;
-            islem.MerchantId = terminal.SourceTerminalReference;
-            islem.PavoMessage = null;
-            islem.PavoResultCode = null;
-            islem.HataMesaji = null;
-            await _db.SaveChangesAsync(cancellationToken);
+            ValidateExistingPaymentForStart(islem, cihaz, terminal, hesap, request, idempotencyKey);
+        }
+
+        if (string.Equals(islem.Durum, PosOdemeDurumlari.Unknown, StringComparison.OrdinalIgnoreCase))
+        {
+            return await GetResultAsync(cihazId, islem.Id, requestedBy, cancellationToken);
+        }
+
+        if (IsFinalPaymentState(islem.Durum) || IsInFlightPaymentState(islem.Durum))
+        {
+            await EnsureTerminalLoadedAsync(islem, cancellationToken);
+            return ToDto(islem, islem.PosTerminal?.SaglayiciKodu);
         }
 
         var sequence = await ReserveTransactionSequenceAsync(cihaz.Id, cancellationToken);
@@ -151,7 +177,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         islem.AgentCommandId = sentCommand.Id;
         islem.Durum = PosOdemeDurumlari.SentToAgent;
         await _db.SaveChangesAsync(cancellationToken);
-        await _db.Entry(islem).Reference(x => x.PosTerminal).LoadAsync(cancellationToken);
+        await EnsureTerminalLoadedAsync(islem, cancellationToken);
         return ToDto(islem, islem.PosTerminal?.SaglayiciKodu);
     }
 
@@ -181,6 +207,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
 
         if (IsFinalPaymentState(payment.Durum))
         {
+            await EnsureTerminalLoadedAsync(payment, cancellationToken);
             return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
         }
 
@@ -197,9 +224,74 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             MaxRetryCount = 3
         }, requestedBy, cancellationToken);
 
-        payment.Durum = PosOdemeDurumlari.SentToAgent;
+        payment.Durum = PosOdemeDurumlari.Processing;
         await _db.SaveChangesAsync(cancellationToken);
+        await EnsureTerminalLoadedAsync(payment, cancellationToken);
         return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
+    }
+
+    private async Task<PosOdemeIslemi?> LoadExistingPaymentForStartAsync(PosPaymentBaslatRequest request, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        if (request.PosOdemeIslemiId.HasValue)
+        {
+            var byId = await _db.PosOdemeIslemleri
+                .Include(x => x.PosTerminal)
+                .FirstOrDefaultAsync(x => x.Id == request.PosOdemeIslemiId.Value, cancellationToken)
+                ?? throw new BaseException("POS ödeme işlemi bulunamadı.", 404);
+
+            if (!string.IsNullOrWhiteSpace(byId.IdempotencyKey) && !string.Equals(byId.IdempotencyKey, idempotencyKey, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BaseException("Idempotency key başka bir ödeme işlemiyle eşleşiyor.", 409);
+            }
+
+            return byId;
+        }
+
+        return await _db.PosOdemeIslemleri
+            .Include(x => x.PosTerminal)
+            .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey && !x.IsDeleted, cancellationToken);
+    }
+
+    private static void ValidateExistingPaymentForStart(
+        PosOdemeIslemi payment,
+        PosCihazi cihaz,
+        PosTerminal terminal,
+        KasaBankaHesap hesap,
+        PosPaymentBaslatRequest request,
+        string idempotencyKey)
+    {
+        if (!string.IsNullOrWhiteSpace(payment.IdempotencyKey) && !string.Equals(payment.IdempotencyKey, idempotencyKey, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Idempotency key başka bir ödeme işlemiyle eşleşiyor.", 409);
+        }
+
+        if (payment.PosCihaziId != cihaz.Id || payment.PosTerminalId != terminal.Id || payment.KurumId != cihaz.KurumId || payment.TesisId != cihaz.TesisId)
+        {
+            throw new BaseException("Ödeme işlemi seçilen cihaz/terminal kapsamıyla eşleşmiyor.", 400);
+        }
+
+        if (payment.KasaBankaHesapId != hesap.Id)
+        {
+            throw new BaseException("Ödeme işlemi farklı bir kredi kartı hesabına bağlı.", 400);
+        }
+
+        if (!string.Equals(payment.ParaBirimi, NormalizeCurrency(request.ParaBirimi), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Aynı ödeme için para birimi değiştirilemez.", 400);
+        }
+
+        if (payment.Tutar != request.Tutar)
+        {
+            throw new BaseException("Aynı ödeme için tutar değiştirilemez.", 400);
+        }
+    }
+
+    private async Task EnsureTerminalLoadedAsync(PosOdemeIslemi payment, CancellationToken cancellationToken)
+    {
+        if (payment.PosTerminal is null)
+        {
+            await _db.Entry(payment).Reference(x => x.PosTerminal).LoadAsync(cancellationToken);
+        }
     }
 
     private async Task<PosCihazi> GetDeviceAsync(int cihazId, CancellationToken cancellationToken)
@@ -283,6 +375,23 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         }
 
         return hesap;
+    }
+
+    private async Task<int> ResolveReservationIdAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        var rezervasyonId = await _db.Set<Rezervasyon>()
+            .AsNoTracking()
+            .Where(x => x.TesisId == tesisId && x.AktifMi && !x.IsDeleted)
+            .OrderByDescending(x => x.Id)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (rezervasyonId <= 0)
+        {
+            throw new BaseException("POS ödeme testi için uygun rezervasyon bulunamadı.", 400);
+        }
+
+        return rezervasyonId;
     }
 
     private void EnsureTerminalBelongsToDevice(PosCihazi cihaz, PosTerminal terminal)
@@ -370,8 +479,11 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         }
     }
 
-    private static string GenerateSaleReference(int cihazId, int terminalId, DateTime now) =>
-        $"STYS-PAY-{now:yyyyMMddHHmmssfff}-{cihazId}-{terminalId}-{Guid.NewGuid():N}"[..96];
+    private static string GenerateSaleReference(int cihazId, int terminalId, DateTime now)
+    {
+        var value = $"STYS-PAY-{now:yyyyMMddHHmmssfff}-{cihazId}-{terminalId}-{Guid.NewGuid():N}";
+        return value.Length <= 96 ? value : value[..96];
+    }
 
     private static bool IsFinalPaymentState(string? durum) =>
         string.Equals(durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
@@ -379,14 +491,30 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         || string.Equals(durum, PosOdemeDurumlari.Unknown, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsInFlightPaymentState(string? durum) =>
+        string.Equals(durum, PosOdemeDurumlari.Pending, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(durum, PosOdemeDurumlari.SentToAgent, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(durum, PosOdemeDurumlari.Processing, StringComparison.OrdinalIgnoreCase);
+
     private static string NormalizeCurrency(string? currency) =>
         string.IsNullOrWhiteSpace(currency) ? "TRY" : currency.Trim().ToUpperInvariant();
+
+    private static string? NormalizeIdempotencyKey(string? value)
+    {
+        var normalized = Normalize(value);
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string? Truncate(string? value, int maxLength) =>
         string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true
+        || ex.InnerException?.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) == true
+        || ex.InnerException?.Message.Contains("Cannot insert duplicate key", StringComparison.OrdinalIgnoreCase) == true;
 
     private static PosOdemeIslemiDto ToDto(PosOdemeIslemi x, string? saglayiciKodu) => new()
     {

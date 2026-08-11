@@ -268,6 +268,12 @@
                 <!-- TEST İŞLEMLERİ -->
                 <p-tabpanel value="payments">
                     @if (selectedCihaz()) {
+                        <div class="connection-actions mb-3">
+                            <button pButton pRipple label="Ping" icon="pi pi-signal" class="p-button-outlined p-button-sm" (click)="ping()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Cihaz Bilgisini Getir" icon="pi pi-info-circle" class="p-button-outlined p-button-sm" (click)="getDeviceInfo()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Terminalleri Senkronize Et" icon="pi pi-sync" class="p-button-outlined p-button-sm" (click)="syncTerminals()" [disabled]="terminalSaving()"></button>
+                        </div>
+
                         <div class="form-section">
                             <div class="section-header">
                                 <div>
@@ -286,22 +292,26 @@
                                         appendTo="body"
                                         [filter]="true"
                                         [(ngModel)]="paymentForm.posTerminalId"
+                                        (ngModelChange)="touchPaymentAttempt()"
                                         styleClass="w-full"
-                                        placeholder="Terminal seçin" />
+                                        [placeholder]="getPaymentTerminalOptions().length ? 'Terminal seçin' : 'Önce terminal senkronize edin'" />
                                 </div>
                                 <div class="field">
                                     <label for="paymentAmount">Tutar *</label>
-                                    <input pInputText id="paymentAmount" type="number" min="0.01" step="0.01" [(ngModel)]="paymentForm.tutar" [class.ng-invalid]="paymentSubmitted() && paymentForm.tutar <= 0" />
+                                    <input pInputText id="paymentAmount" type="number" min="0.01" step="0.01" [(ngModel)]="paymentForm.tutar" (ngModelChange)="touchPaymentAttempt()" [class.ng-invalid]="paymentSubmitted() && paymentForm.tutar <= 0" />
                                 </div>
                                 <div class="field field-full">
                                     <label for="paymentDescription">Açıklama</label>
-                                    <input pInputText id="paymentDescription" [(ngModel)]="paymentForm.aciklama" />
+                                    <input pInputText id="paymentDescription" [(ngModel)]="paymentForm.aciklama" (ngModelChange)="touchPaymentAttempt()" />
                                 </div>
                             </div>
 
                             <div class="flex justify-content-end gap-2 mt-3">
-                                <button pButton pRipple label="Ödeme Başlat" icon="pi pi-credit-card" class="p-button-success" [loading]="paymentSaving()" (click)="startPaymentTest()"></button>
+                                <button pButton pRipple label="Ödeme Başlat" icon="pi pi-credit-card" class="p-button-success" [loading]="paymentSaving()" [disabled]="paymentSaving() || !!getPaymentStartDisabledReason()" (click)="startPaymentTest()"></button>
                             </div>
+                            @if (getPaymentStartDisabledReason()) {
+                                <small class="text-color-secondary mt-2 block">{{ getPaymentStartDisabledReason() }}</small>
+                            }
                         </div>
 
                         <div class="form-section" *ngIf="currentPaymentTest() as payment">
@@ -332,6 +342,10 @@
                                     <span class="connection-item__value">{{ getPaymentTerminalLabel(payment) }}</span>
                                 </div>
                                 <div class="connection-item">
+                                    <span class="connection-item__label">Kredi Kartı Hesabı</span>
+                                    <span class="connection-item__value">{{ getPaymentAccountLabel(payment) }}</span>
+                                </div>
+                                <div class="connection-item">
                                     <span class="connection-item__label">Başlama zamanı</span>
                                     <span class="connection-item__value">{{ payment.baslatilmaTarihi ? (payment.baslatilmaTarihi | date:'short') : '-' }}</span>
                                 </div>
@@ -342,6 +356,10 @@
                                 <div class="connection-item connection-item--wide">
                                     <span class="connection-item__label">PAVO mesajı</span>
                                     <span class="connection-item__value">{{ payment.pavoMessage || payment.hataMesaji || '-' }}</span>
+                                </div>
+                                <div class="connection-item">
+                                    <span class="connection-item__label">ResultCode</span>
+                                    <span class="connection-item__value">{{ payment.pavoResultCode || '-' }}</span>
                                 </div>
                                 <div class="connection-item">
                                     <span class="connection-item__label">RetrievalReferenceNo</span>
@@ -358,7 +376,7 @@
                             </div>
 
                             <div class="flex justify-content-end gap-2 mt-3">
-                                <button pButton pRipple label="Sonucu Sorgula" icon="pi pi-refresh" class="p-button-outlined" [loading]="paymentSaving()" (click)="queryPaymentTestResult(payment)"></button>
+                                <button pButton pRipple label="Sonucu Sorgula" icon="pi pi-refresh" class="p-button-outlined" [loading]="paymentSaving()" [disabled]="paymentSaving() || !payment.saleReference" (click)="queryPaymentTestResult(payment)"></button>
                             </div>
                         </div>
 

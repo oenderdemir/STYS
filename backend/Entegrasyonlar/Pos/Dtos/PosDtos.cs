@@ -60,7 +60,7 @@ public sealed class PosOdemeIslemiDto
 {
     public int Id { get; set; }
     public int? PosCihaziId { get; set; }
-    public int RezervasyonId { get; set; }
+    public int? RezervasyonId { get; set; }
     public int PosTerminalId { get; set; }
     public int KasaBankaHesapId { get; set; }
     public Guid? AgentCommandId { get; set; }
@@ -96,4 +96,5 @@ public sealed class PosPaymentBaslatRequest
     public string? ParaBirimi { get; set; } = "TRY";
     public string? Aciklama { get; set; }
     public int? PosOdemeIslemiId { get; set; }
+    public string IdempotencyKey { get; set; } = string.Empty;
 }

@@ -375,9 +375,9 @@ public sealed class AgentCommandService
 
         if (!request.Success)
         {
-            payment.Durum = IsTimeoutLike(request.ErrorCode, request.ErrorMessage) ? PosOdemeDurumlari.Unknown : PosOdemeDurumlari.Failed;
-            payment.HataMesaji = Truncate(request.ErrorMessage, 1024);
-            payment.TamamlanmaTarihi ??= DateTime.UtcNow;
+            payment.Durum = PosOdemeDurumlari.Unknown;
+            payment.HataMesaji = Truncate(response?.Data?.Message ?? request.ErrorMessage ?? response?.Message, 1024);
+            payment.TamamlanmaTarihi = null;
             return;
         }
 
@@ -391,11 +391,17 @@ public sealed class AgentCommandService
                 return;
             }
 
-            payment.Durum = response?.Data?.IsUnknown == true || response?.HasAbondon == true
-                ? PosOdemeDurumlari.Unknown
-                : PosOdemeDurumlari.Failed;
+            if (response?.Data?.IsSuccessful == false && response?.Data is not null && response?.HasAbondon != true && response?.HasError != true)
+            {
+                payment.Durum = PosOdemeDurumlari.Failed;
+                payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message, 1024);
+                payment.TamamlanmaTarihi = DateTime.UtcNow;
+                return;
+            }
+
+            payment.Durum = PosOdemeDurumlari.Unknown;
             payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message, 1024);
-            payment.TamamlanmaTarihi = DateTime.UtcNow;
+            payment.TamamlanmaTarihi = null;
             return;
         }
 
@@ -415,9 +421,15 @@ public sealed class AgentCommandService
             return;
         }
 
-        payment.Durum = response?.Data?.IsUnknown == true || response?.HasAbondon == true
-            ? PosOdemeDurumlari.Unknown
-            : PosOdemeDurumlari.Failed;
+        if (response?.Data?.IsUnknown == true || response?.Data is null || response?.HasAbondon == true || response?.HasError == true)
+        {
+            payment.Durum = PosOdemeDurumlari.Unknown;
+            payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message ?? request.ErrorMessage, 1024);
+            payment.TamamlanmaTarihi = null;
+            return;
+        }
+
+        payment.Durum = PosOdemeDurumlari.Failed;
         payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message ?? request.ErrorMessage, 1024);
         payment.TamamlanmaTarihi = DateTime.UtcNow;
     }
@@ -641,7 +653,7 @@ public sealed class AgentCommandService
         try
         {
             using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.TryGetProperty("PosCihaziId", out var idElement) && idElement.TryGetInt32(out var id))
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "PosCihaziId", out var idElement) && idElement.TryGetInt32(out var id))
             {
                 return id;
             }
@@ -709,7 +721,7 @@ public sealed class AgentCommandService
         try
         {
             using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.TryGetProperty("PosOdemeIslemiId", out var idElement) && idElement.TryGetInt32(out var id))
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "PosOdemeIslemiId", out var idElement) && idElement.TryGetInt32(out var id))
             {
                 return id;
             }
@@ -731,7 +743,7 @@ public sealed class AgentCommandService
         try
         {
             using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.TryGetProperty("SaleReference", out var value))
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "SaleReference", out var value))
             {
                 return value.GetString();
             }
@@ -753,7 +765,7 @@ public sealed class AgentCommandService
         try
         {
             using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.TryGetProperty("PosTerminalId", out var idElement) && idElement.TryGetInt32(out var id))
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "PosTerminalId", out var idElement) && idElement.TryGetInt32(out var id))
             {
                 return id;
             }
@@ -770,6 +782,21 @@ public sealed class AgentCommandService
         || string.Equals(errorCode, "NETWORK", StringComparison.OrdinalIgnoreCase)
         || string.Equals(errorCode, "CONNECTION_REFUSED", StringComparison.OrdinalIgnoreCase)
         || (!string.IsNullOrWhiteSpace(message) && message.Contains("timeout", StringComparison.OrdinalIgnoreCase));
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
 
     private static string? Truncate(string? value, int maxLength) =>
         string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];

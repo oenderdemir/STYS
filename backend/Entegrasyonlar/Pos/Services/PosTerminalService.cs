@@ -263,7 +263,7 @@ public sealed class PosTerminalService
                    PosCihaziId = terminal.PosCihaziId,
                    PosCihaziAd = cihaz != null ? cihaz.Ad : null,
                    KasaBankaHesapId = terminal.KasaBankaHesapId,
-                   KasaBankaHesapAd = hesap != null ? hesap.Ad : null,
+                   KasaBankaHesapAd = hesap != null ? hesap.Ad : "Hesap eşleştirilmedi",
                    SaglayiciKodu = terminal.SaglayiciKodu,
                    AcquirerId = terminal.AcquirerId ?? (hesap != null ? hesap.Kod : null),
                    AcquirerName = terminal.AcquirerName ?? (hesap != null ? (hesap.BankaAdi ?? hesap.Ad) : null),

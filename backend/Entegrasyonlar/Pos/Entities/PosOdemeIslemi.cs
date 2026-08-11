@@ -10,12 +10,14 @@ public class PosOdemeIslemi : BaseEntity<int>, ITenantEntity
     public int KurumId { get; set; }
     public int TesisId { get; set; }
     public int? PosCihaziId { get; set; }
-    public int RezervasyonId { get; set; }
+    public int? RezervasyonId { get; set; }
     public int PosTerminalId { get; set; }
     public int KasaBankaHesapId { get; set; }
     public int? CariKartId { get; set; }
     public int? RezervasyonOdemeId { get; set; }
     public Guid? AgentCommandId { get; set; }
+    [MaxLength(64)]
+    public string? IdempotencyKey { get; set; }
 
     [Required, MaxLength(96)]
     public string IslemReferansi { get; set; } = string.Empty;

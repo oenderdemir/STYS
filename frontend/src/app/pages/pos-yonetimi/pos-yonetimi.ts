@@ -537,7 +537,13 @@ export class PosYonetimiComponent implements OnInit {
 
     startPaymentTest(): void {
         const cihaz = this.selectedCihaz();
+        const disabledReason = this.getPaymentStartDisabledReason();
         if (!cihaz?.id) {
+            return;
+        }
+
+        if (disabledReason) {
+            this.messageService.add({ severity: 'warn', summary: 'Ödeme başlatılamadı', detail: disabledReason });
             return;
         }
 
@@ -551,7 +557,8 @@ export class PosYonetimiComponent implements OnInit {
             tutar: this.paymentForm.tutar,
             paraBirimi: this.paymentForm.paraBirimi?.trim() || 'TRY',
             aciklama: this.paymentForm.aciklama?.trim() || null,
-            posOdemeIslemiId: this.paymentForm.posOdemeIslemiId ?? null
+            posOdemeIslemiId: this.paymentForm.posOdemeIslemiId ?? null,
+            idempotencyKey: this.paymentForm.idempotencyKey
         };
 
         this.paymentSaving.set(true);
@@ -596,11 +603,66 @@ export class PosYonetimiComponent implements OnInit {
         return payment.terminalId ?? `Terminal #${payment.posTerminalId}`;
     }
 
+    getPaymentAccountLabel(payment: PosOdemeIslemiDto): string {
+        const terminal = this.terminals().find((item) => item.id === payment.posTerminalId);
+        if (terminal?.kasaBankaHesapAd) {
+            return terminal.kasaBankaHesapAd;
+        }
+
+        if (terminal?.kasaBankaHesapId) {
+            return `Hesap #${terminal.kasaBankaHesapId}`;
+        }
+
+        return 'Hesap eşleştirilmedi';
+    }
+
     getPaymentTerminalOptions(): Array<{ label: string; value: number }> {
         return this.terminals().map((terminal) => ({
             label: `${terminal.ad} • ${terminal.terminalId}${terminal.kasaBankaHesapAd ? ` • ${terminal.kasaBankaHesapAd}` : ''}`,
             value: terminal.id
         }));
+    }
+
+    getPaymentStartDisabledReason(): string | null {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return 'Ödeme başlatmak için önce bir cihaz seçin.';
+        }
+
+        if (!cihaz.aktifMi) {
+            return 'Pasif cihazda ödeme başlatılamaz.';
+        }
+
+        if (!cihaz.agentId) {
+            return 'Bu cihaza atanmış agent yok.';
+        }
+
+        if (!cihaz.eslesmeOnayliMi) {
+            return 'Cihaz agent ile eşleşmemiş.';
+        }
+
+        if (this.isAgentLikelyOffline(cihaz.sonBaglantiTarihi)) {
+            return 'Agent çevrimdışı görünüyor. Son bağlantıyı kontrol edin.';
+        }
+
+        const terminal = this.terminals().find((item) => item.id === this.paymentForm.posTerminalId);
+        if (!terminal) {
+            return 'Ödeme için bir terminal seçin.';
+        }
+
+        if (!terminal.posCihaziId || terminal.posCihaziId !== cihaz.id) {
+            return 'Seçili terminal bu cihaza bağlı değil.';
+        }
+
+        if (!terminal.kasaBankaHesapId) {
+            return 'Terminal için kredi kartı hesabı eşleştirilmemiş.';
+        }
+
+        if (this.paymentForm.tutar <= 0) {
+            return 'Tutar sıfırdan büyük olmalıdır.';
+        }
+
+        return null;
     }
 
     getPaymentStatusSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
@@ -683,10 +745,38 @@ export class PosYonetimiComponent implements OnInit {
     private createEmptyPaymentForm(): PosPaymentFormState {
         return {
             posTerminalId: 0,
-            tutar: 100,
+            tutar: 1,
             paraBirimi: 'TRY',
             aciklama: 'PAVO test ödemesi',
-            posOdemeIslemiId: null
+            posOdemeIslemiId: null,
+            idempotencyKey: this.createPaymentIdempotencyKey()
         };
+    }
+
+    touchPaymentAttempt(): void {
+        this.paymentForm.posOdemeIslemiId = null;
+        this.paymentForm.idempotencyKey = this.createPaymentIdempotencyKey();
+    }
+
+    private createPaymentIdempotencyKey(): string {
+        const crypto = globalThis.crypto;
+        if (crypto?.randomUUID) {
+            return crypto.randomUUID().replace(/-/g, '');
+        }
+
+        return `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    private isAgentLikelyOffline(sonBaglantiTarihi?: string): boolean {
+        if (!sonBaglantiTarihi) {
+            return true;
+        }
+
+        const lastSeen = new Date(sonBaglantiTarihi);
+        if (Number.isNaN(lastSeen.getTime())) {
+            return true;
+        }
+
+        return Date.now() - lastSeen.getTime() > 5 * 60 * 1000;
     }
 }

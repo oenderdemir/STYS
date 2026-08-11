@@ -71,6 +71,7 @@ builder.Services.AddSingleton<IAgentRuntimeStatus, AgentRuntimeStatus>();
 builder.Services.AddScoped<IAgentBootstrapManagementService, AgentBootstrapManagementService>();
 builder.Services.AddSingleton<IAgentEnrollmentCoordinator, AgentEnrollmentCoordinator>();
 builder.Services.AddSingleton<ILocalDeviceStore, FileLocalDeviceStore>();
+builder.Services.AddSingleton<IPavoLocalPairingStore, FilePavoLocalPairingStore>();
 builder.Services.AddSingleton<ILocalDeviceConnectionTester, PavoLocalDeviceConnectionTester>();
 builder.Services.AddSingleton<ILocalDeviceConnectionTesterRegistry, LocalDeviceConnectionTesterRegistry>();
 builder.Services.AddScoped<ILocalDeviceManagementService, LocalDeviceManagementService>();

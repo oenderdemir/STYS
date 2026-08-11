@@ -191,6 +191,47 @@ public static class AgentLocalManagementApplication
             }
         });
 
+        localDeviceApi.MapPost("/{id}/device-info", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var device = await service.GetDeviceInfoAsync(id, cancellationToken);
+                return Results.Ok(device);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        localDeviceApi.MapPost("/{id}/pairing", async (
+            string id,
+            LocalDevicePairingRequest request,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var device = await service.PairAsync(id, request.ForceRePair, cancellationToken);
+                return Results.Ok(device);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
         localDeviceApi.MapDelete("/{id}", async (
             string id,
             ILocalDeviceManagementService service,

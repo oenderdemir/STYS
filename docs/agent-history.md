@@ -1223,3 +1223,73 @@ Agent Regression:  0
 - Printer implementasyonu yalnızca model düzeyinde hazır; runtime handler eklenmedi.
 - Angular build budget uyarısı devam ediyor.
 - Full solution test koşusunda iki mevcut test flake’i görüldü; kod değişikliğiyle ilişkili görünmüyor.
+
+## 2026-08-11 — PAVO Local Provisioning Faz B1
+
+### Local GetDeviceInfo
+
+- Agent local UI’dan seçilen PAVO POS cihazı için doğrudan LAN çağrısı yapılıyor.
+- `GetDeviceInfo` akışı merkezi `AgentCommand` kullanmadan çalışıyor.
+- Başarılı sonuçta public metadata olarak `SerialNumber`, `DeviceName` ve `LastDeviceInfoAt` güncelleniyor.
+
+### Pairing architecture
+
+- Pairing artık local device detay aksiyonu olarak çalışıyor.
+- `Pairing` öncesi cihazın PAVO POS olması ve bağlantı testinin başarılı olması zorunlu.
+- Zaten paired cihazda yeniden pairing için açık force onayı gerekiyor.
+
+### Secure pairing store
+
+- Fingerprint / target fingerprint / transaction sequence bilgileri `local-devices.json` içine yazılmıyor.
+- Bu bilgiler ayrı bir secure store’da tutuluyor.
+- Generic local device metadata ile secret pairing state ayrıldı.
+
+### Transaction sequence
+
+- Sequence, pairing store içinde atomik şekilde rezerve ediliyor.
+- Aynı local cihaz için paralel çağrılar aynı sequence’i alamıyor.
+- Restart sonrası sequence değeri korunuyor.
+
+### Re-pair policy
+
+- Pairing yapılmış cihaza force olmadan re-pair reddediliyor.
+- Başarısız re-pair mevcut başarılı pairing state’ini silmiyor.
+- Başarısız denemeler `LastPairingAttemptAt` ve `LastPairingError` ile izleniyor.
+
+### UI
+
+- `Yerel Cihazlar` ekranına cihaz detayı paneli eklendi.
+- Detay panelinde:
+  - `Bağlantıyı Test Et`
+  - `Cihaz Bilgisini Getir`
+  - `Pairing Başlat` / `Yeniden Pairing`
+  - bağlantı ve pairing durumları
+  - seri no, model/cihaz bilgisi, son device-info ve son pairing zamanı
+- Fingerprint UI’da tam gösterilmiyor.
+
+### Security
+
+- Host/IP doğrulaması korunuyor.
+- Arbitrary URI scheme kabul edilmiyor.
+- Secret / fingerprint loglanmıyor.
+- Local UI loopback’te çalışmaya devam ediyor.
+
+### Tests
+
+- POS/PAVO validation, printer/PAVO rejection, get device info success/error, pairing success, secure store, restart persistence, sequence uniqueness, force re-pair policy ve fingerprint sızıntısı için testler eklendi.
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentLocalDevicesPhaseB1Tests|FullyQualifiedName~AgentLocalDevicesPhaseA4Tests"` geçti.
+- `dotnet test STYS.sln --configuration Release` çalıştırıldı; B1 kapsamı geçti, fakat üç mevcut test başarısız oldu:
+  - `STYS.Tests.EBelgeOutboxWorkerTests.ClaimNullDondugundePermitGeriBirakilirVeSonrakiTurCalisir`
+  - `STYS.Tests.EBelgeOutboxWorkerTests.GeciciSqlClaimHatasiWorkeriDurdurmaz`
+  - `STYS.Tests.SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur`
+
+### Real PAVO device test status
+
+- Bu turda gerçek LAN PAVO cihazı ile manuel test yapılmadı.
+
+### Known limitations
+
+- Central STYS `PosCihazi` provisioning bu fazda yapılmıyor.
+- Pairing sonrasında terminal discovery bir sonraki fazda tamamlanacak.
+- Angular build/test komutları bu turda ayrıca koşturulacak.
+- Full solution test koşusunda üç mevcut failure var; bu değişiklik setinden kaynaklı görünmüyor.

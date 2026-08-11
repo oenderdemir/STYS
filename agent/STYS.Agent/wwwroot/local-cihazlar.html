@@ -51,7 +51,7 @@
       <div class="section-head">
         <div>
           <h2 id="local-device-form-title">Yeni Cihaz</h2>
-          <p class="muted">PAVO için yalnızca bağlantı ayarları girilir. Pairing ve merkezi kayıt bu fazda yoktur.</p>
+          <p class="muted">PAVO için önce bağlantı doğrulanır, ardından cihaz bilgisi ve local pairing alınır. Merkezi kayıt bu ekranda yapılmaz.</p>
         </div>
       </div>
       <form id="local-device-form" class="form section">
@@ -104,6 +104,55 @@
       <div id="local-device-form-status" class="status muted section"></div>
     </section>
 
+    <section id="local-device-detail-card" class="card section hidden">
+      <div class="section-head">
+        <div>
+          <h2 id="local-device-detail-title">Cihaz Detayı</h2>
+          <p id="local-device-detail-subtitle" class="muted">Bir cihaz seçildiğinde ayrıntılar burada görünür.</p>
+        </div>
+        <div class="wizard-actions">
+          <button id="local-device-detail-test-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
+          <button id="local-device-detail-info-btn" type="button" class="secondary">Cihaz Bilgisini Getir</button>
+          <button id="local-device-detail-pair-btn" type="button">Pairing Başlat</button>
+        </div>
+      </div>
+      <div id="local-device-detail-warning" class="status warn hidden"></div>
+      <div class="section split">
+        <div class="card compact-card">
+          <div class="meta">Bağlantı</div>
+          <div id="local-device-detail-connection" class="value small-value">-</div>
+          <div class="meta section">Pairing</div>
+          <div id="local-device-detail-pairing" class="value small-value">-</div>
+        </div>
+        <div class="card compact-card">
+          <div class="meta">Seri No</div>
+          <div id="local-device-detail-serial" class="value small-value">-</div>
+          <div class="meta section">Model / cihaz bilgileri</div>
+          <div id="local-device-detail-device-name" class="value small-value">-</div>
+        </div>
+        <div class="card compact-card">
+          <div class="meta">Son DeviceInfo</div>
+          <div id="local-device-detail-device-info-at" class="value small-value">-</div>
+          <div class="meta section">Son Pairing</div>
+          <div id="local-device-detail-pairing-at" class="value small-value">-</div>
+        </div>
+      </div>
+      <div class="section split">
+        <div class="card compact-card">
+          <div class="meta">Adres</div>
+          <div id="local-device-detail-address" class="value small-value mono">-</div>
+          <div class="meta section">Son sonuç</div>
+          <div id="local-device-detail-last-result" class="status muted">-</div>
+        </div>
+        <div class="card compact-card">
+          <div class="meta">Son bağlantı testi</div>
+          <div id="local-device-detail-last-test" class="value small-value">-</div>
+          <div class="meta section">Son pairing hatası</div>
+          <div id="local-device-detail-last-pairing-error" class="status muted">-</div>
+        </div>
+      </div>
+    </section>
+
     <section class="card section">
       <div class="section-head">
         <div>
@@ -119,13 +168,14 @@
               <th>Tip</th>
               <th>Provider</th>
               <th>Adres</th>
+              <th>Pairing</th>
               <th>Durum</th>
               <th>Son Test</th>
               <th>İşlem</th>
             </tr>
           </thead>
           <tbody id="local-devices-table-body">
-            <tr><td colspan="7" class="muted">Yükleniyor...</td></tr>
+            <tr><td colspan="8" class="muted">Yükleniyor...</td></tr>
           </tbody>
         </table>
       </div>

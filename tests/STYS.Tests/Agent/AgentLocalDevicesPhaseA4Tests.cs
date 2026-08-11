@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Agent.Client.Infrastructure;
+using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.LocalDevices;
 using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
@@ -360,7 +361,11 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
     private FileLocalDeviceStore CreateStore() =>
         new(CreatePathResolver(), NullLogger<FileLocalDeviceStore>.Instance);
 
-    private LocalDeviceManagementService CreateService(IEnumerable<ILocalDeviceConnectionTester>? testers = null, FileLocalDeviceStore? store = null)
+    private LocalDeviceManagementService CreateService(
+        IEnumerable<ILocalDeviceConnectionTester>? testers = null,
+        FileLocalDeviceStore? store = null,
+        IPavoRestClient? pavoRestClient = null,
+        FilePavoLocalPairingStore? pairingStore = null)
     {
         return new LocalDeviceManagementService(
             store ?? CreateStore(),
@@ -370,10 +375,15 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
                 Success = true,
                 Message = "Bağlantı başarılı.",
                 TestedAt = DateTimeOffset.UtcNow
-            })]));
+            })]),
+            pairingStore ?? CreatePairingStore(),
+            pavoRestClient ?? new DummyPavoRestClient());
     }
 
     private TempAgentPathResolver CreatePathResolver() => new(_tempDir);
+
+    private FilePavoLocalPairingStore CreatePairingStore() =>
+        new(CreatePathResolver(), NullLogger<FilePavoLocalPairingStore>.Instance);
 
     private sealed class TempAgentPathResolver : IAgentPathResolver
     {
@@ -382,6 +392,7 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
         public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
         public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
         public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");
+        public string PavoPairingStorePath => Path.Combine(DataDirectory, "pavo-pairing.dat");
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
     }
 
@@ -421,5 +432,23 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
             LastEndpoint = endpoint;
             return Task.FromResult(PavoConnectionResult.Ok(12));
         }
+    }
+
+    private sealed class DummyPavoRestClient : IPavoRestClient
+    {
+        public Task<PavoPairingResponse> PairingAsync(PavoPairingRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPingResponse> PingAsync(PavoPingRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoGetDeviceInfoResponse> GetDeviceInfoAsync(PavoGetDeviceInfoRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 }

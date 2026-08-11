@@ -3,7 +3,8 @@ const state = {
   dashboardTimer: null,
   diagnosticsTimer: null,
   localDevicesTimer: null,
-  localDeviceEditingId: null
+  localDeviceEditingId: null,
+  selectedLocalDeviceId: null
 };
 
 const RESET_CONFIRMATION_TEXT = "Bu işlem yerel Agent kimlik bilgilerini silecek. Merkezi STYS kaydı silinmeyecektir. Agent yeniden enrollment gerektirecektir.";
@@ -153,6 +154,13 @@ function localDeviceStatusBadge(status) {
   return { text: "Unknown", kind: "muted" };
 }
 
+function localDevicePairingBadge(status) {
+  const value = Number(status);
+  if (value === 1) return { text: "Paired", kind: "ok" };
+  if (value === 2) return { text: "Failed", kind: "error" };
+  return { text: "NotPaired", kind: "muted" };
+}
+
 function formatDeviceAddress(device) {
   if (!device?.host) return "-";
   const protocol = Number(device.protocol) === 1 ? "https" : "http";
@@ -185,7 +193,14 @@ function mapLocalDeviceError(error) {
   if (message.includes("port")) return "Port değeri geçersiz.";
   if (message.includes("tester")) return "Bu provider için connection tester yok.";
   if (message.includes("bulunamadı")) return "Cihaz bulunamadı.";
+  if (message.includes("eşleştirilmiş")) return "Bu cihaz zaten eşleştirilmiş.";
+  if (message.includes("önce cihaz bilgisini getir") || message.includes("cihaz bilgisi alınmalıdır")) return "Önce cihaz bilgisini alın.";
   return error?.message || "İşlem başarısız.";
+}
+
+function localDeviceOperationMessage(error) {
+  if (!error) return "İşlem tamamlandı.";
+  return mapLocalDeviceError(error);
 }
 
 function updateEnrollmentButtonState() {
@@ -263,6 +278,80 @@ function collectLocalDeviceFormPayload() {
   };
 }
 
+function formatLocalDeviceAddress(device) {
+  if (!device?.host) return "-";
+  const protocol = Number(device.protocol) === 1 ? "https" : "http";
+  const port = Number(device.protocol) === 1
+    ? Number(device.httpsPort || 4568)
+    : Number(device.httpPort || 4567);
+  return `${protocol}://${device.host}:${port}`;
+}
+
+function localDeviceTitle(device) {
+  return device?.displayName || "-";
+}
+
+function localDeviceModelText(device) {
+  return device?.deviceName || device?.serialNumber || "-";
+}
+
+function renderLocalDeviceDetail(device) {
+  const card = $("local-device-detail-card");
+  if (!card) return;
+
+  if (!device) {
+    card.classList.add("hidden");
+    return;
+  }
+
+  card.classList.remove("hidden");
+  const isPaired = Number(device.pairingStatus) === 1;
+  setText("local-device-detail-title", device.displayName || "Cihaz Detayı");
+  setText("local-device-detail-subtitle", `${localDeviceTitle(device)} • ${formatLocalDeviceAddress(device)}`);
+  setText("local-device-detail-connection", localDeviceStatusBadge(device.status).text);
+  setText("local-device-detail-pairing", localDevicePairingBadge(device.pairingStatus).text);
+  setText("local-device-detail-serial", device.serialNumber || "-");
+  setText("local-device-detail-device-name", localDeviceModelText(device));
+  setText("local-device-detail-device-info-at", formatDateTime(device.lastDeviceInfoAt));
+  setText("local-device-detail-pairing-at", formatDateTime(device.lastPairingAt));
+  setText("local-device-detail-address", formatLocalDeviceAddress(device));
+  setText("local-device-detail-last-test", formatDateTime(device.lastConnectionTestAt));
+  setStatus("local-device-detail-last-result", device.lastError || "Hazır.", device.lastError ? "error" : "ok");
+  setStatus("local-device-detail-last-pairing-error", device.lastPairingError || "-", device.lastPairingError ? "error" : "muted");
+
+  const warning = $("local-device-detail-warning");
+  if (warning) {
+    warning.textContent = isPaired
+      ? ""
+      : "Bu cihaz eşleşmiş değil. Cihaz bilgisi alındıktan sonra pairing başlatılabilir.";
+    warning.className = isPaired ? "status warn hidden" : "status warn";
+  }
+
+  const pairBtn = $("local-device-detail-pair-btn");
+  if (pairBtn) {
+    pairBtn.textContent = isPaired ? "Yeniden Pairing" : "Pairing Başlat";
+    pairBtn.dataset.forceRePair = isPaired ? "true" : "false";
+  }
+}
+
+async function loadLocalDeviceDetail(id) {
+  if (!id) {
+    state.selectedLocalDeviceId = null;
+    renderLocalDeviceDetail(null);
+    return null;
+  }
+
+  const device = await getJson(`/api/local-devices/${encodeURIComponent(id)}`);
+  state.selectedLocalDeviceId = device.id || id;
+  renderLocalDeviceDetail(device);
+  return device;
+}
+
+async function selectLocalDevice(id) {
+  state.selectedLocalDeviceId = id;
+  return await loadLocalDeviceDetail(id);
+}
+
 function renderLocalDeviceRows(devices) {
   const body = $("local-devices-table-body");
   if (!body) return;
@@ -271,6 +360,7 @@ function renderLocalDeviceRows(devices) {
   body.innerHTML = items.length
     ? items.map((device) => {
         const badge = localDeviceStatusBadge(device.status);
+        const pairingBadge = localDevicePairingBadge(device.pairingStatus);
         const lastTest = formatDateTime(device.lastConnectionTestAt);
         const lastError = device.lastError ? escapeHtml(device.lastError) : "-";
         return `
@@ -285,10 +375,12 @@ function renderLocalDeviceRows(devices) {
               <div>${escapeHtml(formatDeviceAddress(device))}</div>
               <div class="help">Serial: ${escapeHtml(device.serialNumber || "yok")}</div>
             </td>
+            <td><span class="badge ${pairingBadge.kind}">${escapeHtml(pairingBadge.text)}</span></td>
             <td><span class="badge ${badge.kind}">${escapeHtml(badge.text)}</span></td>
             <td>${escapeHtml(lastTest)}</td>
             <td>
               <div class="table-actions">
+                <button type="button" class="secondary" data-local-device-action="details" data-local-device-id="${escapeHtml(device.id)}">Detay</button>
                 <button type="button" class="secondary" data-local-device-action="edit" data-local-device-id="${escapeHtml(device.id)}">Düzenle</button>
                 <button type="button" class="secondary" data-local-device-action="test" data-local-device-id="${escapeHtml(device.id)}">Bağlantıyı Test Et</button>
                 <button type="button" class="danger" data-local-device-action="delete" data-local-device-id="${escapeHtml(device.id)}">Sil</button>
@@ -296,7 +388,7 @@ function renderLocalDeviceRows(devices) {
             </td>
           </tr>`;
       }).join("")
-    : `<tr><td colspan="7" class="muted">Kayıtlı cihaz yok.</td></tr>`;
+    : `<tr><td colspan="8" class="muted">Kayıtlı cihaz yok.</td></tr>`;
 
   body.querySelectorAll("[data-local-device-action]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -305,7 +397,11 @@ function renderLocalDeviceRows(devices) {
       const device = items.find((item) => String(item.id) === String(id));
       if (!device && action !== "delete") return;
 
-      if (action === "edit") {
+      if (action === "details") {
+        selectLocalDevice(id).catch((error) => {
+          setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+        });
+      } else if (action === "edit") {
         fillLocalDeviceForm(device);
       } else if (action === "test") {
         testSavedLocalDevice(device.id).catch((error) => {
@@ -339,6 +435,17 @@ async function loadLocalDevices() {
   const data = await getJson("/api/local-devices");
   renderLocalDeviceRows(data || []);
   setStatus("local-devices-status", "Cihaz listesi güncellendi.", "ok");
+
+  if (state.selectedLocalDeviceId) {
+    const selected = (Array.isArray(data) ? data : []).find((item) => String(item.id) === String(state.selectedLocalDeviceId));
+    if (selected) {
+      renderLocalDeviceDetail(selected);
+    } else {
+      state.selectedLocalDeviceId = null;
+      renderLocalDeviceDetail(null);
+    }
+  }
+
   return data;
 }
 
@@ -361,6 +468,7 @@ async function saveLocalDevice(event) {
   setText("local-device-last-result", result.lastError || "Kayıt tamamlandı");
   resetLocalDeviceForm();
   await loadLocalDevices();
+  await selectLocalDevice(result.id || result.Id || payload.id || null).catch(() => {});
 }
 
 async function testSavedLocalDevice(id) {
@@ -374,6 +482,9 @@ async function testSavedLocalDevice(id) {
   setText("local-device-last-result", result.message || badge.text);
   setStatus("local-devices-status", result.success ? "Bağlantı testi başarılı." : (result.message || "Bağlantı testi başarısız."), result.success ? "ok" : "error");
   await loadLocalDevices();
+  if (state.selectedLocalDeviceId) {
+    await selectLocalDevice(state.selectedLocalDeviceId).catch(() => {});
+  }
   return result;
 }
 
@@ -391,7 +502,72 @@ async function deleteLocalDevice(id) {
   if (state.localDeviceEditingId && String(state.localDeviceEditingId) === String(id)) {
     resetLocalDeviceForm();
   }
+  if (state.selectedLocalDeviceId && String(state.selectedLocalDeviceId) === String(id)) {
+    state.selectedLocalDeviceId = null;
+    renderLocalDeviceDetail(null);
+  }
   await loadLocalDevices();
+}
+
+async function testSelectedLocalDevice() {
+  if (!state.selectedLocalDeviceId) {
+    setStatus("local-devices-status", "Önce bir cihaz seçin.", "warn");
+    return null;
+  }
+
+  const result = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/test-connection`, {
+    method: "POST"
+  });
+
+  setText("local-device-detail-last-result", result.message || "Bağlantı testi tamamlandı.");
+  setStatus("local-devices-status", result.success ? "Bağlantı testi başarılı." : (result.message || "Bağlantı testi başarısız."), result.success ? "ok" : "error");
+  await loadLocalDevices();
+  await selectLocalDevice(state.selectedLocalDeviceId).catch(() => {});
+  return result;
+}
+
+async function loadSelectedLocalDeviceInfo() {
+  if (!state.selectedLocalDeviceId) {
+    setStatus("local-devices-status", "Önce bir cihaz seçin.", "warn");
+    return null;
+  }
+
+  const device = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/device-info`, {
+    method: "POST"
+  });
+
+  setText("local-device-detail-last-result", "Cihaz bilgisi alındı.");
+  setStatus("local-devices-status", "Cihaz bilgisi alındı.", "ok");
+  await loadLocalDevices();
+  await selectLocalDevice(device.id || state.selectedLocalDeviceId).catch(() => {});
+  return device;
+}
+
+async function pairSelectedLocalDevice() {
+  if (!state.selectedLocalDeviceId) {
+    setStatus("local-devices-status", "Önce bir cihaz seçin.", "warn");
+    return null;
+  }
+
+  const current = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}`);
+  const forceRePair = Number(current?.pairingStatus) === 1;
+  if (forceRePair) {
+    const ok = window.confirm("Bu cihaz zaten eşleştirilmiş. Yeniden pairing mevcut pairing bilgisini değiştirebilir.");
+    if (!ok) {
+      return null;
+    }
+  }
+
+  const device = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/pairing`, {
+    method: "POST",
+    body: JSON.stringify({ forceRePair })
+  });
+
+  setText("local-device-detail-last-result", forceRePair ? "Yeniden pairing tamamlandı." : "Pairing tamamlandı.");
+  setStatus("local-devices-status", "Pairing tamamlandı.", "ok");
+  await loadLocalDevices();
+  await selectLocalDevice(device.id || state.selectedLocalDeviceId).catch(() => {});
+  return device;
 }
 
 function deriveDashboardMessage(data) {
@@ -600,6 +776,22 @@ function bindLocalDevicesPage() {
     resetLocalDeviceForm();
   });
   $("local-device-protocol")?.addEventListener("change", () => syncLocalDevicePortDefaults());
+  $("local-device-detail-test-btn")?.addEventListener("click", () => {
+    testSelectedLocalDevice().catch((error) => {
+      setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+    });
+  });
+  $("local-device-detail-info-btn")?.addEventListener("click", () => {
+    loadSelectedLocalDeviceInfo().catch((error) => {
+      setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+    });
+  });
+  $("local-device-detail-pair-btn")?.addEventListener("click", () => {
+    pairSelectedLocalDevice().catch((error) => {
+      setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+      setText("local-device-detail-last-result", localDeviceOperationMessage(error));
+    });
+  });
   resetLocalDeviceForm();
 }
 

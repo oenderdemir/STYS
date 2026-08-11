@@ -7,6 +7,7 @@ namespace STYS.Entegrasyonlar.Pos.Services;
 
 public interface IPosCihaziService : IBaseRdbmsService<PosCihaziDto, PosCihazi, int>
 {
+    Task<IEnumerable<PosCihaziDto>> GetAllAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken);
     Task<AgentCommandDto> PairingAsync(int id, string requestedBy, CancellationToken cancellationToken);
     Task<AgentCommandDto> PingAsync(int id, string requestedBy, CancellationToken cancellationToken);
     Task<AgentCommandDto> GetDeviceInfoAsync(int id, string requestedBy, CancellationToken cancellationToken);

@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
@@ -18,8 +18,16 @@ export class AgentYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAgents(): Observable<AgentListDto[]> {
-        return this.http.get<ApiResponse<AgentListDto[]>>(`${this.apiBaseUrl}/ui/agent`).pipe(
+    getAgents(kurumId?: number | null, tesisId?: number | null): Observable<AgentListDto[]> {
+        let params = new HttpParams();
+        if (kurumId != null && kurumId > 0) {
+            params = params.set('kurumId', kurumId);
+        }
+        if (tesisId != null && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        return this.http.get<ApiResponse<AgentListDto[]>>(`${this.apiBaseUrl}/ui/agent`, { params }).pipe(
             map((r) => {
                 if (r.success && r.data) return r.data;
                 throw new Error(tryReadApiMessage(r) ?? 'Agent listesi alınamadı.');
@@ -78,8 +86,16 @@ export class AgentYonetimiService {
         );
     }
 
-    getEnrollmentCodes(): Observable<AgentEnrollmentCodeDto[]> {
-        return this.http.get<ApiResponse<AgentEnrollmentCodeDto[]>>(`${this.apiBaseUrl}/ui/agent/enrollment-codes`).pipe(
+    getEnrollmentCodes(kurumId?: number | null, tesisId?: number | null): Observable<AgentEnrollmentCodeDto[]> {
+        let params = new HttpParams();
+        if (kurumId != null && kurumId > 0) {
+            params = params.set('kurumId', kurumId);
+        }
+        if (tesisId != null && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        return this.http.get<ApiResponse<AgentEnrollmentCodeDto[]>>(`${this.apiBaseUrl}/ui/agent/enrollment-codes`, { params }).pipe(
             map((r) => {
                 if (r.success && r.data) return r.data;
                 throw new Error(tryReadApiMessage(r) ?? 'Enrollment kodları alınamadı.');

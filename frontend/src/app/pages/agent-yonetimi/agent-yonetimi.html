@@ -8,6 +8,21 @@
             <button pButton pRipple label="Enrollment Kodları" icon="pi pi-key" class="p-button-help" (click)="openEnrollmentDialog()"></button>
         </ng-template>
         <ng-template pTemplate="right">
+            <div class="field mb-0 mr-2" style="min-width: 18rem">
+                <label for="agentTesisFilter" class="block mb-2">Tesis filtresi</label>
+                <p-select
+                    inputId="agentTesisFilter"
+                    [options]="enrollmentTesisler"
+                    optionLabel="ad"
+                    optionValue="id"
+                    [ngModel]="selectedTesisFilterId()"
+                    (ngModelChange)="selectedTesisFilterId.set($event ?? null); onTesisFilterChange()"
+                    [appendTo]="'body'"
+                    [filter]="true"
+                    [showClear]="true"
+                    placeholder="Tüm tesisler"
+                    styleClass="w-full" />
+            </div>
             <button pButton pRipple label="Yenile" icon="pi pi-refresh" class="p-button-secondary" [loading]="loading()" (click)="refreshAgents()"></button>
         </ng-template>
     </p-toolbar>

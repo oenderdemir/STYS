@@ -17,7 +17,7 @@
                 optionLabel="label"
                 optionValue="value"
                 [ngModel]="selectedTesisFilterId()"
-                (ngModelChange)="selectedTesisFilterId.set($event ?? null)"
+                (ngModelChange)="selectedTesisFilterId.set($event ?? null); onTesisFilterChanged()"
                 [appendTo]="'body'"
                 [filter]="true"
                 [showClear]="true"

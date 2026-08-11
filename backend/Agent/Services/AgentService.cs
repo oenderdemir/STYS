@@ -36,12 +36,16 @@ public sealed class AgentService : IAgentService
         return MapToDto(agent);
     }
 
-    public async Task<IReadOnlyCollection<AgentListDto>> GetAllAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<AgentListDto>> GetAllAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var query = db.Set<AgentEntity>().Where(x => !x.IsDeleted);
 
-        query = ApplyKurumFilter(query);
+        query = ApplyKurumFilter(query, kurumId);
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            query = query.Where(x => x.Tesisler.Any(t => !t.IsDeleted && t.TesisId == tesisId.Value));
+        }
 
         return await query.Select(x => new AgentListDto
         {
@@ -200,14 +204,20 @@ public sealed class AgentService : IAgentService
         return new AgentEnrollmentCodeDto { Id = enrollment.Id, Code = enrollment.Code, KurumId = enrollment.KurumId, TesisIds = request.TesisIds, AllowedScopes = request.AllowedScopes, RequiresApproval = request.RequiresApproval, MaxKullanimSayisi = enrollment.MaxKullanimSayisi, ExpiresAt = enrollment.ExpiresAt, Durum = (int)enrollment.Durum, CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow };
     }
 
-    public async Task<IReadOnlyCollection<AgentEnrollmentCodeDto>> GetEnrollmentCodesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<AgentEnrollmentCodeDto>> GetEnrollmentCodesAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var query = db.Set<AgentEnrollment>().Where(x => !x.IsDeleted);
-        query = ApplyKurumFilter(query);
+        query = ApplyKurumFilter(query, kurumId);
 
         var codes = await query.OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
-        return codes.Select(MapEnrollmentToDto).ToList();
+        var mapped = codes.Select(MapEnrollmentToDto);
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            mapped = mapped.Where(x => x.TesisIds.Contains(tesisId.Value));
+        }
+
+        return mapped.ToList();
     }
 
     public async Task RevokeEnrollmentCodeAsync(int enrollmentId, CancellationToken cancellationToken)
@@ -228,15 +238,27 @@ public sealed class AgentService : IAgentService
         if (!accessible.Contains(targetKurumId)) throw new BaseException("Bu kuruma erişim yetkiniz yok.", 403);
     }
 
-    private IQueryable<AgentEntity> ApplyKurumFilter(IQueryable<AgentEntity> query)
+    private IQueryable<AgentEntity> ApplyKurumFilter(IQueryable<AgentEntity> query, int? kurumId)
     {
+        if (kurumId.HasValue && kurumId.Value > 0)
+        {
+            EnforceKurumAccess(kurumId.Value);
+            return query.Where(x => x.KurumId == kurumId.Value);
+        }
+
         if (_tenantAccessor.IsSuperAdmin()) return query;
         var ids = _tenantAccessor.GetAccessibleKurumIds();
         return query.Where(x => ids.Contains(x.KurumId));
     }
 
-    private IQueryable<AgentEnrollment> ApplyKurumFilter(IQueryable<AgentEnrollment> query)
+    private IQueryable<AgentEnrollment> ApplyKurumFilter(IQueryable<AgentEnrollment> query, int? kurumId)
     {
+        if (kurumId.HasValue && kurumId.Value > 0)
+        {
+            EnforceKurumAccess(kurumId.Value);
+            return query.Where(x => x.KurumId == kurumId.Value);
+        }
+
         if (_tenantAccessor.IsSuperAdmin()) return query;
         var ids = _tenantAccessor.GetAccessibleKurumIds();
         return query.Where(x => ids.Contains(x.KurumId));

@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
@@ -18,8 +18,16 @@ export class PosYonetimiService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getAll(): Observable<PosCihaziDto[]> {
-        return this.http.get<ApiResponse<PosCihaziDto[]>>(`${this.apiBaseUrl}/ui/pos/cihazlar`).pipe(map(r => {
+    getAll(kurumId?: number | null, tesisId?: number | null): Observable<PosCihaziDto[]> {
+        let params = new HttpParams();
+        if (kurumId != null && kurumId > 0) {
+            params = params.set('kurumId', kurumId);
+        }
+        if (tesisId != null && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        return this.http.get<ApiResponse<PosCihaziDto[]>>(`${this.apiBaseUrl}/ui/pos/cihazlar`, { params }).pipe(map(r => {
             if (r.success && r.data) return r.data;
             throw new Error(tryReadApiMessage(r) ?? 'Liste alınamadı.');
         }));

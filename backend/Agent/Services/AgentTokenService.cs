@@ -34,6 +34,7 @@ public sealed class AgentTokenService : IAgentTokenService
     public async Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         try

@@ -18,10 +18,12 @@ import { TooltipModule } from 'primeng/tooltip';
 import { AgentYonetimiService } from '../agent-yonetimi/agent-yonetimi.service';
 import { AgentListDto } from '../agent-yonetimi/agent-yonetimi.dto';
 import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
+import { AuthService } from '../auth/auth.service';
 import { KasaBankaHesapModel, KasaBankaHesapTipi } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.dto';
 import { KasaBankaHesaplariService } from '../muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari.service';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
+import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
@@ -67,6 +69,8 @@ export class PosYonetimiComponent implements OnInit {
     private readonly tesisService = inject(TesisYonetimiService);
     private readonly agentService = inject(AgentYonetimiService);
     private readonly agentRealtime = inject(AgentRealtimeService);
+    private readonly authService = inject(AuthService);
+    private readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
     private readonly handledCommandRefreshKeys = new Set<string>();
@@ -74,7 +78,7 @@ export class PosYonetimiComponent implements OnInit {
     cihazlar = signal<PosCihaziDto[]>([]);
     tesisler = signal<TesisDto[]>([]);
     agents = signal<AgentListDto[]>([]);
-    selectedTesisFilterId = signal<number | null>(null);
+    selectedTesisFilterId = signal<number | null>(this.tesisContext.seciliTesis()?.id ?? null);
     cihazLoading = signal(false);
     dialogVisible = signal(false);
     submitted = signal(false);
@@ -154,16 +158,14 @@ export class PosYonetimiComponent implements OnInit {
     }
 
     ngOnInit(): void {
-        this.load();
-        this.loadSaglayicilar();
         this.loadTesisler();
-        this.loadAgents();
+        this.loadSaglayicilar();
         this.loadKrediKartiHesaplari();
     }
 
     load(): void {
         this.cihazLoading.set(true);
-        this.service.getAll().pipe(finalize(() => this.cihazLoading.set(false))).subscribe({
+        this.service.getAll(this.authService.getAktifKurumId(), this.selectedTesisFilterId()).pipe(finalize(() => this.cihazLoading.set(false))).subscribe({
             next: (items) => this.cihazlar.set(items),
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -181,16 +183,26 @@ export class PosYonetimiComponent implements OnInit {
             next: (items) => {
                 this.tesisler.set(items);
                 const selectedFilterId = this.selectedTesisFilterId();
-                if (selectedFilterId != null && !items.some((item) => item.id === selectedFilterId)) {
+                const contextTesisId = this.tesisContext.seciliTesis()?.id ?? null;
+                if (selectedFilterId == null && contextTesisId != null && items.some((item) => item.id === contextTesisId)) {
+                    this.selectedTesisFilterId.set(contextTesisId);
+                } else if (selectedFilterId != null && !items.some((item) => item.id === selectedFilterId)) {
                     this.selectedTesisFilterId.set(null);
                 }
+
+                this.load();
+                this.loadAgents();
             },
-            error: () => this.tesisler.set([])
+            error: () => {
+                this.tesisler.set([]);
+                this.load();
+                this.loadAgents();
+            }
         });
     }
 
     loadAgents(): void {
-        this.agentService.getAgents().subscribe({
+        this.agentService.getAgents(this.authService.getAktifKurumId(), this.selectedTesisFilterId()).subscribe({
             next: (items) => this.agents.set(items),
             error: () => this.agents.set([])
         });
@@ -708,6 +720,7 @@ export class PosYonetimiComponent implements OnInit {
     onTesisChanged(): void {
         const currentAgentId = this.form.agentId;
         if (currentAgentId == null) {
+            this.loadAgents();
             return;
         }
 
@@ -715,6 +728,13 @@ export class PosYonetimiComponent implements OnInit {
         if (!valid) {
             this.form.agentId = undefined;
         }
+
+        this.loadAgents();
+    }
+
+    onTesisFilterChanged(): void {
+        this.load();
+        this.loadAgents();
     }
 
     private upsertPaymentTest(payment: PosOdemeIslemiDto): void {

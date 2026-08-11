@@ -94,10 +94,17 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         return await SendCommandAsync(device.AgentId!.Value, "PavoGetDeviceInfo", request, requestedBy, cancellationToken);
     }
 
-    public override async Task<IEnumerable<PosCihaziDto>> GetAllAsync(Func<IQueryable<PosCihazi>, IQueryable<PosCihazi>>? include = null)
+    public async Task<IEnumerable<PosCihaziDto>> GetAllAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken)
     {
-        var query = BuildDtoQuery(_db.PosCihazlari.AsNoTracking().Where(x => !x.IsDeleted));
-        return await query.OrderBy(x => x.Ad).ToListAsync();
+        var query = _db.PosCihazlari.AsNoTracking().Where(x => !x.IsDeleted);
+        query = ApplyKurumFilter(query, kurumId);
+
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            query = query.Where(x => x.TesisId == tesisId.Value);
+        }
+
+        return await BuildDtoQuery(query).OrderBy(x => x.Ad).ToListAsync(cancellationToken);
     }
 
     public override async Task DeleteAsync(int id)
@@ -126,6 +133,23 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         if (!_tenantAccessor.IsSuperAdmin() && !_tenantAccessor.GetAccessibleKurumIds().Contains(kurumId))
             throw new BaseException("Bu kuruma erişim yetkiniz yok.", 403);
+    }
+
+    private IQueryable<PosCihazi> ApplyKurumFilter(IQueryable<PosCihazi> query, int? kurumId)
+    {
+        if (kurumId.HasValue && kurumId.Value > 0)
+        {
+            EnforceKurum(kurumId.Value);
+            return query.Where(x => x.KurumId == kurumId.Value);
+        }
+
+        if (_tenantAccessor.IsSuperAdmin())
+        {
+            return query;
+        }
+
+        var ids = _tenantAccessor.GetAccessibleKurumIds();
+        return query.Where(x => ids.Contains(x.KurumId));
     }
 
     private async Task ValidateTesisAsync(int tesisId, int kurumId)

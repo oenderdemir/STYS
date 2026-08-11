@@ -24,7 +24,11 @@ public sealed class PosCihaziController : UIController
 
     [HttpGet("cihazlar")]
     [Permission(StructurePermissions.PosYonetimi.View)]
-    public async Task<ActionResult<IEnumerable<PosCihaziDto>>> GetAll() => Ok(await _service.GetAllAsync());
+    public async Task<ActionResult<IEnumerable<PosCihaziDto>>> GetAll(
+        [FromQuery] int? kurumId,
+        [FromQuery] int? tesisId,
+        CancellationToken cancellationToken) =>
+        Ok(await _service.GetAllAsync(kurumId, tesisId, cancellationToken));
 
     [HttpGet("cihazlar/{id:int}")]
     [Permission(StructurePermissions.PosYonetimi.View)]

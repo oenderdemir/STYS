@@ -29,6 +29,7 @@ import {
 import { AgentYonetimiService } from './agent-yonetimi.service';
 import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
+import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 type AgentFormState = AgentKaydetRequest & { id?: number };
@@ -62,10 +63,12 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     private readonly confirmationService = inject(ConfirmationService);
     private readonly realtime = inject(AgentRealtimeService);
     private readonly authService = inject(AuthService);
+    private readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly destroyRef = inject(DestroyRef);
 
     agents = signal<AgentListDto[]>([]);
     loading = signal(false);
+    selectedTesisFilterId = signal<number | null>(null);
     dialogVisible = signal(false);
     enrollmentDialogVisible = signal(false);
     enrollmentCodes = signal<AgentEnrollmentCodeDto[]>([]);
@@ -118,7 +121,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     }
 
     ngOnInit(): void {
-        this.refreshAgents();
+        this.loadEnrollmentTesisler();
     }
 
     ngOnDestroy(): void {
@@ -127,7 +130,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
 
     loadAgents(): void {
         this.loading.set(true);
-        this.service.getAgents().pipe(finalize(() => this.loading.set(false))).subscribe({
+        this.service.getAgents(this.authService.getAktifKurumId(), this.selectedTesisFilterId()).pipe(finalize(() => this.loading.set(false))).subscribe({
             next: (data) => this.agents.set(data),
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -142,7 +145,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     }
 
     openNew(): void {
-        this.agentForm = { ad: '', tesisIds: [], scopes: [] };
+        this.agentForm = this.createDefaultAgentForm();
         this.submitted.set(false);
         this.dialogVisible.set(true);
     }
@@ -235,12 +238,16 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     openEnrollmentDialog(): void {
         this.enrollmentForm = this.createDefaultEnrollmentForm();
         this.enrollmentDialogVisible.set(true);
+        if (this.enrollmentTesisler.length === 0) {
+            this.loadEnrollmentTesisler();
+            return;
+        }
+
         this.loadEnrollmentCodes();
-        this.loadEnrollmentTesisler();
     }
 
     loadEnrollmentCodes(): void {
-        this.service.getEnrollmentCodes().subscribe({
+        this.service.getEnrollmentCodes(this.authService.getAktifKurumId(), this.selectedTesisFilterId()).subscribe({
             next: (data) => this.enrollmentCodes.set(data),
             error: () => { /* ignnore */ }
         });
@@ -251,17 +258,41 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
             next: (data) => {
                 const sorted = [...data].sort((left, right) => (left.ad ?? '').localeCompare(right.ad ?? ''));
                 this.enrollmentTesisler = sorted;
-                if (this.enrollmentForm.tesisIds.length === 0 && sorted.length > 0) {
-                    const firstTesisId = sorted.find((x) => x.id != null)?.id;
-                    if (firstTesisId != null) {
-                        this.enrollmentForm = { ...this.enrollmentForm, tesisIds: [firstTesisId] };
+                const currentFilter = this.selectedTesisFilterId() ?? this.tesisContext.seciliTesis()?.id ?? null;
+                if (currentFilter != null && sorted.some((x) => x.id === currentFilter)) {
+                    this.selectedTesisFilterId.set(currentFilter);
+                } else if (currentFilter == null && sorted.length === 1) {
+                    const onlyTesisId = sorted[0]?.id ?? null;
+                    this.selectedTesisFilterId.set(onlyTesisId);
+                } else if (this.selectedTesisFilterId() != null && !sorted.some((x) => x.id === this.selectedTesisFilterId())) {
+                    this.selectedTesisFilterId.set(null);
+                }
+
+                if (this.enrollmentForm.tesisIds.length === 0) {
+                    const defaultTesisId = this.selectedTesisFilterId() ?? sorted.find((x) => x.id != null)?.id ?? null;
+                    if (defaultTesisId != null) {
+                        this.enrollmentForm = { ...this.enrollmentForm, tesisIds: [defaultTesisId] };
                     }
                 }
+                this.loadAgents();
+                this.loadEnrollmentCodes();
             },
             error: () => {
                 this.enrollmentTesisler = [];
+                this.loadAgents();
             }
         });
+    }
+
+    onTesisFilterChange(): void {
+        if (!this.enrollmentDialogVisible()) {
+            this.loadAgents();
+            this.loadEnrollmentCodes();
+            return;
+        }
+
+        this.loadAgents();
+        this.loadEnrollmentCodes();
     }
 
     generateEnrollmentCode(): void {
@@ -344,11 +375,15 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     }
 
     private createDefaultEnrollmentForm(): AgentEnrollmentCodeRequest {
-        const firstTesisId = this.enrollmentTesisler.find((x) => x.id != null)?.id;
+        const firstTesisId = this.selectedTesisFilterId() ?? this.enrollmentTesisler.find((x) => x.id != null)?.id;
         return {
             tesisIds: firstTesisId != null ? [firstTesisId] : [],
             allowedScopes: this.enrollmentScopeOptions.map((x) => x.value),
             requiresApproval: false
         };
+    }
+
+    private createDefaultAgentForm(): AgentFormState {
+        return { ad: '', tesisIds: this.selectedTesisFilterId() != null ? [this.selectedTesisFilterId()!] : [], scopes: [] };
     }
 }

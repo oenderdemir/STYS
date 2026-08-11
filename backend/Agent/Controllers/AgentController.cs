@@ -21,8 +21,11 @@ public sealed class AgentController : ControllerBase
 
     [HttpGet]
     [Permission(StructurePermissions.AgentYonetimi.View)]
-    public async Task<ActionResult<IReadOnlyCollection<AgentListDto>>> GetAll(CancellationToken cancellationToken) =>
-        Ok(await _agentService.GetAllAsync(cancellationToken));
+    public async Task<ActionResult<IReadOnlyCollection<AgentListDto>>> GetAll(
+        [FromQuery] int? kurumId,
+        [FromQuery] int? tesisId,
+        CancellationToken cancellationToken) =>
+        Ok(await _agentService.GetAllAsync(kurumId, tesisId, cancellationToken));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.AgentYonetimi.View)]
@@ -80,8 +83,11 @@ public sealed class AgentController : ControllerBase
 
     [HttpGet("enrollment-codes")]
     [Permission(StructurePermissions.AgentYonetimi.View)]
-    public async Task<ActionResult<IReadOnlyCollection<AgentEnrollmentCodeDto>>> GetEnrollmentCodes(CancellationToken cancellationToken) =>
-        Ok(await _agentService.GetEnrollmentCodesAsync(cancellationToken));
+    public async Task<ActionResult<IReadOnlyCollection<AgentEnrollmentCodeDto>>> GetEnrollmentCodes(
+        [FromQuery] int? kurumId,
+        [FromQuery] int? tesisId,
+        CancellationToken cancellationToken) =>
+        Ok(await _agentService.GetEnrollmentCodesAsync(kurumId, tesisId, cancellationToken));
 
     [HttpPost("enrollment-codes/{enrollmentId:int}/revoke")]
     [Permission(StructurePermissions.AgentYonetimi.Manage)]

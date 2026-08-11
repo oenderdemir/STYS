@@ -1,6 +1,7 @@
 using AutoMapper;
 using System.Data;
 using Microsoft.EntityFrameworkCore;
+using STYS.Agent.Authorization;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
@@ -20,6 +21,7 @@ namespace STYS.Entegrasyonlar.Pos.Services;
 public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi, int>, IPosCihaziService
 {
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly ICurrentAgentContext _agentContext;
     private readonly StysAppDbContext _db;
     private readonly IPosCihaziRepository _cihazRepository;
     private readonly AgentCommandService _agentCommandService;
@@ -28,11 +30,13 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         IPosCihaziRepository repository,
         IMapper mapper,
         ICurrentTenantAccessor tenantAccessor,
+        ICurrentAgentContext agentContext,
         StysAppDbContext db,
         AgentCommandService agentCommandService)
         : base(repository, mapper)
     {
         _tenantAccessor = tenantAccessor;
+        _agentContext = agentContext;
         _db = db;
         _cihazRepository = repository;
         _agentCommandService = agentCommandService;
@@ -92,6 +96,208 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         var sequence = await ReserveTransactionSequenceAsync(device.Id, cancellationToken);
         var request = BuildGetDeviceInfoRequest(device, sequence);
         return await SendCommandAsync(device.AgentId!.Value, "PavoGetDeviceInfo", request, requestedBy, cancellationToken);
+    }
+
+    public async Task<AgentPavoDeviceRegistrationResult> RegisterFromAgentAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken)
+    {
+        if (!_agentContext.IsAuthenticated)
+        {
+            throw new BaseException("Agent kimlik doğrulaması gerekli.", 401);
+        }
+
+        var agentId = _agentContext.AgentId;
+        if (agentId <= 0)
+        {
+            throw new BaseException("Agent kimliği bulunamadı.", 401);
+        }
+
+        if (!request.TesisId.HasValue || request.TesisId.Value <= 0)
+        {
+            throw new BaseException("Tesis seçimi zorunludur.", 400);
+        }
+
+        if (!_agentContext.TesisIds.Contains(request.TesisId.Value))
+        {
+            throw new BaseException("Seçilen tesis agent kapsamı dışında.", 403);
+        }
+
+        if (!string.Equals(request.Provider?.Trim(), "PAVO", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Sadece PAVO provider kayıt edilebilir.", 400);
+        }
+
+        var serialNumber = request.SerialNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(serialNumber))
+        {
+            throw new BaseException("Seri numarası zorunludur.", 400);
+        }
+
+        var displayName = request.DisplayName?.Trim();
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            throw new BaseException("Cihaz adı zorunludur.", 400);
+        }
+
+        var host = request.Host?.Trim();
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            throw new BaseException("Host zorunludur.", 400);
+        }
+
+        var agent = await _db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == agentId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Agent bulunamadı.", 404);
+
+        if (agent.KurumId != _agentContext.KurumId)
+        {
+            throw new BaseException("Agent kurum kapsamı geçersiz.", 403);
+        }
+
+        if (agent.Durum != AgentDurum.Active)
+        {
+            throw new BaseException("Agent aktif değil.", 403);
+        }
+
+        var tesisBaglantisiVarMi = await _db.Set<AgentTesis>().AnyAsync(x =>
+            x.AgentId == agent.Id
+            && x.KurumId == agent.KurumId
+            && x.TesisId == request.TesisId.Value
+            && x.AktifMi
+            && !x.IsDeleted, cancellationToken);
+
+        if (!tesisBaglantisiVarMi)
+        {
+            throw new BaseException("Seçilen tesis agent kapsamı dışında.", 403);
+        }
+
+        var existing = await _db.PosCihazlari
+            .Include(x => x.Terminaller)
+            .FirstOrDefaultAsync(x => x.SeriNo == serialNumber && x.Saglayici == PosSaglayici.Pavo && !x.IsDeleted, cancellationToken);
+
+        if (existing is not null)
+        {
+            if (existing.KurumId != agent.KurumId)
+            {
+                throw new BaseException("Bu seri numaralı cihaz başka kuruma kayıtlı.", 409);
+            }
+
+            if (existing.AgentId.HasValue && existing.AgentId.Value != agent.Id)
+            {
+                throw new BaseException("Bu cihaz başka Agent'a bağlı.", 409);
+            }
+
+            if (existing.TesisId != request.TesisId.Value)
+            {
+                throw new BaseException("Bu cihaz başka tesise bağlı.", 409);
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var device = existing ?? new PosCihazi
+        {
+            KurumId = agent.KurumId,
+            TesisId = request.TesisId.Value,
+            AgentId = agent.Id,
+            Saglayici = PosSaglayici.Pavo,
+            CreatedBy = "agent",
+            CreatedAt = now
+        };
+
+        device.KurumId = agent.KurumId;
+        device.TesisId = request.TesisId.Value;
+        device.AgentId = agent.Id;
+        device.Saglayici = PosSaglayici.Pavo;
+        device.AgentLocalDeviceId = NormalizeOptional(request.LocalDeviceId);
+        device.Ad = displayName;
+        device.SeriNo = serialNumber;
+        device.IpAdresi = host;
+        device.HttpPort = request.HttpPort > 0 ? request.HttpPort : null;
+        device.HttpsPort = request.HttpsPort > 0 ? request.HttpsPort : null;
+        device.AktifMi = true;
+        device.SonBaglantiTarihi = now;
+        if (!string.IsNullOrWhiteSpace(request.Fingerprint))
+        {
+            device.Fingerprint = request.Fingerprint.Trim();
+            device.EslesmeOnayliMi = true;
+        }
+        if (!string.IsNullOrWhiteSpace(request.TargetFingerprint))
+        {
+            device.TargetFingerprint = request.TargetFingerprint.Trim();
+        }
+        if (request.TransactionSequence.HasValue)
+        {
+            device.TransactionSequence = Math.Max(device.TransactionSequence, request.TransactionSequence.Value);
+        }
+
+        if (existing is null)
+        {
+            _db.PosCihazlari.Add(device);
+        }
+
+        try
+        {
+            await ReconcileRegisteredTerminalsAsync(device, request.Terminals, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            var conflict = await _db.PosCihazlari
+                .Include(x => x.Terminaller)
+                .FirstOrDefaultAsync(x => x.SeriNo == serialNumber && x.Saglayici == PosSaglayici.Pavo && !x.IsDeleted, cancellationToken);
+
+            if (conflict is null)
+            {
+                throw;
+            }
+
+            if (conflict.KurumId != agent.KurumId)
+            {
+                throw new BaseException("Bu seri numaralı cihaz başka kuruma kayıtlı.", 409);
+            }
+
+            if (conflict.AgentId.HasValue && conflict.AgentId.Value != agent.Id)
+            {
+                throw new BaseException("Bu cihaz başka Agent'a bağlı.", 409);
+            }
+
+            if (conflict.TesisId != request.TesisId.Value)
+            {
+                throw new BaseException("Bu cihaz başka tesise bağlı.", 409);
+            }
+
+            conflict.AgentLocalDeviceId = NormalizeOptional(request.LocalDeviceId);
+            conflict.Ad = displayName;
+            conflict.IpAdresi = host;
+            conflict.HttpPort = request.HttpPort > 0 ? request.HttpPort : null;
+            conflict.HttpsPort = request.HttpsPort > 0 ? request.HttpsPort : null;
+            conflict.AktifMi = true;
+            conflict.SonBaglantiTarihi = now;
+            if (!string.IsNullOrWhiteSpace(request.Fingerprint))
+            {
+                conflict.Fingerprint = request.Fingerprint.Trim();
+                conflict.EslesmeOnayliMi = true;
+            }
+            if (!string.IsNullOrWhiteSpace(request.TargetFingerprint))
+            {
+                conflict.TargetFingerprint = request.TargetFingerprint.Trim();
+            }
+            if (request.TransactionSequence.HasValue)
+            {
+                conflict.TransactionSequence = Math.Max(conflict.TransactionSequence, request.TransactionSequence.Value);
+            }
+
+            await ReconcileRegisteredTerminalsAsync(conflict, request.Terminals, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            device = conflict;
+        }
+
+        return new AgentPavoDeviceRegistrationResult
+        {
+            CentralPosCihaziId = device.Id,
+            ProvisioningStatus = "Provisioned",
+            LastProvisionedAt = now,
+            ReconciledTerminalCount = device.Terminaller.Count(x => !x.IsDeleted),
+            Message = existing is null ? "Cihaz kaydedildi." : "Cihaz güncellendi."
+        };
     }
 
     public async Task<IEnumerable<PosCihaziDto>> GetAllAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken)
@@ -316,6 +522,78 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         }, requestedBy, cancellationToken);
     }
 
+    private async Task ReconcileRegisteredTerminalsAsync(PosCihazi device, IReadOnlyCollection<PavoDeviceProvisioningCandidateTerminal> terminals, CancellationToken cancellationToken)
+    {
+        var existing = device.Terminaller.Where(x => !x.IsDeleted).ToList();
+        var discovered = (terminals ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x.TerminalId))
+            .Select(x => new
+            {
+                AcquirerId = NormalizeOptional(x.AcquirerId),
+                AcquirerName = NormalizeOptional(x.AcquirerName),
+                TerminalId = x.TerminalId.Trim(),
+                MerchantId = NormalizeOptional(x.MerchantId),
+                SourceReference = x.TerminalId.Trim()
+            })
+            .ToList();
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var terminal in discovered)
+        {
+            if (!seen.Add(terminal.SourceReference))
+            {
+                continue;
+            }
+
+            var current = existing.FirstOrDefault(x =>
+                string.Equals(x.SaglayiciKodu, "PAVO", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.SerialNumber, terminal.TerminalId, StringComparison.OrdinalIgnoreCase));
+
+            if (current is null)
+            {
+                device.Terminaller.Add(new PosTerminal
+                {
+                    KurumId = device.KurumId,
+                    TesisId = device.TesisId,
+                    PosCihaziId = device.Id,
+                    KasaBankaHesapId = null,
+                    SaglayiciKodu = "PAVO",
+                    AcquirerId = terminal.AcquirerId,
+                    AcquirerName = terminal.AcquirerName,
+                    Ad = terminal.MerchantId ?? terminal.TerminalId,
+                    SerialNumber = terminal.TerminalId,
+                    SourceTerminalReference = terminal.MerchantId,
+                    SourceFingerprint = null,
+                    TargetFingerprint = null,
+                    PairingId = null,
+                    PairingCode = null,
+                    EslesmeOnayliMi = !string.IsNullOrWhiteSpace(device.Fingerprint),
+                    AktifMi = true,
+                    CreatedBy = "agent",
+                    CreatedAt = DateTime.UtcNow
+                });
+                continue;
+            }
+
+            current.KurumId = device.KurumId;
+            current.TesisId = device.TesisId;
+            current.PosCihaziId = device.Id;
+            current.SaglayiciKodu = "PAVO";
+            current.AcquirerId = terminal.AcquirerId;
+            current.AcquirerName = terminal.AcquirerName;
+            current.Ad = terminal.MerchantId ?? current.Ad;
+            current.SerialNumber = terminal.TerminalId;
+            current.SourceTerminalReference = terminal.MerchantId ?? current.SourceTerminalReference;
+            current.AktifMi = true;
+            current.IsDeleted = false;
+        }
+
+        foreach (var terminal in existing.Where(x => !seen.Contains(x.SerialNumber)))
+        {
+            terminal.AktifMi = false;
+        }
+    }
+
     private async Task<PosCihaziDto> BuildDtoAsync(int id)
     {
         return await BuildDtoQuery(_db.PosCihazlari.AsNoTracking().Where(x => x.Id == id)).SingleAsync();
@@ -340,6 +618,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
                    Ad = cihaz.Ad,
                    SeriNo = cihaz.SeriNo,
                    IpAdresi = cihaz.IpAdresi,
+                   AgentLocalDeviceId = cihaz.AgentLocalDeviceId,
                    HttpPort = cihaz.HttpPort,
                    HttpsPort = cihaz.HttpsPort,
                    Fingerprint = cihaz.Fingerprint,
@@ -350,5 +629,14 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
                    Aciklama = cihaz.Aciklama,
                    TerminalSayisi = _db.PosTerminaller.Count(x => x.PosCihaziId == cihaz.Id && !x.IsDeleted)
                };
+    }
+
+    private static string BuildTerminalSourceReference(int deviceId, string? acquirerId, string terminalId) =>
+        $"{deviceId}::{NormalizeOptional(acquirerId) ?? string.Empty}::{terminalId.Trim()}";
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
 }

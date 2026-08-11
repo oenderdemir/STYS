@@ -5,6 +5,7 @@ using STYS.Agent.Authorization;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Entities;
 using STYS.Agent.Services;
+using STYS.Entegrasyonlar.Pos.Services;
 using STYS.Infrastructure.EntityFramework;
 using AgentEntity = STYS.Agent.Entities.Agent;
 
@@ -17,17 +18,20 @@ public sealed class AgentAuthController : ControllerBase
     private readonly IAgentTokenService _tokenService;
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly AgentCommandService _commandService;
+    private readonly IPosCihaziService _posCihaziService;
     private readonly IAgentRealtimeNotifier _realtimeNotifier;
 
     public AgentAuthController(
         IAgentTokenService tokenService,
         IDbContextFactory<StysAppDbContext> dbContextFactory,
         AgentCommandService commandService,
+        IPosCihaziService posCihaziService,
         IAgentRealtimeNotifier realtimeNotifier)
     {
         _tokenService = tokenService;
         _dbContextFactory = dbContextFactory;
         _commandService = commandService;
+        _posCihaziService = posCihaziService;
         _realtimeNotifier = realtimeNotifier;
     }
 
@@ -159,6 +163,19 @@ public sealed class AgentAuthController : ControllerBase
             LastHeartbeatAt = agent.LastHeartbeatAt,
             OnlineMi = agent.LastHeartbeatAt.HasValue && (DateTime.UtcNow - agent.LastHeartbeatAt.Value) <= TimeSpan.FromSeconds(90)
         });
+    }
+
+    [HttpPost("pos-devices/register")]
+    [Authorize(Policy = AgentPolicies.AgentPolicy)]
+    public async Task<ActionResult<AgentPavoDeviceRegistrationResult>> RegisterPosDevice(
+        [FromBody] AgentPavoDeviceRegisterRequest request,
+        CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated)
+            return Unauthorized();
+
+        return Ok(await _posCihaziService.RegisterFromAgentAsync(request, cancellationToken));
     }
 
     [HttpGet("commands")]

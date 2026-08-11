@@ -1,6 +1,7 @@
 using STYS.Agent.Configuration;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
+using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.LocalDevices;
 using STYS.Agent.Services;
 
@@ -287,6 +288,32 @@ public static class AgentLocalManagementApplication
                 var self = await client.GetMeAsync(cancellationToken);
                 var candidate = await service.BuildProvisioningCandidateAsync(id, tesisId, self, cancellationToken);
                 return Results.Ok(candidate);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (AgentApiException ex)
+            {
+                return Results.Json(new { message = ex.Message, traceId = ex.TraceId }, statusCode: (int)ex.StatusCode);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        app.MapPost("/api/agent/pos-devices/register", async (
+            PavoDeviceProvisioningCandidate request,
+            ILocalDeviceManagementService service,
+            IStysAgentApiClient client,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var self = await client.GetMeAsync(cancellationToken);
+                var result = await service.RegisterAsync(request, self, cancellationToken);
+                return Results.Ok(result);
             }
             catch (ArgumentException ex)
             {

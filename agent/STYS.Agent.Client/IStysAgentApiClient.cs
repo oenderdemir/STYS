@@ -9,6 +9,8 @@ public interface IStysAgentApiClient
     Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken);
     Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken);
     Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken);
+    Task<AgentPavoDeviceRegistrationResult> RegisterPavoDeviceAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
     Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken);
     Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken);
     Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken);

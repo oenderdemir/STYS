@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using STYS.Agent.Authorization;
 using TOD.Platform.Security.Auth.Services;
 
 namespace STYS.Tests.Agent;
@@ -36,4 +37,15 @@ internal sealed class DbContextFactoryForTest<TContext> : IDbContextFactory<TCon
     public DbContextFactoryForTest(Func<TContext> creator) => _creator = creator;
     public TContext CreateDbContext() => _creator();
     public ValueTask<TContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => new(_creator());
+}
+
+internal sealed class FakeCurrentAgentContext : ICurrentAgentContext
+{
+    public int AgentId { get; init; }
+    public string AgentInstanceId { get; init; } = string.Empty;
+    public int KurumId { get; init; }
+    public IReadOnlyCollection<int> TesisIds { get; init; } = [];
+    public IReadOnlyCollection<string> Scopes { get; init; } = [];
+    public int CredentialVersion { get; init; }
+    public bool IsAuthenticated { get; init; } = true;
 }

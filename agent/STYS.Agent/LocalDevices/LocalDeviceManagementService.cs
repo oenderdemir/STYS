@@ -1,4 +1,5 @@
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Client;
 using STYS.Agent.Modules.Pavo;
 
 namespace STYS.Agent.LocalDevices;
@@ -10,19 +11,22 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     private readonly ILocalDeviceConnectionTesterRegistry _testerRegistry;
     private readonly IPavoLocalPairingStore _pairingStore;
     private readonly IPavoRestClient _pavoRestClient;
+    private readonly IStysAgentApiClient? _agentApiClient;
 
     public LocalDeviceManagementService(
         ILocalDeviceStore store,
         ILocalDeviceTerminalStore terminalStore,
         ILocalDeviceConnectionTesterRegistry testerRegistry,
         IPavoLocalPairingStore pairingStore,
-        IPavoRestClient pavoRestClient)
+        IPavoRestClient pavoRestClient,
+        IStysAgentApiClient? agentApiClient = null)
     {
         _store = store;
         _terminalStore = terminalStore;
         _testerRegistry = testerRegistry;
         _pairingStore = pairingStore;
         _pavoRestClient = pavoRestClient;
+        _agentApiClient = agentApiClient;
     }
 
     public Task<IReadOnlyCollection<LocalDevice>> GetAllAsync(CancellationToken cancellationToken) =>
@@ -118,6 +122,101 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
                 .Select(MapCandidateTerminal)
                 .ToList()
         };
+    }
+
+    public async Task<AgentPavoDeviceRegistrationResult> RegisterAsync(PavoDeviceProvisioningCandidate candidate, AgentSelfDto agentSelf, CancellationToken cancellationToken)
+    {
+        if (candidate is null)
+        {
+            throw new InvalidOperationException("Provisioning candidate zorunludur.");
+        }
+
+        if (string.IsNullOrWhiteSpace(candidate.LocalDeviceId))
+        {
+            throw new InvalidOperationException("Local cihaz seçimi zorunludur.");
+        }
+
+        var device = await GetDeviceOrThrowAsync(candidate.LocalDeviceId, cancellationToken);
+        ValidatePavoLocalDevice(device, "Provisioning");
+        ValidateTesisSelection(agentSelf, candidate.TesisId ?? 0);
+
+        if (!string.Equals(candidate.Provider, "PAVO", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Sadece PAVO provider destekleniyor.");
+        }
+
+        if (!string.Equals(device.DisplayName, candidate.DisplayName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Provisioning candidate yerel cihaz ile eşleşmiyor.");
+        }
+
+        if (!string.Equals(device.Host, candidate.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Provisioning candidate host değeri yerel cihaz ile eşleşmiyor.");
+        }
+
+        if (device.Protocol == LocalDeviceProtocol.Http && !string.Equals(candidate.Protocol, "HTTP", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Provisioning candidate protocol değeri yerel cihaz ile eşleşmiyor.");
+        }
+
+        if (device.Protocol == LocalDeviceProtocol.Https && !string.Equals(candidate.Protocol, "HTTPS", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Provisioning candidate protocol değeri yerel cihaz ile eşleşmiyor.");
+        }
+
+        if (candidate.HttpPort != device.HttpPort || candidate.HttpsPort != device.HttpsPort)
+        {
+            throw new InvalidOperationException("Provisioning candidate port değerleri yerel cihaz ile eşleşmiyor.");
+        }
+
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
+        if (pairingState is null || pairingState.PairingStatus != LocalDevicePairingStatus.Paired)
+        {
+            throw new InvalidOperationException("Önce PAVO cihazı ile pairing yapılmalıdır.");
+        }
+
+        var internalRequest = new AgentPavoDeviceRegisterRequest
+        {
+            LocalDeviceId = device.Id,
+            Provider = candidate.Provider,
+            DisplayName = candidate.DisplayName,
+            Host = candidate.Host,
+            HttpPort = candidate.HttpPort,
+            HttpsPort = candidate.HttpsPort,
+            Protocol = candidate.Protocol,
+            SerialNumber = candidate.SerialNumber,
+            DeviceName = candidate.DeviceName,
+            PairedAt = candidate.PairedAt,
+            TesisId = candidate.TesisId,
+            Fingerprint = pairingState.Fingerprint,
+            TargetFingerprint = pairingState.TargetFingerprint,
+            TransactionSequence = pairingState.TransactionSequence,
+            Terminals = candidate.Terminals
+        };
+
+        try
+        {
+        var agentApiClient = _agentApiClient ?? throw new InvalidOperationException("Agent API client tanımlı değil.");
+        var result = await agentApiClient.RegisterPavoDeviceAsync(internalRequest, cancellationToken);
+            var now = DateTimeOffset.UtcNow;
+            var updatedDevice = CloneForPublicUpdate(device);
+            updatedDevice.CentralPosCihaziId = result.CentralPosCihaziId;
+            updatedDevice.LastProvisionedAt = result.LastProvisionedAt == default ? now : result.LastProvisionedAt;
+            updatedDevice.ProvisioningStatus = ParseProvisioningStatus(result.ProvisioningStatus);
+            updatedDevice.UpdatedAt = now;
+            await _store.UpdateAsync(updatedDevice, cancellationToken);
+
+            return result;
+        }
+        catch
+        {
+            var failed = CloneForPublicUpdate(device);
+            failed.ProvisioningStatus = LocalDeviceProvisioningStatus.Failed;
+            failed.UpdatedAt = DateTimeOffset.UtcNow;
+            await _store.UpdateAsync(failed, cancellationToken);
+            throw;
+        }
     }
 
     private async Task<DeviceInfoExecution> ExecuteDeviceInfoAsync(LocalDevice device, bool requirePairing, CancellationToken cancellationToken)
@@ -513,6 +612,9 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         LastPairingAttemptAt = device.LastPairingAttemptAt,
         LastPairingAt = device.LastPairingAt,
         LastPairingError = device.LastPairingError,
+        CentralPosCihaziId = device.CentralPosCihaziId,
+        LastProvisionedAt = device.LastProvisionedAt,
+        ProvisioningStatus = device.ProvisioningStatus,
         CreatedAt = device.CreatedAt,
         UpdatedAt = device.UpdatedAt
     };
@@ -640,6 +742,11 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
         return port;
     }
+
+    private static LocalDeviceProvisioningStatus ParseProvisioningStatus(string? status) =>
+        Enum.TryParse<LocalDeviceProvisioningStatus>(status, true, out var parsed)
+            ? parsed
+            : LocalDeviceProvisioningStatus.NotProvisioned;
 
     private sealed record NormalizedUpsert(
         string Id,

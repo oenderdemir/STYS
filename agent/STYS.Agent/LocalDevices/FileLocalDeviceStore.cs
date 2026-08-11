@@ -204,6 +204,9 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
             LastPairingAttemptAt = device.LastPairingAttemptAt,
             LastPairingAt = device.LastPairingAt,
             LastPairingError = string.IsNullOrWhiteSpace(device.LastPairingError) ? null : device.LastPairingError.Trim(),
+            CentralPosCihaziId = device.CentralPosCihaziId,
+            LastProvisionedAt = device.LastProvisionedAt,
+            ProvisioningStatus = device.ProvisioningStatus,
             CreatedAt = device.CreatedAt == default ? DateTimeOffset.UtcNow : device.CreatedAt,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -277,6 +280,9 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
         LastPairingAttemptAt = device.LastPairingAttemptAt,
         LastPairingAt = device.LastPairingAt,
         LastPairingError = device.LastPairingError,
+        CentralPosCihaziId = device.CentralPosCihaziId,
+        LastProvisionedAt = device.LastProvisionedAt,
+        ProvisioningStatus = device.ProvisioningStatus,
         CreatedAt = device.CreatedAt,
         UpdatedAt = device.UpdatedAt
     };

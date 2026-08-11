@@ -11,4 +11,5 @@ public interface IPosCihaziService : IBaseRdbmsService<PosCihaziDto, PosCihazi, 
     Task<AgentCommandDto> PairingAsync(int id, string requestedBy, CancellationToken cancellationToken);
     Task<AgentCommandDto> PingAsync(int id, string requestedBy, CancellationToken cancellationToken);
     Task<AgentCommandDto> GetDeviceInfoAsync(int id, string requestedBy, CancellationToken cancellationToken);
+    Task<AgentPavoDeviceRegistrationResult> RegisterFromAgentAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken);
 }

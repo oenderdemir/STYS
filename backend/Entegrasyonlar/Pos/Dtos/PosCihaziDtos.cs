@@ -14,6 +14,7 @@ public sealed class PosCihaziDto : BaseRdbmsDto<int>
     public string Ad { get; set; } = string.Empty;
     public string SeriNo { get; set; } = string.Empty;
     public string? IpAdresi { get; set; }
+    public string? AgentLocalDeviceId { get; set; }
     public int? HttpPort { get; set; }
     public int? HttpsPort { get; set; }
     public string? Fingerprint { get; set; }
@@ -33,6 +34,7 @@ public sealed class PosCihaziKaydetRequest
     public string Ad { get; set; } = string.Empty;
     public string SeriNo { get; set; } = string.Empty;
     public string? IpAdresi { get; set; }
+    public string? AgentLocalDeviceId { get; set; }
     public int? HttpPort { get; set; }
     public int? HttpsPort { get; set; }
     public string? Fingerprint { get; set; }

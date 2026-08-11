@@ -1192,6 +1192,7 @@ public sealed class PosYonetimiIntegrationTests
             new PosCihaziRepository(db, mapper),
             mapper,
             new FakeKurumTenantAccessor(kurumId),
+            new FakeCurrentAgentContext(),
             db,
             CreateAgentCommandService(connectionString, kurumId));
     }

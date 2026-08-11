@@ -21,6 +21,9 @@ public sealed class PosCihazi : BaseEntity<int>, ITenantEntity
     [MaxLength(64)]
     public string? IpAdresi { get; set; }
 
+    [MaxLength(128)]
+    public string? AgentLocalDeviceId { get; set; }
+
     public int? HttpPort { get; set; }
     public int? HttpsPort { get; set; }
 

@@ -34,6 +34,13 @@ public enum LocalDevicePairingStatus
     Failed = 2
 }
 
+public enum LocalDeviceProvisioningStatus
+{
+    NotProvisioned = 0,
+    Provisioned = 1,
+    Failed = 2
+}
+
 public sealed class LocalDevice
 {
     public string Id { get; set; } = string.Empty;
@@ -55,6 +62,9 @@ public sealed class LocalDevice
     public DateTimeOffset? LastPairingAttemptAt { get; set; }
     public DateTimeOffset? LastPairingAt { get; set; }
     public string? LastPairingError { get; set; }
+    public int? CentralPosCihaziId { get; set; }
+    public DateTimeOffset? LastProvisionedAt { get; set; }
+    public LocalDeviceProvisioningStatus ProvisioningStatus { get; set; } = LocalDeviceProvisioningStatus.NotProvisioned;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

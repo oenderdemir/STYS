@@ -14,5 +14,6 @@ public interface ILocalDeviceManagementService
     Task<IReadOnlyCollection<LocalDeviceTerminal>> DiscoverTerminalsAsync(string id, CancellationToken cancellationToken);
     Task<LocalDevice> PairAsync(string id, bool forceRePair, CancellationToken cancellationToken);
     Task<PavoDeviceProvisioningCandidate> BuildProvisioningCandidateAsync(string id, int tesisId, AgentSelfDto agentSelf, CancellationToken cancellationToken);
+    Task<AgentPavoDeviceRegistrationResult> RegisterAsync(PavoDeviceProvisioningCandidate candidate, AgentSelfDto agentSelf, CancellationToken cancellationToken);
     Task DeleteAsync(string id, CancellationToken cancellationToken);
 }

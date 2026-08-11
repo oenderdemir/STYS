@@ -7,7 +7,8 @@ const state = {
   selectedLocalDeviceId: null,
   selectedLocalDeviceTerminals: [],
   agentSelf: null,
-  selectedProvisioningTesisId: null
+  selectedProvisioningTesisId: null,
+  selectedProvisioningCandidate: null
 };
 
 const RESET_CONFIRMATION_TEXT = "Bu işlem yerel Agent kimlik bilgilerini silecek. Merkezi STYS kaydı silinmeyecektir. Agent yeniden enrollment gerektirecektir.";
@@ -162,6 +163,13 @@ function localDevicePairingBadge(status) {
   if (value === 1) return { text: "Paired", kind: "ok" };
   if (value === 2) return { text: "Failed", kind: "error" };
   return { text: "NotPaired", kind: "muted" };
+}
+
+function localDeviceProvisioningBadge(status) {
+  const value = Number(status);
+  if (value === 1) return { text: "STYS'e kaydedildi", kind: "ok" };
+  if (value === 2) return { text: "Kayıt başarısız", kind: "error" };
+  return { text: "Kaydedilmedi", kind: "muted" };
 }
 
 function formatDeviceAddress(device) {
@@ -321,6 +329,12 @@ function renderLocalDeviceDetail(device) {
   setText("local-device-detail-device-info-at", formatDateTime(device.lastDeviceInfoAt));
   setText("local-device-detail-pairing-at", formatDateTime(device.lastPairingAt));
   setText("local-device-detail-address", formatLocalDeviceAddress(device));
+  setText("local-device-detail-central-id", device.centralPosCihaziId ?? device.CentralPosCihaziId ?? "-");
+  setText("local-device-detail-provisioning-at", formatDateTime(device.lastProvisionedAt || device.LastProvisionedAt));
+  const provisioningBadge = localDeviceProvisioningBadge(device.provisioningStatus ?? device.ProvisioningStatus);
+  setText("local-device-detail-provisioning-status", provisioningBadge.text);
+  const provisioningStatusEl = $("local-device-detail-provisioning-status");
+  if (provisioningStatusEl) provisioningStatusEl.className = `value small-value badge ${provisioningBadge.kind}`;
   setText("local-device-detail-last-test", formatDateTime(device.lastConnectionTestAt));
   setStatus("local-device-detail-last-result", device.lastError || "Hazır.", device.lastError ? "error" : "ok");
   setStatus("local-device-detail-last-pairing-error", device.lastPairingError || "-", device.lastPairingError ? "error" : "muted");
@@ -348,6 +362,11 @@ function renderLocalDeviceDetail(device) {
   const candidateBtn = $("local-device-provisioning-preview-btn");
   if (candidateBtn) {
     candidateBtn.disabled = !isPaired;
+  }
+
+  const saveBtn = $("provisioning-save-btn");
+  if (saveBtn) {
+    saveBtn.disabled = !state.selectedProvisioningCandidate;
   }
 }
 
@@ -408,11 +427,17 @@ function renderProvisioningCandidate(candidate) {
   if (!pre) return;
 
   if (!candidate) {
+    state.selectedProvisioningCandidate = null;
     pre.textContent = "Henüz önizleme oluşturulmadı.";
+    const saveBtn = $("provisioning-save-btn");
+    if (saveBtn) saveBtn.disabled = true;
     return;
   }
 
+  state.selectedProvisioningCandidate = candidate;
   pre.textContent = JSON.stringify(candidate, null, 2);
+  const saveBtn = $("provisioning-save-btn");
+  if (saveBtn) saveBtn.disabled = false;
 }
 
 async function loadLocalDeviceDetail(id) {
@@ -503,6 +528,30 @@ async function loadProvisioningCandidateForSelectedDevice() {
   renderProvisioningCandidate(candidate);
   setStatus("provisioning-preview-status", "Provisioning önizlemesi hazır.", "ok");
   return candidate;
+}
+
+async function registerSelectedLocalDevice() {
+  if (!state.selectedProvisioningCandidate) {
+    await loadProvisioningCandidateForSelectedDevice();
+  }
+
+  if (!state.selectedProvisioningCandidate) {
+    throw new Error("Önce provisioning önizlemesi oluşturulmalıdır.");
+  }
+
+  setStatus("provisioning-preview-status", "STYS'e kayıt gönderiliyor...", "muted");
+  const result = await getJson("/api/agent/pos-devices/register", {
+    method: "POST",
+    body: JSON.stringify(state.selectedProvisioningCandidate)
+  });
+
+  const message = result?.message || "✓ STYS'e kaydedildi";
+  setStatus("provisioning-preview-status", `${message} Central PosCihazi ID: ${result.centralPosCihaziId ?? result.CentralPosCihaziId ?? "-"}`, "ok");
+  setText("local-device-last-action", `Provisioned: ${state.selectedLocalDeviceId}`);
+  setText("local-device-last-result", result.provisioningStatus || result.ProvisioningStatus || "Provisioned");
+  await loadLocalDevices();
+  await selectLocalDevice(state.selectedLocalDeviceId).catch(() => {});
+  return result;
 }
 
 function renderLocalDeviceRows(devices) {
@@ -967,6 +1016,11 @@ function bindLocalDevicesPage() {
   $("provisioning-preview-btn")?.addEventListener("click", () => {
     loadProvisioningCandidateForSelectedDevice().catch((error) => {
       setStatus("provisioning-preview-status", mapLocalDeviceError(error), "error");
+    });
+  });
+  $("provisioning-save-btn")?.addEventListener("click", () => {
+    registerSelectedLocalDevice().catch((error) => {
+      setStatus("provisioning-preview-status", error.status === 409 ? error.message : mapLocalDeviceError(error), "error");
     });
   });
   resetLocalDeviceForm();

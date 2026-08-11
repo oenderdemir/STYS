@@ -1,4 +1,5 @@
 using STYS.Agent.Configuration;
+using STYS.Agent.Services;
 
 namespace STYS.Agent.LocalManagement;
 
@@ -53,6 +54,28 @@ public static class AgentLocalManagementApplication
             catch (ArgumentException ex)
             {
                 return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        bootstrapApi.MapPost("/enroll", async (
+            AgentBootstrapEnrollmentRequest request,
+            IAgentEnrollmentCoordinator coordinator,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await coordinator.EnrollAsync(request, cancellationToken);
+                return result.Success
+                    ? Results.Ok(result)
+                    : Results.BadRequest(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (TOD.Platform.SharedKernel.Exceptions.BaseException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message, errorCode = ex.ErrorCode });
             }
         });
 

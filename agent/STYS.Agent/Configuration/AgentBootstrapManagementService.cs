@@ -1,5 +1,8 @@
 using System.Reflection;
+using Microsoft.Extensions.Options;
+using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
+using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Services;
 
 namespace STYS.Agent.Configuration;
@@ -11,19 +14,25 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
     private readonly IAgentCredentialStore _credentialStore;
     private readonly IAgentAuthenticationState _authenticationState;
     private readonly AgentBootstrapConnectionTestState _testState;
+    private readonly IStysAgentApiClient _client;
+    private readonly StysAgentClientOptions _clientOptions;
 
     public AgentBootstrapManagementService(
         IAgentBootstrapConfigurationStore store,
         IAgentBootstrapConnectionTester connectionTester,
         IAgentCredentialStore credentialStore,
         IAgentAuthenticationState authenticationState,
-        AgentBootstrapConnectionTestState testState)
+        AgentBootstrapConnectionTestState testState,
+        IStysAgentApiClient client,
+        IOptions<StysAgentClientOptions> clientOptions)
     {
         _store = store;
         _connectionTester = connectionTester;
         _credentialStore = credentialStore;
         _authenticationState = authenticationState;
         _testState = testState;
+        _client = client;
+        _clientOptions = clientOptions.Value;
     }
 
     public Task<AgentBootstrapConfiguration> GetConfigurationAsync(CancellationToken cancellationToken) =>
@@ -33,6 +42,9 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
     {
         Validate(configuration);
         await _store.SaveAsync(configuration, cancellationToken);
+        _clientOptions.BaseUrl = configuration.StysBaseUrl;
+        _clientOptions.RequestTimeoutSeconds = configuration.HttpTimeoutSeconds;
+        _clientOptions.EnrollmentCode = null;
         return await _store.GetAsync(cancellationToken);
     }
 
@@ -49,7 +61,8 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
             AgentVersion = ResolveAgentVersion(),
             LocalUiVersion = ResolveLocalUiVersion(),
             CredentialMevcutMu = credential is not null,
-            SonBaglantiTesti = _testState.LastResult
+            SonBaglantiTesti = _testState.LastResult,
+            Agent = await TryGetAgentSelfAsync(cancellationToken)
         };
     }
 
@@ -81,6 +94,21 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
 
     private static string ResolveLocalUiVersion() =>
         typeof(AgentBootstrapManagementService).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+    private async Task<AgentSelfDto?> TryGetAgentSelfAsync(CancellationToken cancellationToken)
+    {
+        if (!_authenticationState.IsReady)
+            return null;
+
+        try
+        {
+            return await _client.GetMeAsync(cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
 
 public sealed class AgentBootstrapConnectionTestState

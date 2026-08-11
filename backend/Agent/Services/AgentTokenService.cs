@@ -60,12 +60,13 @@ public sealed class AgentTokenService : IAgentTokenService
             var agent = await db.Set<AgentEntity>()
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(x => x.KurumId == enrollment.KurumId && x.AgentKey == request.AgentKey && !x.IsDeleted, cancellationToken);
+            var agentDisplayName = NormalizeAgentDisplayName(request.AgentDisplayName, request.AgentKey);
 
             if (agent is null)
             {
                 agent = new AgentEntity
                 {
-                    Ad = request.AgentKey,
+                    Ad = agentDisplayName,
                     AgentKey = request.AgentKey,
                     KurumId = enrollment.KurumId,
                     Durum = agentDurum,
@@ -81,7 +82,7 @@ public sealed class AgentTokenService : IAgentTokenService
             else
             {
                 await RemoveExistingAgentEnrollmentDataAsync(db, agent.Id, cancellationToken);
-                agent.Ad = request.AgentKey;
+                agent.Ad = agentDisplayName;
                 agent.Durum = agentDurum;
                 agent.AgentVersion = request.AgentVersion;
                 agent.CihazKimligi = request.CihazKimligi;
@@ -97,6 +98,22 @@ public sealed class AgentTokenService : IAgentTokenService
             {
                 var normalized = scope.ToLowerInvariant().Trim();
                 db.Set<AgentScope>().Add(new AgentScope { AgentId = agent.Id, KurumId = enrollment.KurumId, Scope = normalized, AktifMi = true, CreatedBy = "agent-enrollment", CreatedAt = DateTime.UtcNow });
+            }
+
+            foreach (var capability in request.Capabilities
+                         .Select(x => x.Trim().ToLowerInvariant())
+                         .Where(x => !string.IsNullOrWhiteSpace(x))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                db.Set<AgentCapability>().Add(new AgentCapability
+                {
+                    AgentId = agent.Id,
+                    KurumId = enrollment.KurumId,
+                    Capability = capability,
+                    AktifMi = true,
+                    CreatedBy = "agent-enrollment",
+                    CreatedAt = DateTime.UtcNow
+                });
             }
 
             var clientId = $"agent-{agent.Id}-{Guid.NewGuid():N}"[..24];
@@ -142,6 +159,10 @@ public sealed class AgentTokenService : IAgentTokenService
             .IgnoreQueryFilters()
             .Where(x => x.AgentId == agentId && !x.IsDeleted)
             .ToListAsync(ct);
+        var existingCapabilities = await db.Set<AgentCapability>()
+            .IgnoreQueryFilters()
+            .Where(x => x.AgentId == agentId && !x.IsDeleted)
+            .ToListAsync(ct);
 
         if (existingCredentials.Count > 0)
             db.RemoveRange(existingCredentials);
@@ -149,8 +170,10 @@ public sealed class AgentTokenService : IAgentTokenService
             db.RemoveRange(existingScopes);
         if (existingTesis.Count > 0)
             db.RemoveRange(existingTesis);
+        if (existingCapabilities.Count > 0)
+            db.RemoveRange(existingCapabilities);
 
-        if (existingCredentials.Count > 0 || existingScopes.Count > 0 || existingTesis.Count > 0)
+        if (existingCredentials.Count > 0 || existingScopes.Count > 0 || existingTesis.Count > 0 || existingCapabilities.Count > 0)
             await db.SaveChangesAsync(ct);
     }
 
@@ -217,4 +240,7 @@ public sealed class AgentTokenService : IAgentTokenService
     }
 
     private static string ComputeSha256Hash(string input) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(input)));
+
+    private static string NormalizeAgentDisplayName(string? displayName, string agentKey) =>
+        string.IsNullOrWhiteSpace(displayName) ? agentKey : displayName.Trim();
 }

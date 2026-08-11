@@ -970,3 +970,94 @@ Agent Regression:  0
   - Enrollment Code
   - STYS'e Kaydol
   - secure credential storage
+
+## 2026-08-11 — Agent Local Management UI Faz A2
+
+### Enrollment Wizard
+
+- Local UI dashboard üzerinde credential yoksa belirgin `İlk Kurulum / STYS'e Kayıt` akışı gösterildi.
+- Alanlar:
+  - STYS Sunucu Adresi
+  - Agent Adı
+  - Enrollment Kodu
+  - HTTP Timeout
+  - Local UI Port
+- Butonlar:
+  - Bağlantıyı Test Et
+  - STYS'e Kaydol
+- Enrollment code input’u masked tutuldu ve başarı sonrası temizlendi.
+
+### Enrollment orchestration
+
+- Local UI enrollment, mevcut `/api/agent/enroll` akışını kullandı; paralel enrollment altyapısı eklenmedi.
+- AgentHostedService ve local wizard aynı process-local coordinator/gate üzerinden geçti.
+- Credential varsa yeniden enrollment başlatılmadı.
+
+### Secure credential storage
+
+- `ClientId`, `ClientSecret`, `AgentId` mevcut `IAgentCredentialStore` ile güvenli şekilde saklandı.
+- ClientSecret bootstrap JSON, appsettings, browser state veya log içine yazılmadı.
+- Bootstrap config ve credential storage ayrımı korundu.
+
+### Runtime authentication activation
+
+- Enrollment sonrası credential save → token acquisition → authentication state ready akışı aynı process içinde çalıştı.
+- Agent process restart olmadan heartbeat/command worker’lar auth state üzerinden aktif oldu.
+- Token refresh path dinamik base URL ile uyumlu hale getirildi.
+
+### /api/agent/me
+
+- `GET /api/agent/me` eklendi.
+- Yalnız Agent JWT ile erişiliyor.
+- Dönen alanlar:
+  - AgentId
+  - AgentAd
+  - AgentKey
+  - KurumId
+  - KurumAd
+  - Tesisler
+  - Scopes
+  - Capabilities
+  - Durum
+  - AgentVersion
+  - LastHeartbeatAt
+  - OnlineMi
+
+### Auto-enrollment compatibility
+
+- `STYS_ENROLLMENT_CODE` tabanlı mevcut auto-enrollment korunuyor.
+- Local UI enrollment ile env tabanlı auto-enrollment aynı anda çalışsa bile tek kayıt için gate kullanıldı.
+- Config değişikliği runtime client options state’ine işlendi.
+
+### Concurrency
+
+- Enrollment akışı process-local `SemaphoreSlim` ile korundu.
+- Aynı anda local UI enrollment ve hosted-service auto-enrollment geldiğinde tek işlem gerçekleşiyor.
+
+### Security
+
+- Enrollment code kalıcı depoya yazılmıyor.
+- ClientSecret UI response’a dönmüyor.
+- Dashboard sadece own-agent profilini gösteriyor.
+- Heartbeat/command workers auth state hazır olmadan başlamıyor.
+
+### Test sonuçları
+
+- A2 unit testleri geçti.
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~AgentLocalEnrollmentWizardPhaseATests|FullyQualifiedName~AgentLocalManagementPhaseATests"` geçti.
+- `dotnet test STYS.sln --configuration Release` geçti.
+- Angular build geçti.
+- Angular test geçti.
+
+### Bilinen kısıtlar
+
+- Local UI port değişikliği mevcut process içinde rebinding gerektirebilir; bu fazda otomatik port migration yapılmadı.
+- `/api/agent/me` profil alanları mevcut DB şemasıyla sınırlı; ileride daha zengin display name/metadata genişletilebilir.
+
+### Sonraki alt faz
+
+- Faz A3
+  - Dashboard hardening
+  - diagnostics
+  - configuration management
+  - controlled reset/re-enrollment

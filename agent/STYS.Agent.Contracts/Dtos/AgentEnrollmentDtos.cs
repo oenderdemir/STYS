@@ -4,9 +4,11 @@ public sealed class AgentEnrollmentRequest
 {
     public string EnrollmentCode { get; set; } = string.Empty;
     public string AgentKey { get; set; } = string.Empty;
+    public string? AgentDisplayName { get; set; }
     public string? CihazKimligi { get; set; }
     public string? AgentVersion { get; set; }
     public string? PublicKey { get; set; }
+    public IReadOnlyCollection<string> Capabilities { get; set; } = [];
 }
 
 public sealed class AgentEnrollmentResponse

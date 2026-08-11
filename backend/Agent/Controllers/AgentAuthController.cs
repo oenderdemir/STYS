@@ -93,6 +93,74 @@ public sealed class AgentAuthController : ControllerBase
         });
     }
 
+    [HttpGet("me")]
+    [Authorize(Policy = AgentPolicies.AgentPolicy)]
+    public async Task<ActionResult<AgentSelfDto>> Me(CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated)
+            return Unauthorized();
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var agent = await db.Set<AgentEntity>()
+            .Include(x => x.Tesisler)
+            .Include(x => x.Scopes)
+            .FirstOrDefaultAsync(x => x.Id == agentContext.AgentId && !x.IsDeleted, cancellationToken);
+
+        if (agent is null)
+            return NotFound();
+
+        var capabilities = await db.Set<AgentCapability>()
+            .Where(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted)
+            .Select(x => x.Capability)
+            .ToListAsync(cancellationToken);
+
+        var kurumAd = await db.Set<STYS.Kurumlar.Entities.Kurum>()
+            .Where(x => x.Id == agent.KurumId && !x.IsDeleted)
+            .Select(x => x.Ad)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var tesisler = await db.Set<STYS.Tesisler.Entities.Tesis>()
+            .Where(x => agent.Tesisler.Select(t => t.TesisId).Contains(x.Id) && !x.IsDeleted)
+            .Select(x => new AgentSelfTesisDto
+            {
+                Id = x.Id,
+                Ad = x.Ad
+            })
+            .ToListAsync(cancellationToken);
+
+        if (tesisler.Count == 0)
+        {
+            tesisler = agent.Tesisler
+                .Where(x => !x.IsDeleted)
+                .Select(x => new AgentSelfTesisDto
+                {
+                    Id = x.TesisId,
+                    Ad = x.TesisId.ToString()
+                })
+                .ToList();
+        }
+
+        return Ok(new AgentSelfDto
+        {
+            AgentId = agent.Id,
+            AgentAd = agent.Ad,
+            AgentKey = agent.AgentKey,
+            KurumId = agent.KurumId,
+            KurumAd = kurumAd,
+            Tesisler = tesisler,
+            Scopes = agent.Scopes
+                .Where(x => !x.IsDeleted && x.AktifMi)
+                .Select(x => x.Scope)
+                .ToList(),
+            Capabilities = capabilities,
+            Durum = (int)agent.Durum,
+            AgentVersion = agent.AgentVersion,
+            LastHeartbeatAt = agent.LastHeartbeatAt,
+            OnlineMi = agent.LastHeartbeatAt.HasValue && (DateTime.UtcNow - agent.LastHeartbeatAt.Value) <= TimeSpan.FromSeconds(90)
+        });
+    }
+
     [HttpGet("commands")]
     [Authorize(Policy = AgentPolicies.AgentCommandRead)]
     public async Task<ActionResult<IReadOnlyCollection<AgentCommandDto>>> GetPendingCommands(CancellationToken cancellationToken)

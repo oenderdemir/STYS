@@ -63,6 +63,7 @@ builder.Services.AddSingleton<IAgentBootstrapConfigurationStore, FileAgentBootst
 builder.Services.AddSingleton<AgentBootstrapConnectionTestState>();
 builder.Services.AddSingleton<IAgentBootstrapConnectionTester, AgentBootstrapConnectionTester>();
 builder.Services.AddScoped<IAgentBootstrapManagementService, AgentBootstrapManagementService>();
+builder.Services.AddSingleton<IAgentEnrollmentCoordinator, AgentEnrollmentCoordinator>();
 
 builder.Services.AddSingleton<AgentTokenStore>();
 builder.Services.AddSingleton<IAgentAuthenticationState, AgentAuthenticationState>();
@@ -71,9 +72,7 @@ builder.Services.AddTransient<AgentAuthenticationHandler>();
 
 builder.Services.AddHttpClient<IStysAgentApiClient, StysAgentApiClient>((sp, client) =>
 {
-    var options = sp.GetRequiredService<IOptions<StysAgentClientOptions>>().Value;
-    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/'));
-    client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
+    client.Timeout = Timeout.InfiniteTimeSpan;
 })
     .AddHttpMessageHandler<AgentAuthenticationHandler>();
 builder.Services.AddHttpClient(nameof(AgentBootstrapConnectionTester));

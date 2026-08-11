@@ -82,7 +82,11 @@ public sealed class AgentAuthenticationHandler : DelegatingHandler
             if (_tokenStore.HasValidToken())
                 return _tokenStore.GetToken();
 
-            using var authClient = new HttpClient { BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/')) };
+            using var authClient = new HttpClient
+            {
+                BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/')),
+                Timeout = TimeSpan.FromSeconds(Math.Clamp(_options.RequestTimeoutSeconds, 1, 300))
+            };
             var tokenRequest = new AgentTokenRequest
             {
                 ClientId = _options.ClientId,

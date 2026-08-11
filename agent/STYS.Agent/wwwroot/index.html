@@ -19,7 +19,46 @@
     </nav>
   </header>
   <main class="container" id="dashboard-root">
-    <div class="card">
+    <section class="card section" id="enrollment-wizard-card">
+      <h2>İlk Kurulum / STYS'e Kayıt</h2>
+      <p class="muted">Bağlantı testi başarılı olmadan enrollment başlatılmaz. Enrollment kodu yalnızca bellekte kullanılır.</p>
+      <div id="wizard-status" class="status muted">Hazır.</div>
+      <form id="enrollment-form" class="form section">
+        <div class="field">
+          <label for="stys-base-url">STYS Sunucu Adresi</label>
+          <input id="stys-base-url" type="url" placeholder="https://trt.kamutesis.com/stys/api" required>
+        </div>
+        <div class="field">
+          <label for="agent-display-name">Agent Adı</label>
+          <input id="agent-display-name" type="text" placeholder="Resepsiyon Agent" required>
+        </div>
+        <div class="field">
+          <label for="enrollment-code">Enrollment Kodu</label>
+          <input id="enrollment-code" type="password" autocomplete="off" placeholder="••••••••••••••••" required>
+        </div>
+        <div class="field">
+          <label for="http-timeout-seconds">HTTP Timeout</label>
+          <input id="http-timeout-seconds" type="number" min="1" max="120" step="1" value="30" required>
+        </div>
+        <div class="field">
+          <label for="local-ui-port">Local UI Port</label>
+          <input id="local-ui-port" type="number" min="1" max="65535" step="1" value="5180" required>
+        </div>
+        <div class="wizard-actions">
+          <button id="test-connection-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
+          <button id="enroll-btn" type="submit" disabled>STYS'e Kaydol</button>
+        </div>
+      </form>
+      <div class="section">
+        <div id="connection-badge" class="badge">-</div>
+        <div id="connection-status" class="status muted section">Bağlantı testi bekleniyor.</div>
+        <div class="meta">Server time: <span id="connection-server-time">-</span></div>
+        <div class="meta">Version: <span id="connection-version">-</span></div>
+      </div>
+      <div id="enroll-status" class="status muted section"></div>
+    </section>
+
+    <section class="card section" id="dashboard-card">
       <h2>Dashboard</h2>
       <div id="dashboard-status" class="status muted">Durum bilgileri yükleniyor...</div>
       <div class="grid section">
@@ -28,16 +67,36 @@
           <div class="value" id="agent-status">-</div>
         </div>
         <div class="card">
+          <div class="meta">Agent ID</div>
+          <div class="value" id="agent-id">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Agent Adı</div>
+          <div class="value" id="agent-name">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Kurum</div>
+          <div class="value" id="kurum-name">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Yetkili Tesisler</div>
+          <div class="value list-value" id="tesis-list">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Scopes</div>
+          <div class="value list-value" id="scope-list">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Capabilities</div>
+          <div class="value list-value" id="capability-list">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Credential mevcut mu</div>
+          <div class="value" id="credential-present">-</div>
+        </div>
+        <div class="card">
           <div class="meta">STYS Adresi</div>
           <div class="value" id="stys-address">-</div>
-        </div>
-        <div class="card">
-          <div class="meta">Enrollment Durumu</div>
-          <div class="value" id="enrollment-status">-</div>
-        </div>
-        <div class="card">
-          <div class="meta">Agent Display Name</div>
-          <div class="value" id="agent-display-name">-</div>
         </div>
         <div class="card">
           <div class="meta">Agent Version</div>
@@ -48,8 +107,8 @@
           <div class="value" id="local-ui-version">-</div>
         </div>
         <div class="card">
-          <div class="meta">Credential mevcut mu</div>
-          <div class="value" id="credential-present">-</div>
+          <div class="meta">Son heartbeat</div>
+          <div class="value" id="last-heartbeat">-</div>
         </div>
         <div class="card">
           <div class="meta">Son bağlantı testi</div>
@@ -58,7 +117,7 @@
           <div class="meta">Version: <span id="last-connection-version">-</span></div>
         </div>
       </div>
-    </div>
+    </section>
   </main>
 </div>
 <script src="/app.js"></script>

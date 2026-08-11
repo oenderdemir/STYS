@@ -1,5 +1,7 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using STYS.Agent.Contracts.Dtos;
 
 namespace STYS.Agent.Client;
@@ -7,94 +9,165 @@ namespace STYS.Agent.Client;
 public sealed class StysAgentApiClient : IStysAgentApiClient
 {
     private readonly HttpClient _http;
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private readonly IOptions<StysAgentClientOptions> _options;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     private sealed class ApiEnvelope<T>
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
         public T? Data { get; set; }
+        public string? TraceId { get; set; }
     }
 
-    public StysAgentApiClient(HttpClient http)
+    public StysAgentApiClient(HttpClient http, IOptions<StysAgentClientOptions> options)
     {
         _http = http;
+        _options = options;
     }
 
-    public async Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken)
-    {
-        var response = await _http.PostAsJsonAsync("api/agent/enroll", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        return await ReadEnvelopeDataAsync<AgentEnrollmentResponse>(response, "Enrollment response was null.", cancellationToken);
-    }
+    public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) =>
+        SendForDataAsync<AgentEnrollmentResponse>(HttpMethod.Post, "api/agent/enroll", request, cancellationToken);
 
-    public async Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken)
-    {
-        var response = await _http.PostAsJsonAsync("api/agent/auth/token", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        return await ReadEnvelopeDataAsync<AgentTokenResponse>(response, "Token response was null.", cancellationToken);
-    }
+    public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) =>
+        SendForDataAsync<AgentTokenResponse>(HttpMethod.Post, "api/agent/auth/token", request, cancellationToken);
 
-    public async Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken)
-    {
-        var response = await _http.PostAsJsonAsync("api/agent/heartbeat", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
+    public Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, "api/agent/heartbeat", request, cancellationToken);
 
-    public async Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken)
-    {
-        var response = await _http.GetAsync($"api/agent/config?currentVersion={currentVersion}", cancellationToken);
-        response.EnsureSuccessStatusCode();
-        return await ReadEnvelopeDataAsync<AgentConfigDto>(response, "Config response was null.", cancellationToken);
-    }
+    public Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken) =>
+        SendForDataAsync<AgentConfigDto?>(HttpMethod.Get, $"api/agent/config?currentVersion={currentVersion}", null, cancellationToken);
+
+    public Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken) =>
+        SendForDataAsync<AgentSelfDto>(HttpMethod.Get, "api/agent/me", null, cancellationToken);
 
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken)
     {
-        var response = await _http.GetAsync("api/agent/commands", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotImplemented) return [];
-        response.EnsureSuccessStatusCode();
-        return await ReadEnvelopeDataAsync<List<AgentCommandDto>>(response, "Command list response was null.", cancellationToken);
+        var data = await SendForDataAsync<List<AgentCommandDto>>(HttpMethod.Get, "api/agent/commands", null, cancellationToken);
+        return data ?? [];
     }
 
-    public async Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken)
+    public Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/accept", null, cancellationToken);
+
+    public Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/running", null, cancellationToken);
+
+    public Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/complete", request, cancellationToken);
+
+    public Task FailCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/fail", request, cancellationToken);
+
+    public Task RejectCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/reject", request, cancellationToken);
+
+    private async Task<T> SendForDataAsync<T>(HttpMethod method, string relativePath, object? body, CancellationToken cancellationToken)
     {
-        var response = await _http.PostAsync($"api/agent/commands/{commandId}/accept", null, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        using var request = CreateRequest(method, relativePath, body);
+        using var timeoutCts = CreateTimeoutCancellationTokenSource(cancellationToken);
+        using var response = await _http.SendAsync(request, timeoutCts.Token);
+        return await ReadDataAsync<T>(response, timeoutCts.Token);
     }
 
-    public async Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken)
+    private async Task SendForVoidAsync(HttpMethod method, string relativePath, object? body, CancellationToken cancellationToken)
     {
-        var response = await _http.PostAsync($"api/agent/commands/{commandId}/running", null, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        using var request = CreateRequest(method, relativePath, body);
+        using var timeoutCts = CreateTimeoutCancellationTokenSource(cancellationToken);
+        using var response = await _http.SendAsync(request, timeoutCts.Token);
+        await EnsureSuccessAsync(response, timeoutCts.Token);
     }
 
-    public async Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    private HttpRequestMessage CreateRequest(HttpMethod method, string relativePath, object? body)
     {
-        var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/complete", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var request = new HttpRequestMessage(method, BuildUri(relativePath));
+        if (body is not null)
+            request.Content = JsonContent.Create(body);
+        return request;
     }
 
-    public async Task FailCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    private Uri BuildUri(string relativePath)
     {
-        var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/fail", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var baseUrl = GetBaseUrl();
+        return new Uri(new Uri(baseUrl.TrimEnd('/') + "/"), relativePath);
     }
 
-    public async Task RejectCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken)
+    private string GetBaseUrl()
     {
-        var response = await _http.PostAsJsonAsync($"api/agent/commands/{commandId}/reject", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var baseUrl = _options.Value.BaseUrl;
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            throw new InvalidOperationException("STYS base URL is not configured.");
+        return baseUrl;
     }
 
-    private static async Task<T> ReadEnvelopeDataAsync<T>(HttpResponseMessage response, string errorMessage, CancellationToken cancellationToken)
+    private CancellationTokenSource CreateTimeoutCancellationTokenSource(CancellationToken cancellationToken)
     {
-        var envelope = await response.Content.ReadFromJsonAsync<ApiEnvelope<T>>(JsonOptions, cancellationToken);
-        if (envelope is null)
-            throw new InvalidOperationException(errorMessage);
+        var timeoutSeconds = Math.Clamp(_options.Value.RequestTimeoutSeconds, 1, 300);
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        return cts;
+    }
 
-        if (!envelope.Success)
-            throw new InvalidOperationException(envelope.Message ?? errorMessage);
+    private static async Task<T> ReadDataAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var envelope = await ReadEnvelopeAsync<T>(response, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            if (envelope is not null && envelope.Success)
+                return envelope.Data is not null ? envelope.Data : default!;
 
-        return envelope.Data ?? throw new InvalidOperationException(errorMessage);
+            throw new InvalidOperationException("STYS yanıtı beklenen veri içermiyor.");
+        }
+
+        throw CreateException(response, envelope);
+    }
+
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            var envelope = await ReadEnvelopeAsync<object?>(response, cancellationToken);
+            if (envelope is not null && !envelope.Success)
+                throw new InvalidOperationException(envelope.Message ?? "STYS işlemi başarısız.");
+            return;
+        }
+
+        var failedEnvelope = await ReadEnvelopeAsync<object?>(response, cancellationToken);
+        throw CreateException(response, failedEnvelope);
+    }
+
+    private static async Task<ApiEnvelope<T>?> ReadEnvelopeAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.Content is null)
+            return null;
+
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ApiEnvelope<T>>(JsonOptions, cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Exception CreateException(HttpResponseMessage response, object? envelope)
+    {
+        var message = envelope switch
+        {
+            ApiEnvelope<object?> typed when !string.IsNullOrWhiteSpace(typed.Message) => typed.Message!,
+            _ => response.ReasonPhrase ?? $"HTTP {(int)response.StatusCode}"
+        };
+
+        var traceId = envelope switch
+        {
+            ApiEnvelope<object?> typed => typed.TraceId,
+            _ => null
+        };
+
+        return new AgentApiException(response.StatusCode, message, traceId);
     }
 }

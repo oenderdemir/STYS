@@ -8,6 +8,7 @@ public interface IStysAgentApiClient
     Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken);
     Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken);
     Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken);
+    Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken);
     Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken);
     Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken);
     Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken);

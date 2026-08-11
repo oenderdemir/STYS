@@ -4,9 +4,12 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Configuration;
+using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.LocalManagement;
 using STYS.Agent.Services;
 
@@ -177,7 +180,14 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
             CreateConnectionTester(new SuccessfulConnectionTesterHandler()),
             new FakeCredentialStore(new AgentLocalCredential { ClientId = "client", ClientSecret = "secret", AgentInstanceId = "instance", AgentId = 1, CreatedAt = DateTime.UtcNow }),
             new FakeAuthenticationState(false),
-            new AgentBootstrapConnectionTestState());
+            new AgentBootstrapConnectionTestState(),
+            new DummyAgentApiClient(),
+            Options.Create(new StysAgentClientOptions
+            {
+                BaseUrl = "https://example.org/stys/api",
+                RequestTimeoutSeconds = 30,
+                AgentVersion = "1.0.0"
+            }));
 
         var dashboard = await service.GetDashboardAsync(CancellationToken.None);
 
@@ -196,14 +206,22 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
     private AgentBootstrapManagementService CreateManagementService(
         IAgentBootstrapConfigurationStore store,
         IAgentBootstrapConnectionTester tester,
-        bool credentialPresent)
+        bool credentialPresent,
+        IStysAgentApiClient? client = null)
     {
         return new AgentBootstrapManagementService(
             store,
             tester,
             new FakeCredentialStore(credentialPresent ? new AgentLocalCredential { ClientId = "c", ClientSecret = "s", AgentInstanceId = "i", AgentId = 1, CreatedAt = DateTime.UtcNow } : null),
             new FakeAuthenticationState(false),
-            new AgentBootstrapConnectionTestState());
+            new AgentBootstrapConnectionTestState(),
+            client ?? new DummyAgentApiClient(),
+            Options.Create(new StysAgentClientOptions
+            {
+                BaseUrl = "https://example.org/stys/api",
+                RequestTimeoutSeconds = 30,
+                AgentVersion = "1.0.0"
+            }));
     }
 
     private static IAgentBootstrapConnectionTester CreateConnectionTester(HttpMessageHandler handler)
@@ -251,6 +269,31 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
         private readonly HttpMessageHandler _handler;
         public FakeHttpClientFactory(HttpMessageHandler handler) => _handler = handler;
         public HttpClient CreateClient(string name) => new(_handler, disposeHandler: false);
+    }
+
+    private sealed class DummyAgentApiClient : IStysAgentApiClient
+    {
+        public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new AgentEnrollmentResponse
+            {
+                AgentId = 1,
+                ClientId = "client",
+                ClientSecret = "secret",
+                AgentKey = request.AgentKey
+            });
+
+        public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new AgentTokenResponse { AccessToken = "jwt", ExpiresAt = DateTime.UtcNow.AddMinutes(30) });
+
+        public Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken) => Task.FromResult<AgentConfigDto?>(null);
+        public Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken) => Task.FromResult(new AgentSelfDto());
+        public Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyCollection<AgentCommandDto>>([]);
+        public Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task FailCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RejectCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class SuccessfulConnectionTesterHandler : HttpMessageHandler

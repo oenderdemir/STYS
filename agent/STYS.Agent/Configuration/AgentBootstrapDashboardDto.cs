@@ -10,4 +10,5 @@ public sealed class AgentBootstrapDashboardDto
     public string LocalUiVersion { get; set; } = string.Empty;
     public bool CredentialMevcutMu { get; set; }
     public AgentBootstrapConnectionTestResult? SonBaglantiTesti { get; set; }
+    public STYS.Agent.Contracts.Dtos.AgentSelfDto? Agent { get; set; }
 }

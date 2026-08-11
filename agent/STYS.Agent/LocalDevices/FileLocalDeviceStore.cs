@@ -55,6 +55,20 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
         }
     }
 
+    public async Task<LocalDevice?> GetByCentralPosCihaziIdAsync(int centralPosCihaziId, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var items = await ReadAllCoreAsync(cancellationToken);
+            return items.FirstOrDefault(x => x.CentralPosCihaziId == centralPosCihaziId);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<LocalDevice> CreateAsync(LocalDevice device, CancellationToken cancellationToken)
     {
         var normalized = NormalizeForWrite(device, isNew: true);

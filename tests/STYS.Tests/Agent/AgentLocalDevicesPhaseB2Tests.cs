@@ -4,6 +4,7 @@ using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.LocalDevices;
 using STYS.Agent.Modules.Pavo;
+using STYS.Agent.Workers;
 
 namespace STYS.Tests.Agent;
 
@@ -344,6 +345,58 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
 
         Assert.Equal(8, client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence);
         Assert.Equal(8, state!.TransactionSequence);
+    }
+
+    [Fact]
+    public async Task LocalVeCentralSequence_AyniStoreUzerindeCakismadanRezervEdilir()
+    {
+        var client = new FakePavoRestClient
+        {
+            GetDeviceInfoResponse = BuildDeviceInfoResponse(
+                serialNumber: "SN-900",
+                deviceName: "PAVO Model X",
+                new[]
+                {
+                    new PavoDeviceTerminalInfo
+                    {
+                        TerminalId = "TERM-1",
+                        MerchantId = "MER-1",
+                        AcquirerId = "ACQ-1",
+                        AcquirerName = "Bank 1"
+                    }
+                })
+        };
+        var store = CreateStore();
+        var terminalStore = CreateTerminalStore();
+        var pairingStore = CreatePairingStore();
+        var service = CreateService(client, store, terminalStore, pairingStore);
+        var device = await CreatePairedDeviceAsync(service, store, pairingStore, transactionSequence: 0);
+
+        device.CentralPosCihaziId = 7001;
+        device.ProvisioningStatus = LocalDeviceProvisioningStatus.Provisioned;
+        device.LastProvisionedAt = DateTimeOffset.UtcNow;
+        device.UpdatedAt = DateTimeOffset.UtcNow;
+        await store.UpdateAsync(device, CancellationToken.None);
+
+        var reservationService = new PavoCommandSequenceReservationService(store, pairingStore);
+
+        var localTask = service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
+        var centralTask = reservationService.ReserveAsync(7001, null, CancellationToken.None);
+        await Task.WhenAll(localTask, centralTask);
+
+        var localSequence = client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence ?? 0;
+        var centralSequence = (await centralTask).TransactionSequence;
+
+        Assert.NotEqual(localSequence, centralSequence);
+        Assert.Contains(localSequence, new[] { 1L, 2L });
+        Assert.Contains(centralSequence, new[] { 1L, 2L });
+
+        var state = await pairingStore.GetAsync(device.Id, CancellationToken.None);
+        Assert.Equal(2, state!.TransactionSequence);
+
+        var restartReservationService = new PavoCommandSequenceReservationService(store, pairingStore);
+        var restartHandle = await restartReservationService.ReserveAsync(7001, null, CancellationToken.None);
+        Assert.Equal(3, restartHandle.TransactionSequence);
     }
 
     [Fact]

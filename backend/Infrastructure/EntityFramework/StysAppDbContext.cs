@@ -1857,7 +1857,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.PairingCode).HasMaxLength(32);
             entity.Property(x => x.TransactionSequence).HasDefaultValue(0);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
-            entity.HasIndex(x => new { x.KurumId, x.Saglayici, x.SeriNo }).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.Saglayici, x.SeriNo }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.AgentId).HasFilter("[AgentId] IS NOT NULL");
             entity.HasIndex(x => x.AgentLocalDeviceId).HasFilter("[AgentLocalDeviceId] IS NOT NULL");
         });
@@ -1868,6 +1868,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.SaglayiciKodu).HasMaxLength(32).IsRequired();
             entity.Property(x => x.AcquirerId).HasMaxLength(64);
             entity.Property(x => x.AcquirerName).HasMaxLength(128);
+            entity.Property(x => x.CanonicalAcquirerId).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CanonicalTerminalId).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Ad).HasMaxLength(128).IsRequired();
             entity.Property(x => x.SerialNumber).HasMaxLength(64).IsRequired();
             entity.Property(x => x.SourceFingerprint).HasMaxLength(128);
@@ -1877,7 +1879,7 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.PosCihaziId, x.SerialNumber })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => new { x.KurumId, x.SaglayiciKodu, x.SerialNumber })
+            entity.HasIndex(x => new { x.PosCihaziId, x.CanonicalAcquirerId, x.CanonicalTerminalId })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => new { x.TesisId, x.KasaBankaHesapId, x.AktifMi })

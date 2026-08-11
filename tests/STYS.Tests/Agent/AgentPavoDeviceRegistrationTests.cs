@@ -97,6 +97,49 @@ public sealed class AgentPavoDeviceRegistrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task Register_ConcurrentCrossTenantSameSerial_OneWinsDigeri409Alir()
+    {
+        await using var db = await SetupAsync();
+        if (db is null) return;
+
+        var (agentA, tesisA) = await SeedAgentScopeAsync(db);
+        var (kurumB, _, tesisB) = await AgentTestSupport.SeedKurumIlTesisAsync(db, $"{_suffix}-other");
+        var agentB = await AgentTestSupport.SeedAgentAsync(db, kurumB.Id, $"{_suffix}-other-agent");
+        await AttachAgentToTesisAsync(db, agentB.Id, kurumB.Id, tesisB.Id);
+
+        async Task<(bool Success, AgentPavoDeviceRegistrationResult? Result, TOD.Platform.SharedKernel.Exceptions.BaseException? Error)> ExecuteAsync(
+            int agentId,
+            int kurumId,
+            int tesisId,
+            string localDeviceId)
+        {
+            await using var localDb = AgentTestSupport.CreateDbContext(_connectionString);
+            var service = CreateService(localDb, agentId, kurumId, tesisId);
+
+            try
+            {
+                var result = await service.RegisterFromAgentAsync(BuildRequest(tesisId, localDeviceId), CancellationToken.None);
+                return (true, result, null);
+            }
+            catch (TOD.Platform.SharedKernel.Exceptions.BaseException ex)
+            {
+                return (false, null, ex);
+            }
+        }
+
+        var task1 = ExecuteAsync(agentA.Id, agentA.KurumId, tesisA.Id, $"local-{_suffix}-a");
+        var task2 = ExecuteAsync(agentB.Id, kurumB.Id, tesisB.Id, $"local-{_suffix}-b");
+        var outcomes = await Task.WhenAll(task1, task2);
+
+        Assert.Equal(1, outcomes.Count(x => x.Success));
+        Assert.Equal(1, outcomes.Count(x => !x.Success));
+        Assert.Contains(outcomes, x => x.Error?.ErrorCode == 409);
+
+        var devices = await db.PosCihazlari.AsNoTracking().Where(x => x.SeriNo == DeviceSerial && !x.IsDeleted).ToListAsync();
+        Assert.Single(devices);
+    }
+
+    [IntegrationFact]
     public async Task Register_SameTenantOtherAgent_Rejected()
     {
         await using var db = await SetupAsync();
@@ -323,10 +366,10 @@ public sealed class AgentPavoDeviceRegistrationTests : IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
-    private AgentPavoDeviceRegisterRequest BuildRequest(int tesisId, IReadOnlyCollection<PavoDeviceProvisioningCandidateTerminal>? terminals = null) =>
+    private AgentPavoDeviceRegisterRequest BuildRequest(int tesisId, string? localDeviceId = null, IReadOnlyCollection<PavoDeviceProvisioningCandidateTerminal>? terminals = null) =>
         new()
         {
-            LocalDeviceId = $"local-{_suffix}",
+            LocalDeviceId = localDeviceId ?? $"local-{_suffix}",
             Provider = "PAVO",
             DisplayName = "Pavo POS",
             Host = "192.168.1.50",

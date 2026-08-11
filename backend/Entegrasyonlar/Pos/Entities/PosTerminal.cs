@@ -21,6 +21,12 @@ public class PosTerminal : BaseEntity<int>, ITenantEntity
     [MaxLength(128)]
     public string? AcquirerName { get; set; }
 
+    [Required, MaxLength(64)]
+    public string CanonicalAcquirerId { get; set; } = string.Empty;
+
+    [Required, MaxLength(64)]
+    public string CanonicalTerminalId { get; set; } = string.Empty;
+
     [Required, MaxLength(128)]
     public string Ad { get; set; } = string.Empty;
 

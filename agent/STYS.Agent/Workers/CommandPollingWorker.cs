@@ -15,6 +15,7 @@ public sealed class CommandPollingWorker : BackgroundService
     private readonly IAgentRuntimeStatus _runtimeStatus;
     private readonly IAgentCommandHandlerRegistry _handlerRegistry;
     private readonly IAgentCommandExecutionStore _executionStore;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<CommandPollingWorker> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -24,6 +25,7 @@ public sealed class CommandPollingWorker : BackgroundService
         IAgentRuntimeStatus runtimeStatus,
         IAgentCommandHandlerRegistry handlerRegistry,
         IAgentCommandExecutionStore executionStore,
+        IPavoCommandSequenceReservationService sequenceReservationService,
         ILogger<CommandPollingWorker> logger)
     {
         _client = client;
@@ -31,6 +33,7 @@ public sealed class CommandPollingWorker : BackgroundService
         _runtimeStatus = runtimeStatus;
         _handlerRegistry = handlerRegistry;
         _executionStore = executionStore;
+        _sequenceReservationService = sequenceReservationService;
         _logger = logger;
     }
 
@@ -105,19 +108,19 @@ public sealed class CommandPollingWorker : BackgroundService
                     await ExecuteTypedCommandAsync(dto, new RefreshConfigurationCommand(), _handlerRegistry.Resolve<RefreshConfigurationCommand>(dto.CommandType), cancellationToken);
                     break;
                 case "PavoPairing":
-                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType), cancellationToken);
                     break;
                 case "PavoPing":
-                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType), cancellationToken);
                     break;
                 case "PavoGetDeviceInfo":
-                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType), cancellationToken);
                     break;
                 case "PavoStartPayment":
-                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType), cancellationToken);
                     break;
                 case "PavoGetPaymentResult":
-                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType), cancellationToken);
                     break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
@@ -189,6 +192,36 @@ public sealed class CommandPollingWorker : BackgroundService
         }
 
         return _authenticationState.IsReady && !cancellationToken.IsCancellationRequested;
+    }
+
+    private async Task<Modules.Pavo.Commands.PavoPairingCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoPairingCommand command, CancellationToken cancellationToken)
+    {
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        return command;
+    }
+
+    private async Task<Modules.Pavo.Commands.PavoPingCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoPingCommand command, CancellationToken cancellationToken)
+    {
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        return command;
+    }
+
+    private async Task<Modules.Pavo.Commands.PavoGetDeviceInfoCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoGetDeviceInfoCommand command, CancellationToken cancellationToken)
+    {
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        return command;
+    }
+
+    private async Task<Modules.Pavo.Commands.PavoStartPaymentCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoStartPaymentCommand command, CancellationToken cancellationToken)
+    {
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        return command;
+    }
+
+    private async Task<Modules.Pavo.Commands.PavoGetPaymentResultCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoGetPaymentResultCommand command, CancellationToken cancellationToken)
+    {
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        return command;
     }
 
     private static TCommand DeserializeCommand<TCommand>(string? payload)

@@ -84,9 +84,11 @@ public sealed class PosTerminalService
             _dbContext.PosTerminaller.Add(terminal);
         }
 
+        var canonicalAcquirerId = NormalizeCanonicalValue(hesap?.Kod);
         var duplicate = await _dbContext.PosTerminaller.AnyAsync(x =>
             x.PosCihaziId == cihaz.Id
-            && x.SerialNumber == terminalId
+            && x.CanonicalAcquirerId == canonicalAcquirerId
+            && x.CanonicalTerminalId == terminalId
             && x.Id != terminal.Id
             && !x.IsDeleted, cancellationToken);
         if (duplicate)
@@ -96,6 +98,8 @@ public sealed class PosTerminalService
 
         var pairingIdentityChanged = terminal.SaglayiciKodu != saglayiciKodu
             || terminal.SerialNumber != terminalId
+            || terminal.CanonicalAcquirerId != canonicalAcquirerId
+            || terminal.CanonicalTerminalId != terminalId
             || terminal.SourceFingerprint != sourceFingerprint
             || terminal.SourceTerminalReference != merchantId;
 
@@ -105,6 +109,8 @@ public sealed class PosTerminalService
         terminal.KasaBankaHesapId = hesap?.Id;
         terminal.AcquirerId = hesap?.Kod;
         terminal.AcquirerName = hesap is null ? null : (hesap.BankaAdi ?? hesap.Ad);
+        terminal.CanonicalAcquirerId = canonicalAcquirerId;
+        terminal.CanonicalTerminalId = terminalId;
         terminal.SaglayiciKodu = saglayiciKodu;
         terminal.Ad = request.Ad.Trim();
         terminal.SerialNumber = terminalId;
@@ -281,6 +287,9 @@ public sealed class PosTerminalService
     }
 
     private static string Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
+    private static string NormalizeCanonicalValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
 
     private static string NormalizeTerminalIdentity(PosTerminalKaydetRequest request)
     {

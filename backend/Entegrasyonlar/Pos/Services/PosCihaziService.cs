@@ -75,8 +75,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var device = await GetCommandTargetAsync(id, cancellationToken);
         EnsurePavoCommandReady(device);
-        var sequence = await ResetTransactionSequenceAsync(device.Id, cancellationToken);
-        var request = BuildPairingRequest(device, sequence);
+        var request = BuildPairingRequest(device);
         return await SendCommandAsync(device.AgentId!.Value, "PavoPairing", request, requestedBy, cancellationToken);
     }
 
@@ -84,8 +83,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var device = await GetCommandTargetAsync(id, cancellationToken);
         EnsurePavoCommandReady(device);
-        var sequence = await ReserveTransactionSequenceAsync(device.Id, cancellationToken);
-        var request = BuildPingRequest(device, sequence);
+        var request = BuildPingRequest(device);
         return await SendCommandAsync(device.AgentId!.Value, "PavoPing", request, requestedBy, cancellationToken);
     }
 
@@ -93,8 +91,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var device = await GetCommandTargetAsync(id, cancellationToken);
         EnsurePavoCommandReady(device);
-        var sequence = await ReserveTransactionSequenceAsync(device.Id, cancellationToken);
-        var request = BuildGetDeviceInfoRequest(device, sequence);
+        var request = BuildGetDeviceInfoRequest(device);
         return await SendCommandAsync(device.AgentId!.Value, "PavoGetDeviceInfo", request, requestedBy, cancellationToken);
     }
 
@@ -436,49 +433,15 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         }
     }
 
-    private async Task<long> ReserveTransactionSequenceAsync(int cihazId, CancellationToken cancellationToken)
-    {
-        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        await _db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE [entegrasyon].[PosCihazlari]
-            SET [TransactionSequence] = [TransactionSequence] + 1
-            WHERE [Id] = {cihazId} AND [IsDeleted] = 0
-            """, cancellationToken);
-        var sequence = await _db.PosCihazlari
-            .AsNoTracking()
-            .Where(x => x.Id == cihazId && !x.IsDeleted)
-            .Select(x => x.TransactionSequence)
-            .SingleAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
-        return sequence;
-    }
-
-    private async Task<long> ResetTransactionSequenceAsync(int cihazId, CancellationToken cancellationToken)
-    {
-        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        await _db.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE [entegrasyon].[PosCihazlari]
-            SET [TransactionSequence] = 0
-            WHERE [Id] = {cihazId} AND [IsDeleted] = 0
-            """, cancellationToken);
-        var sequence = await _db.PosCihazlari
-            .AsNoTracking()
-            .Where(x => x.Id == cihazId && !x.IsDeleted)
-            .Select(x => x.TransactionSequence)
-            .SingleAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
-        return sequence;
-    }
-
-    private static PavoTransactionHandle BuildTransactionHandle(PosCihazi cihaz, long sequence) => new()
+    private static PavoTransactionHandle BuildTransactionHandle(PosCihazi cihaz) => new()
     {
         SerialNumber = cihaz.SeriNo,
         Fingerprint = cihaz.Fingerprint ?? string.Empty,
-        TransactionSequence = sequence,
+        TransactionSequence = 0,
         TransactionDate = DateTime.UtcNow
     };
 
-    private static PavoPairingRequest BuildPairingRequest(PosCihazi cihaz, long sequence) => new()
+    private static PavoPairingRequest BuildPairingRequest(PosCihazi cihaz) => new()
     {
         PosCihaziId = cihaz.Id,
         IpAddress = cihaz.IpAdresi ?? string.Empty,
@@ -486,27 +449,27 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         HttpsPort = cihaz.HttpsPort,
         UseHttps = cihaz.HttpsPort.HasValue,
         CurrentFingerprint = cihaz.Fingerprint,
-        TransactionHandle = BuildTransactionHandle(cihaz, sequence)
+        TransactionHandle = BuildTransactionHandle(cihaz)
     };
 
-    private static PavoPingRequest BuildPingRequest(PosCihazi cihaz, long sequence) => new()
+    private static PavoPingRequest BuildPingRequest(PosCihazi cihaz) => new()
     {
         PosCihaziId = cihaz.Id,
         IpAddress = cihaz.IpAdresi ?? string.Empty,
         HttpPort = cihaz.HttpPort,
         HttpsPort = cihaz.HttpsPort,
         UseHttps = cihaz.HttpsPort.HasValue,
-        TransactionHandle = BuildTransactionHandle(cihaz, sequence)
+        TransactionHandle = BuildTransactionHandle(cihaz)
     };
 
-    private static PavoGetDeviceInfoRequest BuildGetDeviceInfoRequest(PosCihazi cihaz, long sequence) => new()
+    private static PavoGetDeviceInfoRequest BuildGetDeviceInfoRequest(PosCihazi cihaz) => new()
     {
         PosCihaziId = cihaz.Id,
         IpAddress = cihaz.IpAdresi ?? string.Empty,
         HttpPort = cihaz.HttpPort,
         HttpsPort = cihaz.HttpsPort,
         UseHttps = cihaz.HttpsPort.HasValue,
-        TransactionHandle = BuildTransactionHandle(cihaz, sequence)
+        TransactionHandle = BuildTransactionHandle(cihaz)
     };
 
     private async Task<AgentCommandDto> SendCommandAsync(int agentId, string commandType, object payload, string requestedBy, CancellationToken cancellationToken)
@@ -540,14 +503,16 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var terminal in discovered)
         {
-            if (!seen.Add(terminal.SourceReference))
+            var canonicalKey = BuildTerminalCanonicalKey(device.Id, terminal.AcquirerId, terminal.TerminalId);
+            if (!seen.Add(canonicalKey))
             {
                 continue;
             }
 
             var current = existing.FirstOrDefault(x =>
                 string.Equals(x.SaglayiciKodu, "PAVO", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(x.SerialNumber, terminal.TerminalId, StringComparison.OrdinalIgnoreCase));
+                && string.Equals(x.CanonicalAcquirerId, terminal.AcquirerId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.CanonicalTerminalId, terminal.TerminalId, StringComparison.OrdinalIgnoreCase));
 
             if (current is null)
             {
@@ -560,6 +525,8 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
                     SaglayiciKodu = "PAVO",
                     AcquirerId = terminal.AcquirerId,
                     AcquirerName = terminal.AcquirerName,
+                    CanonicalAcquirerId = NormalizeCanonicalValue(terminal.AcquirerId),
+                    CanonicalTerminalId = terminal.TerminalId,
                     Ad = terminal.MerchantId ?? terminal.TerminalId,
                     SerialNumber = terminal.TerminalId,
                     SourceTerminalReference = terminal.MerchantId,
@@ -581,6 +548,8 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             current.SaglayiciKodu = "PAVO";
             current.AcquirerId = terminal.AcquirerId;
             current.AcquirerName = terminal.AcquirerName;
+            current.CanonicalAcquirerId = NormalizeCanonicalValue(terminal.AcquirerId);
+            current.CanonicalTerminalId = terminal.TerminalId;
             current.Ad = terminal.MerchantId ?? current.Ad;
             current.SerialNumber = terminal.TerminalId;
             current.SourceTerminalReference = terminal.MerchantId ?? current.SourceTerminalReference;
@@ -588,7 +557,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             current.IsDeleted = false;
         }
 
-        foreach (var terminal in existing.Where(x => !seen.Contains(x.SerialNumber)))
+        foreach (var terminal in existing.Where(x => !seen.Contains(BuildTerminalCanonicalKey(device.Id, x.CanonicalAcquirerId, x.CanonicalTerminalId))))
         {
             terminal.AktifMi = false;
         }
@@ -633,6 +602,12 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
 
     private static string BuildTerminalSourceReference(int deviceId, string? acquirerId, string terminalId) =>
         $"{deviceId}::{NormalizeOptional(acquirerId) ?? string.Empty}::{terminalId.Trim()}";
+
+    private static string BuildTerminalCanonicalKey(int deviceId, string? acquirerId, string terminalId) =>
+        $"{deviceId}:{NormalizeOptional(acquirerId)?.ToUpperInvariant() ?? string.Empty}:{terminalId.Trim()}";
+
+    private static string NormalizeCanonicalValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
 
     private static string? NormalizeOptional(string? value)
     {

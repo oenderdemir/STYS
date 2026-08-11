@@ -73,6 +73,7 @@ builder.Services.AddSingleton<IAgentEnrollmentCoordinator, AgentEnrollmentCoordi
 builder.Services.AddSingleton<ILocalDeviceStore, FileLocalDeviceStore>();
 builder.Services.AddSingleton<ILocalDeviceTerminalStore, FileLocalDeviceTerminalStore>();
 builder.Services.AddSingleton<IPavoLocalPairingStore, FilePavoLocalPairingStore>();
+builder.Services.AddSingleton<IPavoCommandSequenceReservationService, PavoCommandSequenceReservationService>();
 builder.Services.AddSingleton<ILocalDeviceConnectionTester, PavoLocalDeviceConnectionTester>();
 builder.Services.AddSingleton<ILocalDeviceConnectionTesterRegistry, LocalDeviceConnectionTesterRegistry>();
 builder.Services.AddScoped<ILocalDeviceManagementService, LocalDeviceManagementService>();

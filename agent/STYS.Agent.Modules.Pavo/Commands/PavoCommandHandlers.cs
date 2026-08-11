@@ -56,7 +56,7 @@ public sealed class PavoPairingCommandHandler : IAgentCommandHandler<PavoPairing
         HttpPort = command.HttpPort,
         HttpsPort = command.HttpsPort,
         UseHttps = command.UseHttps,
-        CurrentFingerprint = command.Fingerprint,
+        CurrentFingerprint = command.CurrentFingerprint ?? command.Fingerprint,
         TransactionHandle = command.TransactionHandle
     };
 }

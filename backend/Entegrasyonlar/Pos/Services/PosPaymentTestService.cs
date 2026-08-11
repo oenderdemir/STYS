@@ -147,8 +147,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             return ToDto(islem, islem.PosTerminal?.SaglayiciKodu);
         }
 
-        var sequence = await ReserveTransactionSequenceAsync(cihaz.Id, cancellationToken);
-        var command = BuildStartCommand(cihaz, terminal, sequence, islem, request, now);
+        var command = BuildStartCommand(cihaz, terminal, islem, request, now);
         var payload = JsonSerializer.Serialize(command, JsonOptions);
 
         AgentCommandDto sentCommand;
@@ -211,8 +210,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
         }
 
-        var sequence = await ReserveTransactionSequenceAsync(cihaz.Id, cancellationToken);
-        var command = BuildResultCommand(cihaz, payment, sequence);
+        var command = BuildResultCommand(cihaz, payment);
         var payload = JsonSerializer.Serialize(command, JsonOptions);
         var sentCommand = await _agentCommandService.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest
         {
@@ -410,7 +408,6 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
     private static PavoStartPaymentRequest BuildStartCommand(
         PosCihazi cihaz,
         PosTerminal terminal,
-        long sequence,
         PosOdemeIslemi islem,
         PosPaymentBaslatRequest request,
         DateTime now)
@@ -432,13 +429,13 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             {
                 SerialNumber = cihaz.SeriNo,
                 Fingerprint = cihaz.Fingerprint ?? string.Empty,
-                TransactionSequence = sequence,
+                TransactionSequence = 0,
                 TransactionDate = now
             }
         };
     }
 
-    private static PavoGetPaymentResultRequest BuildResultCommand(PosCihazi cihaz, PosOdemeIslemi payment, long sequence)
+    private static PavoGetPaymentResultRequest BuildResultCommand(PosCihazi cihaz, PosOdemeIslemi payment)
     {
         return new PavoGetPaymentResultRequest
         {
@@ -454,21 +451,10 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             {
                 SerialNumber = cihaz.SeriNo,
                 Fingerprint = cihaz.Fingerprint ?? string.Empty,
-                TransactionSequence = sequence,
+                TransactionSequence = 0,
                 TransactionDate = DateTime.UtcNow
             }
         };
-    }
-
-    private async Task<long> ReserveTransactionSequenceAsync(int cihazId, CancellationToken cancellationToken)
-    {
-        await using var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var cihaz = await _db.PosCihazlari.FirstAsync(x => x.Id == cihazId && !x.IsDeleted, cancellationToken);
-        cihaz.TransactionSequence++;
-        var sequence = cihaz.TransactionSequence;
-        await _db.SaveChangesAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
-        return sequence;
     }
 
     private void EnforceKurum(int kurumId)

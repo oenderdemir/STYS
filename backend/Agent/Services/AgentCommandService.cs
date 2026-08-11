@@ -449,9 +449,13 @@ public sealed class AgentCommandService
             }
 
             var terminalId = terminalInfo.TerminalId.Trim();
-            discoveredIds.Add(terminalId);
-
-            var terminal = existing.FirstOrDefault(x => x.SerialNumber.Equals(terminalId, StringComparison.OrdinalIgnoreCase));
+            var canonicalAcquirerId = NormalizeCanonicalValue(terminalInfo.AcquirerId);
+            var canonicalKey = BuildCanonicalTerminalKey(device.Id, canonicalAcquirerId, terminalId);
+            discoveredIds.Add(canonicalKey);
+            PosTerminal? terminal;
+            terminal = existing.FirstOrDefault(x =>
+                string.Equals(x.CanonicalAcquirerId, canonicalAcquirerId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.CanonicalTerminalId, terminalId, StringComparison.OrdinalIgnoreCase));
             if (terminal is null)
             {
                 terminal = new PosTerminal
@@ -463,6 +467,8 @@ public sealed class AgentCommandService
                     SaglayiciKodu = "PAVO",
                     Ad = terminalInfo.MerchantId?.Trim().Length > 0 ? terminalInfo.MerchantId!.Trim() : terminalId,
                     SerialNumber = terminalId,
+                    CanonicalAcquirerId = canonicalAcquirerId,
+                    CanonicalTerminalId = terminalId,
                     SourceTerminalReference = terminalInfo.MerchantId,
                     AcquirerId = terminalInfo.AcquirerId,
                     AcquirerName = terminalInfo.AcquirerName,
@@ -479,6 +485,8 @@ public sealed class AgentCommandService
             terminal.KurumId = device.KurumId;
             terminal.TesisId = device.TesisId;
             terminal.PosCihaziId = device.Id;
+            terminal.CanonicalAcquirerId = canonicalAcquirerId;
+            terminal.CanonicalTerminalId = terminalId;
             terminal.SourceTerminalReference = terminalInfo.MerchantId ?? terminal.SourceTerminalReference;
             if (!string.IsNullOrWhiteSpace(terminalInfo.MerchantId))
             {
@@ -489,7 +497,7 @@ public sealed class AgentCommandService
             terminal.IsDeleted = false;
         }
 
-        foreach (var terminal in existing.Where(x => !discoveredIds.Contains(x.SerialNumber)))
+        foreach (var terminal in existing.Where(x => !discoveredIds.Contains(BuildCanonicalTerminalKey(x.PosCihaziId ?? device.Id, x.CanonicalAcquirerId, x.CanonicalTerminalId))))
         {
             terminal.AktifMi = false;
         }
@@ -776,6 +784,12 @@ public sealed class AgentCommandService
 
         return null;
     }
+
+    private static string NormalizeCanonicalValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
+
+    private static string BuildCanonicalTerminalKey(int deviceId, string? acquirerId, string terminalId) =>
+        $"{deviceId}:{NormalizeCanonicalValue(acquirerId)}:{terminalId.Trim()}";
 
     private static bool IsTimeoutLike(string? errorCode, string? message) =>
         string.Equals(errorCode, "TIMEOUT", StringComparison.OrdinalIgnoreCase)

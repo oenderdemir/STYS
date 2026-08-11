@@ -220,6 +220,45 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
+    public async Task TerminalKaydetAsync_AyniTerminalIdFarkliAcquirerIleAyriTerminalOlusturur()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var extraHesap = new KasaBankaHesap
+        {
+            TesisId = fixture.MainTesisId,
+            Tip = KasaBankaHesapTipleri.KrediKarti,
+            Kod = $"KK-{suffix}-X",
+            Ad = $"Kredi Kartı {suffix} X",
+            ParaBirimi = "TRY",
+            AktifMi = true
+        };
+        db.Set<KasaBankaHesap>().Add(extraHesap);
+        await db.SaveChangesAsync();
+
+        var service = CreateTerminalService(db, fixture.KurumId);
+
+        var first = await service.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "TERM-CANON"), CancellationToken.None);
+        var second = await service.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, extraHesap.Id, suffix, "TERM-CANON"), CancellationToken.None);
+
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal("TERM-CANON", first.TerminalId);
+        Assert.Equal("TERM-CANON", second.TerminalId);
+        Assert.NotEqual(first.AcquirerId, second.AcquirerId);
+
+        var count = await db.PosTerminaller.IgnoreQueryFilters().CountAsync(x => x.PosCihaziId == fixture.DeviceId && !x.IsDeleted && x.SerialNumber == "TERM-CANON");
+        Assert.Equal(2, count);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
     public async Task TerminalKaydetAsync_HesapsizOlusturulabilir()
     {
         var cs = ConnectionString();
@@ -271,7 +310,7 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
-    public async Task PavoPairing_CommandUretir_SequenceArttirir_vePayloadCihazBazlidir()
+    public async Task PavoPairing_CommandUretir_SequenceArtirmadanPayloadCihazBazlidir()
     {
         var cs = ConnectionString();
         if (cs is null) return;
@@ -297,7 +336,7 @@ public sealed class PosYonetimiIntegrationTests
 
         await using var verifyDb = AgentTestSupport.CreateDbContext(cs);
         var refreshed = await verifyDb.PosCihazlari.AsNoTracking().SingleAsync(x => x.Id == fixture.DeviceId);
-        Assert.Equal(1, refreshed.TransactionSequence);
+        Assert.Equal(0, refreshed.TransactionSequence);
 
         var firstPayload = JsonSerializer.Deserialize<PavoPairingRequest>(first.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var secondPayload = JsonSerializer.Deserialize<PavoPingRequest>(second.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -308,13 +347,13 @@ public sealed class PosYonetimiIntegrationTests
         Assert.Equal(0, firstPayload.TransactionHandle.TransactionSequence);
         Assert.Equal("127.0.0.1", firstPayload.IpAddress);
         Assert.Equal(fixture.DeviceId, secondPayload!.PosCihaziId);
-        Assert.Equal(1, secondPayload.TransactionHandle.TransactionSequence);
+        Assert.Equal(0, secondPayload.TransactionHandle.TransactionSequence);
 
         await CleanupAsync(db, suffix);
     }
 
     [IntegrationFact]
-    public async Task PavoSequence_ParallelUnique_veRestartSonrasiDevamEder()
+    public async Task PavoSequence_BackendPayloadSifirKaliyor_veRestartSonrasiDegismiyor()
     {
         var cs = ConnectionString();
         if (cs is null) return;
@@ -347,13 +386,13 @@ public sealed class PosYonetimiIntegrationTests
 
         Assert.NotNull(pingPayload);
         Assert.NotNull(infoPayload);
-        Assert.Equal(1, pingPayload!.TransactionHandle.TransactionSequence);
-        Assert.Equal(2, infoPayload!.TransactionHandle.TransactionSequence);
+        Assert.Equal(0, pingPayload!.TransactionHandle.TransactionSequence);
+        Assert.Equal(0, infoPayload!.TransactionHandle.TransactionSequence);
 
         await using (var verifyDb = AgentTestSupport.CreateDbContext(cs))
         {
             var refreshed = await verifyDb.PosCihazlari.AsNoTracking().SingleAsync(x => x.Id == fixture.DeviceId);
-            Assert.Equal(2, refreshed.TransactionSequence);
+            Assert.Equal(0, refreshed.TransactionSequence);
         }
 
         await using var db3 = AgentTestSupport.CreateDbContext(cs);
@@ -361,7 +400,7 @@ public sealed class PosYonetimiIntegrationTests
         var restartPing = await restartService.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
         var restartPayload = JsonSerializer.Deserialize<PavoPingRequest>(restartPing.Payload ?? string.Empty, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(restartPayload);
-        Assert.Equal(3, restartPayload!.TransactionHandle.TransactionSequence);
+        Assert.Equal(0, restartPayload!.TransactionHandle.TransactionSequence);
 
         await CleanupAsync(seedDb, suffix);
     }

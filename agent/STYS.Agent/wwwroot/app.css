@@ -219,6 +219,16 @@ button:disabled {
   border-bottom: 1px solid var(--border);
 }
 
+.table-title {
+  font-weight: 700;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

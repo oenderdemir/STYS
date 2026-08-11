@@ -1,7 +1,9 @@
 const state = {
   connectionOk: false,
   dashboardTimer: null,
-  diagnosticsTimer: null
+  diagnosticsTimer: null,
+  localDevicesTimer: null,
+  localDeviceEditingId: null
 };
 
 const RESET_CONFIRMATION_TEXT = "Bu işlem yerel Agent kimlik bilgilerini silecek. Merkezi STYS kaydı silinmeyecektir. Agent yeniden enrollment gerektirecektir.";
@@ -129,6 +131,37 @@ function mapConnectionBadge(result) {
   return { text: result.status || "Hata", kind: "error" };
 }
 
+function localDeviceTypeLabel(value) {
+  return Number(value) === 1 ? "Printer" : "POS";
+}
+
+function localDeviceProviderLabel(value) {
+  return "PAVO";
+}
+
+function localDeviceProtocolLabel(value) {
+  return Number(value) === 1 ? "HTTPS" : "HTTP";
+}
+
+function localDeviceStatusBadge(status) {
+  const value = Number(status);
+  if (value === 1) return { text: "Connected", kind: "ok" };
+  if (value === 2) return { text: "Unreachable", kind: "warn" };
+  if (value === 3) return { text: "Timeout", kind: "warn" };
+  if (value === 4) return { text: "TlsError", kind: "error" };
+  if (value === 5) return { text: "ProtocolError", kind: "error" };
+  return { text: "Unknown", kind: "muted" };
+}
+
+function formatDeviceAddress(device) {
+  if (!device?.host) return "-";
+  const protocol = Number(device.protocol) === 1 ? "https" : "http";
+  const port = Number(device.protocol) === 1
+    ? Number(device.httpsPort || 4568)
+    : Number(device.httpPort || 4567);
+  return `${protocol}://${device.host}:${port}`;
+}
+
 function mapEnrollmentError(error) {
   const message = (error?.message || "").toLowerCase();
   const status = error?.status;
@@ -145,10 +178,220 @@ function mapEnrollmentError(error) {
   return error?.message || "İşlem başarısız.";
 }
 
+function mapLocalDeviceError(error) {
+  const message = (error?.message || "").toLowerCase();
+  if (message.includes("host")) return "Geçersiz host/IP değeri.";
+  if (message.includes("protocol")) return "Geçersiz protocol.";
+  if (message.includes("port")) return "Port değeri geçersiz.";
+  if (message.includes("tester")) return "Bu provider için connection tester yok.";
+  if (message.includes("bulunamadı")) return "Cihaz bulunamadı.";
+  return error?.message || "İşlem başarısız.";
+}
+
 function updateEnrollmentButtonState() {
   const enrollBtn = $("enroll-btn");
   if (!enrollBtn) return;
   enrollBtn.disabled = !state.connectionOk;
+}
+
+function setLocalDeviceFormMode(device) {
+  const title = $("local-device-form-title");
+  const saveBtn = $("local-device-save-btn");
+  const cancelBtn = $("local-device-cancel-btn");
+  const idField = $("local-device-id");
+
+  state.localDeviceEditingId = device?.id || null;
+  if (idField) idField.value = device?.id || "";
+  if (title) title.textContent = device ? "Cihaz Düzenle" : "Yeni Cihaz";
+  if (saveBtn) saveBtn.textContent = device ? "Güncelle" : "Kaydet";
+  setHidden("local-device-cancel-btn", !device);
+  if (cancelBtn) {
+    cancelBtn.disabled = false;
+  }
+}
+
+function resetLocalDeviceForm() {
+  if ($("local-device-form")) {
+    $("local-device-form").reset();
+  }
+
+  if ($("local-device-type")) $("local-device-type").value = "0";
+  if ($("local-device-provider")) $("local-device-provider").value = "0";
+  if ($("local-device-protocol")) $("local-device-protocol").value = "0";
+  if ($("local-device-http-port")) $("local-device-http-port").value = 4567;
+  if ($("local-device-https-port")) $("local-device-https-port").value = 4568;
+  if ($("local-device-serial-number")) $("local-device-serial-number").value = "";
+  if ($("local-device-host")) $("local-device-host").value = "";
+  if ($("local-device-display-name")) $("local-device-display-name").value = "";
+  setLocalDeviceFormMode(null);
+  setStatus("local-device-form-status", "Yeni cihaz girilebilir.", "muted");
+}
+
+function syncLocalDevicePortDefaults() {
+  const protocol = Number($("local-device-protocol")?.value || 0);
+  const httpPort = $("local-device-http-port");
+  const httpsPort = $("local-device-https-port");
+
+  if (protocol === 1) {
+    if (httpPort && (!httpPort.value || Number(httpPort.value) === 0)) {
+      httpPort.value = 4567;
+    }
+    if (httpsPort && (!httpsPort.value || Number(httpsPort.value) === 0)) {
+      httpsPort.value = 4568;
+    }
+  } else {
+    if (httpPort && (!httpPort.value || Number(httpPort.value) === 0)) {
+      httpPort.value = 4567;
+    }
+    if (httpsPort && (!httpsPort.value || Number(httpsPort.value) === 0)) {
+      httpsPort.value = 4568;
+    }
+  }
+}
+
+function collectLocalDeviceFormPayload() {
+  return {
+    id: $("local-device-id")?.value?.trim() || null,
+    displayName: $("local-device-display-name")?.value?.trim() || "",
+    deviceType: Number($("local-device-type")?.value || 0),
+    provider: Number($("local-device-provider")?.value || 0),
+    host: $("local-device-host")?.value?.trim() || "",
+    protocol: Number($("local-device-protocol")?.value || 0),
+    httpPort: Number($("local-device-http-port")?.value || 4567),
+    httpsPort: Number($("local-device-https-port")?.value || 4568),
+    serialNumber: $("local-device-serial-number")?.value?.trim() || null
+  };
+}
+
+function renderLocalDeviceRows(devices) {
+  const body = $("local-devices-table-body");
+  if (!body) return;
+
+  const items = Array.isArray(devices) ? devices : [];
+  body.innerHTML = items.length
+    ? items.map((device) => {
+        const badge = localDeviceStatusBadge(device.status);
+        const lastTest = formatDateTime(device.lastConnectionTestAt);
+        const lastError = device.lastError ? escapeHtml(device.lastError) : "-";
+        return `
+          <tr>
+            <td>
+              <div class="table-title">${escapeHtml(device.displayName || "-")}</div>
+              <div class="help mono">${escapeHtml(lastError)}</div>
+            </td>
+            <td>${escapeHtml(localDeviceTypeLabel(device.deviceType))}</td>
+            <td>${escapeHtml(localDeviceProviderLabel(device.provider))}</td>
+            <td class="mono">
+              <div>${escapeHtml(formatDeviceAddress(device))}</div>
+              <div class="help">Serial: ${escapeHtml(device.serialNumber || "yok")}</div>
+            </td>
+            <td><span class="badge ${badge.kind}">${escapeHtml(badge.text)}</span></td>
+            <td>${escapeHtml(lastTest)}</td>
+            <td>
+              <div class="table-actions">
+                <button type="button" class="secondary" data-local-device-action="edit" data-local-device-id="${escapeHtml(device.id)}">Düzenle</button>
+                <button type="button" class="secondary" data-local-device-action="test" data-local-device-id="${escapeHtml(device.id)}">Bağlantıyı Test Et</button>
+                <button type="button" class="danger" data-local-device-action="delete" data-local-device-id="${escapeHtml(device.id)}">Sil</button>
+              </div>
+            </td>
+          </tr>`;
+      }).join("")
+    : `<tr><td colspan="7" class="muted">Kayıtlı cihaz yok.</td></tr>`;
+
+  body.querySelectorAll("[data-local-device-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("data-local-device-id");
+      const action = button.getAttribute("data-local-device-action");
+      const device = items.find((item) => String(item.id) === String(id));
+      if (!device && action !== "delete") return;
+
+      if (action === "edit") {
+        fillLocalDeviceForm(device);
+      } else if (action === "test") {
+        testSavedLocalDevice(device.id).catch((error) => {
+          setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+        });
+      } else if (action === "delete") {
+        deleteLocalDevice(id).catch((error) => {
+          setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+        });
+      }
+    });
+  });
+}
+
+function fillLocalDeviceForm(device) {
+  if (!device) return;
+  if ($("local-device-id")) $("local-device-id").value = device.id || "";
+  if ($("local-device-display-name")) $("local-device-display-name").value = device.displayName || "";
+  if ($("local-device-type")) $("local-device-type").value = String(device.deviceType ?? 0);
+  if ($("local-device-provider")) $("local-device-provider").value = String(device.provider ?? 0);
+  if ($("local-device-host")) $("local-device-host").value = device.host || "";
+  if ($("local-device-protocol")) $("local-device-protocol").value = String(device.protocol ?? 0);
+  if ($("local-device-http-port")) $("local-device-http-port").value = Number(device.httpPort || 4567);
+  if ($("local-device-https-port")) $("local-device-https-port").value = Number(device.httpsPort || 4568);
+  if ($("local-device-serial-number")) $("local-device-serial-number").value = device.serialNumber || "";
+  setLocalDeviceFormMode(device);
+  setStatus("local-device-form-status", "Cihaz düzenleme modunda.", "warn");
+}
+
+async function loadLocalDevices() {
+  const data = await getJson("/api/local-devices");
+  renderLocalDeviceRows(data || []);
+  setStatus("local-devices-status", "Cihaz listesi güncellendi.", "ok");
+  return data;
+}
+
+async function saveLocalDevice(event) {
+  event.preventDefault();
+
+  const payload = collectLocalDeviceFormPayload();
+  const isEdit = !!payload.id;
+  const url = isEdit ? `/api/local-devices/${encodeURIComponent(payload.id)}` : "/api/local-devices";
+  const method = isEdit ? "PUT" : "POST";
+
+  setStatus("local-device-form-status", "Kaydediliyor...", "muted");
+  const result = await getJson(url, {
+    method,
+    body: JSON.stringify(payload)
+  });
+
+  setStatus("local-device-form-status", "Cihaz kaydedildi.", "ok");
+  setText("local-device-last-action", `${result.displayName || payload.displayName} kaydedildi`);
+  setText("local-device-last-result", result.lastError || "Kayıt tamamlandı");
+  resetLocalDeviceForm();
+  await loadLocalDevices();
+}
+
+async function testSavedLocalDevice(id) {
+  setStatus("local-devices-status", "Bağlantı testi çalışıyor...", "muted");
+  const result = await getJson(`/api/local-devices/${encodeURIComponent(id)}/test-connection`, {
+    method: "POST"
+  });
+
+  const badge = localDeviceStatusBadge(result.status);
+  setText("local-device-last-action", `Test: ${result.deviceId || id}`);
+  setText("local-device-last-result", result.message || badge.text);
+  setStatus("local-devices-status", result.success ? "Bağlantı testi başarılı." : (result.message || "Bağlantı testi başarısız."), result.success ? "ok" : "error");
+  await loadLocalDevices();
+  return result;
+}
+
+async function deleteLocalDevice(id) {
+  const ok = window.confirm("Bu yerel cihaz kaydı silinsin mi?");
+  if (!ok) return;
+
+  await getJson(`/api/local-devices/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+
+  setStatus("local-devices-status", "Cihaz silindi.", "ok");
+  setText("local-device-last-action", `Silindi: ${id}`);
+  setText("local-device-last-result", "-");
+  if (state.localDeviceEditingId && String(state.localDeviceEditingId) === String(id)) {
+    resetLocalDeviceForm();
+  }
+  await loadLocalDevices();
 }
 
 function deriveDashboardMessage(data) {
@@ -328,12 +571,12 @@ async function loadDiagnostics() {
   setText("diag-local-version", data.localUiVersion || "-");
   setText("diag-data-dir", data.dataDirectory || "-");
   setText("diag-bootstrap-path", data.bootstrapConfigurationPath || "-");
-  setText("diag-credential-path", data.credentialStorePath || "-");
   setText("diag-stys-base-url", data.stysBaseUrl || "-");
   setText("diag-credential-present", data.credentialPresent ? "Evet" : "Hayır");
   setText("diag-auth-ready", data.authenticationReady ? "Evet" : "Hayır");
   setText("diag-reenrollment", data.requiresReEnrollment ? (data.requiresReEnrollmentReason || "Evet") : "Hayır");
   setText("diag-last-connection", formatDateTime(data.lastSuccessfulStysConnectionAt));
+  setText("diag-last-connection-error", data.lastStysConnectionError || "-");
   setText("diag-last-heartbeat", formatDateTime(data.lastHeartbeatSuccessAt));
   setText("diag-last-heartbeat-error", data.lastHeartbeatError || "-");
   setText("diag-last-command", formatDateTime(data.lastCommandPollSuccessAt));
@@ -342,6 +585,22 @@ async function loadDiagnostics() {
 
   renderLogTable(data.recentLogs || []);
   return data;
+}
+
+function bindLocalDevicesPage() {
+  $("local-device-form")?.addEventListener("submit", saveLocalDevice);
+  $("local-device-new-btn")?.addEventListener("click", () => resetLocalDeviceForm());
+  $("local-device-refresh-btn")?.addEventListener("click", () => {
+    loadLocalDevices().catch((error) => {
+      setStatus("local-devices-status", error.message, "error");
+    });
+  });
+  $("local-device-cancel-btn")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    resetLocalDeviceForm();
+  });
+  $("local-device-protocol")?.addEventListener("change", () => syncLocalDevicePortDefaults());
+  resetLocalDeviceForm();
 }
 
 function renderLogTable(entries) {
@@ -435,6 +694,12 @@ function startRefreshers() {
       loadDiagnostics().catch(() => {});
     }, 5000);
   }
+
+  if ($("local-devices-root")) {
+    state.localDevicesTimer = window.setInterval(() => {
+      loadLocalDevices().catch(() => {});
+    }, 5000);
+  }
 }
 
 function stopRefreshers() {
@@ -446,6 +711,11 @@ function stopRefreshers() {
   if (state.diagnosticsTimer) {
     clearInterval(state.diagnosticsTimer);
     state.diagnosticsTimer = null;
+  }
+
+  if (state.localDevicesTimer) {
+    clearInterval(state.localDevicesTimer);
+    state.localDevicesTimer = null;
   }
 }
 
@@ -461,6 +731,12 @@ async function refreshAll() {
   if ($("diagnostics-root")) {
     tasks.push(loadDiagnostics().catch((error) => {
       setStatus("diagnostics-status", error.message, "error");
+    }));
+  }
+
+  if ($("local-devices-root")) {
+    tasks.push(loadLocalDevices().catch((error) => {
+      setStatus("local-devices-status", error.message, "error");
     }));
   }
 
@@ -494,6 +770,13 @@ async function bootstrap() {
   if ($("diagnostics-root")) {
     await loadDiagnostics().catch((error) => {
       setStatus("diagnostics-status", error.message, "error");
+    });
+  }
+
+  if ($("local-devices-root")) {
+    bindLocalDevicesPage();
+    await loadLocalDevices().catch((error) => {
+      setStatus("local-devices-status", error.message, "error");
     });
   }
 

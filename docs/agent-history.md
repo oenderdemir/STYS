@@ -1148,3 +1148,78 @@ Agent Regression:  0
 
 - Angular build’de mevcut bundle budget uyarısı devam ediyor; bu fazda kapsam dışı bırakıldı.
 - Agent tarafında SQLite kullanımı tespit edilmedi; bu fazda dependency temizliği yapılmadı.
+
+## 2026-08-11 — Agent Local Management UI Faz A4
+
+### Generic local device architecture
+
+- Agent içine provider bağımsız `LocalDevice` modeli eklendi.
+- Model; `DeviceType`, `Provider`, `DisplayName`, `Host`, `HttpPort`, `HttpsPort`, `Protocol`, `SerialNumber`, `Status`, `LastConnectionTestAt`, `LastConnectionSuccess`, `LastError`, `CreatedAt`, `UpdatedAt` alanlarını içeriyor.
+- Mimari şu an PAVO dışında provider genişletmeye açık, fakat runtime’da yalnızca PAVO tester kayıtlı.
+
+### Persistence
+
+- `ILocalDeviceStore` ve file-based JSON store eklendi.
+- Store, Agent data directory altında `local-devices.json` kullanıyor.
+- Yazma işlemi temp dosya üzerinden atomic şekilde yapılıyor; yarım/bozuk JSON bırakmamak için overwrite stratejisi kullanılıyor.
+- Device restart sonrası korunuyor.
+
+### Local device UI
+
+- `local-cihazlar` sayfası placeholder olmaktan çıkarıldı.
+- Liste, form ve aksiyonlar eklendi:
+  - Yeni Cihaz
+  - Düzenle
+  - Bağlantıyı Test Et
+  - Sil
+- Tablo alanları:
+  - Ad
+  - Tip
+  - Provider
+  - Adres
+  - Durum
+  - Son Test
+- PAVO için bağlantı formu yalnız host/ip ve port/protocol bilgilerini alıyor.
+
+### Connection tester registry
+
+- `ILocalDeviceConnectionTester` ve registry yaklaşımı eklendi.
+- PAVO local connection test, mevcut REST client altyapısı üzerinden tekrar kullanıldı.
+- Test sonucu local device state’e yazılıyor.
+
+### PAVO connection profile
+
+- PAVO cihaz formu için default portlar `4567/4568` olarak uygulandı.
+- PAVO seçeneği local bağlantı profilini temsil ediyor; pairing ve merkezi STYS provisioning bu fazda yok.
+
+### Security
+
+- Host/IP doğrulaması eklendi.
+- `file://` ve benzeri arbitrary URI scheme reddediliyor.
+- Local tester arbitrary URL proxy haline gelmiyor; shell/process çalıştırma eklenmedi.
+- Secret, fingerprint, JWT veya enrollment code UI/diagnostics raporuna taşınmıyor.
+- Local UI loopback’te kalıyor.
+
+### A3 housekeeping
+
+- Diagnostics DTO’dan `CredentialStorePath` kaldırıldı.
+- Runtime status’a `LastStysConnectionError` eklendi.
+- `MarkFailedConnection()` bu alanı güncelliyor; başarılı bağlantıda hata temizleniyor.
+
+### Tests
+
+- File store save/load, restart persistence, duplicate id, invalid host/protocol, default portlar, connection success, timeout/unreachable status, delete, secret sızıntısı ve arbitrary scheme reddi için testler eklendi.
+- PAVO connection tester endpoint üretimi ve registry davranışı doğrulandı.
+- `dotnet build agent/STYS.Agent/STYS.Agent.csproj -c Release --no-restore` geçti.
+- `dotnet build tests/STYS.Tests/STYS.Tests.csproj -c Release --no-restore` geçti.
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~AgentLocalDevicesPhaseA4Tests"` geçti.
+- `dotnet test STYS.sln --configuration Release --no-build` bu turda iki mevcut, bu değişiklikten bağımsız test flake’i gösterdi.
+- `npm run build` geçti; Angular build’de mevcut bundle budget uyarısı devam ediyor.
+- `npm test -- --watch=false --browsers=ChromeHeadless` geçti.
+
+### Known limitations
+
+- Bu fazda merkezi PAVO pairing, terminal discovery ve STYS POS provisioning yapılmadı.
+- Printer implementasyonu yalnızca model düzeyinde hazır; runtime handler eklenmedi.
+- Angular build budget uyarısı devam ediyor.
+- Full solution test koşusunda iki mevcut test flake’i görüldü; kod değişikliğiyle ilişkili görünmüyor.

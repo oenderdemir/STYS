@@ -5,6 +5,7 @@ public interface IAgentPathResolver
     string DataDirectory { get; }
     string BootstrapConfigurationPath { get; }
     string CredentialStorePath { get; }
+    string LocalDevicesStorePath { get; }
     string InstanceIdPath { get; }
 }
 
@@ -13,6 +14,7 @@ public sealed class AgentPathResolver : IAgentPathResolver
     public string DataDirectory => AgentPaths.GetDataDirectory();
     public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
     public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
+    public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");
     public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
 }
 

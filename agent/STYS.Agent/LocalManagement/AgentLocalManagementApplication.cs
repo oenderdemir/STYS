@@ -1,5 +1,6 @@
 using STYS.Agent.Configuration;
 using STYS.Agent.Client.Authentication;
+using STYS.Agent.LocalDevices;
 using STYS.Agent.Services;
 
 namespace STYS.Agent.LocalManagement;
@@ -20,6 +21,7 @@ public static class AgentLocalManagementApplication
         app.MapGet("/loglar", () => Results.File(Path.Combine(webRoot, "loglar.html"), "text/html"));
 
         var bootstrapApi = app.MapGroup("/api/bootstrap");
+        var localDeviceApi = app.MapGroup("/api/local-devices");
 
         bootstrapApi.MapGet("/config", async (
             IAgentBootstrapManagementService service,
@@ -119,7 +121,123 @@ public static class AgentLocalManagementApplication
             }
         });
 
+        localDeviceApi.MapGet("/", async (
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetAllAsync(cancellationToken)));
+
+        localDeviceApi.MapGet("/{id}", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            var device = await service.GetByIdAsync(id, cancellationToken);
+            return device is null ? Results.NotFound(new { message = "Local cihaz bulunamadı." }) : Results.Ok(device);
+        });
+
+        localDeviceApi.MapPost("/", async (
+            LocalDeviceUpsertRequest request,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+            await ExecuteDeviceSaveAsync(request, null, service, cancellationToken));
+
+        localDeviceApi.MapPut("/{id}", async (
+            string id,
+            LocalDeviceUpsertRequest request,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            request.Id = id;
+            return await ExecuteDeviceSaveAsync(request, id, service, cancellationToken);
+        });
+
+        localDeviceApi.MapPost("/test-connection", async (
+            LocalDeviceTestRequest request,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await service.TestAsync(request, cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        localDeviceApi.MapPost("/{id}/test-connection", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await service.TestAsync(id, cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
+        localDeviceApi.MapDelete("/{id}", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await service.DeleteAsync(id, cancellationToken);
+                return Results.NoContent();
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
         return app;
+    }
+
+    private static async Task<IResult> ExecuteDeviceSaveAsync(
+        LocalDeviceUpsertRequest request,
+        string? id,
+        ILocalDeviceManagementService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                request.Id = id;
+            }
+
+            var saved = await service.SaveAsync(request, cancellationToken);
+            return Results.Ok(saved);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { message = ex.Message });
+        }
     }
 
     private static string NormalizeBaseUrl(string? baseUrl)

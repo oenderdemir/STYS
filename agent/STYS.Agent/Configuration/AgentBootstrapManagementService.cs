@@ -155,13 +155,13 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
             FrameworkDescription = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             DataDirectory = _paths.DataDirectory,
             BootstrapConfigurationPath = _paths.BootstrapConfigurationPath,
-            CredentialStorePath = _paths.CredentialStorePath,
             StysBaseUrl = configuration.StysBaseUrl,
             CredentialPresent = credential is not null,
             AuthenticationReady = runtime.AuthenticationReady,
             RequiresReEnrollment = runtime.RequiresReEnrollment,
             RequiresReEnrollmentReason = runtime.RequiresReEnrollmentReason,
             LastSuccessfulStysConnectionAt = runtime.LastSuccessfulStysConnectionAt,
+            LastStysConnectionError = runtime.LastStysConnectionError,
             LastHeartbeatSuccessAt = runtime.LastHeartbeatSuccessAt,
             LastHeartbeatError = runtime.LastHeartbeatError,
             LastCommandPollSuccessAt = runtime.LastCommandPollSuccessAt,
@@ -228,6 +228,7 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
         {
             ProcessStartTimeUtc = _runtimeStatus.ProcessStartTime,
             LastSuccessfulStysConnectionAt = _runtimeStatus.LastSuccessfulStysConnectionAt,
+            LastStysConnectionError = _runtimeStatus.LastStysConnectionError,
             LastHeartbeatSuccessAt = _runtimeStatus.LastHeartbeatSuccessAt,
             LastHeartbeatError = _runtimeStatus.LastHeartbeatError,
             LastCommandPollSuccessAt = _runtimeStatus.LastCommandPollSuccessAt,
@@ -289,7 +290,12 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
             return "Yeniden enrollment gerekli";
 
         if (test is null)
+        {
+            if (!string.IsNullOrWhiteSpace(runtime.LastStysConnectionError))
+                return $"Bağlantı hatası: {runtime.LastStysConnectionError}";
+
             return runtime.LastSuccessfulStysConnectionAt is null ? "Bağlantı bekleniyor" : "Bağlı";
+        }
 
         if (test.Success)
             return "Bağlı";

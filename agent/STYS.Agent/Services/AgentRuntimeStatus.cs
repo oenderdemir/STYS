@@ -4,6 +4,7 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
 {
     private readonly object _gate = new();
     private DateTimeOffset? _lastSuccessfulStysConnectionAt;
+    private string? _lastStysConnectionError;
     private DateTimeOffset? _lastHeartbeatSuccessAt;
     private string? _lastHeartbeatError;
     private DateTimeOffset? _lastCommandPollSuccessAt;
@@ -19,6 +20,11 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
     public DateTimeOffset? LastSuccessfulStysConnectionAt
     {
         get { lock (_gate) return _lastSuccessfulStysConnectionAt; }
+    }
+
+    public string? LastStysConnectionError
+    {
+        get { lock (_gate) return _lastStysConnectionError; }
     }
 
     public DateTimeOffset? LastHeartbeatSuccessAt
@@ -71,12 +77,16 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
         lock (_gate)
         {
             _lastSuccessfulStysConnectionAt = DateTimeOffset.UtcNow;
+            _lastStysConnectionError = null;
         }
     }
 
     public void MarkFailedConnection(string message)
     {
-        // Connection failures are surfaced through the dashboard/test result.
+        lock (_gate)
+        {
+            _lastStysConnectionError = string.IsNullOrWhiteSpace(message) ? "STYS connection failed." : message.Trim();
+        }
     }
 
     public void MarkHeartbeatSuccess()
@@ -166,6 +176,8 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
             _credentialPresent = false;
             _requiresReEnrollment = false;
             _requiresReEnrollmentReason = null;
+            _lastSuccessfulStysConnectionAt = null;
+            _lastStysConnectionError = null;
             _lastHeartbeatError = null;
             _lastCommandPollError = null;
         }

@@ -4,6 +4,7 @@ public interface IAgentRuntimeStatus
 {
     DateTimeOffset ProcessStartTime { get; }
     DateTimeOffset? LastSuccessfulStysConnectionAt { get; }
+    string? LastStysConnectionError { get; }
     DateTimeOffset? LastHeartbeatSuccessAt { get; }
     string? LastHeartbeatError { get; }
     DateTimeOffset? LastCommandPollSuccessAt { get; }

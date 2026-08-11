@@ -9,6 +9,7 @@ using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Configuration;
 using STYS.Agent.Diagnostics;
+using STYS.Agent.LocalDevices;
 using STYS.Agent.LocalManagement;
 using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
@@ -69,11 +70,16 @@ builder.Services.AddSingleton<IAgentLogBuffer>(inMemoryLogBuffer);
 builder.Services.AddSingleton<IAgentRuntimeStatus, AgentRuntimeStatus>();
 builder.Services.AddScoped<IAgentBootstrapManagementService, AgentBootstrapManagementService>();
 builder.Services.AddSingleton<IAgentEnrollmentCoordinator, AgentEnrollmentCoordinator>();
+builder.Services.AddSingleton<ILocalDeviceStore, FileLocalDeviceStore>();
+builder.Services.AddSingleton<ILocalDeviceConnectionTester, PavoLocalDeviceConnectionTester>();
+builder.Services.AddSingleton<ILocalDeviceConnectionTesterRegistry, LocalDeviceConnectionTesterRegistry>();
+builder.Services.AddScoped<ILocalDeviceManagementService, LocalDeviceManagementService>();
 
 builder.Services.AddSingleton<AgentTokenStore>();
 builder.Services.AddSingleton<IAgentAuthenticationState, AgentAuthenticationState>();
 builder.Services.AddSingleton<IAgentCredentialStore, FileAgentCredentialStore>();
 builder.Services.AddTransient<AgentAuthenticationHandler>();
+builder.Services.AddSingleton<IPavoClient, PavoHttpClient>();
 
 builder.Services.AddHttpClient<IStysAgentApiClient, StysAgentApiClient>((sp, client) =>
 {

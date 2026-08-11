@@ -18,11 +18,118 @@
       <a href="/loglar" data-nav>Loglar</a>
     </nav>
   </header>
-  <main class="container">
-    <div class="card">
-      <h2>Yerel Cihazlar</h2>
-      <p class="placeholder">Bu bölüm sonraki alt fazda doldurulacak.</p>
-    </div>
+  <main class="container" id="local-devices-root">
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h2>Yerel Cihazlar</h2>
+          <p class="muted">Bu ekran Agent içinde LAN cihazlarını tanımlar ve bağlantı testini yerel olarak çalıştırır. Merkezi STYS provisioning içermez.</p>
+        </div>
+        <div class="wizard-actions">
+          <button id="local-device-new-btn" type="button" class="secondary">Yeni Cihaz</button>
+          <button id="local-device-refresh-btn" type="button">Yenile</button>
+        </div>
+      </div>
+      <div id="local-devices-status" class="status muted">Hazır.</div>
+      <div class="section split">
+        <div class="card compact-card">
+          <div class="meta">Desteklenen Tip</div>
+          <div class="value small-value">POS / PAVO</div>
+          <div class="meta section">Not</div>
+          <div class="muted">Yerel cihaz kaydı ve bağlantı testi agent data directory altında korunur.</div>
+        </div>
+        <div class="card compact-card">
+          <div class="meta">Son işlem</div>
+          <div id="local-device-last-action" class="value small-value">-</div>
+          <div class="meta section">Son sonuç</div>
+          <div id="local-device-last-result" class="status muted">-</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card section">
+      <div class="section-head">
+        <div>
+          <h2 id="local-device-form-title">Yeni Cihaz</h2>
+          <p class="muted">PAVO için yalnızca bağlantı ayarları girilir. Pairing ve merkezi kayıt bu fazda yoktur.</p>
+        </div>
+      </div>
+      <form id="local-device-form" class="form section">
+        <input id="local-device-id" type="hidden">
+        <div class="field">
+          <label for="local-device-display-name">Ad</label>
+          <input id="local-device-display-name" type="text" placeholder="Örn. Kasiyer POS" required>
+        </div>
+        <div class="field">
+          <label for="local-device-type">Tip</label>
+          <select id="local-device-type" required>
+            <option value="0">POS</option>
+            <option value="1">Printer</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="local-device-provider">Provider</label>
+          <select id="local-device-provider" required>
+            <option value="0">PAVO</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="local-device-host">IP / Host</label>
+          <input id="local-device-host" type="text" placeholder="192.168.1.10" required>
+        </div>
+        <div class="field">
+          <label for="local-device-protocol">Protocol</label>
+          <select id="local-device-protocol" required>
+            <option value="0">HTTP</option>
+            <option value="1">HTTPS</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="local-device-http-port">HTTP Port</label>
+          <input id="local-device-http-port" type="number" min="1" max="65535" step="1" value="4567" required>
+        </div>
+        <div class="field">
+          <label for="local-device-https-port">HTTPS Port</label>
+          <input id="local-device-https-port" type="number" min="1" max="65535" step="1" value="4568" required>
+        </div>
+        <div class="field">
+          <label for="local-device-serial-number">Serial Number</label>
+          <input id="local-device-serial-number" type="text" placeholder="İsteğe bağlı">
+        </div>
+        <div class="wizard-actions">
+          <button type="submit" id="local-device-save-btn">Kaydet</button>
+          <button type="button" id="local-device-cancel-btn" class="secondary hidden">Vazgeç</button>
+        </div>
+      </form>
+      <div id="local-device-form-status" class="status muted section"></div>
+    </section>
+
+    <section class="card section">
+      <div class="section-head">
+        <div>
+          <h2>Kayıtlı Cihazlar</h2>
+          <p class="muted">Bağlantı testi sonuçları cihaz durumuna yazılır. Local UI sayfa yenilenmeden güncellenir.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Ad</th>
+              <th>Tip</th>
+              <th>Provider</th>
+              <th>Adres</th>
+              <th>Durum</th>
+              <th>Son Test</th>
+              <th>İşlem</th>
+            </tr>
+          </thead>
+          <tbody id="local-devices-table-body">
+            <tr><td colspan="7" class="muted">Yükleniyor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 <script src="/app.js"></script>

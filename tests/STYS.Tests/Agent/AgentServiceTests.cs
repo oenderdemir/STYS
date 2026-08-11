@@ -88,7 +88,7 @@ public sealed class AgentServiceTests : IAsyncLifetime
         var svcB = new AgentService(factory, new FakeKurumTenantAccessor(kurumB.Id));
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svcB.GetByIdAsync(agentA.Id, CancellationToken.None));
 
-        var allA = await svcA.GetAllAsync(CancellationToken.None);
+        var allA = await svcA.GetAllAsync(null, null, CancellationToken.None);
         Assert.All(allA, x => Assert.Equal(kurumA.Id, x.KurumId));
 
         await AgentTestSupport.CleanupAsync(db, $"{_uniqueSuffix}-B");

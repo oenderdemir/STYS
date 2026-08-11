@@ -23,6 +23,7 @@ public sealed class AgentRuntimeSnapshotDto
 {
     public DateTimeOffset ProcessStartTimeUtc { get; set; }
     public DateTimeOffset? LastSuccessfulStysConnectionAt { get; set; }
+    public string? LastStysConnectionError { get; set; }
     public DateTimeOffset? LastHeartbeatSuccessAt { get; set; }
     public string? LastHeartbeatError { get; set; }
     public DateTimeOffset? LastCommandPollSuccessAt { get; set; }

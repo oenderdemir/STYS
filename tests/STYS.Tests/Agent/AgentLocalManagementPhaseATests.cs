@@ -250,6 +250,7 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
         public string DataDirectory { get; }
         public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
         public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
+        public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
     }
 

@@ -274,7 +274,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svcA.DisableAsync(agentB.Id, CancellationToken.None));
         await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() => svcA.RevokeAsync(agentB.Id, CancellationToken.None));
 
-        var allA = await svcA.GetAllAsync(CancellationToken.None);
+        var allA = await svcA.GetAllAsync(null, null, CancellationToken.None);
         Assert.DoesNotContain(allA, x => x.Id == agentB.Id);
 
         await AgentTestSupport.CleanupAsync(db, $"{_uniqueSuffix}-B");
@@ -292,7 +292,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         var svc = new AgentService(factory, new FakeSuperAdminTenantAccessor());
         Assert.NotNull(await svc.GetByIdAsync(agentA.Id, CancellationToken.None));
         Assert.NotNull(await svc.GetByIdAsync(agentB.Id, CancellationToken.None));
-        var all = await svc.GetAllAsync(CancellationToken.None);
+        var all = await svc.GetAllAsync(null, null, CancellationToken.None);
         Assert.Contains(all, x => x.Id == agentA.Id);
         Assert.Contains(all, x => x.Id == agentB.Id);
 

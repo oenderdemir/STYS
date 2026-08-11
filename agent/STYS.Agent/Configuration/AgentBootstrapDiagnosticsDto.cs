@@ -14,13 +14,13 @@ public sealed class AgentBootstrapDiagnosticsDto
     public string FrameworkDescription { get; set; } = string.Empty;
     public string DataDirectory { get; set; } = string.Empty;
     public string BootstrapConfigurationPath { get; set; } = string.Empty;
-    public string CredentialStorePath { get; set; } = string.Empty;
     public string StysBaseUrl { get; set; } = string.Empty;
     public bool CredentialPresent { get; set; }
     public bool AuthenticationReady { get; set; }
     public bool RequiresReEnrollment { get; set; }
     public string? RequiresReEnrollmentReason { get; set; }
     public DateTimeOffset? LastSuccessfulStysConnectionAt { get; set; }
+    public string? LastStysConnectionError { get; set; }
     public DateTimeOffset? LastHeartbeatSuccessAt { get; set; }
     public string? LastHeartbeatError { get; set; }
     public DateTimeOffset? LastCommandPollSuccessAt { get; set; }

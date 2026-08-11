@@ -15,13 +15,17 @@
       <a href="/setup" data-nav>Kurulum / Bağlantı</a>
       <a href="/local-cihazlar" data-nav>Yerel Cihazlar</a>
       <a href="/entegrasyonlar" data-nav>Entegrasyonlar</a>
-      <a href="/loglar" data-nav>Loglar</a>
+      <a href="/loglar" data-nav>Diagnostics</a>
     </nav>
   </header>
   <main class="container" id="dashboard-root">
     <section class="card section" id="enrollment-wizard-card">
-      <h2>İlk Kurulum / STYS'e Kayıt</h2>
-      <p class="muted">Bağlantı testi başarılı olmadan enrollment başlatılmaz. Enrollment kodu yalnızca bellekte kullanılır.</p>
+      <div class="section-head">
+        <div>
+          <h2>İlk Kurulum / STYS'e Kayıt</h2>
+          <p class="muted">Bağlantı testi başarılı olmadan enrollment başlatılmaz. Enrollment kodu yalnızca bellekte kullanılır.</p>
+        </div>
+      </div>
       <div id="wizard-status" class="status muted">Hazır.</div>
       <form id="enrollment-form" class="form section">
         <div class="field">
@@ -49,74 +53,130 @@
           <button id="enroll-btn" type="submit" disabled>STYS'e Kaydol</button>
         </div>
       </form>
-      <div class="section">
-        <div id="connection-badge" class="badge">-</div>
-        <div id="connection-status" class="status muted section">Bağlantı testi bekleniyor.</div>
-        <div class="meta">Server time: <span id="connection-server-time">-</span></div>
-        <div class="meta">Version: <span id="connection-version">-</span></div>
+      <div class="section split">
+        <div class="card compact-card">
+          <div id="connection-badge" class="badge">-</div>
+          <div id="connection-status" class="status muted section">Bağlantı testi bekleniyor.</div>
+          <div class="meta">Server time: <span id="connection-server-time">-</span></div>
+          <div class="meta">Version: <span id="connection-version">-</span></div>
+        </div>
+        <div class="card compact-card">
+          <div class="meta">Durum</div>
+          <div id="dashboard-status" class="status muted">Durum bilgileri yükleniyor...</div>
+          <div class="meta section">Re-enrollment notu</div>
+          <div id="re-enrollment-note" class="value small-value">-</div>
+        </div>
       </div>
       <div id="enroll-status" class="status muted section"></div>
     </section>
 
     <section class="card section" id="dashboard-card">
-      <h2>Dashboard</h2>
-      <div id="dashboard-status" class="status muted">Durum bilgileri yükleniyor...</div>
+      <div class="section-head">
+        <div>
+          <h2>Operasyonel Dashboard</h2>
+          <p class="muted">Kimlik, bağlantı ve worker durumları canlı olarak izlenir.</p>
+        </div>
+      </div>
       <div class="grid section">
-        <div class="card">
+        <div class="card mini-card">
+          <div class="meta">STYS Bağlantısı</div>
+          <div class="value small-value" id="stys-connection-status">-</div>
+        </div>
+        <div class="card mini-card">
           <div class="meta">Agent Durumu</div>
-          <div class="value" id="agent-status">-</div>
+          <div class="value small-value" id="agent-status">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Agent ID</div>
-          <div class="value" id="agent-id">-</div>
+          <div class="value small-value" id="agent-id">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Agent Adı</div>
-          <div class="value" id="agent-name">-</div>
+          <div class="value small-value" id="agent-name">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Kurum</div>
-          <div class="value" id="kurum-name">-</div>
+          <div class="value small-value" id="kurum-name">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Yetkili Tesisler</div>
           <div class="value list-value" id="tesis-list">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Scopes</div>
           <div class="value list-value" id="scope-list">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Capabilities</div>
           <div class="value list-value" id="capability-list">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Credential mevcut mu</div>
-          <div class="value" id="credential-present">-</div>
+          <div class="value small-value" id="credential-present">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
+          <div class="meta">Auth hazır mı</div>
+          <div class="value small-value" id="auth-ready">-</div>
+        </div>
+        <div class="card mini-card">
+          <div class="meta">Heartbeat Worker</div>
+          <div class="value small-value" id="heartbeat-worker-status">-</div>
+        </div>
+        <div class="card mini-card">
+          <div class="meta">Command Worker</div>
+          <div class="value small-value" id="command-worker-status">-</div>
+        </div>
+        <div class="card mini-card">
           <div class="meta">STYS Adresi</div>
-          <div class="value" id="stys-address">-</div>
+          <div class="value small-value mono" id="stys-address">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
+          <div class="meta">STYS Server Version</div>
+          <div class="value small-value" id="stys-server-version">-</div>
+        </div>
+        <div class="card mini-card">
           <div class="meta">Agent Version</div>
-          <div class="value" id="agent-version">-</div>
+          <div class="value small-value" id="agent-version">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Local UI Version</div>
-          <div class="value" id="local-ui-version">-</div>
+          <div class="value small-value" id="local-ui-version">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Son heartbeat</div>
-          <div class="value" id="last-heartbeat">-</div>
+          <div class="value small-value" id="last-heartbeat">-</div>
         </div>
-        <div class="card">
+        <div class="card mini-card">
           <div class="meta">Son bağlantı testi</div>
-          <div class="value"><span id="last-connection-status" class="badge">-</span></div>
+          <div class="value small-value"><span id="last-connection-status" class="badge">-</span></div>
           <div class="meta section">Server time: <span id="last-connection-server-time">-</span></div>
           <div class="meta">Version: <span id="last-connection-version">-</span></div>
         </div>
+        <div class="card mini-card">
+          <div class="meta">Son reset</div>
+          <div class="value small-value" id="last-reset-at">-</div>
+        </div>
       </div>
+    </section>
+
+    <section class="card section danger-zone" id="reset-card">
+      <div class="section-head">
+        <div>
+          <h2>Controlled Reset</h2>
+          <p class="muted">Bu işlem sadece local credential ve token'ı siler. Merkezi STYS kaydı korunur.</p>
+        </div>
+      </div>
+      <form id="reset-form" class="form">
+        <div class="field">
+          <label for="reset-confirmation">Onay metni</label>
+          <textarea id="reset-confirmation" rows="3" spellcheck="false" placeholder="Tam onay metnini buraya yapıştırın" required></textarea>
+          <div class="help">Tam metin: <span class="mono">Bu işlem yerel Agent kimlik bilgilerini silecek. Merkezi STYS kaydı silinmeyecektir. Agent yeniden enrollment gerektirecektir.</span></div>
+        </div>
+        <div class="wizard-actions">
+          <button type="submit" class="danger">Agent Kaydını Sıfırla</button>
+        </div>
+      </form>
+      <div id="reset-status" class="status muted section"></div>
     </section>
   </main>
 </div>

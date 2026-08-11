@@ -1061,3 +1061,90 @@ Agent Regression:  0
   - diagnostics
   - configuration management
   - controlled reset/re-enrollment
+
+## 2026-08-11 — Agent Local Management UI Faz A3
+
+### Dashboard
+
+- Local dashboard operasyonel görünürlük için sadeleştirildi.
+- Aşağıdaki bilgiler gösteriliyor:
+  - STYS bağlantı durumu
+  - Agent ID
+  - Agent adı
+  - Kurum
+  - Yetkili tesisler
+  - Scopes
+  - Capabilities
+  - Credential durumu
+  - Auth hazır mı
+  - Heartbeat worker durumu
+  - Command worker durumu
+  - STYS adresi
+  - STYS server version
+  - Agent version
+  - Local UI version
+  - Son heartbeat
+  - Son bağlantı testi
+  - Son reset zamanı
+
+### Runtime status
+
+- Agent runtime için resetlenebilir, thread-safe bir durum modeli eklendi.
+- Authentication, connection, heartbeat ve command-poll durumları ayrı ayrı takip ediliyor.
+- BaseUrl değiştiğinde mevcut local credential artık kullanılmaz kabul edilip auth kapatılıyor.
+
+### Diagnostics
+
+- `Diagnostics` ekranı eklendi.
+- Process bilgileri, uptime, machine/OS/framework, data directory ve bootstrap path gösteriliyor.
+- Son başarılı STYS bağlantısı, heartbeat, command poll ve reset zamanı izleniyor.
+- Recent log buffer son 100 giriş ile sunuluyor.
+
+### Local log viewer
+
+- In-memory log buffer ve logger provider eklendi.
+- Log görüntüleme ekranında timestamp, level, category ve mesaj yer alıyor.
+- Secret benzeri değerler maskeleniyor; JWT/client secret/enrollment code görünmüyor.
+
+### Configuration management
+
+- Kurulum ekranı Bootstrap config ile senkron çalışır hale getirildi.
+- Local UI port değişikliği için restart gereksinimi açıkça gösteriliyor.
+- STYS BaseUrl değişikliği varsa re-enrollment uyarısı üretiliyor.
+
+### Credential reset
+
+- Controlled reset endpoint’i ve UI formu eklendi.
+- Yerel credential, token ve authentication state sıfırlanıyor.
+- Merkezi STYS agent kaydı silinmiyor.
+- Onay metni olmadan reset çalışmıyor.
+
+### Re-enrollment lifecycle
+
+- Reset sonrası wizard otomatik geri geliyor.
+- Re-enrollment başarılı olunca worker'lar tekrar aktive oluyor.
+- BaseUrl mismatch durumunda mevcut credential ile sessiz bağlanma engelleniyor.
+
+### Worker gating
+
+- HeartbeatWorker ve CommandPollingWorker auth-ready gate üzerinden yeniden bloklanabilir hale getirildi.
+- Reset sonrası worker'lar auth kapalı durumda bekliyor; yeni enrollment sonrası otomatik devam ediyor.
+- 401 spam davranışı için bekleme döngüsü auth durumunu aralıklarla kontrol ediyor.
+
+### Security
+
+- Local UI loopback üzerinde kalıyor.
+- Reset endpoint’i yalnız POST ve explicit confirmation ile çalışıyor.
+- Diagnostics ve log ekranları secret raporlamıyor.
+
+### Test sonuçları
+
+- `dotnet test STYS.sln --configuration Release --filter "Category=Integration&Domain=Agent"` geçti.
+- `dotnet test STYS.sln --configuration Release` geçti.
+- `npm run build` geçti.
+- `npm test -- --watch=false --browsers=ChromeHeadless` geçti.
+
+### Bilinen kısıtlar
+
+- Angular build’de mevcut bundle budget uyarısı devam ediyor; bu fazda kapsam dışı bırakıldı.
+- Agent tarafında SQLite kullanımı tespit edilmedi; bu fazda dependency temizliği yapılmadı.

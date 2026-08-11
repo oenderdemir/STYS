@@ -15,13 +15,18 @@
       <a href="/setup" data-nav>Kurulum / Bağlantı</a>
       <a href="/local-cihazlar" data-nav>Yerel Cihazlar</a>
       <a href="/entegrasyonlar" data-nav>Entegrasyonlar</a>
-      <a href="/loglar" data-nav>Loglar</a>
+      <a href="/loglar" data-nav>Diagnostics</a>
     </nav>
   </header>
   <main class="container">
-    <div class="card">
-      <h2>Kurulum / Bağlantı</h2>
-      <p class="muted">Bootstrap ayarları credentials içermez. Port değişikliği yeniden başlatma gerektirir.</p>
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h2>Kurulum / Bağlantı</h2>
+          <p class="muted">Bootstrap ayarları credentials içermez. Local UI port değişikliği için restart gerekir. STYS adresi değişirse yeniden enrollment gerekir.</p>
+        </div>
+      </div>
+
       <form id="bootstrap-form" class="form">
         <div class="field">
           <label for="stys-base-url">STYS Sunucu Adresi</label>
@@ -39,21 +44,30 @@
           <label for="local-ui-port">Local UI Port</label>
           <input id="local-ui-port" type="number" min="1" max="65535" step="1" value="5180" required>
         </div>
-        <div class="field">
+        <div class="wizard-actions">
           <button type="submit">Kaydet</button>
+          <button id="test-connection-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
         </div>
       </form>
 
-      <div class="section">
-        <button id="test-connection-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
-        <div id="connection-badge" class="badge section">-</div>
-        <div id="connection-status" class="status muted section">Hazır.</div>
-        <div class="meta">Server time: <span id="connection-server-time">-</span></div>
-        <div class="meta">Version: <span id="connection-version">-</span></div>
+      <div class="section split">
+        <div class="card compact-card">
+          <div id="connection-badge" class="badge">-</div>
+          <div id="connection-status" class="status muted section">Hazır.</div>
+          <div class="meta">Server time: <span id="connection-server-time">-</span></div>
+          <div class="meta">Version: <span id="connection-version">-</span></div>
+        </div>
+        <div class="card compact-card">
+          <div class="meta">Kaydetme sonucu</div>
+          <div id="save-status" class="status muted section">-</div>
+          <div class="meta section">Restart</div>
+          <div id="restart-required-badge" class="badge">-</div>
+          <div class="meta section">Re-enrollment</div>
+          <div id="reenrollment-required-badge" class="badge">-</div>
+          <div id="config-warning" class="status muted section"></div>
+        </div>
       </div>
-
-      <div id="save-status" class="status muted section"></div>
-    </div>
+    </section>
   </main>
 </div>
 <script src="/app.js"></script>

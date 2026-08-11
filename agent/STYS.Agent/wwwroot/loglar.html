@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>STYS Agent - Loglar</title>
+  <title>STYS Agent - Diagnostics</title>
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -15,14 +15,66 @@
       <a href="/setup" data-nav>Kurulum / Bağlantı</a>
       <a href="/local-cihazlar" data-nav>Yerel Cihazlar</a>
       <a href="/entegrasyonlar" data-nav>Entegrasyonlar</a>
-      <a href="/loglar" data-nav>Loglar</a>
+      <a href="/loglar" data-nav>Diagnostics</a>
     </nav>
   </header>
-  <main class="container">
-    <div class="card">
-      <h2>Loglar</h2>
-      <p class="placeholder">Bu bölüm sonraki alt fazda doldurulacak.</p>
-    </div>
+  <main class="container" id="diagnostics-root">
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h2>Diagnostics</h2>
+          <p class="muted">Bu ekran local runtime, bağlantı ve son log girdilerini gösterir. Secret, JWT ve enrollment code maske edilir.</p>
+        </div>
+      </div>
+      <div id="diagnostics-status" class="status muted">Hazır.</div>
+      <div class="kv-grid section">
+        <div class="kv-item"><div class="kv-label">Process ID</div><div class="kv-value mono" id="diag-process-id">-</div></div>
+        <div class="kv-item"><div class="kv-label">Process Start</div><div class="kv-value" id="diag-process-start">-</div></div>
+        <div class="kv-item"><div class="kv-label">Uptime</div><div class="kv-value" id="diag-uptime">-</div></div>
+        <div class="kv-item"><div class="kv-label">Machine</div><div class="kv-value" id="diag-machine">-</div></div>
+        <div class="kv-item"><div class="kv-label">OS</div><div class="kv-value" id="diag-os">-</div></div>
+        <div class="kv-item"><div class="kv-label">Framework</div><div class="kv-value" id="diag-framework">-</div></div>
+        <div class="kv-item"><div class="kv-label">Agent Version</div><div class="kv-value" id="diag-agent-version">-</div></div>
+        <div class="kv-item"><div class="kv-label">Local UI Version</div><div class="kv-value" id="diag-local-version">-</div></div>
+        <div class="kv-item"><div class="kv-label">Data Directory</div><div class="kv-value mono" id="diag-data-dir">-</div></div>
+        <div class="kv-item"><div class="kv-label">Bootstrap Path</div><div class="kv-value mono" id="diag-bootstrap-path">-</div></div>
+        <div class="kv-item"><div class="kv-label">Credential Path</div><div class="kv-value mono" id="diag-credential-path">-</div></div>
+        <div class="kv-item"><div class="kv-label">STYS BaseUrl</div><div class="kv-value mono" id="diag-stys-base-url">-</div></div>
+        <div class="kv-item"><div class="kv-label">Credential Present</div><div class="kv-value" id="diag-credential-present">-</div></div>
+        <div class="kv-item"><div class="kv-label">Auth Ready</div><div class="kv-value" id="diag-auth-ready">-</div></div>
+        <div class="kv-item"><div class="kv-label">Re-enrollment</div><div class="kv-value" id="diag-reenrollment">-</div></div>
+        <div class="kv-item"><div class="kv-label">Last Connection</div><div class="kv-value" id="diag-last-connection">-</div></div>
+        <div class="kv-item"><div class="kv-label">Last Heartbeat</div><div class="kv-value" id="diag-last-heartbeat">-</div></div>
+        <div class="kv-item"><div class="kv-label">Last Heartbeat Error</div><div class="kv-value" id="diag-last-heartbeat-error">-</div></div>
+        <div class="kv-item"><div class="kv-label">Last Command Poll</div><div class="kv-value" id="diag-last-command">-</div></div>
+        <div class="kv-item"><div class="kv-label">Last Command Poll Error</div><div class="kv-value" id="diag-last-command-error">-</div></div>
+        <div class="kv-item"><div class="kv-label">Last Reset</div><div class="kv-value" id="diag-last-reset">-</div></div>
+      </div>
+    </section>
+
+    <section class="card section">
+      <div class="section-head">
+        <div>
+          <h2>Recent logs</h2>
+          <p class="muted">Son 100 kayıt gösterilir. Secret benzeri değerler maskelenir.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table log-table">
+          <thead>
+            <tr>
+              <th>Zaman</th>
+              <th>Seviye</th>
+              <th>Kategori</th>
+              <th>Mesaj</th>
+            </tr>
+          </thead>
+          <tbody id="diagnostics-log-body">
+            <tr><td colspan="4" class="muted">Yükleniyor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 <script src="/app.js"></script>

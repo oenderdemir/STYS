@@ -17,6 +17,7 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
     private readonly IStysAgentApiClient _client;
     private readonly AgentTokenStore _tokenStore;
     private readonly IAgentAuthenticationState _authenticationState;
+    private readonly IAgentRuntimeStatus _runtimeStatus;
     private readonly IAgentPathResolver _paths;
     private readonly StysAgentClientOptions _clientOptions;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -29,6 +30,7 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
         IStysAgentApiClient client,
         AgentTokenStore tokenStore,
         IAgentAuthenticationState authenticationState,
+        IAgentRuntimeStatus runtimeStatus,
         IAgentPathResolver paths,
         IOptions<StysAgentClientOptions> clientOptions,
         ILogger<AgentEnrollmentCoordinator> logger)
@@ -39,6 +41,7 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
         _client = client;
         _tokenStore = tokenStore;
         _authenticationState = authenticationState;
+        _runtimeStatus = runtimeStatus;
         _paths = paths;
         _clientOptions = clientOptions.Value;
         _logger = logger;
@@ -53,6 +56,7 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
         {
             if (_authenticationState.IsReady || await HasUsableCredentialAsync(cancellationToken))
             {
+                _runtimeStatus.MarkCredentialPresent(true);
                 return new AgentBootstrapEnrollmentResult
                 {
                     Success = true,
@@ -95,13 +99,13 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
                 return true;
 
             var credential = await _credentialStore.GetAsync(cancellationToken);
+            var config = await _bootstrapStore.GetAsync(cancellationToken);
             if (credential is null)
             {
                 var enrollmentCode = ResolveEnrollmentCode();
                 if (string.IsNullOrWhiteSpace(enrollmentCode))
                     return false;
 
-                var config = await _bootstrapStore.GetAsync(cancellationToken);
                 var enrollmentResult = await EnrollCoreAsync(new AgentBootstrapEnrollmentRequest
                 {
                     StysBaseUrl = config.StysBaseUrl,
@@ -115,9 +119,21 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
                 return enrollmentResult.Success;
             }
 
+            if (!string.Equals(NormalizeBaseUrl(credential.EnrollmentBaseUrl), NormalizeBaseUrl(config.StysBaseUrl), StringComparison.OrdinalIgnoreCase))
+            {
+                _runtimeStatus.MarkReEnrollmentRequired("Mevcut local credential bu STYS adresi için geçerli değil.");
+                _authenticationState.Reset();
+                _tokenStore.ClearToken();
+                _clientOptions.ClientId = string.Empty;
+                _clientOptions.ClientSecret = string.Empty;
+                _clientOptions.AgentInstanceId = string.Empty;
+                return false;
+            }
+
             _clientOptions.ClientId = credential.ClientId;
             _clientOptions.ClientSecret = credential.ClientSecret;
             _clientOptions.AgentInstanceId = credential.AgentInstanceId;
+            _runtimeStatus.MarkCredentialPresent(true);
 
             var token = await _client.GetTokenAsync(new AgentTokenRequest
             {
@@ -129,6 +145,7 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
             _tokenStore.SetToken(token);
             _authenticationState.MarkAuthenticated();
+            _runtimeStatus.MarkAuthenticated();
             return true;
         }
         catch (Exception ex)
@@ -147,8 +164,11 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
         var test = await _connectionTester.TestAsync(request.StysBaseUrl, request.HttpTimeoutSeconds, cancellationToken);
         if (!test.Success)
         {
+            _runtimeStatus.MarkFailedConnection(test.Message);
             throw new BaseException(test.Message ?? "STYS erişilemiyor.", 400);
         }
+
+        _runtimeStatus.MarkSuccessfulConnection();
 
         var storedConfig = await _bootstrapStore.GetAsync(cancellationToken);
         storedConfig.StysBaseUrl = request.StysBaseUrl.TrimEnd('/');
@@ -179,6 +199,7 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
             ClientSecret = enrollmentResponse.ClientSecret,
             AgentInstanceId = agentInstanceId,
             AgentKey = enrollmentResponse.AgentKey,
+            EnrollmentBaseUrl = storedConfig.StysBaseUrl,
             AgentId = enrollmentResponse.AgentId,
             CreatedAt = DateTime.UtcNow
         };
@@ -206,6 +227,8 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
         _tokenStore.SetToken(token);
         _authenticationState.MarkAuthenticated();
+        _runtimeStatus.MarkCredentialPresent(true);
+        _runtimeStatus.MarkAuthenticated();
 
         return new AgentBootstrapEnrollmentResult
         {
@@ -221,11 +244,25 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
     private async Task<bool> HasUsableCredentialAsync(CancellationToken cancellationToken)
     {
+        var config = await _bootstrapStore.GetAsync(cancellationToken);
         var credential = await _credentialStore.GetAsync(cancellationToken);
-        return credential is not null
+        var usable = credential is not null
             && !string.IsNullOrWhiteSpace(credential.ClientId)
             && !string.IsNullOrWhiteSpace(credential.ClientSecret)
-            && !string.IsNullOrWhiteSpace(credential.AgentInstanceId);
+            && !string.IsNullOrWhiteSpace(credential.AgentInstanceId)
+            && string.Equals(NormalizeBaseUrl(credential.EnrollmentBaseUrl), NormalizeBaseUrl(config.StysBaseUrl), StringComparison.OrdinalIgnoreCase);
+
+        if (credential is not null && !usable)
+        {
+            _runtimeStatus.MarkReEnrollmentRequired("Mevcut local credential bu STYS adresi için geçerli değil.");
+            _authenticationState.Reset();
+            _tokenStore.ClearToken();
+            _clientOptions.ClientId = string.Empty;
+            _clientOptions.ClientSecret = string.Empty;
+            _clientOptions.AgentInstanceId = string.Empty;
+        }
+
+        return usable;
     }
 
     private static void ValidateRequest(AgentBootstrapEnrollmentRequest request)
@@ -279,6 +316,12 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
     private static string NormalizeDisplayName(string value) =>
         string.IsNullOrWhiteSpace(value) ? Environment.MachineName : value.Trim();
+
+    private static string NormalizeBaseUrl(string? baseUrl)
+    {
+        var value = string.IsNullOrWhiteSpace(baseUrl) ? "https://localhost:7160" : baseUrl.Trim();
+        return value.TrimEnd('/');
+    }
 
     private static string MapErrorMessage(Exception ex)
     {

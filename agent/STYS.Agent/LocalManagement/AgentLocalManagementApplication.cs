@@ -1,4 +1,5 @@
 using STYS.Agent.Configuration;
+using STYS.Agent.Client.Authentication;
 using STYS.Agent.Services;
 
 namespace STYS.Agent.LocalManagement;
@@ -28,12 +29,25 @@ public static class AgentLocalManagementApplication
         bootstrapApi.MapPost("/config", async (
             AgentBootstrapConfiguration request,
             IAgentBootstrapManagementService service,
+            IAgentBootstrapConfigurationStore store,
+            IAgentCredentialStore credentialStore,
             CancellationToken cancellationToken) =>
         {
             try
             {
+                var current = await store.GetAsync(cancellationToken);
                 var saved = await service.SaveConfigurationAsync(request, cancellationToken);
-                return Results.Ok(saved);
+                var credential = await credentialStore.GetAsync(cancellationToken);
+                var restartRequired = saved.RestartRequired;
+                var reEnrollmentRequired = saved.ReEnrollmentRequired || (credential is not null && !string.Equals(NormalizeBaseUrl(current.StysBaseUrl), NormalizeBaseUrl(saved.Configuration.StysBaseUrl), StringComparison.OrdinalIgnoreCase));
+
+                return Results.Ok(new
+                {
+                    configuration = saved.Configuration,
+                    saved.Message,
+                    restartRequired,
+                    reEnrollmentRequired
+                });
             }
             catch (ArgumentException ex)
             {
@@ -84,6 +98,33 @@ public static class AgentLocalManagementApplication
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetDashboardAsync(cancellationToken)));
 
+        bootstrapApi.MapGet("/diagnostics", async (
+            IAgentBootstrapManagementService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetDiagnosticsAsync(cancellationToken)));
+
+        bootstrapApi.MapPost("/reset", async (
+            AgentBootstrapResetRequest request,
+            IAgentBootstrapManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await service.ResetEnrollmentAsync(request, cancellationToken);
+                return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
         return app;
+    }
+
+    private static string NormalizeBaseUrl(string? baseUrl)
+    {
+        var value = string.IsNullOrWhiteSpace(baseUrl) ? "https://localhost:7160" : baseUrl.Trim();
+        return value.TrimEnd('/');
     }
 }

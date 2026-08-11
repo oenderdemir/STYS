@@ -1,10 +1,10 @@
+using System.Text.Json;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Services;
-using System.Text.Json;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace STYS.Agent.Workers;
 
@@ -12,6 +12,7 @@ public sealed class CommandPollingWorker : BackgroundService
 {
     private readonly IStysAgentApiClient _client;
     private readonly IAgentAuthenticationState _authenticationState;
+    private readonly IAgentRuntimeStatus _runtimeStatus;
     private readonly IAgentCommandHandlerRegistry _handlerRegistry;
     private readonly IAgentCommandExecutionStore _executionStore;
     private readonly ILogger<CommandPollingWorker> _logger;
@@ -20,12 +21,14 @@ public sealed class CommandPollingWorker : BackgroundService
     public CommandPollingWorker(
         IStysAgentApiClient client,
         IAgentAuthenticationState authenticationState,
+        IAgentRuntimeStatus runtimeStatus,
         IAgentCommandHandlerRegistry handlerRegistry,
         IAgentCommandExecutionStore executionStore,
         ILogger<CommandPollingWorker> logger)
     {
         _client = client;
         _authenticationState = authenticationState;
+        _runtimeStatus = runtimeStatus;
         _handlerRegistry = handlerRegistry;
         _executionStore = executionStore;
         _logger = logger;
@@ -33,34 +36,39 @@ public sealed class CommandPollingWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await _authenticationState.WaitUntilReadyAsync(stoppingToken);
-
         while (!stoppingToken.IsCancellationRequested)
         {
-            try
-            {
-                var commands = await _client.GetPendingCommandsAsync(stoppingToken);
-                foreach (var dto in commands)
-                {
-                    await ProcessCommandAsync(dto, stoppingToken);
-                }
-            }
-            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotImplemented)
-            {
-                _logger.LogDebug("Command endpoint'i henüz implemente edilmedi.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Komut kontrolü başarısız.");
-            }
+            await _authenticationState.WaitUntilReadyAsync(stoppingToken);
 
-            try
+            while (!stoppingToken.IsCancellationRequested && _authenticationState.IsReady)
             {
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
+                try
+                {
+                    var commands = await _client.GetPendingCommandsAsync(stoppingToken);
+                    _runtimeStatus.MarkCommandPollSuccess();
+
+                    foreach (var dto in commands)
+                    {
+                        await ProcessCommandAsync(dto, stoppingToken);
+                    }
+                }
+                catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotImplemented)
+                {
+                    _runtimeStatus.MarkCommandPollSuccess();
+                    _logger.LogDebug("Command endpoint'i henüz implemente edilmedi.");
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _runtimeStatus.MarkCommandPollFailure(ex.Message);
+                    _logger.LogWarning(ex, "Komut kontrolü başarısız.");
+                }
+
+                if (!await DelayWhileAuthenticatedAsync(TimeSpan.FromSeconds(10), stoppingToken))
+                    break;
             }
         }
     }
@@ -124,7 +132,9 @@ public sealed class CommandPollingWorker : BackgroundService
             {
                 await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = ex.Message, ErrorCode = "HANDLER_EXCEPTION" }, CancellationToken.None);
             }
-            catch { }
+            catch
+            {
+            }
         }
     }
 
@@ -166,6 +176,19 @@ public sealed class CommandPollingWorker : BackgroundService
             }, cancellationToken);
             _logger.LogWarning("Komut başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
         }
+    }
+
+    private async Task<bool> DelayWhileAuthenticatedAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        var remaining = delay;
+        while (remaining > TimeSpan.Zero && !cancellationToken.IsCancellationRequested && _authenticationState.IsReady)
+        {
+            var slice = remaining > TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : remaining;
+            await Task.Delay(slice, cancellationToken);
+            remaining -= slice;
+        }
+
+        return _authenticationState.IsReady && !cancellationToken.IsCancellationRequested;
     }
 
     private static TCommand DeserializeCommand<TCommand>(string? payload)

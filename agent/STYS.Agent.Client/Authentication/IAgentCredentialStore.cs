@@ -6,6 +6,7 @@ public sealed class AgentLocalCredential
     public string ClientSecret { get; set; } = string.Empty;
     public string AgentInstanceId { get; set; } = string.Empty;
     public string? AgentKey { get; set; }
+    public string? EnrollmentBaseUrl { get; set; }
     public int AgentId { get; set; }
     public DateTime CreatedAt { get; set; }
 }

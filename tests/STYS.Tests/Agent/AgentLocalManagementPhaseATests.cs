@@ -10,6 +10,7 @@ using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Configuration;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Diagnostics;
 using STYS.Agent.LocalManagement;
 using STYS.Agent.Services;
 
@@ -178,10 +179,14 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
         var service = new AgentBootstrapManagementService(
             store,
             CreateConnectionTester(new SuccessfulConnectionTesterHandler()),
-            new FakeCredentialStore(new AgentLocalCredential { ClientId = "client", ClientSecret = "secret", AgentInstanceId = "instance", AgentId = 1, CreatedAt = DateTime.UtcNow }),
+            new FakeCredentialStore(new AgentLocalCredential { ClientId = "client", ClientSecret = "secret", AgentInstanceId = "instance", EnrollmentBaseUrl = "https://example.org/stys/api", AgentId = 1, CreatedAt = DateTime.UtcNow }),
+            new AgentRuntimeStatus(),
             new FakeAuthenticationState(false),
             new AgentBootstrapConnectionTestState(),
+            new AgentTokenStore(),
+            new AgentInMemoryLogBuffer(),
             new DummyAgentApiClient(),
+            CreatePathResolver(),
             Options.Create(new StysAgentClientOptions
             {
                 BaseUrl = "https://example.org/stys/api",
@@ -194,7 +199,7 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
         Assert.True(dashboard.CredentialMevcutMu);
         Assert.Equal("Kayıtlı", dashboard.EnrollmentDurumu);
         Assert.Equal("A", dashboard.AgentDisplayName);
-        Assert.Equal("Başlatıldı", dashboard.AgentDurumu);
+        Assert.Equal("Kimlik doğrulanıyor", dashboard.AgentDurumu);
         Assert.False(string.IsNullOrWhiteSpace(dashboard.LocalUiVersion));
     }
 
@@ -209,13 +214,22 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
         bool credentialPresent,
         IStysAgentApiClient? client = null)
     {
+        var runtimeStatus = new AgentRuntimeStatus();
+        var tokenStore = new AgentTokenStore();
+        var logBuffer = new AgentInMemoryLogBuffer();
+        var paths = CreatePathResolver();
+
         return new AgentBootstrapManagementService(
             store,
             tester,
-            new FakeCredentialStore(credentialPresent ? new AgentLocalCredential { ClientId = "c", ClientSecret = "s", AgentInstanceId = "i", AgentId = 1, CreatedAt = DateTime.UtcNow } : null),
+            new FakeCredentialStore(credentialPresent ? new AgentLocalCredential { ClientId = "c", ClientSecret = "s", AgentInstanceId = "i", EnrollmentBaseUrl = "https://example.org/stys/api", AgentId = 1, CreatedAt = DateTime.UtcNow } : null),
+            runtimeStatus,
             new FakeAuthenticationState(false),
             new AgentBootstrapConnectionTestState(),
+            tokenStore,
+            logBuffer,
             client ?? new DummyAgentApiClient(),
+            paths,
             Options.Create(new StysAgentClientOptions
             {
                 BaseUrl = "https://example.org/stys/api",
@@ -259,9 +273,10 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
     private sealed class FakeAuthenticationState : IAgentAuthenticationState
     {
         public FakeAuthenticationState(bool ready) => IsReady = ready;
-        public bool IsReady { get; }
+        public bool IsReady { get; private set; }
         public Task WaitUntilReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public void MarkAuthenticated() { }
+        public void Reset() => IsReady = false;
     }
 
     private sealed class FakeHttpClientFactory : IHttpClientFactory

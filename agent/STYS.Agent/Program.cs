@@ -8,6 +8,7 @@ using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Configuration;
+using STYS.Agent.Diagnostics;
 using STYS.Agent.LocalManagement;
 using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
@@ -19,6 +20,8 @@ builder.Host.UseWindowsService();
 builder.Host.UseSystemd();
 
 var bootstrapPathResolver = new AgentPathResolver();
+var inMemoryLogBuffer = new AgentInMemoryLogBuffer();
+builder.Logging.AddProvider(new AgentInMemoryLogProvider(inMemoryLogBuffer));
 var bootstrapStoreForStartup = new FileAgentBootstrapConfigurationStore(
     bootstrapPathResolver,
     NullLogger<FileAgentBootstrapConfigurationStore>.Instance);
@@ -62,6 +65,8 @@ builder.Services.AddSingleton<IAgentPathResolver, AgentPathResolver>();
 builder.Services.AddSingleton<IAgentBootstrapConfigurationStore, FileAgentBootstrapConfigurationStore>();
 builder.Services.AddSingleton<AgentBootstrapConnectionTestState>();
 builder.Services.AddSingleton<IAgentBootstrapConnectionTester, AgentBootstrapConnectionTester>();
+builder.Services.AddSingleton<IAgentLogBuffer>(inMemoryLogBuffer);
+builder.Services.AddSingleton<IAgentRuntimeStatus, AgentRuntimeStatus>();
 builder.Services.AddScoped<IAgentBootstrapManagementService, AgentBootstrapManagementService>();
 builder.Services.AddSingleton<IAgentEnrollmentCoordinator, AgentEnrollmentCoordinator>();
 

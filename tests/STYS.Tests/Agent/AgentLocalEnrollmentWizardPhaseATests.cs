@@ -6,6 +6,7 @@ using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Configuration;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Diagnostics;
 using STYS.Agent.Services;
 
 namespace STYS.Tests.Agent;
@@ -47,6 +48,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
         var credentialStore = new FileAgentCredentialStore(resolver, NullLogger<FileAgentCredentialStore>.Instance);
         var authState = new AgentAuthenticationState();
         var tokenStore = new AgentTokenStore();
+        var runtimeStatus = new AgentRuntimeStatus();
         var client = new RecordingAgentApiClient
         {
             EnrollResponse = new AgentEnrollmentResponse
@@ -79,7 +81,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
             }
         };
 
-        var coordinator = CreateCoordinator(resolver, bootstrapStore, credentialStore, client, tokenStore, authState);
+        var coordinator = CreateCoordinator(resolver, bootstrapStore, credentialStore, client, tokenStore, authState, runtimeStatus);
 
         var result = await coordinator.EnrollAsync(new AgentBootstrapEnrollmentRequest
         {
@@ -126,8 +128,9 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
         var credentialStore = new FileAgentCredentialStore(resolver, NullLogger<FileAgentCredentialStore>.Instance);
         var authState = new AgentAuthenticationState();
         var tokenStore = new AgentTokenStore();
+        var runtimeStatus = new AgentRuntimeStatus();
         var client = new RecordingAgentApiClient();
-        var coordinator = CreateCoordinator(resolver, bootstrapStore, credentialStore, client, tokenStore, authState, connectionSuccess: false);
+        var coordinator = CreateCoordinator(resolver, bootstrapStore, credentialStore, client, tokenStore, authState, runtimeStatus, connectionSuccess: false);
 
         var result = await coordinator.EnrollAsync(new AgentBootstrapEnrollmentRequest
         {
@@ -161,6 +164,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
         var credentialStore = new FileAgentCredentialStore(resolver, NullLogger<FileAgentCredentialStore>.Instance);
         var authState = new AgentAuthenticationState();
         var tokenStore = new AgentTokenStore();
+        var runtimeStatus = new AgentRuntimeStatus();
         var client = new RecordingAgentApiClient
         {
             EnrollResponse = new AgentEnrollmentResponse
@@ -177,7 +181,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
                 ExpiresAt = DateTime.UtcNow.AddMinutes(30)
             }
         };
-        var coordinator = CreateCoordinator(resolver, bootstrapStore, credentialStore, client, tokenStore, authState);
+        var coordinator = CreateCoordinator(resolver, bootstrapStore, credentialStore, client, tokenStore, authState, runtimeStatus);
         var request = new AgentBootstrapEnrollmentRequest
         {
             StysBaseUrl = "https://example.org/stys/api",
@@ -214,6 +218,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
             ClientId = "client-1",
             ClientSecret = "secret-1",
             AgentInstanceId = "instance-1",
+            EnrollmentBaseUrl = "https://example.org/stys/api",
             AgentId = 11,
             CreatedAt = DateTime.UtcNow
         }, CancellationToken.None);
@@ -221,6 +226,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
         var authState = new AgentAuthenticationState();
         authState.MarkAuthenticated();
         var tokenStore = new AgentTokenStore();
+        var runtimeStatus = new AgentRuntimeStatus();
         tokenStore.SetToken(new AgentTokenResponse { AccessToken = "jwt", ExpiresAt = DateTime.UtcNow.AddMinutes(10) });
         var client = new RecordingAgentApiClient
         {
@@ -244,9 +250,13 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
             bootstrapStore,
             new SuccessConnectionTester(),
             credentialStore,
+            runtimeStatus,
             authState,
             new AgentBootstrapConnectionTestState(),
+            tokenStore,
+            new AgentInMemoryLogBuffer(),
             client,
+            resolver,
             Options.Create(new StysAgentClientOptions
             {
                 BaseUrl = "https://example.org/stys/api",
@@ -270,6 +280,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
         RecordingAgentApiClient client,
         AgentTokenStore tokenStore,
         IAgentAuthenticationState authState,
+        IAgentRuntimeStatus runtimeStatus,
         bool connectionSuccess = true)
     {
         return new AgentEnrollmentCoordinator(
@@ -279,6 +290,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
             client,
             tokenStore,
             authState,
+            runtimeStatus,
             paths,
             Options.Create(new StysAgentClientOptions
             {

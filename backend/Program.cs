@@ -401,6 +401,13 @@ app.MapGet("/ui/version", (IWebHostEnvironment env) => Results.Ok(new
     buildTime = Environment.GetEnvironmentVariable("BUILD_TIME") ?? "unknown",
     environment = env.EnvironmentName
 }));
+app.MapGet("/api/agent/bootstrap/ping", (IWebHostEnvironment env) => Results.Ok(new
+{
+    status = "ok",
+    serverTime = DateTime.UtcNow,
+    version = Environment.GetEnvironmentVariable("APP_VERSION") ?? env.ApplicationName
+}))
+    .AllowAnonymous();
 app.MapHub<BildirimHub>(BildirimHub.HubRoute)
     .RequireAuthorization(TodPlatformAuthorizationConstants.UiPolicy);
 app.MapHub<STYS.Agent.Hubs.AgentHub>(STYS.Agent.Hubs.AgentHub.HubRoute)

@@ -57,14 +57,14 @@ public abstract class PavoPaymentRequestBase : PavoDeviceRequestBase
     public string SaleReference { get; set; } = string.Empty;
 }
 
-public sealed class PavoStartPaymentRequest : PavoPaymentRequestBase
+public class PavoStartPaymentRequest : PavoPaymentRequestBase
 {
     public decimal Amount { get; set; }
     public string CurrencyCode { get; set; } = "TRY";
     public string? Description { get; set; }
 }
 
-public sealed class PavoGetPaymentResultRequest : PavoPaymentRequestBase
+public class PavoGetPaymentResultRequest : PavoPaymentRequestBase
 {
 }
 

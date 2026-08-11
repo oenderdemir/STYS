@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\backend\STYS.csproj" />
+    <ProjectReference Include="..\..\agent\STYS.Agent\STYS.Agent.csproj" />
+    <ProjectReference Include="..\..\agent\STYS.Agent.Client\STYS.Agent.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

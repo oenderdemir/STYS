@@ -5,10 +5,10 @@ namespace STYS.Agent.Modules.Pavo.Commands;
 
 public sealed class PavoStartPaymentCommand : PavoStartPaymentRequest, IAgentCommand
 {
-    public override string CommandType => "PavoStartPayment";
+    public string CommandType => "PavoStartPayment";
 }
 
 public sealed class PavoGetPaymentResultCommand : PavoGetPaymentResultRequest, IAgentCommand
 {
-    public override string CommandType => "PavoGetPaymentResult";
+    public string CommandType => "PavoGetPaymentResult";
 }

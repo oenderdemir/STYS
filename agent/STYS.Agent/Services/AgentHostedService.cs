@@ -4,7 +4,9 @@ using Microsoft.Extensions.Options;
 using System.Net;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
+using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Configuration;
 
 namespace STYS.Agent.Services;
 
@@ -15,6 +17,7 @@ public sealed class AgentHostedService : BackgroundService
     private readonly StysAgentClientOptions _options;
     private readonly AgentTokenStore _tokenStore;
     private readonly IAgentAuthenticationState _authenticationState;
+    private readonly IAgentPathResolver _paths;
     private readonly ILogger<AgentHostedService> _logger;
 
     public AgentHostedService(
@@ -23,6 +26,7 @@ public sealed class AgentHostedService : BackgroundService
         IOptions<StysAgentClientOptions> options,
         AgentTokenStore tokenStore,
         IAgentAuthenticationState authenticationState,
+        IAgentPathResolver paths,
         ILogger<AgentHostedService> logger)
     {
         _client = client;
@@ -30,6 +34,7 @@ public sealed class AgentHostedService : BackgroundService
         _options = options.Value;
         _tokenStore = tokenStore;
         _authenticationState = authenticationState;
+        _paths = paths;
         _logger = logger;
     }
 
@@ -185,13 +190,11 @@ public sealed class AgentHostedService : BackgroundService
         ex is HttpRequestException httpEx &&
         httpEx.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
 
-    private static string GetOrCreateInstanceId()
+    private string GetOrCreateInstanceId()
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var directory = Path.Combine(appData, "STYS", "Agent");
-        Directory.CreateDirectory(directory);
-        TrySecureDirectory(directory);
-        var instanceFile = Path.Combine(directory, "instance.id");
+        Directory.CreateDirectory(_paths.DataDirectory);
+        TrySecureDirectory(_paths.DataDirectory);
+        var instanceFile = _paths.InstanceIdPath;
 
         if (File.Exists(instanceFile))
         {

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STYS Agent - Kurulum / Bağlantı</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <h1>STYS Agent Local Management</h1>
+    <nav class="nav">
+      <a href="/" data-nav>Dashboard</a>
+      <a href="/setup" data-nav>Kurulum / Bağlantı</a>
+      <a href="/local-cihazlar" data-nav>Yerel Cihazlar</a>
+      <a href="/entegrasyonlar" data-nav>Entegrasyonlar</a>
+      <a href="/loglar" data-nav>Loglar</a>
+    </nav>
+  </header>
+  <main class="container">
+    <div class="card">
+      <h2>Kurulum / Bağlantı</h2>
+      <p class="muted">Bootstrap ayarları credentials içermez. Port değişikliği yeniden başlatma gerektirir.</p>
+      <form id="bootstrap-form" class="form">
+        <div class="field">
+          <label for="stys-base-url">STYS Sunucu Adresi</label>
+          <input id="stys-base-url" type="url" placeholder="https://trt.kamutesis.com/stys/api" required>
+        </div>
+        <div class="field">
+          <label for="agent-display-name">Agent Adı</label>
+          <input id="agent-display-name" type="text" placeholder="Resepsiyon Agent" required>
+        </div>
+        <div class="field">
+          <label for="http-timeout-seconds">HTTP Timeout</label>
+          <input id="http-timeout-seconds" type="number" min="1" max="120" step="1" value="30" required>
+        </div>
+        <div class="field">
+          <label for="local-ui-port">Local UI Port</label>
+          <input id="local-ui-port" type="number" min="1" max="65535" step="1" value="5180" required>
+        </div>
+        <div class="field">
+          <button type="submit">Kaydet</button>
+        </div>
+      </form>
+
+      <div class="section">
+        <button id="test-connection-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
+        <div id="connection-badge" class="badge section">-</div>
+        <div id="connection-status" class="status muted section">Hazır.</div>
+        <div class="meta">Server time: <span id="connection-server-time">-</span></div>
+        <div class="meta">Version: <span id="connection-version">-</span></div>
+      </div>
+
+      <div id="save-status" class="status muted section"></div>
+    </div>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

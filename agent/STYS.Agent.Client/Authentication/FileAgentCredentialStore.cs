@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using STYS.Agent.Client.Infrastructure;
 using Microsoft.Extensions.Logging;
 
 namespace STYS.Agent.Client.Authentication;
@@ -9,17 +10,14 @@ namespace STYS.Agent.Client.Authentication;
 public sealed class FileAgentCredentialStore : IAgentCredentialStore
 {
     private readonly string _storePath;
-    private readonly string _storeDir;
     private readonly ILogger<FileAgentCredentialStore> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
-    public FileAgentCredentialStore(ILogger<FileAgentCredentialStore> logger)
+    public FileAgentCredentialStore(IAgentPathResolver paths, ILogger<FileAgentCredentialStore> logger)
     {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        _storeDir = Path.Combine(appData, "STYS", "Agent");
-        Directory.CreateDirectory(_storeDir);
-        SecureDirectory(_storeDir);
-        _storePath = Path.Combine(_storeDir, "credential.dat");
+        Directory.CreateDirectory(paths.DataDirectory);
+        SecureDirectory(paths.DataDirectory);
+        _storePath = paths.CredentialStorePath;
         _logger = logger;
     }
 

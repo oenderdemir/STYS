@@ -867,3 +867,106 @@ Agent Regression:  0
 
 - Bu ortamda gerçek SQL Server entegrasyon bağlantısı tanımlı olmadığı için payment integration testleri çalıştırılamadı.
 - Gerçek PAVO cihazı/LAN karşısında canlı doğrulama yapılmadı.
+
+## 2026-08-11 — Agent Local Management UI Faz A1
+
+### Amaç
+
+- `STYS.Agent` içine ayrı uygulama gerektirmeyen, loopback-only local management UI eklemek.
+- Bootstrap configuration ile STYS bağlantı ayarlarını ve local UI portunu kalıcı hale getirmek.
+- Enrollment, PAVO discovery/pairing ve payment akışlarına girmeden temel yönetim altyapısını kurmak.
+
+### Local web host mimarisi
+
+- Agent host artık `WebApplication` üzerinde çalışıyor; worker lifecycle aynı process içinde korunuyor.
+- Local UI ve JSON API aynı host tarafından servis ediliyor.
+- UI statik HTML/CSS/JS ile kuruldu; ağır frontend bağımlılığı eklenmedi.
+
+### Bind adresi / port
+
+- Varsayılan local UI adresi: `http://127.0.0.1:5180`
+- Host yalnız loopback üzerinde dinliyor.
+- Port bootstrap configuration üzerinden değiştirilebilir.
+
+### Bootstrap configuration
+
+- Yeni model: `AgentBootstrapConfiguration`
+- Alanlar:
+  - `StysBaseUrl`
+  - `LocalUiPort`
+  - `AgentDisplayName`
+  - `HttpTimeoutSeconds`
+- Abstraction:
+  - `IAgentBootstrapConfigurationStore`
+- File-based store:
+  - `bootstrap.json`
+  - credentials içermez
+
+### Config storage konumu
+
+- Windows: `%ProgramData%/STYS/Agent/`
+- Linux/macOS: uygulama data dizini altında `STYS/Agent/`
+- Bootstrap dosyası: `bootstrap.json`
+- Credential store ve instance id aynı data kökünü kullanıyor.
+
+### STYS connection test
+
+- Kurulum / Bağlantı ekranına bağlantı testi eklendi.
+- Test, gerçek HTTP request atıp STYS bootstrap ping endpoint’ine gider:
+  - `GET /api/agent/bootstrap/ping`
+- UI hata sınıfları:
+  - geçersiz URL
+  - DNS hatası
+  - connection refused
+  - timeout
+  - TLS / certificate hatası
+
+### Dashboard
+
+- Agent enroll olmamış olsa bile dashboard açılıyor.
+- Gösterilen bilgiler:
+  - Agent Durumu
+  - STYS Adresi
+  - Enrollment Durumu
+  - Agent Display Name
+  - Agent Version
+  - Local UI Version
+  - Credential mevcut mu
+  - Son bağlantı testi
+- Credential içeriği gösterilmiyor; yalnız bool olarak ifade ediliyor.
+
+### Security kararları
+
+- UI yalnız loopback bind ediyor.
+- CORS genişletilmedi.
+- Remote shell / arbitrary file access endpoint’i eklenmedi.
+- Credential, JWT, access token, enrollment code local bootstrap JSON’a yazılmıyor.
+- Linux’ta file permission sıkılaştırması korundu.
+
+### Backward compatibility
+
+- Mevcut enrollment/JWT/heartbeat/command polling/PAVO akışları bozulmadı.
+- Bootstrap config yoksa mevcut `appsettings` tabanlı varsayılanlar çalışmaya devam ediyor.
+- Bootstrap dosyası varsa, agent startup’ta bu değerler uygulanıyor.
+
+### Test sonuçları
+
+- Agent build: geçti
+- Backend build: geçti
+- `dotnet test tests/STYS.Tests/STYS.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~AgentLocalManagementPhaseATests"`: geçti
+- `dotnet test STYS.sln --configuration Release --no-restore`: geçti
+
+### Bilinen kısıtlar
+
+- Local UI port değişikliği mevcut process içinde otomatik rebinding yapmıyor; restart gerekir.
+- Dashboard’daki son bağlantı testi runtime state olarak tutuluyor; yeniden başlatma sonrası sıfırlanabilir.
+- Gerçek STYS bağlantısı ortamına göre URL doğrulaması ve TLS davranışı değişebilir.
+
+### Sonraki alt faz
+
+- Faz A2
+  - Enrollment Wizard
+  - STYS BaseUrl
+  - Enrollment Code
+  - STYS'e Kaydol
+  - secure credential storage

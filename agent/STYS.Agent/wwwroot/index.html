@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>STYS Agent</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <h1>STYS Agent Local Management</h1>
+    <nav class="nav">
+      <a href="/" data-nav>Dashboard</a>
+      <a href="/setup" data-nav>Kurulum / Bağlantı</a>
+      <a href="/local-cihazlar" data-nav>Yerel Cihazlar</a>
+      <a href="/entegrasyonlar" data-nav>Entegrasyonlar</a>
+      <a href="/loglar" data-nav>Loglar</a>
+    </nav>
+  </header>
+  <main class="container" id="dashboard-root">
+    <div class="card">
+      <h2>Dashboard</h2>
+      <div id="dashboard-status" class="status muted">Durum bilgileri yükleniyor...</div>
+      <div class="grid section">
+        <div class="card">
+          <div class="meta">Agent Durumu</div>
+          <div class="value" id="agent-status">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">STYS Adresi</div>
+          <div class="value" id="stys-address">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Enrollment Durumu</div>
+          <div class="value" id="enrollment-status">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Agent Display Name</div>
+          <div class="value" id="agent-display-name">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Agent Version</div>
+          <div class="value" id="agent-version">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Local UI Version</div>
+          <div class="value" id="local-ui-version">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Credential mevcut mu</div>
+          <div class="value" id="credential-present">-</div>
+        </div>
+        <div class="card">
+          <div class="meta">Son bağlantı testi</div>
+          <div class="value"><span id="last-connection-status" class="badge">-</span></div>
+          <div class="meta section">Server time: <span id="last-connection-server-time">-</span></div>
+          <div class="meta">Version: <span id="last-connection-version">-</span></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

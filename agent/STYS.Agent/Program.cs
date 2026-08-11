@@ -1,21 +1,68 @@
+using System.Globalization;
+using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Serilog;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
+using STYS.Agent.Configuration;
+using STYS.Agent.LocalManagement;
 using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
 using STYS.Agent.Workers;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Serilog;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddWindowsService();
-builder.Services.AddSystemd();
+builder.Host.UseWindowsService();
+builder.Host.UseSystemd();
+
+var bootstrapPathResolver = new AgentPathResolver();
+var bootstrapStoreForStartup = new FileAgentBootstrapConfigurationStore(
+    bootstrapPathResolver,
+    NullLogger<FileAgentBootstrapConfigurationStore>.Instance);
+var startupBootstrap = bootstrapStoreForStartup.TryGetAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+if (startupBootstrap is not null)
+{
+    var bootstrapSettings = new Dictionary<string, string?>
+    {
+        ["AgentBootstrap:StysBaseUrl"] = startupBootstrap.StysBaseUrl,
+        ["StysAgentClient:BaseUrl"] = startupBootstrap.StysBaseUrl,
+        ["AgentBootstrap:HttpTimeoutSeconds"] = startupBootstrap.HttpTimeoutSeconds.ToString(CultureInfo.InvariantCulture),
+        ["StysAgentClient:RequestTimeoutSeconds"] = startupBootstrap.HttpTimeoutSeconds.ToString(CultureInfo.InvariantCulture),
+        ["AgentBootstrap:LocalUiPort"] = startupBootstrap.LocalUiPort.ToString(CultureInfo.InvariantCulture),
+        ["AgentBootstrap:AgentDisplayName"] = startupBootstrap.AgentDisplayName
+    };
+
+    builder.Configuration.AddInMemoryCollection(bootstrapSettings);
+    var bootstrapSource = builder.Configuration.Sources[^1];
+    var environmentSourceIndex = builder.Configuration.Sources
+        .Select((source, index) => new { source, index })
+        .FirstOrDefault(x => x.source.GetType().Name.Contains("EnvironmentVariables", StringComparison.OrdinalIgnoreCase))?.index;
+
+    if (environmentSourceIndex is not null)
+    {
+        builder.Configuration.Sources.Remove(bootstrapSource);
+        builder.Configuration.Sources.Insert(environmentSourceIndex.Value, bootstrapSource);
+    }
+}
+
+var localUiPort = startupBootstrap?.LocalUiPort > 0 ? startupBootstrap.LocalUiPort : 5180;
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Listen(AgentLocalWebHostBinding.CreateLoopbackEndpoint(localUiPort));
+});
 
 builder.Services.Configure<StysAgentClientOptions>(
     builder.Configuration.GetSection(StysAgentClientOptions.SectionName));
+
+builder.Services.AddSingleton<IAgentPathResolver, AgentPathResolver>();
+builder.Services.AddSingleton<IAgentBootstrapConfigurationStore, FileAgentBootstrapConfigurationStore>();
+builder.Services.AddSingleton<AgentBootstrapConnectionTestState>();
+builder.Services.AddSingleton<IAgentBootstrapConnectionTester, AgentBootstrapConnectionTester>();
+builder.Services.AddScoped<IAgentBootstrapManagementService, AgentBootstrapManagementService>();
 
 builder.Services.AddSingleton<AgentTokenStore>();
 builder.Services.AddSingleton<IAgentAuthenticationState, AgentAuthenticationState>();
@@ -24,11 +71,12 @@ builder.Services.AddTransient<AgentAuthenticationHandler>();
 
 builder.Services.AddHttpClient<IStysAgentApiClient, StysAgentApiClient>((sp, client) =>
 {
-    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<StysAgentClientOptions>>().Value;
+    var options = sp.GetRequiredService<IOptions<StysAgentClientOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/'));
     client.Timeout = TimeSpan.FromSeconds(options.RequestTimeoutSeconds);
 })
-.AddHttpMessageHandler<AgentAuthenticationHandler>();
+    .AddHttpMessageHandler<AgentAuthenticationHandler>();
+builder.Services.AddHttpClient(nameof(AgentBootstrapConnectionTester));
 
 builder.Services.AddHostedService<AgentHostedService>();
 builder.Services.AddHostedService<HeartbeatWorker>();
@@ -58,5 +106,7 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Services.AddSerilog();
 
-var host = builder.Build();
-await host.RunAsync();
+var app = builder.Build();
+app.MapAgentLocalManagement();
+
+await app.RunAsync();

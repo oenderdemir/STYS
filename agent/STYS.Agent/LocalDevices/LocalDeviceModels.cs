@@ -27,6 +27,13 @@ public enum LocalDeviceConnectionStatus
     ProtocolError = 5
 }
 
+public enum LocalDevicePairingStatus
+{
+    NotPaired = 0,
+    Paired = 1,
+    Failed = 2
+}
+
 public sealed class LocalDevice
 {
     public string Id { get; set; } = string.Empty;
@@ -38,10 +45,16 @@ public sealed class LocalDevice
     public int HttpsPort { get; set; } = 4568;
     public LocalDeviceProtocol Protocol { get; set; } = LocalDeviceProtocol.Http;
     public string? SerialNumber { get; set; }
+    public string? DeviceName { get; set; }
     public LocalDeviceConnectionStatus Status { get; set; } = LocalDeviceConnectionStatus.Unknown;
     public DateTimeOffset? LastConnectionTestAt { get; set; }
     public bool? LastConnectionSuccess { get; set; }
     public string? LastError { get; set; }
+    public LocalDevicePairingStatus PairingStatus { get; set; } = LocalDevicePairingStatus.NotPaired;
+    public DateTimeOffset? LastDeviceInfoAt { get; set; }
+    public DateTimeOffset? LastPairingAttemptAt { get; set; }
+    public DateTimeOffset? LastPairingAt { get; set; }
+    public string? LastPairingError { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -57,6 +70,11 @@ public sealed class LocalDeviceUpsertRequest
     public int? HttpsPort { get; set; }
     public LocalDeviceProtocol Protocol { get; set; } = LocalDeviceProtocol.Http;
     public string? SerialNumber { get; set; }
+}
+
+public sealed class LocalDevicePairingRequest
+{
+    public bool ForceRePair { get; set; }
 }
 
 public sealed class LocalDeviceTestRequest

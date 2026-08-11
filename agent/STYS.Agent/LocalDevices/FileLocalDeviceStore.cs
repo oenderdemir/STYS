@@ -194,10 +194,16 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
             HttpsPort = httpsPort,
             Protocol = protocol,
             SerialNumber = string.IsNullOrWhiteSpace(device.SerialNumber) ? null : device.SerialNumber.Trim(),
+            DeviceName = string.IsNullOrWhiteSpace(device.DeviceName) ? null : device.DeviceName.Trim(),
             Status = device.Status,
             LastConnectionTestAt = device.LastConnectionTestAt,
             LastConnectionSuccess = device.LastConnectionSuccess,
             LastError = string.IsNullOrWhiteSpace(device.LastError) ? null : device.LastError.Trim(),
+            PairingStatus = device.PairingStatus,
+            LastDeviceInfoAt = device.LastDeviceInfoAt,
+            LastPairingAttemptAt = device.LastPairingAttemptAt,
+            LastPairingAt = device.LastPairingAt,
+            LastPairingError = string.IsNullOrWhiteSpace(device.LastPairingError) ? null : device.LastPairingError.Trim(),
             CreatedAt = device.CreatedAt == default ? DateTimeOffset.UtcNow : device.CreatedAt,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -261,10 +267,16 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
         HttpsPort = device.HttpsPort,
         Protocol = device.Protocol,
         SerialNumber = device.SerialNumber,
+        DeviceName = device.DeviceName,
         Status = device.Status,
         LastConnectionTestAt = device.LastConnectionTestAt,
         LastConnectionSuccess = device.LastConnectionSuccess,
         LastError = device.LastError,
+        PairingStatus = device.PairingStatus,
+        LastDeviceInfoAt = device.LastDeviceInfoAt,
+        LastPairingAttemptAt = device.LastPairingAttemptAt,
+        LastPairingAt = device.LastPairingAt,
+        LastPairingError = device.LastPairingError,
         CreatedAt = device.CreatedAt,
         UpdatedAt = device.UpdatedAt
     };

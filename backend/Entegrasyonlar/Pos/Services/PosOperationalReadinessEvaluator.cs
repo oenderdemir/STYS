@@ -36,12 +36,8 @@ internal static class PosOperationalReadinessEvaluator
             && cihaz.EslesmeOnayliMi;
 
         var pairingValid = provisioned
-            && !string.IsNullOrWhiteSpace(cihaz.Fingerprint)
-            && !string.IsNullOrWhiteSpace(cihaz.TargetFingerprint);
-
-        var fingerprintsMatch = !string.IsNullOrWhiteSpace(cihaz.Fingerprint)
-            && !string.IsNullOrWhiteSpace(cihaz.TargetFingerprint)
-            && string.Equals(Normalize(cihaz.Fingerprint), Normalize(cihaz.TargetFingerprint), StringComparison.OrdinalIgnoreCase);
+            && cihaz.EslesmeOnayliMi
+            && !string.IsNullOrWhiteSpace(cihaz.Fingerprint);
 
         var reasons = new List<string>();
         var status = PavoOperationalReadiness.Ready;
@@ -68,15 +64,10 @@ internal static class PosOperationalReadinessEvaluator
             status = PavoOperationalReadiness.NotProvisioned;
             reasons.Add("Cihaz henüz provision edilmemiş.");
         }
-        else if (!cihaz.EslesmeOnayliMi || string.IsNullOrWhiteSpace(cihaz.Fingerprint) || string.IsNullOrWhiteSpace(cihaz.TargetFingerprint))
+        else if (!cihaz.EslesmeOnayliMi || string.IsNullOrWhiteSpace(cihaz.Fingerprint))
         {
             status = PavoOperationalReadiness.PairingInvalid;
             reasons.Add("Pairing geçersiz.");
-        }
-        else if (!fingerprintsMatch)
-        {
-            status = PavoOperationalReadiness.ReProvisionRequired;
-            reasons.Add("Cihaz yeniden eşitlenmeli.");
         }
         else if (!deviceOnline)
         {
@@ -135,7 +126,7 @@ internal static class PosOperationalReadinessEvaluator
             DeviceOnline = deviceOnline,
             Provisioned = provisioned,
             InSync = status == PavoOperationalReadiness.Ready,
-            PairingValid = pairingValid && fingerprintsMatch,
+            PairingValid = pairingValid,
             HasActiveTerminal = hasActiveTerminal,
             HasAccountMapping = hasAccountMapping,
             Disabled = status == PavoOperationalReadiness.Disabled,
@@ -149,7 +140,4 @@ internal static class PosOperationalReadinessEvaluator
             Reasons = reasons
         };
     }
-
-    private static string Normalize(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
 }

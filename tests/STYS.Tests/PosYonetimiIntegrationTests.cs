@@ -637,7 +637,7 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
-    public async Task Readiness_ReProvisionRequired_NotReady()
+    public async Task Readiness_FingerprintTargetMismatch_Ready()
     {
         var cs = ConnectionString();
         if (cs is null) return;
@@ -660,8 +660,8 @@ public sealed class PosYonetimiIntegrationTests
         var service = CreateCihazService(db, cs, fixture.KurumId);
         var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
 
-        Assert.Equal(PavoOperationalReadiness.ReProvisionRequired, readiness.Status);
-        Assert.False(readiness.Ready);
+        Assert.Equal(PavoOperationalReadiness.Ready, readiness.Status);
+        Assert.True(readiness.Ready);
 
         await CleanupAsync(db, suffix);
     }

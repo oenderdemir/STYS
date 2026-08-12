@@ -1590,3 +1590,19 @@ Agent Regression:  0
 - Bilinen kısıtlar:
   - Angular bundle budget warning devam ediyor.
   - Ready olmayan cihazlarda hata nedeni ilk blokaj üzerinden raporlanıyor; bu, guard davranışı için kasıtlı.
+
+### D1 Pairing Readiness Fix — 2026-08-12
+
+- `Fingerprint == TargetFingerprint` varsayımı kaldırıldı.
+- `PairingValid` artık `EslesmeOnayliMi + Fingerprint varlığı + provisioning` üzerinden değerlendiriliyor.
+- `TargetFingerprint` readiness için zorunlu / eşitlik kriteri değil; mismatch tek başına readiness’i düşürmüyor.
+- `Ready` hesabı pairing eşitliği yerine gerçek provisioning + agent/device + terminal/account readiness ile belirleniyor.
+- `ReProvisionRequired` readiness tarafında fingerprint eşitliğine bağlanmıyor; provisioning drift için ayrı lifecycle alanlarına bırakıldı.
+- Testler:
+  - `Fingerprint != TargetFingerprint` iken pairing onaylı cihazın `Ready` olabildiği test edildi.
+  - Invalid pairing testi korundu.
+  - Hedefli integration testler yerel connection string olmadığı için `skip` oldu.
+  - Full solution test çalıştırıldı; şu an bağımsız bir mevcut failure var:
+    - `STYS.Tests.SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur`
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.

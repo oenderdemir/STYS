@@ -168,8 +168,21 @@ function localDevicePairingBadge(status) {
 function localDeviceProvisioningBadge(status) {
   const value = Number(status);
   if (value === 1) return { text: "STYS'e kaydedildi", kind: "ok" };
-  if (value === 2) return { text: "Kayıt başarısız", kind: "error" };
+  if (value === 2) return { text: "Yeniden eşitle gerekli", kind: "warn" };
+  if (value === 3) return { text: "Çakışma", kind: "error" };
+  if (value === 4) return { text: "Devre dışı", kind: "error" };
+  if (value === 5) return { text: "Kayıt başarısız", kind: "error" };
   return { text: "Kaydedilmedi", kind: "muted" };
+}
+
+function localDeviceStysReconciliationBadge(status) {
+  const value = Number(status);
+  if (value === 0) return { text: "InSync", kind: "ok" };
+  if (value === 1) return { text: "ReProvisionRequired", kind: "warn" };
+  if (value === 2) return { text: "CentralMissing", kind: "muted" };
+  if (value === 3) return { text: "OwnershipConflict", kind: "error" };
+  if (value === 4) return { text: "Disabled", kind: "error" };
+  return { text: "-", kind: "muted" };
 }
 
 function formatDeviceAddress(device) {
@@ -209,6 +222,10 @@ function mapLocalDeviceError(error) {
   if (message.includes("önce pavo cihazı ile pairing yapılmalıdır")) return "Önce PAVO cihazı ile pairing yapılmalıdır.";
   if (message.includes("tesis seçimi zorunludur")) return "Tesis seçimi zorunludur.";
   if (message.includes("agent kapsamı")) return "Seçilen tesis agent kapsamı dışında.";
+  if (message.includes("başka agent'a bağlı") || message.includes("başka agent yerel cihazına bağlı")) return "Bu cihaz başka Agent'a bağlı.";
+  if (message.includes("başka tesise bağlı")) return "Bu cihaz başka tesise kayıtlı.";
+  if (message.includes("devre dışı")) return "Merkezi cihaz devre dışı.";
+  if (message.includes("çakışma")) return "Merkezi cihaz çakışması var.";
   return error?.message || "İşlem başarısız.";
 }
 
@@ -335,6 +352,11 @@ function renderLocalDeviceDetail(device) {
   setText("local-device-detail-provisioning-status", provisioningBadge.text);
   const provisioningStatusEl = $("local-device-detail-provisioning-status");
   if (provisioningStatusEl) provisioningStatusEl.className = `value small-value badge ${provisioningBadge.kind}`;
+  const stysStatusBadge = localDeviceStysReconciliationBadge(device.stysReconciliationStatus ?? device.StysReconciliationStatus);
+  setText("local-device-detail-stys-status", stysStatusBadge.text);
+  const stysStatusEl = $("local-device-detail-stys-status");
+  if (stysStatusEl) stysStatusEl.className = `value small-value badge ${stysStatusBadge.kind}`;
+  setStatus("local-device-detail-stys-message", device.stysReconciliationMessage || device.StysReconciliationMessage || "-", stysStatusBadge.kind);
   setText("local-device-detail-last-test", formatDateTime(device.lastConnectionTestAt));
   setStatus("local-device-detail-last-result", device.lastError || "Hazır.", device.lastError ? "error" : "ok");
   setStatus("local-device-detail-last-pairing-error", device.lastPairingError || "-", device.lastPairingError ? "error" : "muted");
@@ -354,6 +376,11 @@ function renderLocalDeviceDetail(device) {
     pairBtn.disabled = false;
   }
 
+  const stysBtn = $("local-device-detail-stys-btn");
+  if (stysBtn) {
+    stysBtn.disabled = false;
+  }
+
   const discoverBtn = $("local-device-detail-discover-btn");
   if (discoverBtn) {
     discoverBtn.disabled = !isPaired;
@@ -367,6 +394,8 @@ function renderLocalDeviceDetail(device) {
   const saveBtn = $("provisioning-save-btn");
   if (saveBtn) {
     saveBtn.disabled = !state.selectedProvisioningCandidate;
+    const hasCentralRecord = Boolean(device.centralPosCihaziId ?? device.CentralPosCihaziId);
+    saveBtn.textContent = hasCentralRecord ? "STYS ile Yeniden Eşitle" : "STYS'e Kaydet";
   }
 }
 
@@ -489,6 +518,29 @@ async function loadLocalDeviceTerminals(id) {
   renderLocalDeviceTerminalRows(terminals || []);
   setStatus("local-device-terminals-status", terminals?.length ? "Terminal listesi güncellendi." : "Keşfedilmiş terminal yok.", terminals?.length ? "ok" : "muted");
   return terminals || [];
+}
+
+async function checkSelectedLocalDeviceStysStatus() {
+  if (!state.selectedLocalDeviceId) {
+    setStatus("local-devices-status", "Önce bir cihaz seçin.", "warn");
+    return null;
+  }
+
+  setStatus("local-devices-status", "STYS durumu kontrol ediliyor...", "muted");
+  const result = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/stys-status`, {
+    method: "POST"
+  });
+
+  const badge = localDeviceStysReconciliationBadge(result?.status ?? result?.Status);
+  setText("local-device-detail-stys-status", badge.text);
+  const stysStatusEl = $("local-device-detail-stys-status");
+  if (stysStatusEl) stysStatusEl.className = `value small-value badge ${badge.kind}`;
+  setStatus("local-device-detail-stys-message", result?.message || result?.Message || "-", badge.kind);
+  setText("local-device-detail-last-result", result?.message || result?.Message || "STYS durumu kontrol edildi.");
+  setStatus("local-devices-status", result?.message || result?.Message || "STYS durumu kontrol edildi.", badge.kind);
+  await loadLocalDevices();
+  await selectLocalDevice(state.selectedLocalDeviceId).catch(() => {});
+  return result;
 }
 
 async function discoverLocalDeviceTerminals(id) {
@@ -1008,6 +1060,12 @@ function bindLocalDevicesPage() {
   $("local-device-detail-discover-btn")?.addEventListener("click", () => {
     discoverLocalDeviceTerminals(state.selectedLocalDeviceId).catch((error) => {
       setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+    });
+  });
+  $("local-device-detail-stys-btn")?.addEventListener("click", () => {
+    checkSelectedLocalDeviceStysStatus().catch((error) => {
+      setStatus("local-devices-status", mapLocalDeviceError(error), "error");
+      setText("local-device-detail-last-result", localDeviceOperationMessage(error));
     });
   });
   $("provisioning-tesis-id")?.addEventListener("change", () => {

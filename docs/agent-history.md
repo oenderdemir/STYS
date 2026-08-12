@@ -1480,3 +1480,33 @@ Agent Regression:  0
   - Sonuç: `1113 passed, 761 skipped, 0 failed`
 - Sequence owner hâlâ Agent-side authoritative reservation mekanizması.
 - Gerçek PAVO cihazı ile manuel test bu turda yapılmadı.
+
+## 2026-08-12 — PAVO Device Provisioning Faz C2
+
+- Lifecycle states:
+  - `NotProvisioned`
+  - `Provisioned`
+  - `ReProvisionRequired`
+  - `Conflict`
+  - `Disabled`
+- Re-pair sonrası local state artık `ReProvisionRequired` oluyor; central komutlar bu durumda çalıştırılmıyor.
+- Re-provision akışı `STYS durumu kontrol et` ve yeniden kayıt adımıyla yönetiliyor.
+- Central/local reconciliation için güvenli bir Agent endpoint eklendi:
+  - `POST /api/agent/pos-devices/status-snapshot`
+- Local UI’da STYS reconciliation aksiyonu eklendi ve durum mesajı gösteriliyor.
+- AgentId/KurumId request contract’tan alınmıyor; server-side `ICurrentAgentContext` ile doğrulama yapılıyor.
+- Tesis doğrulaması ve sahiplik kontrolleri korunuyor.
+- PosCihazi create/reconcile akışı aynı kurum / aynı agent / aynı tesis kuralını bozmayacak şekilde kaldı.
+- Global `Saglayici + SeriNo` uniqueness ve `AgentLocalDeviceId` mismatch kontrolü korunuyor.
+- Terminal canonical identity ve mevcut `KasaBankaHesapId` mapping korunuyor.
+- TransactionSequence authoritative owner hâlâ Agent; merkezi command sequence execution anında reserve ediliyor.
+- Local UI ve central command aynı pairing store counter’ını kullanıyor.
+- Fingerprint, client secret, JWT ve enrollment code log/response sızıntısı hedeflenmiyor.
+- Migrations tarafında mevcut C1/C1-hardening altyapısı kullanıldı; bu turda yeni migration gerektiren model değişikliği çıkmadı.
+- Test sonuçları:
+  - `dotnet test STYS.sln --configuration Release` geçti
+  - `frontend` için `npm run build` geçti
+  - `frontend` için `npm test -- --watch=false --browsers=ChromeHeadless` geçti
+- Bilinen kısıtlar:
+  - Gerçek PAVO cihazı ile manuel saha testi yapılmadı.
+  - Angular build’de bundle budget warning devam ediyor.

@@ -186,6 +186,12 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             {
                 throw new BaseException("Bu cihaz başka tesise bağlı.", 409);
             }
+
+            if (!string.IsNullOrWhiteSpace(existing.AgentLocalDeviceId)
+                && !string.Equals(existing.AgentLocalDeviceId, request.LocalDeviceId?.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BaseException("Bu cihaz başka Agent yerel cihazına bağlı.", 409);
+            }
         }
 
         var now = DateTime.UtcNow;
@@ -259,6 +265,12 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             if (conflict.TesisId != request.TesisId.Value)
             {
                 throw new BaseException("Bu cihaz başka tesise bağlı.", 409);
+            }
+
+            if (!string.IsNullOrWhiteSpace(conflict.AgentLocalDeviceId)
+                && !string.Equals(conflict.AgentLocalDeviceId, request.LocalDeviceId?.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BaseException("Bu cihaz başka Agent yerel cihazına bağlı.", 409);
             }
 
             conflict.AgentLocalDeviceId = NormalizeOptional(request.LocalDeviceId);

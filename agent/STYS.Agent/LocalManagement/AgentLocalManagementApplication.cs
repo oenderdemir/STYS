@@ -276,6 +276,26 @@ public static class AgentLocalManagementApplication
             }
         });
 
+        localDeviceApi.MapPost("/{id}/stys-status", async (
+            string id,
+            ILocalDeviceManagementService service,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await service.CheckStysStatusAsync(id, cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+        });
+
         localDeviceApi.MapGet("/{id}/provisioning-candidate", async (
             string id,
             int tesisId,

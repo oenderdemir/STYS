@@ -172,6 +172,37 @@ public sealed class AgentPavoDeviceRegistrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task Register_SameAgentDifferentLocalDeviceId_Rejected()
+    {
+        await using var db = await SetupAsync();
+        if (db is null) return;
+
+        var (agent, tesis) = await SeedAgentScopeAsync(db);
+        db.Set<PosCihazi>().Add(new PosCihazi
+        {
+            KurumId = agent.KurumId,
+            TesisId = tesis.Id,
+            AgentId = agent.Id,
+            AgentLocalDeviceId = $"local-{_suffix}-old",
+            Saglayici = PosSaglayici.Pavo,
+            Ad = "Existing POS",
+            SeriNo = DeviceSerial,
+            IpAdresi = "192.168.1.19",
+            HttpPort = 4567,
+            HttpsPort = 4568,
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db, agent.Id, agent.KurumId, tesis.Id);
+        var ex = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() =>
+            service.RegisterFromAgentAsync(BuildRequest(tesis.Id, localDeviceId: $"local-{_suffix}-new"), CancellationToken.None));
+
+        Assert.Equal(409, ex.ErrorCode);
+    }
+
+    [IntegrationFact]
     public async Task Register_SameTenantOtherTesis_Rejected()
     {
         await using var db = await SetupAsync();

@@ -54,3 +54,30 @@ public sealed class AgentPavoDeviceRegistrationResult
     public int ReconciledTerminalCount { get; set; }
     public string? Message { get; set; }
 }
+
+public sealed class AgentPavoDeviceStatusSnapshotRequest
+{
+    public string LocalDeviceId { get; set; } = string.Empty;
+    public string Provider { get; set; } = "PAVO";
+    public string? SerialNumber { get; set; }
+}
+
+public sealed class AgentPavoDeviceStatusSnapshotDto
+{
+    public int? CentralPosCihaziId { get; set; }
+    public int? AgentId { get; set; }
+    public int? KurumId { get; set; }
+    public int? TesisId { get; set; }
+    public string? AgentLocalDeviceId { get; set; }
+    public string? Provider { get; set; }
+    public string? SerialNumber { get; set; }
+    public bool Active { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Host { get; set; }
+    public int? HttpPort { get; set; }
+    public int? HttpsPort { get; set; }
+    public string? Fingerprint { get; set; }
+    public string? TargetFingerprint { get; set; }
+    public DateTime? SonBaglantiTarihi { get; set; }
+    public IReadOnlyCollection<PavoDeviceProvisioningCandidateTerminal> Terminals { get; set; } = [];
+}

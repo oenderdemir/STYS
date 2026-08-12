@@ -31,6 +31,13 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
             throw new InvalidOperationException("Sadece PAVO POS cihazları destekleniyor.");
         }
 
+        if (device.ProvisioningStatus is LocalDeviceProvisioningStatus.ReProvisionRequired
+            or LocalDeviceProvisioningStatus.Conflict
+            or LocalDeviceProvisioningStatus.Disabled)
+        {
+            throw new InvalidOperationException("Bu cihazın STYS durumu komut çalıştırmaya uygun değil.");
+        }
+
         if (device.ProvisioningStatus != LocalDeviceProvisioningStatus.Provisioned || device.CentralPosCihaziId != centralPosCihaziId)
         {
             throw new InvalidOperationException("Bu cihaz henüz STYS'e kaydedilmemiş.");

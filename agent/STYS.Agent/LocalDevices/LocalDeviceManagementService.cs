@@ -51,6 +51,15 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         }
 
         var device = BuildDevice(normalized, existing);
+        if (existing is not null
+            && existing.ProvisioningStatus == LocalDeviceProvisioningStatus.Provisioned
+            && HasLifecycleRelevantChanges(existing, device))
+        {
+            device.ProvisioningStatus = LocalDeviceProvisioningStatus.ReProvisionRequired;
+            device.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.ReProvisionRequired;
+            device.StysReconciliationMessage = "Yerel cihaz değişti; yeniden STYS eşitleme gerekli.";
+            device.StysReconciliationCheckedAt = DateTimeOffset.UtcNow;
+        }
 
         return existing is null
             ? await _store.CreateAsync(device, cancellationToken)
@@ -75,6 +84,16 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         ValidatePavoLocalDevice(device, "Cihaz bilgisi");
 
         var execution = await ExecuteDeviceInfoAsync(device, requirePairing: false, cancellationToken);
+        if (device.ProvisioningStatus == LocalDeviceProvisioningStatus.Provisioned
+            && HasLifecycleRelevantChanges(device, execution.UpdatedDevice))
+        {
+            execution.UpdatedDevice.ProvisioningStatus = LocalDeviceProvisioningStatus.ReProvisionRequired;
+            execution.UpdatedDevice.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.ReProvisionRequired;
+            execution.UpdatedDevice.StysReconciliationMessage = "Cihaz bilgisi değişti; yeniden STYS eşitleme gerekli.";
+            execution.UpdatedDevice.StysReconciliationCheckedAt = DateTimeOffset.UtcNow;
+            await _store.UpdateAsync(execution.UpdatedDevice, cancellationToken);
+        }
+
         return execution.UpdatedDevice;
     }
 
@@ -83,9 +102,31 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         var device = await GetDeviceOrThrowAsync(id, cancellationToken);
         ValidatePavoLocalDevice(device, "Terminal discovery");
 
+        var existingTerminalKeys = (await _terminalStore.GetByLocalDeviceIdAsync(device.Id, cancellationToken))
+            .Where(x => x.Active)
+            .Select(BuildTerminalIdentity)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var execution = await ExecuteDeviceInfoAsync(device, requirePairing: true, cancellationToken);
         var terminals = MapDiscoveredTerminals(device.Id, execution.Response.Terminals);
-        return await _terminalStore.ReconcileAsync(device.Id, terminals, cancellationToken);
+        var reconciled = await _terminalStore.ReconcileAsync(device.Id, terminals, cancellationToken);
+
+        if (device.ProvisioningStatus == LocalDeviceProvisioningStatus.Provisioned)
+        {
+            var currentTerminalKeys = reconciled.Where(x => x.Active).Select(BuildTerminalIdentity).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!existingTerminalKeys.SetEquals(currentTerminalKeys))
+            {
+                var updatedDevice = CloneForPublicUpdate(execution.UpdatedDevice);
+                updatedDevice.ProvisioningStatus = LocalDeviceProvisioningStatus.ReProvisionRequired;
+                updatedDevice.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.ReProvisionRequired;
+                updatedDevice.StysReconciliationMessage = "Terminal topolojisi değişti; yeniden STYS eşitleme gerekli.";
+                updatedDevice.StysReconciliationCheckedAt = DateTimeOffset.UtcNow;
+                updatedDevice.UpdatedAt = DateTimeOffset.UtcNow;
+                await _store.UpdateAsync(updatedDevice, cancellationToken);
+            }
+        }
+
+        return reconciled;
     }
 
     public async Task<PavoDeviceProvisioningCandidate> BuildProvisioningCandidateAsync(string id, int tesisId, AgentSelfDto agentSelf, CancellationToken cancellationToken)
@@ -197,26 +238,118 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
         try
         {
-        var agentApiClient = _agentApiClient ?? throw new InvalidOperationException("Agent API client tanımlı değil.");
-        var result = await agentApiClient.RegisterPavoDeviceAsync(internalRequest, cancellationToken);
+            var agentApiClient = _agentApiClient ?? throw new InvalidOperationException("Agent API client tanımlı değil.");
+            var result = await agentApiClient.RegisterPavoDeviceAsync(internalRequest, cancellationToken);
             var now = DateTimeOffset.UtcNow;
             var updatedDevice = CloneForPublicUpdate(device);
             updatedDevice.CentralPosCihaziId = result.CentralPosCihaziId;
+            updatedDevice.CentralAgentId = agentSelf.AgentId;
+            updatedDevice.CentralTesisId = candidate.TesisId;
             updatedDevice.LastProvisionedAt = result.LastProvisionedAt == default ? now : result.LastProvisionedAt;
             updatedDevice.ProvisioningStatus = ParseProvisioningStatus(result.ProvisioningStatus);
+            updatedDevice.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.InSync;
+            updatedDevice.StysReconciliationMessage = "STYS kaydı senkron.";
+            updatedDevice.StysReconciliationCheckedAt = now;
             updatedDevice.UpdatedAt = now;
             await _store.UpdateAsync(updatedDevice, cancellationToken);
 
             return result;
         }
-        catch
+        catch (AgentApiException ex)
         {
             var failed = CloneForPublicUpdate(device);
-            failed.ProvisioningStatus = LocalDeviceProvisioningStatus.Failed;
+            failed.ProvisioningStatus = MapProvisioningFailure(ex);
+            failed.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.OwnershipConflict;
+            failed.StysReconciliationMessage = ex.Message;
+            failed.StysReconciliationCheckedAt = DateTimeOffset.UtcNow;
             failed.UpdatedAt = DateTimeOffset.UtcNow;
             await _store.UpdateAsync(failed, cancellationToken);
             throw;
         }
+        catch
+        {
+            var failed = CloneForPublicUpdate(device);
+            failed.ProvisioningStatus = LocalDeviceProvisioningStatus.Failed;
+            failed.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.CentralMissing;
+            failed.StysReconciliationMessage = "STYS kaydı tamamlanamadı.";
+            failed.StysReconciliationCheckedAt = DateTimeOffset.UtcNow;
+            failed.UpdatedAt = DateTimeOffset.UtcNow;
+            await _store.UpdateAsync(failed, cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<LocalDeviceStysReconciliationResult> CheckStysStatusAsync(string id, CancellationToken cancellationToken)
+    {
+        var device = await GetDeviceOrThrowAsync(id, cancellationToken);
+        ValidatePavoLocalDevice(device, "STYS durumu kontrolü");
+
+        if (string.IsNullOrWhiteSpace(device.SerialNumber))
+        {
+            var now = DateTimeOffset.UtcNow;
+            var noSerialDevice = CloneForPublicUpdate(device);
+            noSerialDevice.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.CentralMissing;
+            noSerialDevice.StysReconciliationMessage = "Önce cihaz bilgisi alınmalıdır.";
+            noSerialDevice.StysReconciliationCheckedAt = now;
+            noSerialDevice.UpdatedAt = now;
+            await _store.UpdateAsync(noSerialDevice, cancellationToken);
+
+            return new LocalDeviceStysReconciliationResult
+            {
+                DeviceId = device.Id,
+                Status = LocalDeviceStysReconciliationStatus.CentralMissing,
+                Message = "Önce cihaz bilgisi alınmalıdır.",
+                CheckedAt = now
+            };
+        }
+
+        var snapshot = await GetCentralSnapshotAsync(device, cancellationToken);
+        var checkedAt = DateTimeOffset.UtcNow;
+        var hasReProvisionDifferences = snapshot is not null && await HasReProvisionDifferencesAsync(device, snapshot, cancellationToken);
+        var status = ResolveReconciliationStatus(device, snapshot, hasReProvisionDifferences);
+        var message = ResolveReconciliationMessage(status);
+
+        var updatedDevice = CloneForPublicUpdate(device);
+        updatedDevice.ProvisioningStatus = status switch
+        {
+            LocalDeviceStysReconciliationStatus.InSync => LocalDeviceProvisioningStatus.Provisioned,
+            LocalDeviceStysReconciliationStatus.ReProvisionRequired => LocalDeviceProvisioningStatus.ReProvisionRequired,
+            LocalDeviceStysReconciliationStatus.Disabled => LocalDeviceProvisioningStatus.Disabled,
+            LocalDeviceStysReconciliationStatus.OwnershipConflict => LocalDeviceProvisioningStatus.Conflict,
+            LocalDeviceStysReconciliationStatus.CentralMissing => device.CentralPosCihaziId.HasValue
+                ? LocalDeviceProvisioningStatus.Conflict
+                : LocalDeviceProvisioningStatus.NotProvisioned,
+            _ => device.ProvisioningStatus
+        };
+
+        if (snapshot is not null)
+        {
+            updatedDevice.CentralPosCihaziId = snapshot.CentralPosCihaziId;
+            updatedDevice.CentralAgentId = snapshot.AgentId;
+            updatedDevice.CentralTesisId = snapshot.TesisId;
+            updatedDevice.SerialNumber = string.IsNullOrWhiteSpace(snapshot.SerialNumber) ? updatedDevice.SerialNumber : snapshot.SerialNumber.Trim();
+            updatedDevice.DeviceName = string.IsNullOrWhiteSpace(snapshot.DisplayName) ? updatedDevice.DeviceName : snapshot.DisplayName.Trim();
+        }
+
+        updatedDevice.StysReconciliationStatus = status;
+        updatedDevice.StysReconciliationMessage = message;
+        updatedDevice.StysReconciliationCheckedAt = checkedAt;
+        updatedDevice.UpdatedAt = checkedAt;
+        await _store.UpdateAsync(updatedDevice, cancellationToken);
+
+        return new LocalDeviceStysReconciliationResult
+        {
+            DeviceId = device.Id,
+            Status = status,
+            Message = message,
+            CentralPosCihaziId = snapshot?.CentralPosCihaziId,
+            CentralAgentId = snapshot?.AgentId,
+            CentralTesisId = snapshot?.TesisId,
+            CentralSerialNumber = snapshot?.SerialNumber,
+            CentralProvider = snapshot?.Provider,
+            CentralActive = snapshot?.Active,
+            CheckedAt = checkedAt
+        };
     }
 
     private async Task<DeviceInfoExecution> ExecuteDeviceInfoAsync(LocalDevice device, bool requirePairing, CancellationToken cancellationToken)
@@ -390,6 +523,13 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
             var updatedDevice = CloneForPublicUpdate(device);
             updatedDevice.PairingStatus = LocalDevicePairingStatus.Paired;
+            if (device.CentralPosCihaziId.HasValue || device.ProvisioningStatus == LocalDeviceProvisioningStatus.Provisioned)
+            {
+                updatedDevice.ProvisioningStatus = LocalDeviceProvisioningStatus.ReProvisionRequired;
+                updatedDevice.StysReconciliationStatus = LocalDeviceStysReconciliationStatus.ReProvisionRequired;
+                updatedDevice.StysReconciliationMessage = "Pairing yenilendi; yeniden STYS eşitleme gerekli.";
+                updatedDevice.StysReconciliationCheckedAt = now;
+            }
             updatedDevice.LastPairingAt = now;
             updatedDevice.LastPairingAttemptAt = now;
             updatedDevice.LastPairingError = null;
@@ -472,6 +612,12 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         var lastPairingAt = existing?.LastPairingAt;
         var lastPairingError = existing?.LastPairingError;
         var deviceName = existing?.DeviceName;
+        var centralPosCihaziId = existing?.CentralPosCihaziId;
+        var centralAgentId = existing?.CentralAgentId;
+        var centralTesisId = existing?.CentralTesisId;
+        var reconciliationStatus = existing?.StysReconciliationStatus;
+        var reconciliationMessage = existing?.StysReconciliationMessage;
+        var reconciliationCheckedAt = existing?.StysReconciliationCheckedAt;
 
         return new LocalDevice
         {
@@ -494,6 +640,12 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             LastPairingAttemptAt = lastPairingAttemptAt,
             LastPairingAt = lastPairingAt,
             LastPairingError = lastPairingError,
+            CentralPosCihaziId = centralPosCihaziId,
+            CentralAgentId = centralAgentId,
+            CentralTesisId = centralTesisId,
+            StysReconciliationStatus = reconciliationStatus,
+            StysReconciliationMessage = reconciliationMessage,
+            StysReconciliationCheckedAt = reconciliationCheckedAt,
             CreatedAt = createdAt,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -613,11 +765,147 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         LastPairingAt = device.LastPairingAt,
         LastPairingError = device.LastPairingError,
         CentralPosCihaziId = device.CentralPosCihaziId,
+        CentralAgentId = device.CentralAgentId,
+        CentralTesisId = device.CentralTesisId,
         LastProvisionedAt = device.LastProvisionedAt,
         ProvisioningStatus = device.ProvisioningStatus,
+        StysReconciliationStatus = device.StysReconciliationStatus,
+        StysReconciliationMessage = device.StysReconciliationMessage,
+        StysReconciliationCheckedAt = device.StysReconciliationCheckedAt,
         CreatedAt = device.CreatedAt,
         UpdatedAt = device.UpdatedAt
     };
+
+    private async Task<AgentPavoDeviceStatusSnapshotDto?> GetCentralSnapshotAsync(LocalDevice device, CancellationToken cancellationToken)
+    {
+        if (_agentApiClient is null)
+        {
+            throw new InvalidOperationException("Agent API client tanımlı değil.");
+        }
+
+        return await _agentApiClient.GetPavoDeviceStatusSnapshotAsync(new AgentPavoDeviceStatusSnapshotRequest
+        {
+            LocalDeviceId = device.Id,
+            Provider = "PAVO",
+            SerialNumber = device.SerialNumber
+        }, cancellationToken);
+    }
+
+    private static LocalDeviceStysReconciliationStatus ResolveReconciliationStatus(LocalDevice device, AgentPavoDeviceStatusSnapshotDto? snapshot, bool hasReProvisionDifferences)
+    {
+        if (snapshot is null)
+        {
+            return LocalDeviceStysReconciliationStatus.CentralMissing;
+        }
+
+        if (!snapshot.Active)
+        {
+            return LocalDeviceStysReconciliationStatus.Disabled;
+        }
+
+        if (!string.Equals(snapshot.Provider, "PAVO", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(snapshot.SerialNumber, device.SerialNumber, StringComparison.OrdinalIgnoreCase)
+            || !Nullable.Equals(device.CentralPosCihaziId, snapshot.CentralPosCihaziId)
+            || !Nullable.Equals(device.CentralAgentId, snapshot.AgentId)
+            || !Nullable.Equals(device.CentralTesisId, snapshot.TesisId)
+            || (!string.IsNullOrWhiteSpace(snapshot.AgentLocalDeviceId) && !string.Equals(snapshot.AgentLocalDeviceId, device.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            return LocalDeviceStysReconciliationStatus.OwnershipConflict;
+        }
+
+        if (hasReProvisionDifferences)
+        {
+            return LocalDeviceStysReconciliationStatus.ReProvisionRequired;
+        }
+
+        return LocalDeviceStysReconciliationStatus.InSync;
+    }
+
+    private static string ResolveReconciliationMessage(LocalDeviceStysReconciliationStatus status) => status switch
+    {
+        LocalDeviceStysReconciliationStatus.InSync => "STYS kaydı senkron.",
+        LocalDeviceStysReconciliationStatus.ReProvisionRequired => "Cihaz değişiklikleri algılandı; yeniden STYS eşitleme gerekli.",
+        LocalDeviceStysReconciliationStatus.CentralMissing => "Merkezi STYS kaydı bulunamadı.",
+        LocalDeviceStysReconciliationStatus.OwnershipConflict => "Bu cihaz başka Agent'a veya tesise bağlı.",
+        LocalDeviceStysReconciliationStatus.Disabled => "Merkezi STYS kaydı devre dışı.",
+        _ => "STYS durumu kontrol edilemedi."
+    };
+
+    private async Task<bool> HasReProvisionDifferencesAsync(LocalDevice device, AgentPavoDeviceStatusSnapshotDto snapshot, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(NormalizeText(snapshot.Host), NormalizeText(device.Host), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if ((snapshot.HttpPort ?? 0) != device.HttpPort || (snapshot.HttpsPort ?? 0) != device.HttpsPort)
+        {
+            return true;
+        }
+
+        if (!string.Equals(NormalizeText(snapshot.DisplayName), NormalizeText(device.DisplayName), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.Equals(NormalizeText(snapshot.SerialNumber), NormalizeText(device.SerialNumber), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
+        if (!string.Equals(NormalizeText(snapshot.Fingerprint), NormalizeText(pairingState?.Fingerprint), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.Equals(NormalizeText(snapshot.TargetFingerprint), NormalizeText(pairingState?.TargetFingerprint), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var centralTerminals = (snapshot.Terminals ?? [])
+            .Where(x => x.Active)
+            .Select(BuildTerminalIdentity)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var localTerminals = (await _terminalStore.GetByLocalDeviceIdAsync(device.Id, cancellationToken))
+            .Where(x => x.Active)
+            .Select(BuildTerminalIdentity)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return !centralTerminals.SetEquals(localTerminals);
+    }
+
+    private static string BuildTerminalIdentity(LocalDeviceTerminal terminal) =>
+        $"{terminal.AcquirerId?.Trim().ToUpperInvariant() ?? string.Empty}:{terminal.TerminalId.Trim()}";
+
+    private static string BuildTerminalIdentity(PavoDeviceProvisioningCandidateTerminal terminal) =>
+        $"{terminal.AcquirerId?.Trim().ToUpperInvariant() ?? string.Empty}:{terminal.TerminalId.Trim()}";
+
+    private static bool HasLifecycleRelevantChanges(LocalDevice existing, LocalDevice updated)
+    {
+        return !string.Equals(existing.DisplayName, updated.DisplayName, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(existing.Host, updated.Host, StringComparison.OrdinalIgnoreCase)
+            || existing.HttpPort != updated.HttpPort
+            || existing.HttpsPort != updated.HttpsPort
+            || existing.DeviceType != updated.DeviceType
+            || existing.Provider != updated.Provider
+            || !string.Equals(existing.SerialNumber, updated.SerialNumber, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(existing.DeviceName, updated.DeviceName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static LocalDeviceProvisioningStatus MapProvisioningFailure(AgentApiException ex) =>
+        ex.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Conflict => LocalDeviceProvisioningStatus.Conflict,
+            System.Net.HttpStatusCode.Forbidden => LocalDeviceProvisioningStatus.Disabled,
+            _ => LocalDeviceProvisioningStatus.Failed
+        };
+
+    private static LocalDeviceProvisioningStatus ParseProvisioningStatus(string? status) =>
+        Enum.TryParse<LocalDeviceProvisioningStatus>(status, true, out var parsed)
+            ? parsed
+            : LocalDeviceProvisioningStatus.NotProvisioned;
 
     private static NormalizedUpsert Normalize(LocalDeviceUpsertRequest request) =>
         NormalizeCore(
@@ -742,11 +1030,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
         return port;
     }
-
-    private static LocalDeviceProvisioningStatus ParseProvisioningStatus(string? status) =>
-        Enum.TryParse<LocalDeviceProvisioningStatus>(status, true, out var parsed)
-            ? parsed
-            : LocalDeviceProvisioningStatus.NotProvisioned;
 
     private sealed record NormalizedUpsert(
         string Id,

@@ -114,6 +114,7 @@
           <button id="local-device-detail-test-btn" type="button" class="secondary">Bağlantıyı Test Et</button>
           <button id="local-device-detail-info-btn" type="button" class="secondary">Cihaz Bilgisini Getir</button>
           <button id="local-device-detail-discover-btn" type="button" class="secondary">Terminalleri Keşfet</button>
+          <button id="local-device-detail-stys-btn" type="button" class="secondary">STYS Durumunu Kontrol Et</button>
           <button id="local-device-detail-pair-btn" type="button">Pairing Başlat</button>
         </div>
       </div>
@@ -156,6 +157,9 @@
           <div id="local-device-detail-central-id" class="value small-value">-</div>
           <div class="meta section">Provisioning</div>
           <div id="local-device-detail-provisioning-status" class="value small-value badge muted">Kaydedilmedi</div>
+          <div class="meta section">STYS Durumu</div>
+          <div id="local-device-detail-stys-status" class="value small-value badge muted">-</div>
+          <div id="local-device-detail-stys-message" class="status muted">-</div>
           <div class="meta section">Son kayıt</div>
           <div id="local-device-detail-provisioning-at" class="value small-value">-</div>
         </div>
@@ -210,8 +214,8 @@
           <button id="provisioning-save-btn" type="button" class="secondary" disabled>STYS'e Kaydet</button>
         </div>
       </div>
-      <div id="provisioning-preview-status" class="status muted">Önizleme bekleniyor.</div>
-      <pre id="provisioning-preview-json" class="json-preview">Henüz önizleme oluşturulmadı.</pre>
+          <div id="provisioning-preview-status" class="status muted">Önizleme bekleniyor.</div>
+          <pre id="provisioning-preview-json" class="json-preview">Henüz önizleme oluşturulmadı.</pre>
     </section>
 
     <section class="card section">

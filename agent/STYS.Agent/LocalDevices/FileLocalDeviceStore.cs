@@ -219,8 +219,13 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
             LastPairingAt = device.LastPairingAt,
             LastPairingError = string.IsNullOrWhiteSpace(device.LastPairingError) ? null : device.LastPairingError.Trim(),
             CentralPosCihaziId = device.CentralPosCihaziId,
+            CentralAgentId = device.CentralAgentId,
+            CentralTesisId = device.CentralTesisId,
             LastProvisionedAt = device.LastProvisionedAt,
             ProvisioningStatus = device.ProvisioningStatus,
+            StysReconciliationStatus = device.StysReconciliationStatus,
+            StysReconciliationMessage = string.IsNullOrWhiteSpace(device.StysReconciliationMessage) ? null : device.StysReconciliationMessage.Trim(),
+            StysReconciliationCheckedAt = device.StysReconciliationCheckedAt,
             CreatedAt = device.CreatedAt == default ? DateTimeOffset.UtcNow : device.CreatedAt,
             UpdatedAt = DateTimeOffset.UtcNow
         };
@@ -295,8 +300,13 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
         LastPairingAt = device.LastPairingAt,
         LastPairingError = device.LastPairingError,
         CentralPosCihaziId = device.CentralPosCihaziId,
+        CentralAgentId = device.CentralAgentId,
+        CentralTesisId = device.CentralTesisId,
         LastProvisionedAt = device.LastProvisionedAt,
         ProvisioningStatus = device.ProvisioningStatus,
+        StysReconciliationStatus = device.StysReconciliationStatus,
+        StysReconciliationMessage = device.StysReconciliationMessage,
+        StysReconciliationCheckedAt = device.StysReconciliationCheckedAt,
         CreatedAt = device.CreatedAt,
         UpdatedAt = device.UpdatedAt
     };

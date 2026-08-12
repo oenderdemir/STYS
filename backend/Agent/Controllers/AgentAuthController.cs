@@ -7,6 +7,7 @@ using STYS.Agent.Entities;
 using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Services;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Entegrasyonlar.Pos.Entities;
 using AgentEntity = STYS.Agent.Entities.Agent;
 
 namespace STYS.Agent.Controllers;
@@ -176,6 +177,84 @@ public sealed class AgentAuthController : ControllerBase
             return Unauthorized();
 
         return Ok(await _posCihaziService.RegisterFromAgentAsync(request, cancellationToken));
+    }
+
+    [HttpPost("pos-devices/status-snapshot")]
+    [Authorize(Policy = AgentPolicies.AgentPolicy)]
+    public async Task<ActionResult<AgentPavoDeviceStatusSnapshotDto?>> GetPosDeviceStatusSnapshot(
+        [FromBody] AgentPavoDeviceStatusSnapshotRequest request,
+        CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated)
+            return Unauthorized();
+
+        if (request is null)
+            return BadRequest(new { message = "İstek zorunludur." });
+
+        if (!string.Equals(request.Provider?.Trim(), "PAVO", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Sadece PAVO provider destekleniyor." });
+
+        if (string.IsNullOrWhiteSpace(request.LocalDeviceId))
+            return BadRequest(new { message = "Local cihaz kimliği zorunludur." });
+
+        if (string.IsNullOrWhiteSpace(request.SerialNumber))
+            return BadRequest(new { message = "Seri numarası zorunludur." });
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var devices = await db.PosCihazlari
+            .AsNoTracking()
+            .Include(x => x.Terminaller.Where(t => !t.IsDeleted))
+            .Where(x =>
+                !x.IsDeleted
+                && x.KurumId == agentContext.KurumId
+                && x.AgentId == agentContext.AgentId
+                && x.Saglayici == PosSaglayici.Pavo)
+            .ToListAsync(cancellationToken);
+
+        var device = devices
+            .Where(x =>
+                string.Equals(x.AgentLocalDeviceId, request.LocalDeviceId.Trim(), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(x.SeriNo, request.SerialNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(x => string.Equals(x.AgentLocalDeviceId, request.LocalDeviceId.Trim(), StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(x => string.Equals(x.SeriNo, request.SerialNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault();
+
+        if (device is null)
+        {
+            return Ok(null);
+        }
+
+        return Ok(new AgentPavoDeviceStatusSnapshotDto
+        {
+            CentralPosCihaziId = device.Id,
+            AgentId = device.AgentId,
+            KurumId = device.KurumId,
+            TesisId = device.TesisId,
+            AgentLocalDeviceId = device.AgentLocalDeviceId,
+            Provider = "PAVO",
+            SerialNumber = device.SeriNo,
+            Active = device.AktifMi,
+            DisplayName = device.Ad,
+            Host = device.IpAdresi,
+            HttpPort = device.HttpPort,
+            HttpsPort = device.HttpsPort,
+            Fingerprint = device.Fingerprint,
+            TargetFingerprint = device.TargetFingerprint,
+            SonBaglantiTarihi = device.SonBaglantiTarihi,
+            Terminals = device.Terminaller
+                .Where(x => !x.IsDeleted)
+                .Select(x => new PavoDeviceProvisioningCandidateTerminal
+                {
+                    AcquirerId = x.AcquirerId,
+                    AcquirerName = x.AcquirerName,
+                    TerminalId = x.CanonicalTerminalId ?? x.SerialNumber,
+                    MerchantId = x.SourceTerminalReference,
+                    SourceReference = x.SourceTerminalReference ?? x.CanonicalTerminalId,
+                    Active = x.AktifMi
+                })
+                .ToList()
+        });
     }
 
     [HttpGet("commands")]

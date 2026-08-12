@@ -11,6 +11,8 @@ public interface IStysAgentApiClient
     Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken);
     Task<AgentPavoDeviceRegistrationResult> RegisterPavoDeviceAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
+    Task<AgentPavoDeviceStatusSnapshotDto?> GetPavoDeviceStatusSnapshotAsync(AgentPavoDeviceStatusSnapshotRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
     Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken);
     Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken);
     Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken);

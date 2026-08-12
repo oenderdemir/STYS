@@ -47,6 +47,9 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
     public Task<AgentPavoDeviceRegistrationResult> RegisterPavoDeviceAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken) =>
         SendForDataAsync<AgentPavoDeviceRegistrationResult>(HttpMethod.Post, "api/agent/pos-devices/register", request, cancellationToken);
 
+    public Task<AgentPavoDeviceStatusSnapshotDto?> GetPavoDeviceStatusSnapshotAsync(AgentPavoDeviceStatusSnapshotRequest request, CancellationToken cancellationToken) =>
+        SendForDataAsync<AgentPavoDeviceStatusSnapshotDto?>(HttpMethod.Post, "api/agent/pos-devices/status-snapshot", request, cancellationToken);
+
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(CancellationToken cancellationToken)
     {
         var data = await SendForDataAsync<List<AgentCommandDto>>(HttpMethod.Get, "api/agent/commands", null, cancellationToken);

@@ -38,7 +38,10 @@ public enum LocalDeviceProvisioningStatus
 {
     NotProvisioned = 0,
     Provisioned = 1,
-    Failed = 2
+    ReProvisionRequired = 2,
+    Conflict = 3,
+    Disabled = 4,
+    Failed = 5
 }
 
 public sealed class LocalDevice
@@ -63,10 +66,38 @@ public sealed class LocalDevice
     public DateTimeOffset? LastPairingAt { get; set; }
     public string? LastPairingError { get; set; }
     public int? CentralPosCihaziId { get; set; }
+    public int? CentralAgentId { get; set; }
+    public int? CentralTesisId { get; set; }
     public DateTimeOffset? LastProvisionedAt { get; set; }
     public LocalDeviceProvisioningStatus ProvisioningStatus { get; set; } = LocalDeviceProvisioningStatus.NotProvisioned;
+    public LocalDeviceStysReconciliationStatus? StysReconciliationStatus { get; set; }
+    public string? StysReconciliationMessage { get; set; }
+    public DateTimeOffset? StysReconciliationCheckedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public enum LocalDeviceStysReconciliationStatus
+{
+    InSync = 0,
+    ReProvisionRequired = 1,
+    CentralMissing = 2,
+    OwnershipConflict = 3,
+    Disabled = 4
+}
+
+public sealed class LocalDeviceStysReconciliationResult
+{
+    public string DeviceId { get; set; } = string.Empty;
+    public LocalDeviceStysReconciliationStatus Status { get; set; } = LocalDeviceStysReconciliationStatus.CentralMissing;
+    public string Message { get; set; } = string.Empty;
+    public int? CentralPosCihaziId { get; set; }
+    public int? CentralAgentId { get; set; }
+    public int? CentralTesisId { get; set; }
+    public string? CentralSerialNumber { get; set; }
+    public string? CentralProvider { get; set; }
+    public bool? CentralActive { get; set; }
+    public DateTimeOffset CheckedAt { get; set; }
 }
 
 public sealed class LocalDeviceUpsertRequest

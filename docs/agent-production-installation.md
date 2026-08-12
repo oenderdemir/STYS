@@ -38,6 +38,13 @@ Use `scripts/agent/uninstall-agent.ps1` to remove the service. Add `-Purge` only
 
 Use `scripts/agent/install-agent.sh` to deploy the agent and register the `stys-agent` systemd unit.
 
+- positional parameters:
+  - 1: publish directory
+  - 2: install directory
+  - 3: data directory
+  - 4: log directory
+  - 5: local UI port
+
 - dedicated low-privilege user: `stys-agent`
 - restart policy: `Restart=on-failure`
 - working directory: `/opt/stys-agent`

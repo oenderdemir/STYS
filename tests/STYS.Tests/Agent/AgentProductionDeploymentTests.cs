@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
@@ -104,12 +105,76 @@ public sealed class AgentProductionDeploymentTests : IDisposable
         Assert.True(File.Exists(scriptPath));
 
         var script = File.ReadAllText(scriptPath);
+        Assert.DoesNotContain("$LocalUiPort", script, StringComparison.Ordinal);
+        Assert.Contains("LOCAL_UI_PORT=\"${5:-5180}\"", script, StringComparison.Ordinal);
         Assert.Contains("chown -R root:root \"$INSTALL_DIR\"", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("chmod -R u=rwX,go=rX \"$INSTALL_DIR\"", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=STYS_AGENT_DATA_DIR=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=STYS_AGENT_LOG_DIR=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=STYS_AGENT_LOCAL_UI_PORT=", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=ASPNETCORE_URLS=http://127.0.0.1:$LOCAL_UI_PORT", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("chown -R \"$SERVICE_USER:$SERVICE_USER\" \"$INSTALL_DIR\"", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LinuxInstallScript_BashSyntaxIsValid()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var scriptPath = Path.Combine(repoRoot, "scripts", "agent", "install-agent.sh");
+        var bashScriptPath = ToBashPath(scriptPath);
+
+        var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "bash",
+            Arguments = $"-n \"{bashScriptPath}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        Assert.NotNull(process);
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            var stderr = process.StandardError.ReadToEnd();
+            var stdout = process.StandardOutput.ReadToEnd();
+            Assert.Fail($"bash -n failed with exit code {process.ExitCode}. stderr: {stderr} stdout: {stdout}");
+        }
+    }
+
+    [Fact]
+    public void LinuxInstallScript_CustomPortIsReflectedInUnitTemplate()
+    {
+        var port = 6123;
+        var tempScript = Path.Combine(_tempDir, "render-unit.sh");
+        File.WriteAllText(tempScript, $$"""
+#!/usr/bin/env bash
+set -euo pipefail
+LOCAL_UI_PORT={{port}}
+printf 'Environment=STYS_AGENT_LOCAL_UI_PORT=%s\nEnvironment=ASPNETCORE_URLS=http://127.0.0.1:%s\n' "$LOCAL_UI_PORT" "$LOCAL_UI_PORT"
+""");
+
+        var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "bash",
+            Arguments = $"\"{ToBashPath(tempScript)}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        Assert.NotNull(process);
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        Assert.Equal(0, process.ExitCode);
+        Assert.Empty(stderr);
+        Assert.Contains($"Environment=STYS_AGENT_LOCAL_UI_PORT={port}", stdout, StringComparison.Ordinal);
+        Assert.Contains($"Environment=ASPNETCORE_URLS=http://127.0.0.1:{port}", stdout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -184,4 +249,15 @@ public sealed class AgentProductionDeploymentTests : IDisposable
 
     private static void SetEnvironment(string name, string? value) =>
         Environment.SetEnvironmentVariable(name, value);
+
+    private static string ToBashPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path).Replace('\\', '/');
+        if (fullPath.Length > 1 && fullPath[1] == ':')
+        {
+            return "/mnt/" + char.ToLowerInvariant(fullPath[0]) + fullPath[2..];
+        }
+
+        return fullPath;
+    }
 }

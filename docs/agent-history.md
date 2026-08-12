@@ -1612,6 +1612,25 @@ Agent Regression:  0
   - Linux install scriptinin root yetkisiyle çalıştırılması gerekir.
   - Publish output farklı self-contained ayarlarda dosya isimlerini değiştirebilir; scriptler publish çıktısını varsayar.
 
+### E1 Linux Installer Port Fix — 2026-08-12
+
+- Local UI port:
+  - Linux installer artık 5. positional parametreyi `LOCAL_UI_PORT` olarak kullanıyor.
+  - Varsayılan değer `5180`.
+  - Geçersiz port değerleri `1..65535` aralığı dışında ise kurulum duruyor.
+- systemd unit:
+  - `STYS_AGENT_LOCAL_UI_PORT` ve `ASPNETCORE_URLS` aynı port değerini kullanıyor.
+  - Ayrı ve çelişen hard-coded port kalmadı.
+- Tests:
+  - `bash -n scripts/agent/install-agent.sh` syntax testi eklendi.
+  - Scriptte undefined `LocalUiPort` kalmadığı test edildi.
+  - Custom port örneğinin aynı portu unit satırlarına taşıdığı doğrulandı.
+- Real device test status:
+  - Bu turda gerçek Linux kurulum testi yapılmadı.
+- Known limitations:
+  - Unit dosyası `systemd` yazma izni gerektirir.
+  - Port argümanı yalnız kurulum scripti üzerinden uygulanır; mevcut kurulu service’in yeniden kurulması gerekir.
+
 ### D3 Final Safety Fix — 2026-08-12
 
 - Execution store fail-closed hale getirildi:

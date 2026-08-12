@@ -3,7 +3,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using STYS.Agent.Client;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Contracts.Versioning;
 using STYS.Agent.Services;
+using STYS.Agent.Versioning;
 
 namespace STYS.Agent.Workers;
 
@@ -13,9 +15,6 @@ public sealed class HeartbeatWorker : BackgroundService
     private readonly IAgentAuthenticationState _authenticationState;
     private readonly IAgentRuntimeStatus _runtimeStatus;
     private readonly ILogger<HeartbeatWorker> _logger;
-    private readonly string _agentVersion = "1.0.0";
-    private readonly string _contractVersion = "1.0.0";
-
     public HeartbeatWorker(
         IStysAgentApiClient client,
         IAgentAuthenticationState authenticationState,
@@ -40,13 +39,13 @@ public sealed class HeartbeatWorker : BackgroundService
                 {
                     var request = new AgentHeartbeatRequest
                     {
-                        AgentVersion = _agentVersion,
-                        ContractVersion = _contractVersion,
+                        AgentVersion = AgentVersionInfo.Current,
+                        ContractVersion = AgentContractVersion.Current,
                         SupportedApiVersions = ["v1"],
                         SupportedCapabilities = ["heartbeat", "config-read"],
                         InstalledModules =
                         [
-                            new AgentModuleInfo { ModuleName = "Core", ModuleVersion = _agentVersion }
+                            new AgentModuleInfo { ModuleName = "Core", ModuleVersion = AgentVersionInfo.Current }
                         ],
                         Platform = RuntimeInformation.OSDescription,
                         OsVersion = Environment.OSVersion.ToString()

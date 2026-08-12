@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Options;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
@@ -6,6 +5,7 @@ using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Diagnostics;
 using STYS.Agent.Services;
+using STYS.Agent.Versioning;
 using TOD.Platform.SharedKernel.Exceptions;
 
 namespace STYS.Agent.Configuration;
@@ -262,8 +262,7 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
         }
     }
 
-    private static string ResolveAgentVersion() =>
-        Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown";
+    private static string ResolveAgentVersion() => AgentVersionInfo.Current;
 
     private static string ResolveLocalUiVersion() =>
         typeof(AgentBootstrapManagementService).Assembly.GetName().Version?.ToString() ?? "unknown";

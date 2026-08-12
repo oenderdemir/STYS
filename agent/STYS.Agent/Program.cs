@@ -14,6 +14,7 @@ using STYS.Agent.LocalManagement;
 using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
 using STYS.Agent.Workers;
+using STYS.Agent.Versioning;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +62,7 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.Configure<StysAgentClientOptions>(
     builder.Configuration.GetSection(StysAgentClientOptions.SectionName));
+builder.Services.PostConfigure<StysAgentClientOptions>(options => options.AgentVersion = AgentVersionInfo.Current);
 
 builder.Services.AddSingleton<IAgentPathResolver, AgentPathResolver>();
 builder.Services.AddSingleton<IAgentBootstrapConfigurationStore, FileAgentBootstrapConfigurationStore>();

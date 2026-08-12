@@ -1,11 +1,12 @@
 using STYS.Agent.Contracts.Enums;
+using STYS.Agent.Contracts.Versioning;
 
 namespace STYS.Agent.Contracts.Dtos;
 
 public sealed class AgentHeartbeatRequest
 {
     public string AgentVersion { get; set; } = string.Empty;
-    public string ContractVersion { get; set; } = string.Empty;
+    public string ContractVersion { get; set; } = AgentContractVersion.Current;
     public IReadOnlyCollection<string> SupportedApiVersions { get; set; } = [];
     public IReadOnlyCollection<string> SupportedCapabilities { get; set; } = [];
     public IReadOnlyCollection<AgentModuleInfo> InstalledModules { get; set; } = [];

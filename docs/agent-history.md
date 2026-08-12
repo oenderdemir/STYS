@@ -1538,6 +1538,33 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+### E2A Authoritative Version Hardening — 2026-08-12
+
+- Gerçek binary version kaynağı:
+  - `agent/Directory.Build.props` ile agent tarafında deterministik `VersionPrefix/Version/InformationalVersion` tanımlandı.
+  - `STYS.Agent` heartbeat ve bootstrap tarafı artık sabit string kullanmıyor; version `AssemblyInformationalVersion` üzerinden okunuyor.
+- Contract version kaynağı:
+  - `STYS.Agent.Contracts.Versioning.AgentContractVersion.Current` authoritative tek kaynak olarak eklendi.
+  - Heartbeat contract version ve backend compatibility policy bu sabit üzerinden ilerliyor.
+- SemVer davranışı:
+  - Prerelease precedence eklendi: `1.0.0-rc.1 < 1.0.0`.
+  - Build metadata precedence’i etkilemiyor: `1.0.0+build.5` ile `1.0.0` aynı precedence.
+  - Bozuk formatlar `Unknown` dönüyor.
+  - `v1.2.3` açıkça destekleniyor.
+- Payment guard:
+  - `UpdateRequired` ve `IncompatibleContract` durumlarında `PavoStartPayment` hâlâ engelleniyor.
+  - `PavoGetPaymentResult` ve recovery akışları açık kaldı.
+- Tests:
+  - Hedefli compatibility/version testleri geçti.
+  - `dotnet test STYS.sln --configuration Release` çalıştırıldı.
+  - Full solution’da tek mevcut failure:
+    - `STYS.Tests.EBelgeSchematronSidecarIntegrationTests.BuyukXmlLimitteReddedilir`
+    - hata: remote sidecar connection request sırasında connection forcibly closed by remote host.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Build version provider şu an agent assembly informational version’ına dayanıyor; pipeline başka metadata isterse props üzerinden override edilebilir.
+
 ## 2026-08-12 — Agent Production Faz E2A
 
 - Compatibility policy:

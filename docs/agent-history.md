@@ -1467,3 +1467,16 @@ Agent Regression:  0
 - Central DB sequence değeri legacy/diagnostic amaçlı tutuluyor; authoritative kabul edilmiyor.
 - Gerçek PAVO donanımı olmadan sequence ve registration davranışı laboratuvar/test verisiyle doğrulandı.
 - Targeted hardening filter’deki sequence testi şu an expectation mismatch gösteriyor; full solution testi ise geçti.
+
+### C1 Sequence Concurrency Final Fix — 2026-08-12
+
+- Gerçek race condition root cause: `FilePavoLocalPairingStore.UpsertAsync` eski snapshot ile yazıp daha yüksek `TransactionSequence` değerini geriye çekebiliyordu.
+- Monotonic merge eklendi: persisted state ile incoming state aynı lock altında birleştiriliyor, `TransactionSequence` için `Max(stored, incoming)` uygulanıyor.
+- Fingerprint / target fingerprint / pairing metadata artık stale yazımlarla kaybolmuyor.
+- Hedef test artık PASS:
+  - `STYS.Tests.Agent.AgentLocalDevicesPhaseB2Tests.LocalVeCentralSequence_AyniStoreUzerindeCakismadanRezervEdilir`
+- Full test sonucu:
+  - `dotnet test STYS.sln --configuration Release` geçti
+  - Sonuç: `1113 passed, 761 skipped, 0 failed`
+- Sequence owner hâlâ Agent-side authoritative reservation mekanizması.
+- Gerçek PAVO cihazı ile manuel test bu turda yapılmadı.

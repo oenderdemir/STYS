@@ -55,9 +55,18 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         try
         {
             var items = await ReadAllCoreAsync(cancellationToken);
-            items[normalized.DeviceId] = normalized;
+            if (items.TryGetValue(normalized.DeviceId, out var existing))
+            {
+                items[normalized.DeviceId] = Merge(existing, normalized);
+            }
+            else
+            {
+                items[normalized.DeviceId] = normalized;
+            }
+
+            var persisted = items[normalized.DeviceId];
             await WriteAllCoreAsync(items, cancellationToken);
-            return Clone(normalized);
+            return Clone(persisted);
         }
         finally
         {
@@ -196,6 +205,62 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
             LastDeviceInfoAt = state.LastDeviceInfoAt,
             UpdatedAt = state.UpdatedAt == default ? DateTimeOffset.UtcNow : state.UpdatedAt
         };
+    }
+
+    private static PavoLocalPairingState Merge(PavoLocalPairingState existing, PavoLocalPairingState incoming)
+    {
+        var existingSequence = Math.Max(0, existing.TransactionSequence);
+        var incomingSequence = Math.Max(0, incoming.TransactionSequence);
+        var preferIncoming = incomingSequence >= existingSequence;
+
+        return new PavoLocalPairingState
+        {
+            DeviceId = existing.DeviceId,
+            Fingerprint = MergeText(existing.Fingerprint, incoming.Fingerprint, preferIncoming),
+            TargetFingerprint = MergeText(existing.TargetFingerprint, incoming.TargetFingerprint, preferIncoming),
+            TransactionSequence = Math.Max(existingSequence, incomingSequence),
+            PairingStatus = MergePairingStatus(existing.PairingStatus, incoming.PairingStatus, preferIncoming),
+            PairingAt = MergeDateTime(existing.PairingAt, incoming.PairingAt, preferIncoming),
+            LastPairingAttemptAt = MergeDateTime(existing.LastPairingAttemptAt, incoming.LastPairingAttemptAt, preferIncoming),
+            LastPairingError = MergeText(existing.LastPairingError, incoming.LastPairingError, preferIncoming),
+            LastDeviceInfoAt = MergeDateTime(existing.LastDeviceInfoAt, incoming.LastDeviceInfoAt, preferIncoming),
+            UpdatedAt = preferIncoming && incoming.UpdatedAt != default && incoming.UpdatedAt >= existing.UpdatedAt
+                ? incoming.UpdatedAt
+                : existing.UpdatedAt
+        };
+    }
+
+    private static string? MergeText(string? existing, string? incoming, bool preferIncoming)
+    {
+        var existingValue = string.IsNullOrWhiteSpace(existing) ? null : existing.Trim();
+        var incomingValue = string.IsNullOrWhiteSpace(incoming) ? null : incoming.Trim();
+
+        if (preferIncoming)
+        {
+            return incomingValue ?? existingValue;
+        }
+
+        return existingValue ?? incomingValue;
+    }
+
+    private static DateTimeOffset? MergeDateTime(DateTimeOffset? existing, DateTimeOffset? incoming, bool preferIncoming)
+    {
+        if (preferIncoming)
+        {
+            return incoming ?? existing;
+        }
+
+        return existing ?? incoming;
+    }
+
+    private static LocalDevicePairingStatus MergePairingStatus(LocalDevicePairingStatus existing, LocalDevicePairingStatus incoming, bool preferIncoming)
+    {
+        if (preferIncoming)
+        {
+            return incoming;
+        }
+
+        return existing == LocalDevicePairingStatus.Paired ? existing : incoming;
     }
 
     private static PavoLocalPairingState Clone(PavoLocalPairingState state) => new()

@@ -348,6 +348,46 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
     }
 
     [Fact]
+    public async Task StaleUpsert_TransactionSequenceIgeriyeCekemez()
+    {
+        var pairingStore = CreatePairingStore();
+        var firstTimestamp = DateTimeOffset.UtcNow.AddMinutes(-2);
+
+        await pairingStore.UpsertAsync(new PavoLocalPairingState
+        {
+            DeviceId = "device-1",
+            Fingerprint = "FP-1",
+            TargetFingerprint = "TFP-1",
+            TransactionSequence = 12,
+            PairingStatus = LocalDevicePairingStatus.Paired,
+            PairingAt = firstTimestamp,
+            LastPairingAttemptAt = firstTimestamp,
+            UpdatedAt = firstTimestamp
+        }, CancellationToken.None);
+
+        await pairingStore.UpsertAsync(new PavoLocalPairingState
+        {
+            DeviceId = "device-1",
+            Fingerprint = "FP-STALE",
+            TargetFingerprint = "TFP-STALE",
+            TransactionSequence = 11,
+            PairingStatus = LocalDevicePairingStatus.Failed,
+            PairingAt = firstTimestamp.AddMinutes(-1),
+            LastPairingAttemptAt = firstTimestamp.AddMinutes(-1),
+            LastPairingError = "stale",
+            UpdatedAt = firstTimestamp.AddMinutes(-1)
+        }, CancellationToken.None);
+
+        var state = await pairingStore.GetAsync("device-1", CancellationToken.None);
+
+        Assert.NotNull(state);
+        Assert.Equal(12, state!.TransactionSequence);
+        Assert.Equal("FP-1", state.Fingerprint);
+        Assert.Equal("TFP-1", state.TargetFingerprint);
+        Assert.Equal(LocalDevicePairingStatus.Paired, state.PairingStatus);
+    }
+
+    [Fact]
     public async Task LocalVeCentralSequence_AyniStoreUzerindeCakismadanRezervEdilir()
     {
         var client = new FakePavoRestClient

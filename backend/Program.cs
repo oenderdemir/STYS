@@ -6,6 +6,7 @@ using Serilog;
 using STYS.AccessScope;
 using STYS.Agent.Authorization;
 using STYS.Agent.Services;
+using STYS.Agent.Options;
 using STYS.Bildirimler.Hubs;
 using STYS.Bildirimler.Services;
 using STYS.Countries.Mapping;
@@ -119,6 +120,7 @@ builder.Services.Configure<KurumLogoStorageOptions>(
 builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOptions.SectionName));
 builder.Services.Configure<PosOperationalHealthOptions>(builder.Configuration.GetSection(PosOperationalHealthOptions.SectionName));
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
+builder.Services.Configure<AgentCompatibilityOptions>(builder.Configuration.GetSection(AgentCompatibilityOptions.SectionName));
 builder.Services.Configure<EBelgeUblOptions>(builder.Configuration.GetSection(EBelgeUblOptions.SectionName));
 builder.Services.Configure<AgentAuthOptions>(builder.Configuration.GetSection(AgentAuthOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);

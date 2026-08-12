@@ -19,6 +19,7 @@ import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
 import { AuthService } from '../auth/auth.service';
 import {
     AgentDto,
+    AgentCompatibilityStatusLabels,
     AgentDurumLabels,
     AgentEnrollmentCodeDto,
     AgentEnrollmentCodeRequest,
@@ -77,6 +78,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     commandsLoading = signal(false);
     selectedCommandType = signal<string>('Ping');
     viewingAgentId = signal<number | null>(null);
+    selectedAgentDetail = signal<AgentDto | null>(null);
 
     agentForm: AgentFormState = { ad: '', tesisIds: [], scopes: [] };
     enrollmentForm: AgentEnrollmentCodeRequest = { tesisIds: [], allowedScopes: [] };
@@ -146,6 +148,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
 
     openNew(): void {
         this.agentForm = this.createDefaultAgentForm();
+        this.selectedAgentDetail.set(null);
         this.submitted.set(false);
         this.dialogVisible.set(true);
     }
@@ -153,6 +156,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     editAgent(agent: AgentListDto): void {
         this.service.getAgent(agent.id).subscribe({
             next: (detail) => {
+                this.selectedAgentDetail.set(detail);
                 this.agentForm = {
                     id: detail.id, ad: detail.ad,
                     tesisIds: detail.tesisIds, scopes: detail.scopes
@@ -368,9 +372,24 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         }
     }
 
+    getCompatibilityLabel(status: number): string {
+        return AgentCompatibilityStatusLabels[status] ?? 'Bilinmiyor';
+    }
+
+    getCompatibilitySeverity(status: number): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+        switch (status) {
+            case 1: return 'success';
+            case 2: return 'warn';
+            case 3:
+            case 4: return 'danger';
+            default: return 'secondary';
+        }
+    }
+
     closeDialog(): void {
         this.dialogVisible.set(false);
         this.viewingAgentId.set(null);
+        this.selectedAgentDetail.set(null);
         this.realtime.leaveAgentGroup();
     }
 

@@ -1,3 +1,5 @@
+using STYS.Agent.Contracts.Enums;
+
 namespace STYS.Agent.Contracts.Dtos;
 
 public sealed class AgentDto
@@ -9,6 +11,11 @@ public sealed class AgentDto
     public string? KurumAd { get; set; }
     public int Durum { get; set; }
     public string? AgentVersion { get; set; }
+    public string? ContractVersion { get; set; }
+    public string? MinimumSupportedAgentVersion { get; set; }
+    public string? RecommendedAgentVersion { get; set; }
+    public string? SupportedContractVersion { get; set; }
+    public AgentCompatibilityStatus CompatibilityStatus { get; set; }
     public DateTime? SonGorulmeTarihi { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
     public bool OnlineMi { get; set; }
@@ -27,6 +34,11 @@ public sealed class AgentListDto
     public string? KurumAd { get; set; }
     public int Durum { get; set; }
     public string? AgentVersion { get; set; }
+    public string? ContractVersion { get; set; }
+    public string? MinimumSupportedAgentVersion { get; set; }
+    public string? RecommendedAgentVersion { get; set; }
+    public string? SupportedContractVersion { get; set; }
+    public AgentCompatibilityStatus CompatibilityStatus { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
     public bool OnlineMi { get; set; }
     public DateTime CreatedAt { get; set; }

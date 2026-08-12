@@ -1538,6 +1538,46 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+## 2026-08-12 — Agent Production Faz E2A
+
+- Compatibility policy:
+  - Merkezi agent uyumluluk modeli eklendi.
+  - Durumlar: `Unknown`, `Supported`, `UpdateAvailable`, `UpdateRequired`, `IncompatibleContract`.
+  - Karar backend policy/options üzerinden veriliyor:
+    - `MinimumSupportedAgentVersion`
+    - `RecommendedAgentVersion`
+    - `SupportedContractVersion`
+  - Semantic version karşılaştırması string compare ile yapılmıyor.
+- Heartbeat / agent metadata:
+  - Heartbeat request içindeki `AgentVersion` ve `ContractVersion` authoritative kaynak olarak işleniyor.
+  - Agent entity’sine `ContractVersion` kalıcı alanı eklendi.
+  - Agent listesi ve detail DTO’ları uyumluluk status/version alanlarını taşıyor.
+- Payment guard:
+  - `PavoStartPayment` için uyumluluk kontrolü backend tarafında zorunlu hale getirildi.
+  - `Supported` ve `UpdateAvailable` izinli.
+  - `UpdateRequired`, `IncompatibleContract`, `Unknown` bloklanıyor.
+  - Recovery akışları (`PavoGetPaymentResult`, heartbeat, config, health) engellenmiyor.
+- UI:
+  - Agent listesinde compatibility badge eklendi.
+  - Agent detayında uyumluluk sekmesi eklendi:
+    - Agent Version
+    - Contract Version
+    - Minimum Supported
+    - Recommended Version
+    - Supported Contract
+    - Compatibility Status
+- Migration:
+  - `Agentler.ContractVersion` kolonu eklendi.
+- Tests:
+  - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentCompatibilityPolicy"` geçti.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+  - Integration testlerin bir kısmı local SQL connection env olmadığı için `skip` oldu.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Policy şu an major/minor/patch/revision karşılaştırması yapıyor; prerelease semver sıralaması için ayrı bir model yok.
+  - Backend ve UI version alanları display amaçlıdır; binary download/self-update yoktur.
+
 ## 2026-08-12 — Agent Production Faz E1
 
 - Windows/Linux production publish:

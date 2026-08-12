@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
+using STYS.Agent.Options;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Infrastructure.EntityFramework;
@@ -22,6 +24,7 @@ public sealed class AgentCommandService
     private readonly IAgentCommandRealtimeNotifier? _notifier;
     private readonly AgentCommandExpiryService _commandExpiryService;
     private readonly ILogger<AgentCommandService> _logger;
+    private readonly AgentCompatibilityOptions _compatibilityOptions;
 
     private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -55,10 +58,12 @@ public sealed class AgentCommandService
         ICurrentTenantAccessor tenantAccessor,
         ILogger<AgentCommandService> logger,
         IAgentCommandRealtimeNotifier? notifier = null,
-        AgentCommandExpiryService? commandExpiryService = null)
+        AgentCommandExpiryService? commandExpiryService = null,
+        IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
     {
         _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _logger = logger; _notifier = notifier;
         _commandExpiryService = commandExpiryService ?? new AgentCommandExpiryService(dbContextFactory, NullLogger<AgentCommandExpiryService>.Instance);
+        _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
     }
 
     public async Task<AgentCommandDto> SendAsync(AgentCommandSendRequest request, string requestedBy, CancellationToken ct)
@@ -69,6 +74,7 @@ public sealed class AgentCommandService
         if (!_tenantAccessor.IsSuperAdmin() && !_tenantAccessor.GetAccessibleKurumIds().Contains(agent.KurumId))
             throw new BaseException("Bu agent'a komut gönderme yetkiniz yok.", 403);
         if (agent.Durum != AgentDurum.Active) throw new BaseException("Agent aktif değil.", 400);
+        EnsurePaymentCommandAllowed(agent, request.CommandType);
         await ValidateScopeAsync(db, agent.Id, request.CommandType, ct);
         await ValidateCapabilityAsync(db, agent.Id, request.CommandType, ct);
 
@@ -86,6 +92,30 @@ public sealed class AgentCommandService
         var dto = MapToDto(cmd);
         NotifyIfNeeded(dto);
         return dto;
+    }
+
+    private void EnsurePaymentCommandAllowed(AgentEntity agent, string commandType)
+    {
+        if (!string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var compatibility = AgentCompatibilityEvaluator.Evaluate(agent.AgentVersion, agent.ContractVersion, _compatibilityOptions);
+        if (AgentCompatibilityEvaluator.CanStartPayment(compatibility.CompatibilityStatus))
+        {
+            return;
+        }
+
+        var message = compatibility.CompatibilityStatus switch
+        {
+            AgentCompatibilityStatus.UpdateRequired => "Agent sürümü PAVO ödemesi için güncellenmeli.",
+            AgentCompatibilityStatus.IncompatibleContract => "Agent contract sürümü PAVO ödemesi için uyumsuz.",
+            AgentCompatibilityStatus.Unknown => "Agent sürümü PAVO ödemesi için doğrulanamadı.",
+            _ => "Agent sürümü PAVO ödemesi için desteklenmiyor."
+        };
+
+        throw new BaseException(message, 400);
     }
 
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(int agentId, CancellationToken ct)

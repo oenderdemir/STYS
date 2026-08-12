@@ -10,6 +10,7 @@ public sealed class Agent : BaseEntity<int>, ITenantEntity
     public int KurumId { get; set; }
     public AgentDurum Durum { get; set; } = AgentDurum.PendingApproval;
     public string? AgentVersion { get; set; }
+    public string? ContractVersion { get; set; }
     public DateTime? SonGorulmeTarihi { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
     public string? CihazKimligi { get; set; }

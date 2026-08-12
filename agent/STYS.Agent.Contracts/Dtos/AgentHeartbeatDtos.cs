@@ -1,3 +1,5 @@
+using STYS.Agent.Contracts.Enums;
+
 namespace STYS.Agent.Contracts.Dtos;
 
 public sealed class AgentHeartbeatRequest
@@ -21,8 +23,11 @@ public sealed class AgentModuleInfo
 public sealed class AgentHeartbeatResponse
 {
     public string? MinimumSupportedAgentVersion { get; set; }
+    public string? RecommendedAgentVersion { get; set; }
+    public string? SupportedContractVersion { get; set; }
     public string? LatestAgentVersion { get; set; }
     public string? RequiredContractVersion { get; set; }
+    public AgentCompatibilityStatus CompatibilityStatus { get; set; }
     public IReadOnlyCollection<string> DeprecatedCapabilities { get; set; } = [];
     public bool RequiredUpdate { get; set; }
 }

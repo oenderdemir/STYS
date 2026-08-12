@@ -1969,6 +1969,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
             entity.Property(x => x.AgentKey).HasMaxLength(128).IsRequired();
             entity.Property(x => x.AgentVersion).HasMaxLength(50);
+            entity.Property(x => x.ContractVersion).HasMaxLength(50);
             entity.Property(x => x.CihazKimligi).HasMaxLength(500);
             entity.Property(x => x.PublicKey).HasColumnType("nvarchar(max)");
             entity.HasIndex(x => new { x.KurumId, x.AgentKey }).IsUnique().HasFilter("[IsDeleted] = 0");

@@ -43,6 +43,7 @@
                 <th>Durum</th>
                 <th>Bağlantı</th>
                 <th>Sürüm</th>
+                <th>Uyumluluk</th>
                 <th style="width: 12rem">İşlemler</th>
             </tr>
         </ng-template>
@@ -57,6 +58,11 @@
                     <p-tag [value]="agent.onlineMi ? 'Online' : 'Offline'" [severity]="agent.onlineMi ? 'success' : 'secondary'" />
                 </td>
                 <td>{{ agent.agentVersion ?? '-' }}</td>
+                <td>
+                    <p-tag
+                        [value]="getCompatibilityLabel(agent.compatibilityStatus)"
+                        [severity]="getCompatibilitySeverity(agent.compatibilityStatus)" />
+                </td>
                 <td>
                     <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="editAgent(agent)" pTooltip="Düzenle"></button>
                     @if (agent.durum === 0) {
@@ -85,7 +91,8 @@
         <p-tabs value="0">
             <p-tablist>
                 <p-tab value="0">Bilgiler</p-tab>
-                <p-tab value="1">Komutlar</p-tab>
+                <p-tab value="1">Uyumluluk</p-tab>
+                <p-tab value="2">Komutlar</p-tab>
             </p-tablist>
             <p-tabpanels>
                 <p-tabpanel value="0">
@@ -95,6 +102,54 @@
                     </div>
                 </p-tabpanel>
                 <p-tabpanel value="1">
+                    @if (selectedAgentDetail(); as detail) {
+                        <div class="grid">
+                            <div class="col-12 md:col-6">
+                                <div class="field">
+                                    <label>Agent Version</label>
+                                    <div class="font-semibold">{{ detail.agentVersion ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-6">
+                                <div class="field">
+                                    <label>Contract Version</label>
+                                    <div class="font-semibold">{{ detail.contractVersion ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-4">
+                                <div class="field">
+                                    <label>Minimum Supported</label>
+                                    <div class="font-semibold">{{ detail.minimumSupportedAgentVersion ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-4">
+                                <div class="field">
+                                    <label>Recommended Version</label>
+                                    <div class="font-semibold">{{ detail.recommendedAgentVersion ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-4">
+                                <div class="field">
+                                    <label>Supported Contract</label>
+                                    <div class="font-semibold">{{ detail.supportedContractVersion ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="field">
+                                    <label>Compatibility Status</label>
+                                    <div>
+                                        <p-tag
+                                            [value]="getCompatibilityLabel(detail.compatibilityStatus)"
+                                            [severity]="getCompatibilitySeverity(detail.compatibilityStatus)" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    } @else {
+                        <div class="text-color-secondary">Uyumluluk bilgisi için bir agent seçin.</div>
+                    }
+                </p-tabpanel>
+                <p-tabpanel value="2">
                     <div class="field grid">
                         <div class="col-8">
                             <p-select [options]="commandTypes" [(ngModel)]="selectedCommandType" styleClass="w-full" />

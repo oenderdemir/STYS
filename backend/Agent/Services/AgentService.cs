@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
+using STYS.Agent.Options;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Security.Auth.Services;
@@ -15,11 +17,16 @@ public sealed class AgentService : IAgentService
 {
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly AgentCompatibilityOptions _compatibilityOptions;
 
-    public AgentService(IDbContextFactory<StysAppDbContext> dbContextFactory, ICurrentTenantAccessor tenantAccessor)
+    public AgentService(
+        IDbContextFactory<StysAppDbContext> dbContextFactory,
+        ICurrentTenantAccessor tenantAccessor,
+        IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
     {
         _dbContextFactory = dbContextFactory;
         _tenantAccessor = tenantAccessor;
+        _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
     }
 
     public async Task<AgentDto> GetByIdAsync(int id, CancellationToken cancellationToken)
@@ -47,20 +54,11 @@ public sealed class AgentService : IAgentService
             query = query.Where(x => x.Tesisler.Any(t => !t.IsDeleted && t.TesisId == tesisId.Value));
         }
 
-        return await query.Select(x => new AgentListDto
-        {
-            Id = x.Id,
-            Ad = x.Ad,
-            AgentKey = x.AgentKey,
-            KurumId = x.KurumId,
-            Durum = (int)x.Durum,
-            AgentVersion = x.AgentVersion,
-            LastHeartbeatAt = x.LastHeartbeatAt,
-            OnlineMi = ComputeOnline(x.LastHeartbeatAt),
-            CreatedAt = x.CreatedAt ?? DateTime.MinValue
-        })
-        .OrderByDescending(x => x.CreatedAt)
-        .ToListAsync(cancellationToken);
+        var agents = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return agents.Select(MapToListDto).ToList();
     }
 
     public async Task<AgentDto> CreateAsync(AgentKaydetRequest request, string createdBy, CancellationToken cancellationToken)
@@ -273,11 +271,50 @@ public sealed class AgentService : IAgentService
         if (invalid.Count > 0) throw new BaseException($"Geçersiz tesis ID'leri: {string.Join(", ", invalid)}", 400);
     }
 
-    private static AgentDto MapToDto(AgentEntity agent)
+    private AgentDto MapToDto(AgentEntity agent)
     {
+        var compatibility = AgentCompatibilityEvaluator.Evaluate(agent.AgentVersion, agent.ContractVersion, _compatibilityOptions);
         return new AgentDto
         {
-            Id = agent.Id, Ad = agent.Ad, AgentKey = agent.AgentKey, KurumId = agent.KurumId, Durum = (int)agent.Durum, AgentVersion = agent.AgentVersion, LastHeartbeatAt = agent.LastHeartbeatAt, OnlineMi = ComputeOnline(agent.LastHeartbeatAt), CihazKimligi = agent.CihazKimligi, TesisIds = agent.Tesisler?.Where(x => !x.IsDeleted).Select(x => x.TesisId).ToList() ?? [], Scopes = agent.Scopes?.Where(x => !x.IsDeleted && x.AktifMi).Select(x => x.Scope).ToList() ?? [], CreatedAt = agent.CreatedAt ?? DateTime.MinValue
+            Id = agent.Id,
+            Ad = agent.Ad,
+            AgentKey = agent.AgentKey,
+            KurumId = agent.KurumId,
+            Durum = (int)agent.Durum,
+            AgentVersion = agent.AgentVersion,
+            ContractVersion = agent.ContractVersion,
+            MinimumSupportedAgentVersion = compatibility.MinimumSupportedAgentVersion,
+            RecommendedAgentVersion = compatibility.RecommendedAgentVersion,
+            SupportedContractVersion = compatibility.SupportedContractVersion,
+            CompatibilityStatus = compatibility.CompatibilityStatus,
+            LastHeartbeatAt = agent.LastHeartbeatAt,
+            OnlineMi = ComputeOnline(agent.LastHeartbeatAt),
+            CihazKimligi = agent.CihazKimligi,
+            TesisIds = agent.Tesisler?.Where(x => !x.IsDeleted).Select(x => x.TesisId).ToList() ?? [],
+            Scopes = agent.Scopes?.Where(x => !x.IsDeleted && x.AktifMi).Select(x => x.Scope).ToList() ?? [],
+            CreatedAt = agent.CreatedAt ?? DateTime.MinValue
+        };
+    }
+
+    private AgentListDto MapToListDto(AgentEntity agent)
+    {
+        var compatibility = AgentCompatibilityEvaluator.Evaluate(agent.AgentVersion, agent.ContractVersion, _compatibilityOptions);
+        return new AgentListDto
+        {
+            Id = agent.Id,
+            Ad = agent.Ad,
+            AgentKey = agent.AgentKey,
+            KurumId = agent.KurumId,
+            Durum = (int)agent.Durum,
+            AgentVersion = agent.AgentVersion,
+            ContractVersion = agent.ContractVersion,
+            MinimumSupportedAgentVersion = compatibility.MinimumSupportedAgentVersion,
+            RecommendedAgentVersion = compatibility.RecommendedAgentVersion,
+            SupportedContractVersion = compatibility.SupportedContractVersion,
+            CompatibilityStatus = compatibility.CompatibilityStatus,
+            LastHeartbeatAt = agent.LastHeartbeatAt,
+            OnlineMi = ComputeOnline(agent.LastHeartbeatAt),
+            CreatedAt = agent.CreatedAt ?? DateTime.MinValue
         };
     }
 

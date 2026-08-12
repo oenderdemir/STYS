@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using STYS.Agent.Authorization;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
+using STYS.Agent.Options;
 using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Services;
 using STYS.Infrastructure.EntityFramework;
@@ -21,19 +24,22 @@ public sealed class AgentAuthController : ControllerBase
     private readonly AgentCommandService _commandService;
     private readonly IPosCihaziService _posCihaziService;
     private readonly IAgentRealtimeNotifier _realtimeNotifier;
+    private readonly AgentCompatibilityOptions _compatibilityOptions;
 
     public AgentAuthController(
         IAgentTokenService tokenService,
         IDbContextFactory<StysAppDbContext> dbContextFactory,
         AgentCommandService commandService,
         IPosCihaziService posCihaziService,
-        IAgentRealtimeNotifier realtimeNotifier)
+        IAgentRealtimeNotifier realtimeNotifier,
+        IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
     {
         _tokenService = tokenService;
         _dbContextFactory = dbContextFactory;
         _commandService = commandService;
         _posCihaziService = posCihaziService;
         _realtimeNotifier = realtimeNotifier;
+        _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
     }
 
     [HttpPost("enroll")]
@@ -68,15 +74,24 @@ public sealed class AgentAuthController : ControllerBase
         {
             agent.LastHeartbeatAt = DateTime.UtcNow;
             agent.SonGorulmeTarihi = DateTime.UtcNow;
-            agent.AgentVersion = request.AgentVersion;
-            agent.CihazKimligi ??= request.CihazKimligi;
+            agent.AgentVersion = NormalizeNullable(request.AgentVersion);
+            agent.ContractVersion = NormalizeNullable(request.ContractVersion);
+            agent.CihazKimligi ??= NormalizeNullable(request.CihazKimligi);
             await db.SaveChangesAsync(cancellationToken);
             await _realtimeNotifier.AgentChangedAsync(cancellationToken);
         }
 
+        var compatibility = AgentCompatibilityEvaluator.Evaluate(request.AgentVersion, request.ContractVersion, _compatibilityOptions);
+
         return Ok(new AgentHeartbeatResponse
         {
-            RequiredUpdate = false
+            MinimumSupportedAgentVersion = compatibility.MinimumSupportedAgentVersion,
+            RecommendedAgentVersion = compatibility.RecommendedAgentVersion,
+            SupportedContractVersion = compatibility.SupportedContractVersion,
+            LatestAgentVersion = compatibility.RecommendedAgentVersion,
+            RequiredContractVersion = compatibility.SupportedContractVersion,
+            CompatibilityStatus = compatibility.CompatibilityStatus,
+            RequiredUpdate = compatibility.RequiredUpdate
         });
     }
 
@@ -125,6 +140,8 @@ public sealed class AgentAuthController : ControllerBase
             .Select(x => x.Ad)
             .FirstOrDefaultAsync(cancellationToken);
 
+        var compatibility = AgentCompatibilityEvaluator.Evaluate(agent.AgentVersion, agent.ContractVersion, _compatibilityOptions);
+
         var tesisler = await db.Set<STYS.Tesisler.Entities.Tesis>()
             .Where(x => agent.Tesisler.Select(t => t.TesisId).Contains(x.Id) && !x.IsDeleted)
             .Select(x => new AgentSelfTesisDto
@@ -161,6 +178,11 @@ public sealed class AgentAuthController : ControllerBase
             Capabilities = capabilities,
             Durum = (int)agent.Durum,
             AgentVersion = agent.AgentVersion,
+            ContractVersion = agent.ContractVersion,
+            MinimumSupportedAgentVersion = compatibility.MinimumSupportedAgentVersion,
+            RecommendedAgentVersion = compatibility.RecommendedAgentVersion,
+            SupportedContractVersion = compatibility.SupportedContractVersion,
+            CompatibilityStatus = compatibility.CompatibilityStatus,
             LastHeartbeatAt = agent.LastHeartbeatAt,
             OnlineMi = agent.LastHeartbeatAt.HasValue && (DateTime.UtcNow - agent.LastHeartbeatAt.Value) <= TimeSpan.FromSeconds(90)
         });
@@ -246,9 +268,9 @@ public sealed class AgentAuthController : ControllerBase
                 {
                     AcquirerId = x.AcquirerId,
                     AcquirerName = x.AcquirerName,
-                    TerminalId = x.CanonicalTerminalId ?? x.SerialNumber,
+                    TerminalId = x.CanonicalTerminalId ?? x.SerialNumber ?? string.Empty,
                     MerchantId = x.SourceTerminalReference,
-                    SourceReference = x.SourceTerminalReference ?? x.CanonicalTerminalId,
+                    SourceReference = x.SourceTerminalReference ?? x.CanonicalTerminalId ?? x.SerialNumber ?? string.Empty,
                     Active = x.AktifMi
                 })
                 .ToList()
@@ -313,4 +335,7 @@ public sealed class AgentAuthController : ControllerBase
         await _commandService.RejectAsync(id, agentContext.AgentId, request.ErrorMessage ?? "Unknown command", cancellationToken);
         return Ok();
     }
+
+    private static string? NormalizeNullable(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

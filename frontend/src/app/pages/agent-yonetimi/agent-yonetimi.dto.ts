@@ -6,7 +6,14 @@ export interface AgentListDto {
     kurumAd?: string;
     durum: number;
     agentVersion?: string;
+    contractVersion?: string;
+    minimumSupportedAgentVersion?: string;
+    recommendedAgentVersion?: string;
+    supportedContractVersion?: string;
+    compatibilityStatus: number;
     sonGorulmeTarihi?: string;
+    lastHeartbeatAt?: string;
+    onlineMi: boolean;
     createdAt: string;
 }
 
@@ -50,6 +57,14 @@ export const AgentDurumLabels: Record<number, string> = {
     1: 'Aktif',
     2: 'Devre Dışı',
     3: 'İptal Edildi'
+};
+
+export const AgentCompatibilityStatusLabels: Record<number, string> = {
+    0: 'Bilinmiyor',
+    1: 'Destekleniyor',
+    2: 'Güncelleme Var',
+    3: 'Güncelleme Gerekli',
+    4: 'Sözleşme Uyuşmuyor'
 };
 
 export const AgentEnrollmentDurumLabels: Record<number, string> = {

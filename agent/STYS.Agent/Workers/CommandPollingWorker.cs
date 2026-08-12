@@ -86,6 +86,22 @@ public sealed class CommandPollingWorker : BackgroundService
                 return;
             }
 
+            if (IsPaymentCommand(dto.CommandType) && !_runtimeStatus.StartupHealthy)
+            {
+                _logger.LogWarning(
+                    "Ödeme komutu başlangıç kontrolü nedeniyle reddedildi: {CommandType} ({CommandId})",
+                    dto.CommandType,
+                    dto.Id);
+                await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest
+                {
+                    Id = dto.Id,
+                    Success = false,
+                    ErrorCode = "AGENT_STARTUP_UNHEALTHY",
+                    ErrorMessage = _runtimeStatus.StartupHealthError ?? "Agent startup validation failed."
+                }, cancellationToken);
+                return;
+            }
+
             if (_executionStore.HasExecuted(dto.IdempotencyKey))
             {
                 _logger.LogInformation("Komut zaten çalıştırılmış (idempotent): {CommandType} ({CommandId})", dto.CommandType, dto.Id);
@@ -250,6 +266,10 @@ public sealed class CommandPollingWorker : BackgroundService
 
         return JsonSerializer.Deserialize<TCommand>(payload, JsonOptions) ?? new TCommand();
     }
+
+    private static bool IsPaymentCommand(string commandType) =>
+        string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class UnknownCommand : IAgentCommand { public string CommandType => "Unknown"; }

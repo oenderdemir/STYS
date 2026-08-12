@@ -1538,6 +1538,44 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+## 2026-08-12 — Agent Production Faz E1
+
+- Windows/Linux production publish:
+  - `win-x64` ve `linux-x64` için Release publish akışı tanımlandı.
+  - Self-contained publish örnekleri dokümante edildi.
+  - Artifact içine development dosyaları / secrets dahil edilmedi.
+- Windows service modeli:
+  - `STYS Agent` servis adıyla kurulum scripti eklendi.
+  - Automatic (Delayed Start) ve recovery policy ayarlandı.
+  - Çalışma dizini, data/log dizinleri ve ACL ayarları kurulumda hazırlanıyor.
+  - Varsayılan servis hesabı düşük yetkili `LocalService`.
+- Linux systemd modeli:
+  - Dedicated düşük yetkili `stys-agent` user ile unit/script eklendi.
+  - `Restart=on-failure`, çalışma dizini ve izinler tanımlandı.
+  - SIGTERM ile graceful shutdown hedefleniyor.
+- Data preservation:
+  - Uninstall varsayılan olarak credential/data/log dizinlerini silmiyor.
+  - `--purge` / explicit purge ile temizleme yapılabiliyor.
+- Security:
+  - Install scriptleri client secret, enrollment code veya fingerprint loglamıyor.
+  - Secrets command-line argümanları üzerinden taşınmıyor.
+  - Local UI loopback binding korunuyor.
+- Startup validation:
+  - Kritik dizinler writable değilse agent healthy sayılmıyor.
+  - Diagnostics’te startup health error görünür hale getirildi.
+  - Production DI, restart-safe file execution store kullanıyor.
+- Tests:
+  - Production DI file execution store testi geçti.
+  - Unwritable critical store startup unhealthy testi geçti.
+  - Loopback / uninstall data preservation / secret redaction regresyonları geçti.
+  - `dotnet test STYS.sln --configuration Release` geçti: `Passed: 1129, Skipped: 782, Failed: 0`.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Service scriptleri makineye göre servis hesabı/izin uyarlaması gerektirebilir.
+  - Linux kurulumunda paketlenmiş self-contained binary adı publish çıktısına bağlıdır.
+  - Angular/Back-end dışında production deploy prosedürü ayrıca operasyon dokümantasyonu gerektirebilir.
+
 ### D3 Final Safety Fix — 2026-08-12
 
 - Execution store fail-closed hale getirildi:

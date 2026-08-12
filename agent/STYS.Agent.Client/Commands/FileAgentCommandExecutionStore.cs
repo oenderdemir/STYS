@@ -30,7 +30,7 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
     {
         Directory.CreateDirectory(paths.DataDirectory);
         SecureDirectory(paths.DataDirectory);
-        _storePath = Path.Combine(paths.DataDirectory, "agent-command-executions.json");
+        _storePath = paths.AgentCommandExecutionStorePath;
         _gate = Gates.GetOrAdd(_storePath, _ => new SemaphoreSlim(1, 1));
         _logger = logger;
     }

@@ -1,0 +1,19 @@
+[Unit]
+Description=STYS Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stys-agent
+Group=stys-agent
+WorkingDirectory=/opt/stys-agent
+ExecStart=/opt/stys-agent/STYS.Agent
+Restart=on-failure
+RestartSec=5
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5180
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

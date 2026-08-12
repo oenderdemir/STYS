@@ -95,7 +95,7 @@ builder.Services.AddHostedService<AgentHostedService>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<CommandPollingWorker>();
 
-builder.Services.AddSingleton<IAgentCommandExecutionStore, FileAgentCommandExecutionStore>();
+builder.Services.AddAgentProductionInfrastructure();
 builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
 {
     var registry = new AgentCommandHandlerRegistry(sp);
@@ -121,5 +121,11 @@ builder.Services.AddSerilog();
 
 var app = builder.Build();
 app.MapAgentLocalManagement();
+
+using (var scope = app.Services.CreateScope())
+{
+    var startupValidator = scope.ServiceProvider.GetRequiredService<IAgentStartupValidationService>();
+    await startupValidator.ValidateAsync(CancellationToken.None);
+}
 
 await app.RunAsync();

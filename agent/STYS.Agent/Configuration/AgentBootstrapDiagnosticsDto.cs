@@ -19,6 +19,9 @@ public sealed class AgentBootstrapDiagnosticsDto
     public bool AuthenticationReady { get; set; }
     public bool RequiresReEnrollment { get; set; }
     public string? RequiresReEnrollmentReason { get; set; }
+    public bool StartupHealthy { get; set; }
+    public string? StartupHealthError { get; set; }
+    public DateTimeOffset? LastStartupValidationAt { get; set; }
     public DateTimeOffset? LastSuccessfulStysConnectionAt { get; set; }
     public string? LastStysConnectionError { get; set; }
     public DateTimeOffset? LastHeartbeatSuccessAt { get; set; }

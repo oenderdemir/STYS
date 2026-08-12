@@ -10,6 +10,9 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
     private DateTimeOffset? _lastCommandPollSuccessAt;
     private string? _lastCommandPollError;
     private DateTimeOffset? _lastResetAt;
+    private DateTimeOffset? _lastStartupValidationAt;
+    private bool _startupHealthy = true;
+    private string? _startupHealthError;
     private bool _credentialPresent;
     private bool _authenticationReady;
     private bool _requiresReEnrollment;
@@ -50,6 +53,21 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
     public DateTimeOffset? LastResetAt
     {
         get { lock (_gate) return _lastResetAt; }
+    }
+
+    public DateTimeOffset? LastStartupValidationAt
+    {
+        get { lock (_gate) return _lastStartupValidationAt; }
+    }
+
+    public bool StartupHealthy
+    {
+        get { lock (_gate) return _startupHealthy; }
+    }
+
+    public string? StartupHealthError
+    {
+        get { lock (_gate) return _startupHealthError; }
     }
 
     public bool CredentialPresent
@@ -128,6 +146,26 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
         lock (_gate)
         {
             _credentialPresent = present;
+        }
+    }
+
+    public void MarkStartupHealthy()
+    {
+        lock (_gate)
+        {
+            _startupHealthy = true;
+            _startupHealthError = null;
+            _lastStartupValidationAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    public void MarkStartupUnhealthy(string message)
+    {
+        lock (_gate)
+        {
+            _startupHealthy = false;
+            _startupHealthError = string.IsNullOrWhiteSpace(message) ? "Agent startup validation failed." : message.Trim();
+            _lastStartupValidationAt = DateTimeOffset.UtcNow;
         }
     }
 

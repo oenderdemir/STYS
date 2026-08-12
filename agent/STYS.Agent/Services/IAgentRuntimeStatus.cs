@@ -10,6 +10,9 @@ public interface IAgentRuntimeStatus
     DateTimeOffset? LastCommandPollSuccessAt { get; }
     string? LastCommandPollError { get; }
     DateTimeOffset? LastResetAt { get; }
+    DateTimeOffset? LastStartupValidationAt { get; }
+    bool StartupHealthy { get; }
+    string? StartupHealthError { get; }
     bool CredentialPresent { get; }
     bool AuthenticationReady { get; }
     bool RequiresReEnrollment { get; }
@@ -22,6 +25,8 @@ public interface IAgentRuntimeStatus
     void MarkCommandPollSuccess();
     void MarkCommandPollFailure(string message);
     void MarkCredentialPresent(bool present);
+    void MarkStartupHealthy();
+    void MarkStartupUnhealthy(string message);
     void MarkAuthenticated();
     void ResetAuthentication();
     void MarkReEnrollmentRequired(string reason);

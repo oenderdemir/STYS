@@ -160,6 +160,9 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
             AuthenticationReady = runtime.AuthenticationReady,
             RequiresReEnrollment = runtime.RequiresReEnrollment,
             RequiresReEnrollmentReason = runtime.RequiresReEnrollmentReason,
+            StartupHealthy = runtime.StartupHealthy,
+            StartupHealthError = runtime.StartupHealthError,
+            LastStartupValidationAt = runtime.LastStartupValidationAt,
             LastSuccessfulStysConnectionAt = runtime.LastSuccessfulStysConnectionAt,
             LastStysConnectionError = runtime.LastStysConnectionError,
             LastHeartbeatSuccessAt = runtime.LastHeartbeatSuccessAt,
@@ -237,7 +240,10 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
             CredentialPresent = credentialPresent,
             AuthenticationReady = _authenticationState.IsReady,
             RequiresReEnrollment = _runtimeStatus.RequiresReEnrollment,
-            RequiresReEnrollmentReason = _runtimeStatus.RequiresReEnrollmentReason
+            RequiresReEnrollmentReason = _runtimeStatus.RequiresReEnrollmentReason,
+            StartupHealthy = _runtimeStatus.StartupHealthy,
+            StartupHealthError = _runtimeStatus.StartupHealthError,
+            LastStartupValidationAt = _runtimeStatus.LastStartupValidationAt
         };
     }
 
@@ -267,6 +273,9 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
         if (credential is null)
             return "Kayıtlı değil";
 
+        if (!runtime.StartupHealthy)
+            return "Başlatma hatası";
+
         if (runtime.RequiresReEnrollment)
             return "Yeniden enrollment gerekli";
 
@@ -286,6 +295,9 @@ public sealed class AgentBootstrapManagementService : IAgentBootstrapManagementS
 
     private static string ResolveConnectionStatus(AgentBootstrapConnectionTestResult? test, AgentRuntimeSnapshotDto runtime, bool reEnrollmentRequired)
     {
+        if (!runtime.StartupHealthy && !string.IsNullOrWhiteSpace(runtime.StartupHealthError))
+            return $"Başlatma hatası: {runtime.StartupHealthError}";
+
         if (reEnrollmentRequired)
             return "Yeniden enrollment gerekli";
 

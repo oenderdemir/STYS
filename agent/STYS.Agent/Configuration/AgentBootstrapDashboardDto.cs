@@ -33,4 +33,7 @@ public sealed class AgentRuntimeSnapshotDto
     public bool AuthenticationReady { get; set; }
     public bool RequiresReEnrollment { get; set; }
     public string? RequiresReEnrollmentReason { get; set; }
+    public bool StartupHealthy { get; set; }
+    public string? StartupHealthError { get; set; }
+    public DateTimeOffset? LastStartupValidationAt { get; set; }
 }

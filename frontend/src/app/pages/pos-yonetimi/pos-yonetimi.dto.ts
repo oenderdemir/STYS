@@ -67,6 +67,52 @@ export interface PosTerminalDto {
     pairingCode?: string | null;
 }
 
+export type PavoOperationalReadiness =
+    | 'Ready'
+    | 'AgentOffline'
+    | 'DeviceOffline'
+    | 'NotProvisioned'
+    | 'ReProvisionRequired'
+    | 'PairingInvalid'
+    | 'NoActiveTerminal'
+    | 'NoAccountMapping'
+    | 'Disabled'
+    | 'OwnershipConflict';
+
+export interface PosTerminalOperationalReadinessDto {
+    id: number;
+    terminalId: string;
+    acquirerId?: string | null;
+    acquirerName?: string | null;
+    active: boolean;
+    kasaBankaHesapId?: number | null;
+    accountMapped: boolean;
+    paymentReady: boolean;
+    statusMessage?: string | null;
+}
+
+export interface PosOperationalReadinessDto {
+    posCihaziId: number;
+    status: PavoOperationalReadiness;
+    ready: boolean;
+    agentOnline: boolean;
+    deviceOnline: boolean;
+    provisioned: boolean;
+    inSync: boolean;
+    pairingValid: boolean;
+    hasActiveTerminal: boolean;
+    hasAccountMapping: boolean;
+    disabled: boolean;
+    ownershipConflict: boolean;
+    agentLastHeartbeatAt?: string | null;
+    deviceLastConnectionAt?: string | null;
+    lastError?: string | null;
+    activeTerminalCount: number;
+    accountMappedTerminalCount: number;
+    terminals: PosTerminalOperationalReadinessDto[];
+    reasons: string[];
+}
+
 export interface PosTerminalKaydetRequest {
     posCihaziId?: number | null;
     kasaBankaHesapId?: number | null;

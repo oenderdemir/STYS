@@ -95,6 +95,24 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         return await SendCommandAsync(device.AgentId!.Value, "PavoGetDeviceInfo", request, requestedBy, cancellationToken);
     }
 
+    public async Task<PosOperationalReadinessDto> GetReadinessAsync(int id, CancellationToken cancellationToken)
+    {
+        var cihaz = await _db.PosCihazlari
+            .Include(x => x.Terminaller)
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("POS cihazı bulunamadı.", 404);
+
+        EnforceKurum(cihaz.KurumId);
+
+        AgentEntity? agent = null;
+        if (cihaz.AgentId.HasValue)
+        {
+            agent = await _db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == cihaz.AgentId.Value && !x.IsDeleted, cancellationToken);
+        }
+
+        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, cihaz.Terminaller.Where(x => !x.IsDeleted).ToList(), DateTime.UtcNow);
+    }
+
     public async Task<AgentPavoDeviceRegistrationResult> RegisterFromAgentAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken)
     {
         if (!_agentContext.IsAuthenticated)

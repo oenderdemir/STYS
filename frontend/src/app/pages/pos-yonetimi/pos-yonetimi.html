@@ -118,6 +118,70 @@
                     <p-tag [value]="getSaglayiciLabel(selectedCihaz()?.saglayici??0)" severity="info" />
                 </div>
             </div>
+
+            @if (selectedReadiness()) {
+                <div class="card mt-3 pos-readiness-card">
+                    <div class="section-header">
+                        <div>
+                            <h4>Operasyonel Hazırlık</h4>
+                            <p>PAVO cihazının ödeme için hazır olup olmadığına dair merkezi özet.</p>
+                        </div>
+                        <p-tag [value]="getReadinessLabel(selectedReadiness()!.status)" [severity]="getReadinessSeverity(selectedReadiness()!.status)" />
+                    </div>
+
+                    <div class="connection-grid">
+                        <div class="connection-item">
+                            <span class="connection-item__label">Agent</span>
+                            <span class="connection-item__value">
+                                <p-tag [value]="selectedReadiness()!.agentOnline ? 'Online' : 'Offline'" [severity]="selectedReadiness()!.agentOnline ? 'success' : 'danger'" />
+                            </span>
+                        </div>
+                        <div class="connection-item">
+                            <span class="connection-item__label">PAVO</span>
+                            <span class="connection-item__value">
+                                <p-tag [value]="selectedReadiness()!.deviceOnline ? 'Connected' : 'Disconnected'" [severity]="selectedReadiness()!.deviceOnline ? 'success' : 'danger'" />
+                            </span>
+                        </div>
+                        <div class="connection-item">
+                            <span class="connection-item__label">Provision</span>
+                            <span class="connection-item__value">
+                                <p-tag [value]="selectedReadiness()!.inSync ? 'In Sync' : getReadinessLabel(selectedReadiness()!.status)" [severity]="getReadinessSeverity(selectedReadiness()!.status)" />
+                            </span>
+                        </div>
+                        <div class="connection-item">
+                            <span class="connection-item__label">Pairing</span>
+                            <span class="connection-item__value">
+                                <p-tag [value]="selectedReadiness()!.pairingValid ? 'Ready' : 'Not Ready'" [severity]="selectedReadiness()!.pairingValid ? 'success' : 'warn'" />
+                            </span>
+                        </div>
+                        <div class="connection-item">
+                            <span class="connection-item__label">Terminal</span>
+                            <span class="connection-item__value">{{ selectedReadiness()!.activeTerminalCount }} aktif</span>
+                        </div>
+                        <div class="connection-item">
+                            <span class="connection-item__label">Hesap</span>
+                            <span class="connection-item__value">{{ selectedReadiness()!.accountMappedTerminalCount }}/{{ selectedReadiness()!.activeTerminalCount || 0 }} eşleşmiş</span>
+                        </div>
+                        <div class="connection-item connection-item--wide">
+                            <span class="connection-item__label">Ödeme</span>
+                            <span class="connection-item__value">
+                                <p-tag [value]="selectedReadiness()!.ready ? 'Ready' : 'Not Ready'" [severity]="selectedReadiness()!.ready ? 'success' : 'danger'" />
+                            </span>
+                        </div>
+                    </div>
+
+                    @if (selectedReadiness()!.reasons.length > 0) {
+                        <div class="mt-3">
+                            <small class="text-color-secondary">Hazırlık engelleri</small>
+                            <ul class="mt-2 mb-0">
+                                @for (reason of selectedReadiness()!.reasons; track reason) {
+                                    <li>{{ reason }}</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            }
         }
 
         <p-tabs value="general">

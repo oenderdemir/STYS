@@ -1543,3 +1543,50 @@ Agent Regression:  0
     - `STYS.Tests.EBelgeOutboxWorkerTests.KuyrukBoskenIdleDelayKullanilir`
     - Hata: `System.TimeoutException: Beklenen koşul zaman aşımı içinde gerçekleşmedi.`
     - Bu hata C2 reconciliation değişikliklerinden bağımsız, outbox worker idle-delay davranışıyla ilgili.
+
+## 2026-08-12 — PAVO Operations Faz D1
+
+- Readiness modeli eklendi:
+  - `Ready`
+  - `AgentOffline`
+  - `DeviceOffline`
+  - `NotProvisioned`
+  - `ReProvisionRequired`
+  - `PairingInvalid`
+  - `NoActiveTerminal`
+  - `NoAccountMapping`
+  - `Disabled`
+  - `OwnershipConflict`
+- Backend operasyonel readiness read-model’i eklendi ve POS cihaz detayına bağlandı:
+  - `GET /ui/pos/cihazlar/{id}/readiness`
+  - tenant / tesis izolasyonu korunuyor
+  - fingerprint / secret readiness response’a çıkmıyor
+- Agent/device health:
+  - agent heartbeat
+  - cihaz son bağlantı zamanı
+  - device active durumu
+  - local provisioning / pairing durumu
+  - active terminal ve hesap eşleşmesi
+  tek readiness kararında birleştirildi.
+- Payment guard:
+  - `StartPayment` ve payment-test akışı readiness kontrolünden geçmeden command üretmiyor.
+  - Ready değilse sequence reserve edilmiyor.
+  - UI’de not-ready nedeni açık gösteriliyor.
+- Terminal/account readiness:
+  - aktif terminal sayısı
+  - hesap eşleşmiş terminal sayısı
+  - terminal bazlı payment-ready durumları
+  gösteriliyor.
+- UI:
+  - POS yönetim ekranında merkezi operasyonel özet eklendi.
+  - Agent / PAVO / Provision / Pairing / Terminal / Hesap / Ödeme özetleri görünür.
+- Tests:
+  - `dotnet test STYS.sln --configuration Release --no-restore` geçti.
+  - `npm run build` geçti.
+  - `npm test -- --watch=false --browsers=ChromeHeadless` geçti.
+  - Hedefli readiness testi yerel ortamda integration connection string olmadığı için skip oldu.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Angular bundle budget warning devam ediyor.
+  - Ready olmayan cihazlarda hata nedeni ilk blokaj üzerinden raporlanıyor; bu, guard davranışı için kasıtlı.

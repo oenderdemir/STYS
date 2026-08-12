@@ -67,6 +67,11 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         var terminal = await GetTerminalAsync(request.PosTerminalId, cancellationToken);
         EnsureTerminalBelongsToDevice(cihaz, terminal);
         _ = await GetValidatedAgentAsync(cihaz, cancellationToken);
+        var readiness = await GetReadinessAsync(cihaz, cancellationToken);
+        if (!readiness.Ready)
+        {
+            throw new BaseException($"PAVO cihazı ödeme için hazır değil: {readiness.LastError ?? "hazırlık doğrulanamadı."}", 409);
+        }
         var hesap = await GetValidatedAccountAsync(terminal, cancellationToken);
         var rezervasyonId = await ResolveReservationIdAsync(cihaz.TesisId, cancellationToken);
 
@@ -226,6 +231,20 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         await _db.SaveChangesAsync(cancellationToken);
         await EnsureTerminalLoadedAsync(payment, cancellationToken);
         return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
+    }
+
+    private async Task<PosOperationalReadinessDto> GetReadinessAsync(PosCihazi cihaz, CancellationToken cancellationToken)
+    {
+        var agent = cihaz.AgentId.HasValue
+            ? await _db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == cihaz.AgentId.Value && !x.IsDeleted, cancellationToken)
+            : null;
+
+        var terminals = await _db.PosTerminaller
+            .AsNoTracking()
+            .Where(x => x.PosCihaziId == cihaz.Id && !x.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, terminals, DateTime.UtcNow);
     }
 
     private async Task<PosOdemeIslemi?> LoadExistingPaymentForStartAsync(PosPaymentBaslatRequest request, string idempotencyKey, CancellationToken cancellationToken)

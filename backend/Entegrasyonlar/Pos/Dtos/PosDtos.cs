@@ -32,6 +32,56 @@ public sealed class PosTerminalDto
     public string? PairingCode { get; set; }
 }
 
+public enum PavoOperationalReadiness
+{
+    Ready = 0,
+    AgentOffline = 1,
+    DeviceOffline = 2,
+    NotProvisioned = 3,
+    ReProvisionRequired = 4,
+    PairingInvalid = 5,
+    NoActiveTerminal = 6,
+    NoAccountMapping = 7,
+    Disabled = 8,
+    OwnershipConflict = 9
+}
+
+public sealed class PosTerminalOperationalReadinessDto
+{
+    public int Id { get; set; }
+    public string TerminalId { get; set; } = string.Empty;
+    public string? AcquirerId { get; set; }
+    public string? AcquirerName { get; set; }
+    public bool Active { get; set; }
+    public int? KasaBankaHesapId { get; set; }
+    public bool AccountMapped { get; set; }
+    public bool PaymentReady { get; set; }
+    public string? StatusMessage { get; set; }
+}
+
+public sealed class PosOperationalReadinessDto
+{
+    public int PosCihaziId { get; set; }
+    public PavoOperationalReadiness Status { get; set; }
+    public bool Ready => Status == PavoOperationalReadiness.Ready;
+    public bool AgentOnline { get; set; }
+    public bool DeviceOnline { get; set; }
+    public bool Provisioned { get; set; }
+    public bool InSync { get; set; }
+    public bool PairingValid { get; set; }
+    public bool HasActiveTerminal { get; set; }
+    public bool HasAccountMapping { get; set; }
+    public bool Disabled { get; set; }
+    public bool OwnershipConflict { get; set; }
+    public DateTime? AgentLastHeartbeatAt { get; set; }
+    public DateTime? DeviceLastConnectionAt { get; set; }
+    public string? LastError { get; set; }
+    public int ActiveTerminalCount { get; set; }
+    public int AccountMappedTerminalCount { get; set; }
+    public IReadOnlyCollection<PosTerminalOperationalReadinessDto> Terminals { get; set; } = [];
+    public IReadOnlyCollection<string> Reasons { get; set; } = [];
+}
+
 public sealed class PosTerminalKaydetRequest
 {
     public int? PosCihaziId { get; set; }

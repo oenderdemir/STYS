@@ -576,6 +576,271 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
+    public async Task Readiness_AgentOffline_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow.AddMinutes(-10);
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.AgentOffline, readiness.Status);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_DisabledDevice_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.AktifMi = false;
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.Disabled, readiness.Status);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_ReProvisionRequired_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"LOCAL-FP-{suffix}";
+        device.TargetFingerprint = $"REMOTE-FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.ReProvisionRequired, readiness.Status);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_PairingInvalid_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = null;
+        device.TargetFingerprint = null;
+        device.EslesmeOnayliMi = false;
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.PairingInvalid, readiness.Status);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_NoActiveTerminal_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.NoActiveTerminal, readiness.Status);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_NoAccountMapping_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, null, suffix, "READY-NO-ACC"), CancellationToken.None);
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.NoAccountMapping, readiness.Status);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_FullyProvisioned_Ready_AndResponseContainsNoFingerprint()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "READY-OK"), CancellationToken.None);
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(readiness, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(PavoOperationalReadiness.Ready, readiness.Status);
+        Assert.True(readiness.Ready);
+        Assert.Contains("\"ready\":true", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fingerprint", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("targetFingerprint", json, StringComparison.OrdinalIgnoreCase);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_NotReady_StartPaymentDoesNotCreateCommandOrReserveSequence()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        device.TransactionSequence = 7;
+        device.SonBaglantiTarihi = DateTime.UtcNow;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, null, suffix, "PAY-NOT-READY"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = NewPaymentKey()
+        }, "test", CancellationToken.None));
+
+        var commandCount = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
+        var paymentCount = await db.PosOdemeIslemleri.CountAsync(x => x.PosCihaziId == fixture.DeviceId);
+        var reloadedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
+
+        Assert.Equal(0, commandCount);
+        Assert.Equal(0, paymentCount);
+        Assert.Equal(7, reloadedDevice.TransactionSequence);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
     public async Task Payment_StartPaymentCommandOlusturur()
     {
         var cs = ConnectionString();

@@ -6,6 +6,7 @@ import { getApiBaseUrl } from '../../core/config';
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
+    PosOperationalReadinessDto,
     PosOdemeIslemiDto,
     PosPaymentBaslatRequestDto,
     PosSaglayiciDto,
@@ -109,6 +110,13 @@ export class PosYonetimiService {
     getDeviceInfo(cihazId: number): Observable<void> {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/device-info`, {}).pipe(map(r => {
             if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Cihaz bilgisi alınamadı.');
+        }));
+    }
+
+    getReadiness(cihazId: number): Observable<PosOperationalReadinessDto> {
+        return this.http.get<ApiResponse<PosOperationalReadinessDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/readiness`).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Hazırlık bilgisi alınamadı.');
         }));
     }
 

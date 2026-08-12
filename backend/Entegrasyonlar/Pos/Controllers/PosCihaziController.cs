@@ -34,6 +34,11 @@ public sealed class PosCihaziController : UIController
     [Permission(StructurePermissions.PosYonetimi.View)]
     public async Task<ActionResult<PosCihaziDto>> GetById(int id) => Ok(await _service.GetByIdAsync(id));
 
+    [HttpGet("cihazlar/{id:int}/readiness")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<ActionResult<PosOperationalReadinessDto>> GetReadiness(int id, CancellationToken cancellationToken) =>
+        Ok(await _service.GetReadinessAsync(id, cancellationToken));
+
     [HttpPost("cihazlar")]
     [Permission(StructurePermissions.PosYonetimi.Manage)]
     public async Task<ActionResult<PosCihaziDto>> Create([FromBody] PosCihaziKaydetRequest req)

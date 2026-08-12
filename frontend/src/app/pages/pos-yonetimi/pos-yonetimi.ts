@@ -27,10 +27,12 @@ import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
+    PosOperationalReadinessDto,
     PosOdemeIslemiDto,
     PosPaymentBaslatRequestDto,
     PosSaglayiciDto,
     PosTerminalDto,
+    PosTerminalOperationalReadinessDto,
     PosTerminalKaydetRequest,
     SaglayiciLabels
 } from './pos-yonetimi.dto';
@@ -120,6 +122,8 @@ export class PosYonetimiComponent implements OnInit {
             terminal: cihazlar.reduce((sum, item) => sum + (item.terminalSayisi ?? 0), 0)
         };
     });
+
+    readonly selectedReadiness = signal<PosOperationalReadinessDto | null>(null);
 
     readonly tesisFilterOptions = computed(() => [
         { label: 'Tüm tesisler', value: null },
@@ -241,6 +245,7 @@ export class PosYonetimiComponent implements OnInit {
                 this.handledCommandRefreshKeys.clear();
                 this.paymentForm = this.createEmptyPaymentForm();
                 this.paymentSubmitted.set(false);
+                this.selectedReadiness.set(null);
                 if (detail.agentId) {
                     this.agentRealtime.joinAgentGroup(detail.agentId);
                 } else {
@@ -262,6 +267,7 @@ export class PosYonetimiComponent implements OnInit {
                 this.submitted.set(false);
                 this.dialogVisible.set(true);
                 this.loadTerminals(detail.id);
+                this.loadReadiness(detail.id);
                 this.loadPaymentTests(detail.id);
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
@@ -295,6 +301,7 @@ export class PosYonetimiComponent implements OnInit {
                 this.handledCommandRefreshKeys.clear();
                 this.paymentForm = this.createEmptyPaymentForm();
                 this.paymentSubmitted.set(false);
+                this.loadReadiness(saved.id);
                 if (saved.agentId) {
                     this.agentRealtime.joinAgentGroup(saved.agentId);
                 }
@@ -329,6 +336,7 @@ export class PosYonetimiComponent implements OnInit {
     closeDialog(): void {
         this.dialogVisible.set(false);
         this.selectedCihaz.set(null);
+        this.selectedReadiness.set(null);
         this.agentRealtime.leaveAgentGroup();
         this.terminals.set([]);
         this.paymentTests.set([]);
@@ -360,12 +368,17 @@ export class PosYonetimiComponent implements OnInit {
         this.service.getTerminals(cihazId).pipe(finalize(() => this.terminalsLoading.set(false))).subscribe({
             next: (items) => {
                 this.terminals.set(items);
-                if (items.length > 0 && !items.some((item) => item.id === this.paymentForm.posTerminalId)) {
-                    this.paymentForm.posTerminalId = items[0]?.id ?? 0;
-                }
-                if ((this.paymentForm.posTerminalId ?? 0) <= 0 && items.length > 0) {
-                    this.paymentForm.posTerminalId = items[0]?.id ?? 0;
-                }
+                this.syncPaymentTerminalSelection(items);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    loadReadiness(cihazId: number): void {
+        this.service.getReadiness(cihazId).subscribe({
+            next: (readiness) => {
+                this.selectedReadiness.set(readiness);
+                this.syncPaymentTerminalSelection(this.terminals());
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -641,6 +654,11 @@ export class PosYonetimiComponent implements OnInit {
             return 'Ödeme başlatmak için önce bir cihaz seçin.';
         }
 
+        const readiness = this.selectedReadiness();
+        if (readiness && !readiness.ready) {
+            return readiness.lastError ?? 'PAVO cihazı ödeme için hazır değil.';
+        }
+
         if (!cihaz.aktifMi) {
             return 'Pasif cihazda ödeme başlatılamaz.';
         }
@@ -675,6 +693,57 @@ export class PosYonetimiComponent implements OnInit {
         }
 
         return null;
+    }
+
+    getTerminalReadiness(terminalId: number): PosTerminalOperationalReadinessDto | null {
+        return this.selectedReadiness()?.terminals.find((item) => item.id === terminalId) ?? null;
+    }
+
+    getReadinessSeverity(status: PosOperationalReadinessDto['status']): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+        switch (status) {
+            case 'Ready':
+                return 'success';
+            case 'AgentOffline':
+            case 'DeviceOffline':
+            case 'NoActiveTerminal':
+            case 'NoAccountMapping':
+            case 'ReProvisionRequired':
+            case 'PairingInvalid':
+            case 'NotProvisioned':
+                return 'warn';
+            case 'Disabled':
+            case 'OwnershipConflict':
+                return 'danger';
+            default:
+                return 'secondary';
+        }
+    }
+
+    getReadinessLabel(status: PosOperationalReadinessDto['status']): string {
+        switch (status) {
+            case 'Ready':
+                return 'Ödeme Hazır';
+            case 'AgentOffline':
+                return 'Agent Çevrimdışı';
+            case 'DeviceOffline':
+                return 'PAVO Çevrimdışı';
+            case 'NotProvisioned':
+                return 'Provisioned Değil';
+            case 'ReProvisionRequired':
+                return 'Yeniden Eşitleme Gerekli';
+            case 'PairingInvalid':
+                return 'Pairing Geçersiz';
+            case 'NoActiveTerminal':
+                return 'Aktif Terminal Yok';
+            case 'NoAccountMapping':
+                return 'Hesap Eşleşmemiş';
+            case 'Disabled':
+                return 'Devre Dışı';
+            case 'OwnershipConflict':
+                return 'Sahiplik Çakışması';
+            default:
+                return 'Bilinmiyor';
+        }
     }
 
     getPaymentStatusSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
@@ -798,5 +867,25 @@ export class PosYonetimiComponent implements OnInit {
         }
 
         return Date.now() - lastSeen.getTime() > 5 * 60 * 1000;
+    }
+
+    private syncPaymentTerminalSelection(items: PosTerminalDto[]): void {
+        if (items.length === 0) {
+            this.paymentForm.posTerminalId = 0;
+            return;
+        }
+
+        if (items.some((item) => item.id === this.paymentForm.posTerminalId)) {
+            return;
+        }
+
+        const readiness = this.selectedReadiness();
+        const readyTerminal = readiness?.terminals.find((item) => item.paymentReady && items.some((terminal) => terminal.id === item.id));
+        if (readyTerminal) {
+            this.paymentForm.posTerminalId = readyTerminal.id;
+            return;
+        }
+
+        this.paymentForm.posTerminalId = items[0]?.id ?? 0;
     }
 }

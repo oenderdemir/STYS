@@ -9,6 +9,7 @@ using STYS.Rezervasyonlar;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Services;
 using TOD.Platform.SharedKernel.Exceptions;
+using AgentEntity = STYS.Agent.Entities.Agent;
 
 namespace STYS.Entegrasyonlar.Pos.Services;
 
@@ -184,6 +185,12 @@ public sealed class PosService : IPosService
             throw new BaseException("POS terminali aktif ve kullanima hazir olmalidir.", 409);
         }
 
+        var readiness = await GetReadinessAsync(terminal, cancellationToken);
+        if (!readiness.Ready)
+        {
+            throw new BaseException($"PAVO cihazı ödeme için hazır değil: {readiness.LastError ?? "hazırlık doğrulanamadı."}", 409);
+        }
+
         var rezervasyon = await _dbContext.Rezervasyonlar
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == request.RezervasyonId, cancellationToken)
@@ -241,6 +248,25 @@ public sealed class PosService : IPosService
             await _dbContext.SaveChangesAsync(CancellationToken.None);
             throw;
         }
+    }
+
+    private async Task<PosOperationalReadinessDto> GetReadinessAsync(PosTerminal terminal, CancellationToken cancellationToken)
+    {
+        if (!terminal.PosCihaziId.HasValue)
+        {
+            throw new BaseException("Terminalin bağlı olduğu POS cihazı bulunamadı.", 400);
+        }
+
+        var cihaz = await _dbContext.PosCihazlari
+            .Include(x => x.Terminaller)
+            .FirstOrDefaultAsync(x => x.Id == terminal.PosCihaziId.Value && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("POS cihazı bulunamadı.", 404);
+
+        var agent = cihaz.AgentId.HasValue
+            ? await _dbContext.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == cihaz.AgentId.Value && !x.IsDeleted, cancellationToken)
+            : null;
+
+        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, cihaz.Terminaller.Where(x => !x.IsDeleted).ToList(), DateTime.UtcNow);
     }
 
     public async Task<PosOdemeIslemiDto> OdemeDurumuAsync(int id, CancellationToken cancellationToken)

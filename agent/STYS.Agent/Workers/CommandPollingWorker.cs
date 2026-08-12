@@ -89,10 +89,28 @@ public sealed class CommandPollingWorker : BackgroundService
             if (_executionStore.HasExecuted(dto.IdempotencyKey))
             {
                 _logger.LogInformation("Komut zaten çalıştırılmış (idempotent): {CommandType} ({CommandId})", dto.CommandType, dto.Id);
-                await _client.AcceptCommandAsync(dto.Id, cancellationToken);
                 var cached = _executionStore.GetResult(dto.IdempotencyKey);
-                if (cached is not null && cached.Success)
+                if (cached is null)
+                {
+                    return;
+                }
+
+                await _client.AcceptCommandAsync(dto.Id, cancellationToken);
+                if (cached.Success)
+                {
                     await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = true, ResultPayload = cached.ResultPayload }, cancellationToken);
+                }
+                else
+                {
+                    await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest
+                    {
+                        Id = dto.Id,
+                        Success = false,
+                        ResultPayload = cached.ResultPayload,
+                        ErrorCode = cached.ErrorCode,
+                        ErrorMessage = cached.ErrorMessage
+                    }, cancellationToken);
+                }
                 return;
             }
 

@@ -1538,6 +1538,33 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+### D3 Restart & Final-State Hardening — 2026-08-12
+
+- Restart-safe execution store artık production’da dosya tabanlı:
+  - `FileAgentCommandExecutionStore`
+  - `agent-command-executions.json` altında kalıcı marker/result saklıyor
+  - atomik yazım için temp file + overwrite move kullanıyor
+  - `MarkExecuted` yalnız marker yazıyor, result’u ayrı persist ediyor
+  - restart sonrası aynı `AgentCommand.Id` tekrar gelirse fiziksel handler ikinci kez çalışmıyor
+- Final-state monotonicity:
+  - `Successful`, `Failed`, `Cancelled` final state olarak korunuyor
+  - late `PavoStartPayment` sonucu mevcut final state’i geriye çekemiyor
+  - `PavoGetPaymentResult` reconciliation sonucu authoritative kabul ediliyor
+  - `Unknown` / `Processing` durumları yalnız ileri yönlü güncelleniyor
+- Production registration:
+  - `MemoryAgentCommandExecutionStore` production kaydı kaldırıldı
+  - agent startup artık file store’u kullanıyor
+- Tests:
+  - restart simülasyonu ile marker/result kalıcılığı doğrulandı
+  - parallel persistence corruption testi geçti
+  - late success / late failure / ambiguous result monotonicity senaryoları doğrulandı
+  - full çözüm testi geçti: `dotnet test STYS.sln --configuration Release`
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Dosya tabanlı execution store aynı process içindeki instance’lar arasında güvenli; multi-process lock henüz eklenmedi.
+  - `PavoGetPaymentResult` authoritative reconciliation olarak davranıyor; bu kasıtlı.
+
 ## 2026-08-12 — PAVO Operations Faz D3
 
 - Timeout / ambiguity:

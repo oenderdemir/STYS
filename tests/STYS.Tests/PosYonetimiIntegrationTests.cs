@@ -1491,6 +1491,23 @@ public sealed class PosYonetimiIntegrationTests
         Assert.Equal(PosOdemeDurumlari.Successful, afterResult.Durum);
         Assert.Equal("RRN-1", afterResult.RetrievalReferenceNo);
 
+        var lateStartCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        lateStartCommand.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+
+        await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = payment.AgentCommandId!.Value,
+            Success = false,
+            ErrorMessage = "late failed start"
+        }, CancellationToken.None);
+
+        var afterLateStart = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Successful, afterLateStart.Durum);
+
         var commandsBeforeRepeat = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId);
         var repeat = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
         {
@@ -1554,6 +1571,34 @@ public sealed class PosYonetimiIntegrationTests
         var afterResult = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
         Assert.Equal(PosOdemeDurumlari.Failed, afterResult.Durum);
         Assert.Equal(payment.Id, afterResult.Id);
+
+        var lateStartCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        lateStartCommand.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+
+        await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = payment.AgentCommandId!.Value,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData
+                {
+                    SaleReference = payment.SaleReference,
+                    IsSuccessful = true,
+                    ResultCode = "00",
+                    Message = "late start ok",
+                    TransactionStatus = "PROCESSING"
+                }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None);
+
+        var afterLateStart = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Failed, afterLateStart.Durum);
+        Assert.Equal(payment.Id, afterLateStart.Id);
 
         await CleanupAsync(db, suffix);
     }
@@ -1664,7 +1709,7 @@ public sealed class PosYonetimiIntegrationTests
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
         var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
-        Assert.Equal(PosOdemeDurumlari.Processing, after.Durum);
+        Assert.Equal(PosOdemeDurumlari.Successful, after.Durum);
         Assert.Equal("RRN-REC", after.RetrievalReferenceNo);
 
         await CleanupAsync(db, suffix);
@@ -1726,7 +1771,7 @@ public sealed class PosYonetimiIntegrationTests
         }, CancellationToken.None);
 
         var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
-        Assert.Equal(PosOdemeDurumlari.Successful, after.Durum);
+        Assert.Equal(PosOdemeDurumlari.Processing, after.Durum);
 
         await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
         {

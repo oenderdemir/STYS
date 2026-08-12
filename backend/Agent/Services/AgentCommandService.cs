@@ -380,9 +380,18 @@ public sealed class AgentCommandService
             return;
         }
 
-        PavoPaymentResponseBase? response = cmd.CommandType.Equals("PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+        var commandType = cmd.CommandType;
+        PavoPaymentResponseBase? response = commandType.Equals("PavoStartPayment", StringComparison.OrdinalIgnoreCase)
             ? DeserializePayload<PavoStartPaymentResponse>(request.ResultPayload)
             : DeserializePayload<PavoGetPaymentResultResponse>(request.ResultPayload);
+
+        var proposedStatus = ResolveProposedPaymentStatus(commandType, request, response);
+        var resolvedStatus = ResolveMonotonicPaymentStatus(commandType, payment.Durum, proposedStatus);
+
+        if (IsHardFinalPaymentState(payment.Durum) && string.Equals(resolvedStatus, payment.Durum, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         if (payment.PosCihaziId != device.Id || payment.KurumId != device.KurumId || payment.TesisId != device.TesisId)
         {
@@ -401,7 +410,7 @@ public sealed class AgentCommandService
             payment.SaleReference = response.Data.SaleReference;
         }
 
-        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase) || !payment.AgentCommandId.HasValue)
+        if (string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase) || !payment.AgentCommandId.HasValue)
         {
             payment.AgentCommandId = cmd.Id;
         }
@@ -420,64 +429,90 @@ public sealed class AgentCommandService
 
         if (!request.Success)
         {
-            payment.Durum = PosOdemeDurumlari.Unknown;
-            payment.HataMesaji = Truncate(response?.Data?.Message ?? request.ErrorMessage ?? response?.Message, 1024);
-            payment.TamamlanmaTarihi = null;
+            ApplyResolvedPaymentState(payment, resolvedStatus, response?.Data?.Message ?? request.ErrorMessage ?? response?.Message);
             return;
         }
 
-        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase))
+        ApplyResolvedPaymentState(payment, resolvedStatus, response?.Data?.Message ?? request.ErrorMessage ?? response?.Message);
+    }
+
+    private static string ResolveProposedPaymentStatus(string commandType, AgentCommandCompleteRequest request, PavoPaymentResponseBase? response)
+    {
+        if (string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase))
         {
             if (response?.Data?.IsSuccessful == true || response?.Data?.IsPending == true)
             {
-                payment.Durum = PosOdemeDurumlari.Processing;
-                payment.TamamlanmaTarihi = null;
-                payment.HataMesaji = null;
-                return;
+                return PosOdemeDurumlari.Processing;
             }
 
             if (response?.Data?.IsSuccessful == false && response?.Data is not null && response?.HasAbondon != true && response?.HasError != true)
             {
-                payment.Durum = PosOdemeDurumlari.Failed;
-                payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message, 1024);
-                payment.TamamlanmaTarihi = DateTime.UtcNow;
-                return;
+                return PosOdemeDurumlari.Failed;
             }
 
-            payment.Durum = PosOdemeDurumlari.Unknown;
-            payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message, 1024);
-            payment.TamamlanmaTarihi = null;
-            return;
+            return PosOdemeDurumlari.Unknown;
         }
 
         if (response?.Data?.IsSuccessful == true)
         {
-            payment.Durum = PosOdemeDurumlari.Successful;
+            return PosOdemeDurumlari.Successful;
+        }
+
+        if (response?.Data?.IsPending == true)
+        {
+            return PosOdemeDurumlari.Processing;
+        }
+
+        if (response?.Data?.IsUnknown == true || response?.Data is null || response?.HasAbondon == true || response?.HasError == true)
+        {
+            return PosOdemeDurumlari.Unknown;
+        }
+
+        return PosOdemeDurumlari.Failed;
+    }
+
+    private static string ResolveMonotonicPaymentStatus(string commandType, string? currentStatus, string proposedStatus)
+    {
+        if (IsHardFinalPaymentState(currentStatus))
+        {
+            if (string.Equals(currentStatus, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(proposedStatus, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase))
+            {
+                return PosOdemeDurumlari.Successful;
+            }
+
+            return currentStatus!;
+        }
+
+        return proposedStatus;
+    }
+
+    private static void ApplyResolvedPaymentState(PosOdemeIslemi payment, string resolvedStatus, string? rawMessage)
+    {
+        payment.Durum = resolvedStatus;
+        if (string.Equals(resolvedStatus, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase))
+        {
             payment.TamamlanmaTarihi = DateTime.UtcNow;
             payment.HataMesaji = null;
             return;
         }
 
-        if (response?.Data?.IsPending == true)
+        if (string.Equals(resolvedStatus, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase))
         {
-            payment.Durum = PosOdemeDurumlari.Processing;
-            payment.TamamlanmaTarihi = null;
-            payment.HataMesaji = null;
+            payment.TamamlanmaTarihi = DateTime.UtcNow;
+            payment.HataMesaji = Truncate(rawMessage, 1024);
             return;
         }
 
-        if (response?.Data?.IsUnknown == true || response?.Data is null || response?.HasAbondon == true || response?.HasError == true)
-        {
-            payment.Durum = PosOdemeDurumlari.Unknown;
-            payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message ?? request.ErrorMessage, 1024);
-            payment.TamamlanmaTarihi = null;
-            return;
-        }
-
-        payment.Durum = PosOdemeDurumlari.Failed;
-        payment.HataMesaji = Truncate(response?.Data?.Message ?? response?.Message ?? request.ErrorMessage, 1024);
-        payment.TamamlanmaTarihi = DateTime.UtcNow;
+        payment.TamamlanmaTarihi = null;
+        payment.HataMesaji = Truncate(rawMessage, 1024);
     }
+
+    private static bool IsHardFinalPaymentState(string? status) =>
+        string.Equals(status, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
 
     private void SyncDiscoveredTerminals(StysAppDbContext db, PosCihazi device, IReadOnlyCollection<PavoDeviceTerminalInfo> discoveredTerminals)
     {

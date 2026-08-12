@@ -95,7 +95,7 @@ builder.Services.AddHostedService<AgentHostedService>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<CommandPollingWorker>();
 
-builder.Services.AddSingleton<IAgentCommandExecutionStore, MemoryAgentCommandExecutionStore>();
+builder.Services.AddSingleton<IAgentCommandExecutionStore, FileAgentCommandExecutionStore>();
 builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
 {
     var registry = new AgentCommandHandlerRegistry(sp);

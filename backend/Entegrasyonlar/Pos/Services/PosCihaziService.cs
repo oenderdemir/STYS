@@ -8,6 +8,7 @@ using STYS.Agent.Entities;
 using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
+using STYS.Entegrasyonlar.Pos.Options;
 using STYS.Entegrasyonlar.Pos.Repositories;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Tesisler.Entities;
@@ -25,6 +26,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private readonly StysAppDbContext _db;
     private readonly IPosCihaziRepository _cihazRepository;
     private readonly AgentCommandService _agentCommandService;
+    private readonly PosOperationalHealthOptions _healthOptions;
 
     public PosCihaziService(
         IPosCihaziRepository repository,
@@ -32,7 +34,8 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         ICurrentTenantAccessor tenantAccessor,
         ICurrentAgentContext agentContext,
         StysAppDbContext db,
-        AgentCommandService agentCommandService)
+        AgentCommandService agentCommandService,
+        Microsoft.Extensions.Options.IOptions<PosOperationalHealthOptions>? healthOptions = null)
         : base(repository, mapper)
     {
         _tenantAccessor = tenantAccessor;
@@ -40,6 +43,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         _db = db;
         _cihazRepository = repository;
         _agentCommandService = agentCommandService;
+        _healthOptions = healthOptions?.Value ?? new PosOperationalHealthOptions();
     }
 
     public override async Task<PosCihaziDto> AddAsync(PosCihaziDto dto)
@@ -83,8 +87,14 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var device = await GetCommandTargetAsync(id, cancellationToken);
         EnsurePavoCommandReady(device);
+        var existingCommand = await FindExistingActiveHealthCommandAsync(device.AgentId!.Value, device.Id, cancellationToken);
+        if (existingCommand is not null)
+        {
+            return existingCommand;
+        }
+
         var request = BuildPingRequest(device);
-        return await SendCommandAsync(device.AgentId!.Value, "PavoPing", request, requestedBy, cancellationToken);
+        return await SendCommandAsync(device.AgentId!.Value, "PavoPing", request, requestedBy, cancellationToken, (int)Math.Ceiling(_healthOptions.CommandTimeout.TotalMinutes));
     }
 
     public async Task<AgentCommandDto> GetDeviceInfoAsync(int id, string requestedBy, CancellationToken cancellationToken)
@@ -110,7 +120,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             agent = await _db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == cihaz.AgentId.Value && !x.IsDeleted, cancellationToken);
         }
 
-        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, cihaz.Terminaller.Where(x => !x.IsDeleted).ToList(), DateTime.UtcNow);
+        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, cihaz.Terminaller.Where(x => !x.IsDeleted).ToList(), _healthOptions, DateTime.UtcNow);
     }
 
     public async Task<AgentPavoDeviceRegistrationResult> RegisterFromAgentAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken)
@@ -502,7 +512,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         TransactionHandle = BuildTransactionHandle(cihaz)
     };
 
-    private async Task<AgentCommandDto> SendCommandAsync(int agentId, string commandType, object payload, string requestedBy, CancellationToken cancellationToken)
+    private async Task<AgentCommandDto> SendCommandAsync(int agentId, string commandType, object payload, string requestedBy, CancellationToken cancellationToken, int? expirationMinutes = null)
     {
         return await _agentCommandService.SendAsync(new AgentCommandSendRequest
         {
@@ -510,9 +520,65 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             CommandType = commandType,
             Payload = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
             Priority = 1,
-            ExpirationMinutes = 10,
+            ExpirationMinutes = expirationMinutes ?? 10,
             MaxRetryCount = 3
         }, requestedBy, cancellationToken);
+    }
+
+    private async Task<AgentCommandDto?> FindExistingActiveHealthCommandAsync(int agentId, int posCihaziId, CancellationToken cancellationToken)
+    {
+        var activeStatuses = new[]
+        {
+            AgentCommandStatus.Pending,
+            AgentCommandStatus.Delivered,
+            AgentCommandStatus.Accepted,
+            AgentCommandStatus.Running
+        };
+
+        var now = DateTime.UtcNow;
+        var commands = await _db.Set<AgentCommand>()
+            .AsNoTracking()
+            .Where(x =>
+                x.AgentId == agentId
+                && x.CommandType == "PavoPing"
+                && !x.IsDeleted
+                && activeStatuses.Contains(x.Status)
+                && (x.ExpiresAt == null || x.ExpiresAt > now))
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var command = commands.FirstOrDefault(x => DeserializePayload<PavoPingRequest>(x.Payload)?.PosCihaziId == posCihaziId);
+        if (command is null)
+        {
+            return null;
+        }
+
+        return new AgentCommandDto
+        {
+            Id = command.Id,
+            AgentId = command.AgentId,
+            CommandType = command.CommandType,
+            Payload = command.Payload,
+            Status = (int)command.Status,
+            Priority = command.Priority,
+            ScheduledAt = command.ScheduledAt,
+            ExpiresAt = command.ExpiresAt,
+            RetryCount = command.RetryCount,
+            MaxRetryCount = command.MaxRetryCount,
+            CorrelationId = command.CorrelationId,
+            IdempotencyKey = command.IdempotencyKey,
+            CreatedAt = command.CreatedAt ?? DateTime.MinValue
+        };
+    }
+
+    private static T? DeserializePayload<T>(string? payload) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        return System.Text.Json.JsonSerializer.Deserialize<T>(payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
     }
 
     private async Task ReconcileRegisteredTerminalsAsync(PosCihazi device, IReadOnlyCollection<PavoDeviceProvisioningCandidateTerminal> terminals, CancellationToken cancellationToken)
@@ -621,6 +687,10 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
                    HttpPort = cihaz.HttpPort,
                    HttpsPort = cihaz.HttpsPort,
                    Fingerprint = cihaz.Fingerprint,
+                   LastHealthCheckAt = cihaz.LastHealthCheckAt,
+                   LastHealthSuccessAt = cihaz.LastHealthSuccessAt,
+                   LastHealthStatus = cihaz.LastHealthStatus,
+                   LastHealthError = cihaz.LastHealthError,
                    TransactionSequence = cihaz.TransactionSequence,
                    EslesmeOnayliMi = cihaz.EslesmeOnayliMi,
                    AktifMi = cihaz.AktifMi,

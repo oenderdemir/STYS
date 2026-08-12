@@ -20,19 +20,22 @@ public sealed class PosService : IPosService
     private readonly IRezervasyonService _rezervasyonService;
     private readonly IRezervasyonCariKartResolver _cariKartResolver;
     private readonly PosOdemeTakipOptions _takipOptions;
+    private readonly PosOperationalHealthOptions _healthOptions;
 
     public PosService(
         StysAppDbContext dbContext,
         IEnumerable<IPosOdemeSaglayicisi> saglayicilar,
         IRezervasyonService rezervasyonService,
         IRezervasyonCariKartResolver cariKartResolver,
-        IOptions<PosOdemeTakipOptions> takipOptions)
+        IOptions<PosOdemeTakipOptions> takipOptions,
+        IOptions<PosOperationalHealthOptions>? healthOptions = null)
     {
         _dbContext = dbContext;
         _saglayicilar = saglayicilar.ToDictionary(x => x.Kod, StringComparer.OrdinalIgnoreCase);
         _rezervasyonService = rezervasyonService;
         _cariKartResolver = cariKartResolver;
         _takipOptions = takipOptions.Value;
+        _healthOptions = healthOptions?.Value ?? new PosOperationalHealthOptions();
     }
 
     public List<PosSaglayiciDto> GetSaglayicilar() =>
@@ -266,7 +269,7 @@ public sealed class PosService : IPosService
             ? await _dbContext.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == cihaz.AgentId.Value && !x.IsDeleted, cancellationToken)
             : null;
 
-        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, cihaz.Terminaller.Where(x => !x.IsDeleted).ToList(), DateTime.UtcNow);
+        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, cihaz.Terminaller.Where(x => !x.IsDeleted).ToList(), _healthOptions, DateTime.UtcNow);
     }
 
     public async Task<PosOdemeIslemiDto> OdemeDurumuAsync(int id, CancellationToken cancellationToken)

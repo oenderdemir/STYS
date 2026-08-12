@@ -21,6 +21,10 @@ public sealed class PosCihaziDto : BaseRdbmsDto<int>
     public bool EslesmeOnayliMi { get; set; }
     public bool AktifMi { get; set; }
     public DateTime? SonBaglantiTarihi { get; set; }
+    public DateTime? LastHealthCheckAt { get; set; }
+    public DateTime? LastHealthSuccessAt { get; set; }
+    public PavoDeviceHealthStatus LastHealthStatus { get; set; }
+    public string? LastHealthError { get; set; }
     public long TransactionSequence { get; set; }
     public string? Aciklama { get; set; }
     public int TerminalSayisi { get; set; }

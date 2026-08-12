@@ -16,7 +16,7 @@ public static class AgentCommandStateMachine
         [AgentCommandStatus.Pending] = new() { AgentCommandStatus.Delivered, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired, AgentCommandStatus.Rejected },
         [AgentCommandStatus.Delivered] = new() { AgentCommandStatus.Accepted, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
         [AgentCommandStatus.Accepted] = new() { AgentCommandStatus.Running, AgentCommandStatus.Failed, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
-        [AgentCommandStatus.Running] = new() { AgentCommandStatus.Completed, AgentCommandStatus.Failed, AgentCommandStatus.Cancelled },
+        [AgentCommandStatus.Running] = new() { AgentCommandStatus.Completed, AgentCommandStatus.Failed, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
         [AgentCommandStatus.Completed] = new() { },
         [AgentCommandStatus.Failed] = new() { },
         [AgentCommandStatus.Cancelled] = new() { },

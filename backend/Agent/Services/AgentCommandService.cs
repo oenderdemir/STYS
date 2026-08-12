@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
+using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Infrastructure.EntityFramework;
 using System.Text.Json;
@@ -90,6 +91,8 @@ public sealed class AgentCommandService
         await AcquirePollLockAsync(db, agentId, ct);
 
         var now = DateTime.UtcNow;
+        await ExpireTimedOutCommandsAsync(db, agentId, now, ct);
+
         var commands = await db.Set<AgentCommand>()
             .Where(x => x.AgentId == agentId && !x.IsDeleted && x.Status == AgentCommandStatus.Pending && (x.ExpiresAt == null || x.ExpiresAt > now))
             .OrderByDescending(x => x.Priority).ThenBy(x => x.CreatedAt)
@@ -258,20 +261,23 @@ public sealed class AgentCommandService
                 return;
             }
 
-            if (!request.Success)
-            {
-                return;
-            }
-
             switch (cmd.CommandType)
             {
                 case "PavoPairing":
+                    if (!request.Success)
+                    {
+                        break;
+                    }
                     ApplyPavoPairingResult(db, cmd, validatedDevice, request.ResultPayload);
                     break;
                 case "PavoPing":
-                    ApplyPavoPingResult(db, validatedDevice);
+                    ApplyPavoPingResult(db, validatedDevice, request);
                     break;
                 case "PavoGetDeviceInfo":
+                    if (!request.Success)
+                    {
+                        break;
+                    }
                     ApplyPavoGetDeviceInfoResult(db, validatedDevice, request.ResultPayload, ct);
                     break;
             }
@@ -298,14 +304,27 @@ public sealed class AgentCommandService
         device.SonBaglantiTarihi = DateTime.UtcNow;
     }
 
-    private void ApplyPavoPingResult(StysAppDbContext db, PosCihazi? device)
+    private void ApplyPavoPingResult(StysAppDbContext db, PosCihazi? device, AgentCommandCompleteRequest request)
     {
         if (device is null)
         {
             return;
         }
 
-        device.SonBaglantiTarihi = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+        device.LastHealthCheckAt = now;
+
+        if (request.Success)
+        {
+            device.LastHealthSuccessAt = now;
+            device.LastHealthStatus = PavoDeviceHealthStatus.Healthy;
+            device.LastHealthError = null;
+            device.SonBaglantiTarihi = now;
+            return;
+        }
+
+        device.LastHealthStatus = MapHealthStatus(request.ErrorCode, request.ErrorMessage);
+        device.LastHealthError = Truncate(SafeHealthError(request.ErrorMessage ?? request.ErrorCode), 1024);
     }
 
     private void ApplyPavoGetDeviceInfoResult(StysAppDbContext db, PosCihazi? device, string? resultPayload, CancellationToken ct)
@@ -321,6 +340,57 @@ public sealed class AgentCommandService
         device.SonBaglantiTarihi = DateTime.UtcNow;
 
         SyncDiscoveredTerminals(db, device, response.Terminals);
+    }
+
+    private async Task ExpireTimedOutCommandsAsync(StysAppDbContext db, int agentId, DateTime utcNow, CancellationToken ct)
+    {
+        var timedOutCommands = await db.Set<AgentCommand>()
+            .Where(x =>
+                x.AgentId == agentId
+                && !x.IsDeleted
+                && x.ExpiresAt.HasValue
+                && x.ExpiresAt.Value <= utcNow
+                && (x.Status == AgentCommandStatus.Pending
+                    || x.Status == AgentCommandStatus.Delivered
+                    || x.Status == AgentCommandStatus.Accepted
+                    || x.Status == AgentCommandStatus.Running))
+            .ToListAsync(ct);
+
+        if (timedOutCommands.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var cmd in timedOutCommands)
+        {
+            var previous = cmd.Status;
+            cmd.Status = AgentCommandStatus.Expired;
+            cmd.CompletedAt ??= utcNow;
+            AddExecution(db, cmd, "Expired", previous, agentId, errorCode: "COMMAND_EXPIRED", errorMessage: "Komut süresi doldu.");
+
+            if (string.Equals(cmd.CommandType, "PavoPing", StringComparison.OrdinalIgnoreCase))
+            {
+                var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
+                var device = deviceId.HasValue
+                    ? db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted)
+                    : null;
+                ApplyPavoPingExpiry(db, device, utcNow);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private void ApplyPavoPingExpiry(StysAppDbContext db, PosCihazi? device, DateTime utcNow)
+    {
+        if (device is null)
+        {
+            return;
+        }
+
+        device.LastHealthCheckAt = utcNow;
+        device.LastHealthStatus = PavoDeviceHealthStatus.Timeout;
+        device.LastHealthError = "Komut süresi doldu.";
     }
 
     private void ApplyPavoPaymentResult(
@@ -787,6 +857,34 @@ public sealed class AgentCommandService
 
     private static string NormalizeCanonicalValue(string? value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
+
+    private static PavoDeviceHealthStatus MapHealthStatus(string? errorCode, string? message)
+    {
+        if (string.IsNullOrWhiteSpace(errorCode))
+        {
+            return IsTimeoutLike(errorCode, message) ? PavoDeviceHealthStatus.Timeout : PavoDeviceHealthStatus.ProtocolError;
+        }
+
+        return errorCode.Trim().ToUpperInvariant() switch
+        {
+            "TIMEOUT" => PavoDeviceHealthStatus.Timeout,
+            "NETWORK" or "NETWORK_UNREACHABLE" or "CONNECTION_REFUSED" or "HOST_UNREACHABLE" => PavoDeviceHealthStatus.Unreachable,
+            "TLS_CERTIFICATE" or "TLS" or "TLS_ERROR" => PavoDeviceHealthStatus.TlsError,
+            "INVALID_RESPONSE" or "PROTOCOL" or "HTTP_ERROR" or "HANDLER_EXCEPTION" => PavoDeviceHealthStatus.ProtocolError,
+            _ when IsTimeoutLike(errorCode, message) => PavoDeviceHealthStatus.Timeout,
+            _ => PavoDeviceHealthStatus.ProtocolError
+        };
+    }
+
+    private static string SafeHealthError(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "PAVO sağlık kontrolü başarısız oldu.";
+        }
+
+        return value.Trim();
+    }
 
     private static string BuildCanonicalTerminalKey(int deviceId, string? acquirerId, string terminalId) =>
         $"{deviceId}:{NormalizeCanonicalValue(acquirerId)}:{terminalId.Trim()}";

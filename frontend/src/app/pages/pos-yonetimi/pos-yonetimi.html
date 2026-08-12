@@ -129,24 +129,30 @@
                         <p-tag [value]="getReadinessLabel(selectedReadiness()!.status)" [severity]="getReadinessSeverity(selectedReadiness()!.status)" />
                     </div>
 
-                    <div class="connection-grid">
-                        <div class="connection-item">
-                            <span class="connection-item__label">Agent</span>
-                            <span class="connection-item__value">
-                                <p-tag [value]="selectedReadiness()!.agentOnline ? 'Online' : 'Offline'" [severity]="selectedReadiness()!.agentOnline ? 'success' : 'danger'" />
+                        <div class="connection-grid">
+                            <div class="connection-item">
+                                <span class="connection-item__label">Agent</span>
+                                <span class="connection-item__value">
+                                    <p-tag [value]="selectedReadiness()!.agentOnline ? 'Online' : 'Offline'" [severity]="selectedReadiness()!.agentOnline ? 'success' : 'danger'" />
                             </span>
                         </div>
-                        <div class="connection-item">
-                            <span class="connection-item__label">PAVO</span>
-                            <span class="connection-item__value">
-                                <p-tag [value]="selectedReadiness()!.deviceOnline ? 'Connected' : 'Disconnected'" [severity]="selectedReadiness()!.deviceOnline ? 'success' : 'danger'" />
-                            </span>
-                        </div>
-                        <div class="connection-item">
-                            <span class="connection-item__label">Provision</span>
-                            <span class="connection-item__value">
-                                <p-tag [value]="selectedReadiness()!.inSync ? 'In Sync' : getReadinessLabel(selectedReadiness()!.status)" [severity]="getReadinessSeverity(selectedReadiness()!.status)" />
-                            </span>
+                            <div class="connection-item">
+                                <span class="connection-item__label">PAVO</span>
+                                <span class="connection-item__value">
+                                    <p-tag [value]="selectedReadiness()!.deviceOnline ? 'Connected' : 'Disconnected'" [severity]="selectedReadiness()!.deviceOnline ? 'success' : 'danger'" />
+                                </span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">PAVO Sağlık</span>
+                                <span class="connection-item__value">
+                                    <p-tag [value]="getHealthLabel(selectedReadiness()!.deviceHealthStatus)" [severity]="getHealthSeverity(selectedReadiness()!.deviceHealthStatus)" />
+                                </span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">Provision</span>
+                                <span class="connection-item__value">
+                                    <p-tag [value]="selectedReadiness()!.inSync ? 'In Sync' : getReadinessLabel(selectedReadiness()!.status)" [severity]="getReadinessSeverity(selectedReadiness()!.status)" />
+                                </span>
                         </div>
                         <div class="connection-item">
                             <span class="connection-item__label">Pairing</span>
@@ -162,13 +168,25 @@
                             <span class="connection-item__label">Hesap</span>
                             <span class="connection-item__value">{{ selectedReadiness()!.accountMappedTerminalCount }}/{{ selectedReadiness()!.activeTerminalCount || 0 }} eşleşmiş</span>
                         </div>
-                        <div class="connection-item connection-item--wide">
-                            <span class="connection-item__label">Ödeme</span>
-                            <span class="connection-item__value">
-                                <p-tag [value]="selectedReadiness()!.ready ? 'Ready' : 'Not Ready'" [severity]="selectedReadiness()!.ready ? 'success' : 'danger'" />
-                            </span>
+                            <div class="connection-item connection-item--wide">
+                                <span class="connection-item__label">Ödeme</span>
+                                <span class="connection-item__value">
+                                    <p-tag [value]="selectedReadiness()!.ready ? 'Ready' : 'Not Ready'" [severity]="selectedReadiness()!.ready ? 'success' : 'danger'" />
+                                </span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">Son Kontrol</span>
+                                <span class="connection-item__value">{{ selectedReadiness()!.lastHealthCheckAt ? (selectedReadiness()!.lastHealthCheckAt | date:'short') : '-' }}</span>
+                            </div>
+                            <div class="connection-item">
+                                <span class="connection-item__label">Son Başarı</span>
+                                <span class="connection-item__value">{{ selectedReadiness()!.lastHealthSuccessAt ? (selectedReadiness()!.lastHealthSuccessAt | date:'short') : '-' }}</span>
+                            </div>
+                            <div class="connection-item connection-item--wide">
+                                <span class="connection-item__label">Hata</span>
+                                <span class="connection-item__value">{{ selectedReadiness()!.lastError || '-' }}</span>
+                            </div>
                         </div>
-                    </div>
 
                     @if (selectedReadiness()!.reasons.length > 0) {
                         <div class="mt-3">
@@ -287,7 +305,7 @@
                     @if (selectedCihaz()) {
                         <div class="connection-actions">
                             <button pButton pRipple label="Eşleştir" icon="pi pi-link" class="p-button-outlined" (click)="startPairing()" [disabled]="terminalSaving()"></button>
-                            <button pButton pRipple label="Bağlantı Testi" icon="pi pi-signal" class="p-button-outlined" (click)="ping()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Bağlantıyı Kontrol Et" icon="pi pi-signal" class="p-button-outlined" (click)="ping()" [disabled]="terminalSaving()"></button>
                             <button pButton pRipple label="Cihaz Bilgisini Getir" icon="pi pi-info-circle" class="p-button-outlined" (click)="getDeviceInfo()" [disabled]="terminalSaving()"></button>
                             <button pButton pRipple label="Terminalleri Senkronize Et" icon="pi pi-sync" class="p-button-outlined" (click)="syncTerminals()" [disabled]="terminalSaving()"></button>
                         </div>
@@ -333,7 +351,7 @@
                 <p-tabpanel value="payments">
                     @if (selectedCihaz()) {
                         <div class="connection-actions mb-3">
-                            <button pButton pRipple label="Ping" icon="pi pi-signal" class="p-button-outlined p-button-sm" (click)="ping()" [disabled]="terminalSaving()"></button>
+                            <button pButton pRipple label="Bağlantıyı Kontrol Et" icon="pi pi-signal" class="p-button-outlined p-button-sm" (click)="ping()" [disabled]="terminalSaving()"></button>
                             <button pButton pRipple label="Cihaz Bilgisini Getir" icon="pi pi-info-circle" class="p-button-outlined p-button-sm" (click)="getDeviceInfo()" [disabled]="terminalSaving()"></button>
                             <button pButton pRipple label="Terminalleri Senkronize Et" icon="pi pi-sync" class="p-button-outlined p-button-sm" (click)="syncTerminals()" [disabled]="terminalSaving()"></button>
                         </div>

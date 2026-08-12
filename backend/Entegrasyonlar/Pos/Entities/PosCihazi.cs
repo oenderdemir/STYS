@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using TOD.Platform.Persistence.Rdbms.Entities;
+using STYS.Entegrasyonlar.Pos.Dtos;
 
 namespace STYS.Entegrasyonlar.Pos.Entities;
 
@@ -41,6 +42,12 @@ public sealed class PosCihazi : BaseEntity<int>, ITenantEntity
     public bool EslesmeOnayliMi { get; set; }
     public bool AktifMi { get; set; } = true;
     public DateTime? SonBaglantiTarihi { get; set; }
+    public DateTime? LastHealthCheckAt { get; set; }
+    public DateTime? LastHealthSuccessAt { get; set; }
+    public PavoDeviceHealthStatus LastHealthStatus { get; set; } = PavoDeviceHealthStatus.Unknown;
+
+    [MaxLength(1024)]
+    public string? LastHealthError { get; set; }
 
     [MaxLength(1024)]
     public string? Aciklama { get; set; }

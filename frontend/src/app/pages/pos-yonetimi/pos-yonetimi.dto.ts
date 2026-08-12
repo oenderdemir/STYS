@@ -14,6 +14,10 @@ export interface PosCihaziDto {
     httpsPort?: number;
     fingerprint?: string;
     targetFingerprint?: string;
+    lastHealthCheckAt?: string | null;
+    lastHealthSuccessAt?: string | null;
+    lastHealthStatus?: string | null;
+    lastHealthError?: string | null;
     pairingId?: number | null;
     pairingCode?: string | null;
     transactionSequence: number;
@@ -95,6 +99,7 @@ export interface PosOperationalReadinessDto {
     posCihaziId: number;
     status: PavoOperationalReadiness;
     ready: boolean;
+    deviceHealthStatus: 'Unknown' | 'Healthy' | 'Unreachable' | 'Timeout' | 'TlsError' | 'ProtocolError' | 'Stale';
     agentOnline: boolean;
     deviceOnline: boolean;
     provisioned: boolean;
@@ -106,6 +111,9 @@ export interface PosOperationalReadinessDto {
     ownershipConflict: boolean;
     agentLastHeartbeatAt?: string | null;
     deviceLastConnectionAt?: string | null;
+    lastHealthCheckAt?: string | null;
+    lastHealthSuccessAt?: string | null;
+    lastHealthStatus?: string | null;
     lastError?: string | null;
     activeTerminalCount: number;
     accountMappedTerminalCount: number;

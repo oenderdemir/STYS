@@ -7,6 +7,7 @@ using STYS.Bildirimler.Entities;
 using STYS.Binalar.Entities;
 using STYS.Countries.Entities;
 using STYS.EkHizmetler.Entities;
+using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
@@ -1856,6 +1857,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.TargetFingerprint).HasMaxLength(256);
             entity.Property(x => x.PairingCode).HasMaxLength(32);
             entity.Property(x => x.TransactionSequence).HasDefaultValue(0);
+            entity.Property(x => x.LastHealthStatus).HasConversion<string>().HasMaxLength(32).HasDefaultValue(PavoDeviceHealthStatus.Unknown);
+            entity.Property(x => x.LastHealthError).HasMaxLength(1024);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.HasIndex(x => new { x.Saglayici, x.SeriNo }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.AgentId).HasFilter("[AgentId] IS NOT NULL");

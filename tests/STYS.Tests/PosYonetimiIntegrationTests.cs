@@ -797,6 +797,315 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
+    public async Task Readiness_FreshHealthy_Ready()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetHealthyDeviceHealth(device, suffix);
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "HEALTH-READY"), CancellationToken.None);
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.True(readiness.Ready);
+        Assert.Equal(PavoDeviceHealthStatus.Healthy, readiness.DeviceHealthStatus);
+        Assert.Equal("Healthy", readiness.LastHealthStatus);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_StaleHealth_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Healthy, DateTime.UtcNow.AddMinutes(-20), DateTime.UtcNow.AddMinutes(-20));
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "HEALTH-STALE"), CancellationToken.None);
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.DeviceOffline, readiness.Status);
+        Assert.Equal(PavoDeviceHealthStatus.Stale, readiness.DeviceHealthStatus);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_TimeoutHealth_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Timeout, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(-1), "timeout");
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "HEALTH-TIMEOUT"), CancellationToken.None);
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.DeviceOffline, readiness.Status);
+        Assert.Equal(PavoDeviceHealthStatus.Timeout, readiness.DeviceHealthStatus);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Readiness_UnreachableHealth_NotReady()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
+        agent.LastHeartbeatAt = DateTime.UtcNow;
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Unreachable, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(-1), "unreachable");
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "HEALTH-UNREACH"), CancellationToken.None);
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
+
+        Assert.Equal(PavoOperationalReadiness.DeviceOffline, readiness.Status);
+        Assert.Equal(PavoDeviceHealthStatus.Unreachable, readiness.DeviceHealthStatus);
+        Assert.False(readiness.Ready);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Ping_SuccessUpdatesCentralHealth()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Unreachable, DateTime.UtcNow.AddMinutes(-10), DateTime.UtcNow.AddMinutes(-10), "initial");
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var command = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+
+        await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.CompleteAsync(command.Id, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = command.Id,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(new PavoPingResponse(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None);
+
+        var updatedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
+        Assert.Equal(PavoDeviceHealthStatus.Healthy, updatedDevice.LastHealthStatus);
+        Assert.NotNull(updatedDevice.LastHealthCheckAt);
+        Assert.NotNull(updatedDevice.LastHealthSuccessAt);
+        Assert.Null(updatedDevice.LastHealthError);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Ping_FailurePreservesLastSuccessAt()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        var previousSuccess = DateTime.UtcNow.AddMinutes(-3);
+        SetHealthyDeviceHealth(device, suffix, previousSuccess, previousSuccess);
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var command = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+
+        await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
+        await agentService.CompleteAsync(command.Id, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = command.Id,
+            Success = false,
+            ErrorCode = "TIMEOUT",
+            ErrorMessage = "timeout"
+        }, CancellationToken.None);
+
+        var updatedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
+        Assert.Equal(previousSuccess, updatedDevice.LastHealthSuccessAt);
+        Assert.Equal(PavoDeviceHealthStatus.Timeout, updatedDevice.LastHealthStatus);
+        Assert.NotNull(updatedDevice.LastHealthError);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Ping_DuplicateActiveCommandReturnsExisting()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        var previousSuccess = DateTime.UtcNow.AddMinutes(-5);
+        SetHealthyDeviceHealth(device, suffix, previousSuccess, previousSuccess);
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var first = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+        var second = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+
+        Assert.Equal(first.Id, second.Id);
+        var commandCount = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoPing" && !x.IsDeleted);
+        Assert.Equal(1, commandCount);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task HealthExpiredCommandRecovery_MarksTimeout()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        var previousSuccess = DateTime.UtcNow.AddMinutes(-5);
+        SetHealthyDeviceHealth(device, suffix, previousSuccess, previousSuccess);
+        await db.SaveChangesAsync();
+
+        var commandId = Guid.NewGuid();
+        db.Set<STYS.Agent.Entities.AgentCommand>().Add(new STYS.Agent.Entities.AgentCommand
+        {
+            Id = commandId,
+            AgentId = fixture.MainAgentId,
+            KurumId = fixture.KurumId,
+            CommandType = "PavoPing",
+            Payload = JsonSerializer.Serialize(new PavoPingRequest { PosCihaziId = fixture.DeviceId }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            Status = AgentCommandStatus.Running,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+            Priority = 1,
+            CorrelationId = Guid.NewGuid().ToString("N"),
+            IdempotencyKey = Guid.NewGuid().ToString("N"),
+            RequestedBy = "test",
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+        await db.SaveChangesAsync();
+
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+
+        var expired = await db.Set<STYS.Agent.Entities.AgentCommand>().AsNoTracking().FirstAsync(x => x.Id == commandId);
+        var updatedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
+
+        Assert.Equal(AgentCommandStatus.Expired, expired.Status);
+        Assert.Equal(PavoDeviceHealthStatus.Timeout, updatedDevice.LastHealthStatus);
+        Assert.NotNull(updatedDevice.LastHealthCheckAt);
+        Assert.Equal(previousSuccess, updatedDevice.LastHealthSuccessAt);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_NotReady_ByHealth_DoesNotCreateCommandOrReserveSequence()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Stale, DateTime.UtcNow.AddMinutes(-15), DateTime.UtcNow.AddMinutes(-15), "stale");
+        device.TransactionSequence = 7;
+        await db.SaveChangesAsync();
+
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-HEALTH"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+
+        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = NewPaymentKey()
+        }, "test", CancellationToken.None));
+
+        var commandCount = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
+        var reloadedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
+
+        Assert.Equal(0, commandCount);
+        Assert.Equal(7, reloadedDevice.TransactionSequence);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
     public async Task Payment_NotReady_StartPaymentDoesNotCreateCommandOrReserveSequence()
     {
         var cs = ConnectionString();
@@ -1658,6 +1967,26 @@ public sealed class PosYonetimiIntegrationTests
             device.Id,
             secondDevice.Id,
             device.SeriNo);
+    }
+
+    private static void SetProvisionedDeviceHealth(PosCihazi device, string suffix, PavoDeviceHealthStatus status, DateTime? successAt = null, DateTime? checkAt = null, string? error = null)
+    {
+        device.AktifMi = true;
+        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
+        device.Fingerprint = $"FP-{suffix}";
+        device.TargetFingerprint = $"REMOTE-FP-{suffix}";
+        device.EslesmeOnayliMi = true;
+        device.LastHealthStatus = status;
+        device.LastHealthSuccessAt = successAt;
+        device.LastHealthCheckAt = checkAt ?? successAt;
+        device.LastHealthError = error;
+        device.SonBaglantiTarihi = null;
+    }
+
+    private static void SetHealthyDeviceHealth(PosCihazi device, string suffix, DateTime? successAt = null, DateTime? checkAt = null)
+    {
+        var now = DateTime.UtcNow;
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Healthy, successAt ?? now, checkAt ?? now, null);
     }
 
     private static async Task CleanupAsync(StysAppDbContext db, string suffix)

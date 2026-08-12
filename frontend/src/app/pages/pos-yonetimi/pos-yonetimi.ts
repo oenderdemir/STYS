@@ -746,6 +746,43 @@ export class PosYonetimiComponent implements OnInit {
         }
     }
 
+    getHealthLabel(status?: PosOperationalReadinessDto['deviceHealthStatus'] | string | null): string {
+        switch (status) {
+            case 'Healthy':
+                return 'Sağlıklı';
+            case 'Stale':
+                return 'Eski';
+            case 'Timeout':
+                return 'Zaman Aşımı';
+            case 'Unreachable':
+                return 'Ulaşılamıyor';
+            case 'TlsError':
+                return 'TLS Hatası';
+            case 'ProtocolError':
+                return 'Protokol Hatası';
+            case 'Unknown':
+            default:
+                return 'Bilinmiyor';
+        }
+    }
+
+    getHealthSeverity(status?: PosOperationalReadinessDto['deviceHealthStatus'] | string | null): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+        switch (status) {
+            case 'Healthy':
+                return 'success';
+            case 'Stale':
+                return 'warn';
+            case 'Timeout':
+            case 'Unreachable':
+            case 'TlsError':
+            case 'ProtocolError':
+                return 'danger';
+            case 'Unknown':
+            default:
+                return 'secondary';
+        }
+    }
+
     getPaymentStatusSeverity(durum: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
         switch (durum) {
             case 'Successful':

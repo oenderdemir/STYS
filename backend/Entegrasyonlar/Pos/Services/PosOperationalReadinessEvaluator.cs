@@ -1,6 +1,7 @@
 using STYS.Agent.Entities;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
+using STYS.Entegrasyonlar.Pos.Options;
 using AgentEntity = STYS.Agent.Entities.Agent;
 
 namespace STYS.Entegrasyonlar.Pos.Services;
@@ -8,9 +9,13 @@ namespace STYS.Entegrasyonlar.Pos.Services;
 internal static class PosOperationalReadinessEvaluator
 {
     private static readonly TimeSpan AgentOfflineThreshold = TimeSpan.FromSeconds(90);
-    private static readonly TimeSpan DeviceOfflineThreshold = TimeSpan.FromMinutes(5);
 
-    public static PosOperationalReadinessDto Evaluate(PosCihazi cihaz, AgentEntity? agent, IReadOnlyCollection<PosTerminal> terminals, DateTime utcNow)
+    public static PosOperationalReadinessDto Evaluate(
+        PosCihazi cihaz,
+        AgentEntity? agent,
+        IReadOnlyCollection<PosTerminal> terminals,
+        PosOperationalHealthOptions healthOptions,
+        DateTime utcNow)
     {
         var activeTerminals = (terminals ?? [])
             .Where(x => !x.IsDeleted && x.AktifMi)
@@ -27,9 +32,8 @@ internal static class PosOperationalReadinessEvaluator
             && agent.LastHeartbeatAt.HasValue
             && utcNow - agent.LastHeartbeatAt.Value <= AgentOfflineThreshold;
 
-        var deviceOnline = cihaz.AktifMi
-            && cihaz.SonBaglantiTarihi.HasValue
-            && utcNow - cihaz.SonBaglantiTarihi.Value <= DeviceOfflineThreshold;
+        var deviceHealth = ResolveDeviceHealth(cihaz, healthOptions.FreshnessThreshold, utcNow, out var lastHealthCheckAt, out var lastHealthSuccessAt, out var healthReason);
+        var deviceOnline = cihaz.AktifMi && deviceHealth == PavoDeviceHealthStatus.Healthy;
 
         var provisioned = cihaz.AgentId.HasValue
             && !string.IsNullOrWhiteSpace(cihaz.AgentLocalDeviceId)
@@ -40,6 +44,11 @@ internal static class PosOperationalReadinessEvaluator
             && !string.IsNullOrWhiteSpace(cihaz.Fingerprint);
 
         var reasons = new List<string>();
+        if (!string.IsNullOrWhiteSpace(healthReason))
+        {
+            reasons.Add(healthReason);
+        }
+
         var status = PavoOperationalReadiness.Ready;
 
         if (!cihaz.AktifMi)
@@ -69,10 +78,10 @@ internal static class PosOperationalReadinessEvaluator
             status = PavoOperationalReadiness.PairingInvalid;
             reasons.Add("Pairing geçersiz.");
         }
-        else if (!deviceOnline)
+        else if (deviceHealth is not PavoDeviceHealthStatus.Healthy)
         {
             status = PavoOperationalReadiness.DeviceOffline;
-            reasons.Add("PAVO cihazı çevrimdışı.");
+            reasons.Add(GetDeviceHealthReason(deviceHealth));
         }
         else if (!hasActiveTerminal)
         {
@@ -88,7 +97,7 @@ internal static class PosOperationalReadinessEvaluator
         var terminalReadiness = activeTerminals.Select(terminal =>
         {
             var accountMapped = terminal.KasaBankaHesapId.HasValue;
-            var paymentReady = status == PavoOperationalReadiness.Ready && accountMapped;
+            var paymentReady = status == PavoOperationalReadiness.Ready && accountMapped && deviceHealth == PavoDeviceHealthStatus.Healthy;
             return new PosTerminalOperationalReadinessDto
             {
                 Id = terminal.Id,
@@ -122,6 +131,7 @@ internal static class PosOperationalReadinessEvaluator
         {
             PosCihaziId = cihaz.Id,
             Status = status,
+            DeviceHealthStatus = deviceHealth,
             AgentOnline = agentOnline,
             DeviceOnline = deviceOnline,
             Provisioned = provisioned,
@@ -132,7 +142,10 @@ internal static class PosOperationalReadinessEvaluator
             Disabled = status == PavoOperationalReadiness.Disabled,
             OwnershipConflict = status == PavoOperationalReadiness.OwnershipConflict,
             AgentLastHeartbeatAt = agent?.LastHeartbeatAt,
-            DeviceLastConnectionAt = cihaz.SonBaglantiTarihi,
+            DeviceLastConnectionAt = lastHealthSuccessAt ?? cihaz.SonBaglantiTarihi,
+            LastHealthCheckAt = lastHealthCheckAt,
+            LastHealthSuccessAt = lastHealthSuccessAt,
+            LastHealthStatus = deviceHealth.ToString(),
             LastError = reasons.FirstOrDefault(),
             ActiveTerminalCount = activeTerminals.Count,
             AccountMappedTerminalCount = readyTerminals.Count,
@@ -140,4 +153,64 @@ internal static class PosOperationalReadinessEvaluator
             Reasons = reasons
         };
     }
+
+    private static PavoDeviceHealthStatus ResolveDeviceHealth(
+        PosCihazi cihaz,
+        TimeSpan freshnessThreshold,
+        DateTime utcNow,
+        out DateTime? lastHealthCheckAt,
+        out DateTime? lastHealthSuccessAt,
+        out string? reason)
+    {
+        lastHealthCheckAt = cihaz.LastHealthCheckAt;
+        lastHealthSuccessAt = cihaz.LastHealthSuccessAt;
+        var lastHealthStatus = cihaz.LastHealthStatus;
+        reason = null;
+
+        var hasModernHealthState = lastHealthCheckAt.HasValue || lastHealthSuccessAt.HasValue || lastHealthStatus != PavoDeviceHealthStatus.Unknown;
+        if (!hasModernHealthState && cihaz.SonBaglantiTarihi.HasValue)
+        {
+            lastHealthCheckAt = cihaz.SonBaglantiTarihi;
+            lastHealthSuccessAt = cihaz.SonBaglantiTarihi;
+            lastHealthStatus = PavoDeviceHealthStatus.Healthy;
+        }
+
+        if (!lastHealthCheckAt.HasValue && !lastHealthSuccessAt.HasValue && lastHealthStatus == PavoDeviceHealthStatus.Unknown)
+        {
+            reason = "PAVO sağlık kontrolü henüz yapılmadı.";
+            return PavoDeviceHealthStatus.Unknown;
+        }
+
+        if (lastHealthStatus == PavoDeviceHealthStatus.Healthy)
+        {
+            if (lastHealthSuccessAt.HasValue && utcNow - lastHealthSuccessAt.Value <= freshnessThreshold)
+            {
+                return PavoDeviceHealthStatus.Healthy;
+            }
+
+            reason = "Son başarılı PAVO sağlık kontrolü eski.";
+            return PavoDeviceHealthStatus.Stale;
+        }
+
+        if (lastHealthStatus == PavoDeviceHealthStatus.Unknown)
+        {
+            reason = "PAVO sağlık kontrolü sonucu bilinmiyor.";
+            return PavoDeviceHealthStatus.Unknown;
+        }
+
+        reason = GetDeviceHealthReason(lastHealthStatus);
+        return lastHealthStatus;
+    }
+
+    private static string GetDeviceHealthReason(PavoDeviceHealthStatus status) =>
+        status switch
+        {
+            PavoDeviceHealthStatus.Healthy => "PAVO cihazı sağlıklı.",
+            PavoDeviceHealthStatus.Unreachable => "PAVO cihazına ulaşılamıyor.",
+            PavoDeviceHealthStatus.Timeout => "PAVO sağlık kontrolü zaman aşımına uğradı.",
+            PavoDeviceHealthStatus.TlsError => "PAVO TLS doğrulaması başarısız oldu.",
+            PavoDeviceHealthStatus.ProtocolError => "PAVO protokol yanıtı geçersiz.",
+            PavoDeviceHealthStatus.Stale => "Son başarılı PAVO sağlık kontrolü eski.",
+            _ => "PAVO sağlık durumu bilinmiyor."
+        };
 }

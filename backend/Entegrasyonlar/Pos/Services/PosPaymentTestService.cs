@@ -6,6 +6,7 @@ using STYS.Agent.Entities;
 using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
+using STYS.Entegrasyonlar.Pos.Options;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Rezervasyonlar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
@@ -24,15 +25,18 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
     private readonly StysAppDbContext _db;
     private readonly AgentCommandService _agentCommandService;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly PosOperationalHealthOptions _healthOptions;
 
     public PosPaymentTestService(
         StysAppDbContext db,
         AgentCommandService agentCommandService,
-        ICurrentTenantAccessor tenantAccessor)
+        ICurrentTenantAccessor tenantAccessor,
+        Microsoft.Extensions.Options.IOptions<PosOperationalHealthOptions>? healthOptions = null)
     {
         _db = db;
         _agentCommandService = agentCommandService;
         _tenantAccessor = tenantAccessor;
+        _healthOptions = healthOptions?.Value ?? new PosOperationalHealthOptions();
     }
 
     public async Task<IReadOnlyCollection<PosOdemeIslemiDto>> GetRecentAsync(int cihazId, int take, CancellationToken cancellationToken)
@@ -244,7 +248,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             .Where(x => x.PosCihaziId == cihaz.Id && !x.IsDeleted)
             .ToListAsync(cancellationToken);
 
-        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, terminals, DateTime.UtcNow);
+        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, terminals, _healthOptions, DateTime.UtcNow);
     }
 
     private async Task<PosOdemeIslemi?> LoadExistingPaymentForStartAsync(PosPaymentBaslatRequest request, string idempotencyKey, CancellationToken cancellationToken)

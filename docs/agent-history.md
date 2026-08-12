@@ -1537,6 +1537,55 @@ Agent Regression:  0
   - Drift testinde local `SerialNumber` ve host/display metadata’nın snapshot ile overwrite edilmediği doğrulandı.
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+
+## 2026-08-12 — PAVO Operations Faz D2
+
+- Health state modeli eklendi:
+  - `Unknown`
+  - `Healthy`
+  - `Unreachable`
+  - `Timeout`
+  - `TlsError`
+  - `ProtocolError`
+  - `Stale`
+- Runtime health alanları eklendi:
+  - `LastHealthCheckAt`
+  - `LastHealthSuccessAt`
+  - `LastHealthStatus`
+  - `LastHealthError`
+- Readiness artık sadece `SonBaglantiTarihi` varsayımına dayanmayacak şekilde health policy ile hesaplanıyor:
+  - hiç health check yoksa `Unknown`
+  - son başarılı health eskiyse `Stale`
+  - son check failure ise ilgili failure state
+  - threshold config üzerinden yönetiliyor
+- Merkezi health refresh akışı eklendi:
+  - UI `Bağlantıyı Kontrol Et` çağırıyor
+  - backend typed `PavoPing` command oluşturuyor
+  - Agent PAVO’ya gidip sonucu döndürüyor
+  - central health state güncelleniyor
+- Result processing:
+  - başarılı `PavoPing` sonrası `Healthy`
+  - failure sonrası `Timeout / Unreachable / TlsError / ProtocolError`
+  - `LastHealthSuccessAt` failure’da silinmiyor
+- Timeout / stuck command recovery:
+  - expired health command’lar `Expired` oluyor
+  - running health command için de timeout recovery çalışıyor
+  - duplicate aktif health command üretimi engelleniyor
+- Payment guard:
+  - fresh `Healthy` state olmadan `StartPayment` command’i üretmiyor
+  - sequence reserve edilmiyor
+- UI:
+  - merkezi POS ekranında health status / son kontrol / son başarı / hata görünür
+  - bağlantı kontrol action’ı açık isimle gösteriliyor
+- Tests:
+  - `dotnet test STYS.sln --configuration Release --no-restore` geçti
+  - `tests/STYS.Tests/STYS.Tests.csproj --filter "FullyQualifiedName~PosYonetimiIntegrationTests"` çalıştırıldı
+  - integration testler local SQL connection olmadığı için skip oldu
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Health freshness threshold konfigürasyon üzerinden yönetiliyor; env ayarı yoksa default 5 dakika kullanılıyor.
+  - UI health display mevcut command update akışıyla yenileniyor; ayrı polling eklenmedi.
 - Full test sonucu:
   - `dotnet test STYS.sln --configuration Release` çalıştırıldı.
   - Full çözümde tek kırık test görüldü:

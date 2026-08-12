@@ -117,6 +117,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.Configure<KurumLogoStorageOptions>(
     builder.Configuration.GetSection(KurumLogoStorageOptions.SectionName));
 builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOptions.SectionName));
+builder.Services.Configure<PosOperationalHealthOptions>(builder.Configuration.GetSection(PosOperationalHealthOptions.SectionName));
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
 builder.Services.Configure<EBelgeUblOptions>(builder.Configuration.GetSection(EBelgeUblOptions.SectionName));
 builder.Services.Configure<AgentAuthOptions>(builder.Configuration.GetSection(AgentAuthOptions.SectionName));

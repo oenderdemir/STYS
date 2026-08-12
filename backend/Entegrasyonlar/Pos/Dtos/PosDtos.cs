@@ -1,4 +1,18 @@
+using System.Text.Json.Serialization;
+
 namespace STYS.Entegrasyonlar.Pos.Dtos;
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum PavoDeviceHealthStatus
+{
+    Unknown = 0,
+    Healthy = 1,
+    Unreachable = 2,
+    Timeout = 3,
+    TlsError = 4,
+    ProtocolError = 5,
+    Stale = 6
+}
 
 public sealed class PosSaglayiciDto
 {
@@ -64,6 +78,7 @@ public sealed class PosOperationalReadinessDto
     public int PosCihaziId { get; set; }
     public PavoOperationalReadiness Status { get; set; }
     public bool Ready => Status == PavoOperationalReadiness.Ready;
+    public PavoDeviceHealthStatus DeviceHealthStatus { get; set; } = PavoDeviceHealthStatus.Unknown;
     public bool AgentOnline { get; set; }
     public bool DeviceOnline { get; set; }
     public bool Provisioned { get; set; }
@@ -75,6 +90,9 @@ public sealed class PosOperationalReadinessDto
     public bool OwnershipConflict { get; set; }
     public DateTime? AgentLastHeartbeatAt { get; set; }
     public DateTime? DeviceLastConnectionAt { get; set; }
+    public DateTime? LastHealthCheckAt { get; set; }
+    public DateTime? LastHealthSuccessAt { get; set; }
+    public string? LastHealthStatus { get; set; }
     public string? LastError { get; set; }
     public int ActiveTerminalCount { get; set; }
     public int AccountMappedTerminalCount { get; set; }

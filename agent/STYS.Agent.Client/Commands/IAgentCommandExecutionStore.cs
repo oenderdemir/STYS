@@ -14,11 +14,11 @@ public sealed class MemoryAgentCommandExecutionStore : IAgentCommandExecutionSto
 {
     private readonly ConcurrentDictionary<string, AgentCommandExecutionState> _store = new();
 
-    public bool HasExecuted(string idempotencyKey) => _store.ContainsKey(idempotencyKey);
+    public bool HasExecuted(string idempotencyKey) => _store.ContainsKey(NormalizeKey(idempotencyKey));
 
     public void MarkExecuted(string idempotencyKey) =>
         _store.AddOrUpdate(
-            idempotencyKey,
+            NormalizeKey(idempotencyKey),
             _ => new AgentCommandExecutionState { Started = true },
             (_, existing) =>
             {
@@ -26,11 +26,11 @@ public sealed class MemoryAgentCommandExecutionStore : IAgentCommandExecutionSto
                 return existing;
             });
 
-    public AgentCommandResult? GetResult(string idempotencyKey) => _store.GetValueOrDefault(idempotencyKey)?.Result;
+    public AgentCommandResult? GetResult(string idempotencyKey) => _store.GetValueOrDefault(NormalizeKey(idempotencyKey))?.Result;
 
     public void StoreResult(string idempotencyKey, AgentCommandResult result) =>
         _store.AddOrUpdate(
-            idempotencyKey,
+            NormalizeKey(idempotencyKey),
             _ => new AgentCommandExecutionState { Started = true, Result = Clone(result) },
             (_, existing) =>
             {
@@ -38,6 +38,9 @@ public sealed class MemoryAgentCommandExecutionStore : IAgentCommandExecutionSto
                 existing.Result = Clone(result);
                 return existing;
             });
+
+    private static string NormalizeKey(string idempotencyKey) =>
+        string.IsNullOrWhiteSpace(idempotencyKey) ? throw new InvalidOperationException("IdempotencyKey zorunludur.") : idempotencyKey.Trim();
 
     private static AgentCommandResult Clone(AgentCommandResult result) => new()
     {

@@ -7,6 +7,12 @@ namespace STYS.Agent.Client.Commands;
 
 public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
 {
+    private static readonly string[] PersistentKeyPrefixes =
+    [
+        "PavoStartPayment:",
+        "PavoGetPaymentResult:"
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -17,6 +23,7 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
 
     private readonly string _storePath;
     private readonly SemaphoreSlim _gate;
+    private readonly MemoryAgentCommandExecutionStore _memoryFallback = new();
     private readonly ILogger<FileAgentCommandExecutionStore> _logger;
 
     public FileAgentCommandExecutionStore(IAgentPathResolver paths, ILogger<FileAgentCommandExecutionStore> logger)
@@ -36,6 +43,11 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
             return false;
         }
 
+        if (!IsPersistentKey(normalized))
+        {
+            return _memoryFallback.HasExecuted(normalized);
+        }
+
         return WithGate(() =>
         {
             var items = ReadAllCore();
@@ -46,6 +58,13 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
     public void MarkExecuted(string idempotencyKey)
     {
         var normalized = NormalizeKey(idempotencyKey) ?? throw new InvalidOperationException("IdempotencyKey zorunludur.");
+
+        if (!IsPersistentKey(normalized))
+        {
+            _memoryFallback.MarkExecuted(normalized);
+            return;
+        }
+
         WithGate(() =>
         {
             var items = ReadAllCore();
@@ -69,6 +88,11 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
             return null;
         }
 
+        if (!IsPersistentKey(normalized))
+        {
+            return _memoryFallback.GetResult(normalized);
+        }
+
         return WithGate(() =>
         {
             var items = ReadAllCore();
@@ -80,6 +104,12 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
     {
         var normalized = NormalizeKey(idempotencyKey) ?? throw new InvalidOperationException("IdempotencyKey zorunludur.");
         var cloned = Clone(result) ?? throw new InvalidOperationException("Agent command result zorunludur.");
+
+        if (!IsPersistentKey(normalized))
+        {
+            _memoryFallback.StoreResult(normalized, cloned);
+            return;
+        }
 
         WithGate(() =>
         {
@@ -141,8 +171,8 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Agent command execution store could not be read; empty state will be used.");
-            return new Dictionary<string, AgentCommandExecutionState>(StringComparer.OrdinalIgnoreCase);
+            _logger.LogError(ex, "Persisted agent command execution store is unreadable or corrupted.");
+            throw new InvalidOperationException("Persisted agent command execution store is unreadable or corrupted.", ex);
         }
     }
 
@@ -174,6 +204,9 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
         var trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
+
+    private static bool IsPersistentKey(string key) =>
+        PersistentKeyPrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static AgentCommandResult? Clone(AgentCommandResult? result) => result is null
         ? null

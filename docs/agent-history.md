@@ -1538,6 +1538,31 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+### D3 Final Safety Fix — 2026-08-12
+
+- Execution store fail-closed hale getirildi:
+  - `FileAgentCommandExecutionStore` içinde persisted dosya yoksa normalde empty state döner.
+  - Persisted dosya mevcutken read/deserialize başarısız olursa exception fırlatılır.
+  - Böyle bir bozuk store, `PavoStartPayment` için fiziksel execution tekrarına izin vermez.
+- Disk persistence scope daraltıldı:
+  - yalnız `PavoStartPayment` ve `PavoGetPaymentResult` kalıcı store’a yazılıyor.
+  - `PavoPairing`, `PavoPing`, `PavoGetDeviceInfo` ve diğer command’lar memory fallback kullanıyor.
+  - secret-bearing payload’lar disk execution store’a yazılmıyor.
+- Tests:
+  - corrupt persistent file + `PavoStartPayment` için fail-closed senaryosu eklendi.
+  - `PavoPairing` secret-bearing result payload’ı disk dosyasına düşmüyor.
+  - restart sonrası `PavoStartPayment` marker hâlâ ikinci execution’ı engelliyor.
+  - restart sonrası `PavoGetPaymentResult` result okunabiliyor.
+  - monotonic payment testleri korunuyor.
+  - `dotnet test STYS.sln --configuration Release` çalıştırıldı; tek mevcut bağımsız failure:
+    - `STYS.Tests.EBelgeOutboxWorkerTests.DogruIsTuruIleClaimIsleAsyncEGider(isTuru: UblImzala)`
+    - hata: `System.TimeoutException: Beklenen koşul zaman aşımı içinde gerçekleşmedi.`
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - Disk store yalnız payment idempotency anahtarlarını persist ediyor; diğer command tipleri için memory fallback çalışıyor.
+  - Tam çözümde görülen tek failure EBelge outbox worker testinde; bu değişiklikle doğrudan ilişkili görünmüyor.
+
 ### D3 Restart & Final-State Hardening — 2026-08-12
 
 - Restart-safe execution store artık production’da dosya tabanlı:

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
@@ -55,6 +56,43 @@ public sealed class AgentCommandExecutionStoreTests : IDisposable
         var store2 = CreateStore();
         Assert.True(store2.HasExecuted(key));
         Assert.Equal("{\"status\":\"ok\"}", store2.GetResult(key)?.ResultPayload);
+    }
+
+    [Fact]
+    public void CorruptedPersistentFile_FailClosed_AndPhysicalExecutionDoesNotRun()
+    {
+        File.WriteAllText(StorePath, "{ this is not valid json");
+        var store = CreateStore();
+        var idempotencyKey = "PavoStartPayment:corrupted";
+        var physicalCalls = 0;
+
+        var exception = Record.Exception(() => RunPhysicalStartPayment(store, idempotencyKey, () => physicalCalls++));
+
+        Assert.NotNull(exception);
+        Assert.IsType<InvalidOperationException>(exception);
+        Assert.Equal(0, physicalCalls);
+    }
+
+    [Fact]
+    public void PairingResult_StaysInMemory_AndSecretsDoNotHitDisk()
+    {
+        var store = CreateStore();
+        var key = "PavoPairing:secret-bearing";
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            Fingerprint = "fingerprint-secret",
+            TargetFingerprint = "target-secret",
+            PairingCode = "pairing-secret",
+            ClientSecret = "client-secret"
+        });
+
+        store.MarkExecuted(key);
+        store.StoreResult(key, AgentCommandResult.Ok(payload));
+
+        Assert.True(store.HasExecuted(key));
+        Assert.Equal(payload, store.GetResult(key)?.ResultPayload);
+        Assert.False(File.Exists(StorePath), "Non-payment commands should not create a persistent execution file.");
     }
 
     [Fact]

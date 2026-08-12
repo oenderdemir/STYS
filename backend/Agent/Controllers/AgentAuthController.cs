@@ -239,8 +239,6 @@ public sealed class AgentAuthController : ControllerBase
             Host = device.IpAdresi,
             HttpPort = device.HttpPort,
             HttpsPort = device.HttpsPort,
-            Fingerprint = device.Fingerprint,
-            TargetFingerprint = device.TargetFingerprint,
             SonBaglantiTarihi = device.SonBaglantiTarihi,
             Terminals = device.Terminaller
                 .Where(x => !x.IsDeleted)

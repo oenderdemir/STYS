@@ -1508,5 +1508,38 @@ Agent Regression:  0
   - `frontend` için `npm run build` geçti
   - `frontend` için `npm test -- --watch=false --browsers=ChromeHeadless` geçti
 - Bilinen kısıtlar:
-  - Gerçek PAVO cihazı ile manuel saha testi yapılmadı.
-  - Angular build’de bundle budget warning devam ediyor.
+- Gerçek PAVO cihazı ile manuel saha testi yapılmadı.
+- Angular build’de bundle budget warning devam ediyor.
+
+### C2 Reconciliation Security Hardening — 2026-08-12
+
+- Fingerprint snapshot leak kaldırıldı:
+  - `AgentPavoDeviceStatusSnapshotDto` içinden `Fingerprint` ve `TargetFingerprint` alanları çıkarıldı.
+  - `POST /api/agent/pos-devices/status-snapshot` response’u artık sadece public operational metadata dönüyor.
+- Reconciliation local metadata’yı overwrite etmiyor:
+  - `CheckStysStatusAsync()` central snapshot’tan `SerialNumber`, `DeviceName`, `DisplayName`, `Host` ve port alanlarını local cihaza yazmıyor.
+  - Central snapshot yalnız comparison/result DTO olarak kullanılıyor.
+- Local truth / central comparison ayrımı netleştirildi:
+  - Local discovery / user configuration / PAVO `GetDeviceInfo` local metadata’nın kaynağı olarak korunuyor.
+  - Central correlation alanları ayrı tutuluyor:
+    - `CentralPosCihaziId`
+    - `CentralAgentId`
+    - `CentralTesisId`
+    - `StysReconciliationStatus`
+    - `StysReconciliationMessage`
+    - `StysReconciliationCheckedAt`
+- Tenant-safe snapshot davranışı korunuyor:
+  - Status snapshot endpoint current Agent/Kurum kapsamında kalıyor.
+  - Cross-tenant veri response’a sızmıyor.
+  - Registration endpoint ownership conflict için authoritative mekanizma olmaya devam ediyor.
+- Tests:
+  - Snapshot JSON fingerprint içermez testi eklendi.
+  - Drift testinde local `SerialNumber` ve host/display metadata’nın snapshot ile overwrite edilmediği doğrulandı.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Full test sonucu:
+  - `dotnet test STYS.sln --configuration Release` çalıştırıldı.
+  - Full çözümde tek kırık test görüldü:
+    - `STYS.Tests.EBelgeOutboxWorkerTests.KuyrukBoskenIdleDelayKullanilir`
+    - Hata: `System.TimeoutException: Beklenen koşul zaman aşımı içinde gerçekleşmedi.`
+    - Bu hata C2 reconciliation değişikliklerinden bağımsız, outbox worker idle-delay davranışıyla ilgili.

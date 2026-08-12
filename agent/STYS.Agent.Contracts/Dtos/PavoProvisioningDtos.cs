@@ -76,8 +76,6 @@ public sealed class AgentPavoDeviceStatusSnapshotDto
     public string? Host { get; set; }
     public int? HttpPort { get; set; }
     public int? HttpsPort { get; set; }
-    public string? Fingerprint { get; set; }
-    public string? TargetFingerprint { get; set; }
     public DateTime? SonBaglantiTarihi { get; set; }
     public IReadOnlyCollection<PavoDeviceProvisioningCandidateTerminal> Terminals { get; set; } = [];
 }

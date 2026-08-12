@@ -244,6 +244,95 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
     }
 
     [Fact]
+    public async Task StatusSnapshot_FingerprintVeTargetFingerprint_Icermez()
+    {
+        var snapshot = new AgentPavoDeviceStatusSnapshotDto
+        {
+            CentralPosCihaziId = 1,
+            AgentId = 2,
+            KurumId = 3,
+            TesisId = 4,
+            AgentLocalDeviceId = "local-1",
+            Provider = "PAVO",
+            SerialNumber = "SN-1",
+            Active = true,
+            DisplayName = "PAVO POS",
+            Host = "192.168.1.50",
+            HttpPort = 4567,
+            HttpsPort = 4568
+        };
+
+        var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.DoesNotContain("Fingerprint", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TargetFingerprint", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CheckStysStatus_LocalMetadata_OverwriteEdilmez()
+    {
+        var snapshotClient = new FakeAgentApiClient
+        {
+            SnapshotResponse = new AgentPavoDeviceStatusSnapshotDto
+            {
+                CentralPosCihaziId = 9100,
+                AgentId = 101,
+                KurumId = 202,
+                TesisId = 303,
+                AgentLocalDeviceId = "local-device-1",
+                Provider = "PAVO",
+                SerialNumber = "CENTRAL-456",
+                Active = true,
+                DisplayName = "Central POS",
+                Host = "10.10.10.10",
+                HttpPort = 9999,
+                HttpsPort = 9998
+            }
+        };
+        var client = new FakePavoRestClient
+        {
+            GetDeviceInfoResponse = BuildDeviceInfoResponse(
+                serialNumber: "LOCAL-123",
+                deviceName: "Local Device",
+                new[]
+                {
+                    new PavoDeviceTerminalInfo
+                    {
+                        TerminalId = "TERM-1",
+                        MerchantId = "MER-1",
+                        AcquirerId = "ACQ-1",
+                        AcquirerName = "Bank 1"
+                    }
+                })
+        };
+        var store = CreateStore();
+        var terminalStore = CreateTerminalStore();
+        var pairingStore = CreatePairingStore();
+        var service = CreateService(client, store, terminalStore, pairingStore, snapshotClient);
+        var device = await CreatePairedDeviceAsync(service, store, pairingStore);
+        device.SerialNumber = "LOCAL-123";
+        device.DeviceName = "Local Device";
+        device.Host = "192.168.1.50";
+        device.CentralPosCihaziId = 9100;
+        device.CentralAgentId = 101;
+        device.CentralTesisId = 303;
+        device.ProvisioningStatus = LocalDeviceProvisioningStatus.Provisioned;
+        device.UpdatedAt = DateTimeOffset.UtcNow;
+        await store.UpdateAsync(device, CancellationToken.None);
+        snapshotClient.SnapshotResponse!.AgentLocalDeviceId = device.Id;
+
+        var result = await service.CheckStysStatusAsync(device.Id, CancellationToken.None);
+        var reloaded = await store.GetByIdAsync(device.Id, CancellationToken.None);
+
+        Assert.Equal(LocalDeviceStysReconciliationStatus.ReProvisionRequired, result.Status);
+        Assert.Equal("LOCAL-123", reloaded!.SerialNumber);
+        Assert.Equal("Local Device", reloaded.DeviceName);
+        Assert.Equal("192.168.1.50", reloaded.Host);
+        Assert.Equal(4567, reloaded.HttpPort);
+        Assert.Equal(4568, reloaded.HttpsPort);
+    }
+
+    [Fact]
     public async Task TerminalStore_SecretIcermez()
     {
         var client = new FakePavoRestClient

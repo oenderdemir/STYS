@@ -327,8 +327,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             updatedDevice.CentralPosCihaziId = snapshot.CentralPosCihaziId;
             updatedDevice.CentralAgentId = snapshot.AgentId;
             updatedDevice.CentralTesisId = snapshot.TesisId;
-            updatedDevice.SerialNumber = string.IsNullOrWhiteSpace(snapshot.SerialNumber) ? updatedDevice.SerialNumber : snapshot.SerialNumber.Trim();
-            updatedDevice.DeviceName = string.IsNullOrWhiteSpace(snapshot.DisplayName) ? updatedDevice.DeviceName : snapshot.DisplayName.Trim();
         }
 
         updatedDevice.StysReconciliationStatus = status;
@@ -804,7 +802,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         }
 
         if (!string.Equals(snapshot.Provider, "PAVO", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(snapshot.SerialNumber, device.SerialNumber, StringComparison.OrdinalIgnoreCase)
             || !Nullable.Equals(device.CentralPosCihaziId, snapshot.CentralPosCihaziId)
             || !Nullable.Equals(device.CentralAgentId, snapshot.AgentId)
             || !Nullable.Equals(device.CentralTesisId, snapshot.TesisId)
@@ -849,17 +846,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         }
 
         if (!string.Equals(NormalizeText(snapshot.SerialNumber), NormalizeText(device.SerialNumber), StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
-        if (!string.Equals(NormalizeText(snapshot.Fingerprint), NormalizeText(pairingState?.Fingerprint), StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (!string.Equals(NormalizeText(snapshot.TargetFingerprint), NormalizeText(pairingState?.TargetFingerprint), StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

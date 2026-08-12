@@ -1380,3 +1380,90 @@ Agent Regression:  0
 - Merkezi `PosCihazi` provisioning bu fazda yapılmıyor.
 - Terminal discovery sonrası central sync bir sonraki fazda ele alınacak.
 - Angular build budget uyarısı mevcut.
+
+## 2026-08-12 — PAVO Device Provisioning Faz C1 + Hardening
+
+### Registration endpoint
+
+- Agent → STYS akışı `POST /api/agent/pos-devices/register` üzerinden ilerliyor.
+- `AgentId` ve `KurumId` request contract içinde taşınmıyor; bu değerler server-side `ICurrentAgentContext` üzerinden çözülüyor.
+- Tesis doğrulaması backend tarafında yapılıyor; agent context dışı tesis reddediliyor.
+
+### PosCihazi create / reconcile
+
+- Aynı fiziksel cihaz için idempotent kayıt/reconcile davranışı korunuyor.
+- Tekrarlayan aynı-agent kayıt denemelerinde mevcut `PosCihazi` geri dönüyor.
+- Concurrent registration senaryolarında tek kayıt oluşuyor; loser request conflict alıyor.
+
+### Global serial uniqueness
+
+- PAVO için global filtered uniqueness `Saglayici + SeriNo` üzerinde uygulanıyor.
+- Soft-delete kayıtlar filtre dışı bırakılıyor.
+- Aynı seri numarası başka kurumda kayıtlıysa conflict davranışı bekleniyor.
+- Cross-tenant concurrent conflict senaryosu tek kayıt + 409 sonucu üretiyor.
+
+### Cross-tenant conflict behavior
+
+- Aynı fiziksel seri numarası başka bir tenant altında aktifse yeni kayıt reddediliyor.
+- Conflict kararı server-side veriliyor; istemciye güvenilmiyor.
+
+### Terminal canonical identity
+
+- Terminal reconciliation için canonical kimlik:
+  `PosCihaziId + AcquirerId + TerminalId`
+- `SerialNumber` veya yalnız `TerminalId` ile eşleştirme yapılmıyor.
+- Aynı `TerminalId` farklı `AcquirerId` ile ayrı terminal sayılıyor.
+
+### KasaBankaHesapId mapping
+
+- Mevcut `KasaBankaHesapId` eşlemesi korunuyor.
+- Reconcile sırasında terminalin hesap bağlantısı gereksiz yere sıfırlanmıyor.
+- Canonical identity güncellemesi, var olan finansal hesap eşleşmesini bozmuyor.
+
+### TransactionSequence ownership
+
+- TransactionSequence authoritative owner = Agent.
+- Local UI PAVO çağrıları ve central command çağrıları aynı Agent-side atomic reservation mekanizmasını kullanıyor.
+- Central command sequence, execution anında Agent tarafında reserve ediliyor.
+- Central DB `PosCihazi.TransactionSequence` artık authoritative değil; legacy / diagnostic amaçlı kalıyor.
+
+### Local UI + central command sequence coordination
+
+- Local UI ve central command aynı pairing store counter’ını kullanıyor.
+- Ayrı sequence owner bırakılmadı; paralel execution collision riski azaltıldı.
+
+### Idempotency / concurrency
+
+- Aynı `Agent + LocalDevice + Serial + Tesis` kombinasyonu tekrar register edildiğinde mevcut kayıt dönüyor.
+- Concurrent aynı-agent register senaryosu tek kayıt üretmek üzere tasarlandı.
+- Sequence reservation tarafı da concurrent kullanımda unique kalacak şekilde ele alındı.
+
+### Fingerprint security
+
+- Fingerprint / target fingerprint response’a çıkarılmıyor.
+- Loglara yazılmıyor.
+- Local provisioning preview DTO içinde taşınmıyor.
+
+### Migrations
+
+- `C1ProvisioningOwnershipHardening` migration’ı eklendi.
+- `PosCihazlari` için global `Saglayici + SeriNo` unique index tanımlandı.
+- `PosTerminaller` için canonical identity kolonları ve unique index eklendi.
+
+### Test results
+
+- `dotnet test STYS.sln --configuration Release` geçti.
+- Sonuç: `1112 passed, 761 skipped, 0 failed`
+- Agent/PAVO odaklı ek filtre çalıştırıldığında tek bir hardening testi hata verdi:
+  - `STYS.Tests.Agent.AgentLocalDevicesPhaseB2Tests.LocalVeCentralSequence_AyniStoreUzerindeCakismadanRezervEdilir`
+  - Hata: `Assert.Equal() Failure: Values differ. Expected: 2 Actual: 1`
+
+### Real PAVO device test status
+
+- Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+
+### Known limitations
+
+- Central DB sequence değeri legacy/diagnostic amaçlı tutuluyor; authoritative kabul edilmiyor.
+- Gerçek PAVO donanımı olmadan sequence ve registration davranışı laboratuvar/test verisiyle doğrulandı.
+- Targeted hardening filter’deki sequence testi şu an expectation mismatch gösteriyor; full solution testi ise geçti.

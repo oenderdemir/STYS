@@ -1576,6 +1576,42 @@ Agent Regression:  0
   - Linux kurulumunda paketlenmiş self-contained binary adı publish çıktısına bağlıdır.
   - Angular/Back-end dışında production deploy prosedürü ayrıca operasyon dokümantasyonu gerektirebilir.
 
+### E1 Deployment Runtime Fix — 2026-08-12
+
+- Windows service runtime:
+  - PowerShell wrapper kaldırıldı.
+  - SCM artık doğrudan `STYS.Agent.exe` ile başlatıyor.
+  - `UseWindowsService` lifecycle gerçek service process içinde çalışıyor.
+  - Delayed Start ve recovery policy korunuyor.
+- Path overrides:
+  - `STYS_AGENT_DATA_DIR` ve `STYS_AGENT_LOG_DIR` desteği eklendi.
+  - Windows default paths `%ProgramData%\STYS\Agent` ve `%ProgramData%\STYS\Agent\logs`.
+  - Linux default paths `/var/lib/stys-agent` ve `/var/log/stys-agent`.
+  - Serilog artık relative `logs/...` yerine resolver tabanlı log directory kullanıyor.
+- Linux permissions:
+  - `/opt/stys-agent` servis kullanıcısına writable değil.
+  - Binary/config root-owned; service user için read/execute.
+  - Data/log dizinleri `stys-agent` owned ve writable.
+- Local UI port:
+  - `LocalUiPort` artık `STYS_AGENT_LOCAL_UI_PORT` üzerinden gerçekten uygulanıyor.
+  - Loopback binding korunuyor.
+- Startup validation:
+  - Log directory de kritik writable path kontrolüne dahil edildi.
+  - Writable olmayan kritik store’da agent unhealthy sayılıyor.
+- Tests:
+  - Windows binPath direct exe testi geçti.
+  - Program Files write gerektirmediği doğrulandı.
+  - Linux install dir service user writable değil testi geçti.
+  - Data/log override ve startup log-dir validation testleri geçti.
+  - Loopback binding testi korundu.
+  - `dotnet test STYS.sln --configuration Release` geçti: `Passed: 1129, Skipped: 782, Failed: 0`.
+- Real device test status:
+  - Bu turda gerçek cihaz üzerinde kurulum testi yapılmadı.
+- Known limitations:
+  - Windows service registry environment value ayarları kurulum yetkisi gerektirir.
+  - Linux install scriptinin root yetkisiyle çalıştırılması gerekir.
+  - Publish output farklı self-contained ayarlarda dosya isimlerini değiştirebilir; scriptler publish çıktısını varsayar.
+
 ### D3 Final Safety Fix — 2026-08-12
 
 - Execution store fail-closed hale getirildi:

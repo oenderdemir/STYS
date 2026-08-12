@@ -305,6 +305,7 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
     {
         public TempAgentPathResolver(string root) => DataDirectory = root;
         public string DataDirectory { get; }
+        public string LogDirectory => Path.Combine(DataDirectory, "logs");
         public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
         public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
         public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");

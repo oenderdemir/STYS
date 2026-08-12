@@ -36,6 +36,7 @@ public sealed class AgentStartupValidationService : IAgentStartupValidationServi
         try
         {
             ValidateWritableDirectory(_paths.DataDirectory, checkedPaths);
+            ValidateWritableDirectory(_paths.LogDirectory, checkedPaths);
             ValidateWritableLocation(_paths.BootstrapConfigurationPath, checkedPaths);
             ValidateWritableLocation(_paths.CredentialStorePath, checkedPaths);
             ValidateWritableLocation(_paths.LocalDevicesStorePath, checkedPaths);

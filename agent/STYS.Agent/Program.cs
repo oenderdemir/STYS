@@ -27,6 +27,7 @@ var bootstrapStoreForStartup = new FileAgentBootstrapConfigurationStore(
     bootstrapPathResolver,
     NullLogger<FileAgentBootstrapConfigurationStore>.Instance);
 var startupBootstrap = bootstrapStoreForStartup.TryGetAsync(CancellationToken.None).GetAwaiter().GetResult();
+var localUiPort = ResolveLocalUiPort(startupBootstrap?.LocalUiPort);
 
 if (startupBootstrap is not null)
 {
@@ -36,7 +37,7 @@ if (startupBootstrap is not null)
         ["StysAgentClient:BaseUrl"] = startupBootstrap.StysBaseUrl,
         ["AgentBootstrap:HttpTimeoutSeconds"] = startupBootstrap.HttpTimeoutSeconds.ToString(CultureInfo.InvariantCulture),
         ["StysAgentClient:RequestTimeoutSeconds"] = startupBootstrap.HttpTimeoutSeconds.ToString(CultureInfo.InvariantCulture),
-        ["AgentBootstrap:LocalUiPort"] = startupBootstrap.LocalUiPort.ToString(CultureInfo.InvariantCulture),
+        ["AgentBootstrap:LocalUiPort"] = localUiPort.ToString(CultureInfo.InvariantCulture),
         ["AgentBootstrap:AgentDisplayName"] = startupBootstrap.AgentDisplayName
     };
 
@@ -53,7 +54,6 @@ if (startupBootstrap is not null)
     }
 }
 
-var localUiPort = startupBootstrap?.LocalUiPort > 0 ? startupBootstrap.LocalUiPort : 5180;
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Listen(AgentLocalWebHostBinding.CreateLoopbackEndpoint(localUiPort));
@@ -114,7 +114,7 @@ builder.Services.AddPavoModule();
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
-    .WriteTo.File("logs/agent-.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.File(Path.Combine(bootstrapPathResolver.LogDirectory, "agent-.log"), rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Services.AddSerilog();
@@ -129,3 +129,19 @@ using (var scope = app.Services.CreateScope())
 }
 
 await app.RunAsync();
+
+static int ResolveLocalUiPort(int? configuredPort)
+{
+    var environmentValue = Environment.GetEnvironmentVariable("STYS_AGENT_LOCAL_UI_PORT");
+    if (int.TryParse(environmentValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var environmentPort) && environmentPort > 0 && environmentPort <= 65535)
+    {
+        return environmentPort;
+    }
+
+    if (configuredPort is > 0 and <= 65535)
+    {
+        return configuredPort.Value;
+    }
+
+    return 5180;
+}

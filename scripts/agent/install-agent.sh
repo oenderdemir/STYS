@@ -17,7 +17,9 @@ if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
 fi
 
 cp -a "$PUBLISH_DIR"/. "$INSTALL_DIR"/
-chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR" "$DATA_DIR" "$LOG_DIR"
+chown -R root:root "$INSTALL_DIR"
+chmod -R u=rwX,go=rX "$INSTALL_DIR"
+chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR" "$LOG_DIR"
 chmod -R u+rwX,go-rwx "$DATA_DIR" "$LOG_DIR"
 
 cat > "$SERVICE_FILE" <<EOF
@@ -34,7 +36,10 @@ WorkingDirectory=$INSTALL_DIR
 ExecStart=$INSTALL_DIR/STYS.Agent
 Restart=on-failure
 RestartSec=5
-Environment=ASPNETCORE_URLS=http://127.0.0.1:5180
+Environment=STYS_AGENT_DATA_DIR=$DATA_DIR
+Environment=STYS_AGENT_LOG_DIR=$LOG_DIR
+Environment=STYS_AGENT_LOCAL_UI_PORT=5180
+Environment=ASPNETCORE_URLS=http://127.0.0.1:$LocalUiPort
 UMask=0077
 NoNewPrivileges=true
 

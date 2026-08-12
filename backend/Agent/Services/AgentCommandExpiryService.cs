@@ -105,6 +105,17 @@ public sealed class AgentCommandExpiryService
                 ? db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted)
                 : null;
             ApplyPavoPingExpiry(device, utcNow);
+            return;
+        }
+
+        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cmd.CommandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase))
+        {
+            var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload);
+            var payment = paymentId.HasValue
+                ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
+                : null;
+            ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
         }
     }
 
@@ -118,6 +129,22 @@ public sealed class AgentCommandExpiryService
         device.LastHealthCheckAt = utcNow;
         device.LastHealthStatus = PavoDeviceHealthStatus.Timeout;
         device.LastHealthError = "PAVO sağlık kontrolü zaman aşımına uğradı.";
+    }
+
+    private void ApplyPavoPaymentExpiry(PosOdemeIslemi? payment, string commandType, DateTime utcNow)
+    {
+        if (payment is null || IsFinalPaymentState(payment.Durum))
+        {
+            return;
+        }
+
+        payment.Durum = PosOdemeDurumlari.Unknown;
+        payment.HataMesaji = string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+            ? "PAVO ödeme başlatma zaman aşımına uğradı. Sonuç daha sonra GetPaymentResult ile doğrulanmalıdır."
+            : "PAVO ödeme sonucu zaman aşımına uğradı. Sonuç daha sonra yeniden doğrulanmalıdır.";
+        payment.PavoMessage = payment.HataMesaji;
+        payment.SonSorgulamaTarihi = utcNow;
+        payment.TamamlanmaTarihi = null;
     }
 
     private static void AddExecution(
@@ -165,6 +192,33 @@ public sealed class AgentCommandExpiryService
 
         return null;
     }
+
+    private static int? TryGetPaymentIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "PosOdemeIslemiId", out var idElement) && idElement.TryGetInt32(out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static bool IsFinalPaymentState(string? durum) =>
+        string.Equals(durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(durum, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(durum, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
 
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
     {

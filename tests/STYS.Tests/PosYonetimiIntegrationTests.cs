@@ -1583,10 +1583,170 @@ public sealed class PosYonetimiIntegrationTests
             IdempotencyKey = paymentKey
         }, "test", CancellationToken.None);
 
-        await agentService.FailAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, "timeout", CancellationToken.None);
+        var startCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        startCommand.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
 
         var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
         Assert.Equal(PosOdemeDurumlari.Unknown, after.Durum);
+        Assert.Contains("zaman aşım", after.HataMesaji ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        var expiredCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        Assert.Equal(STYS.Agent.Contracts.Enums.AgentCommandStatus.Expired, expiredCommand.Status);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_StartTimeout_SonraGetResultIleReconcileEdilir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-REC"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var paymentKey = NewPaymentKey();
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = paymentKey
+        }, "test", CancellationToken.None);
+
+        var startCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        startCommand.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+
+        var recovery = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            PosOdemeIslemiId = payment.Id,
+            IdempotencyKey = paymentKey
+        }, "test", CancellationToken.None);
+
+        Assert.Equal(payment.Id, recovery.Id);
+
+        var startCommands = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
+        var resultCommands = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult");
+        Assert.Equal(1, startCommands);
+        Assert.Equal(1, resultCommands);
+
+        var resultCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().OrderByDescending(x => x.CreatedAt).FirstAsync(x => x.CommandType == "PavoGetPaymentResult");
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, resultCommand.Id, true, JsonSerializer.Serialize(new PavoGetPaymentResultResponse
+        {
+            Data = new PavoPaymentOperationData
+            {
+                SaleReference = payment.SaleReference,
+                IsSuccessful = true,
+                ResultCode = "00",
+                Message = "ok",
+                RetrievalReferenceNo = "RRN-REC",
+                AcquirerReference = "ARC-REC",
+                AuthorizationCode = "AUTH-REC"
+            }
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Processing, after.Durum);
+        Assert.Equal("RRN-REC", after.RetrievalReferenceNo);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_LateExpiredStartPaymentResult_IdempotentUygulanir()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-LATE"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var paymentKey = NewPaymentKey();
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = paymentKey
+        }, "test", CancellationToken.None);
+
+        await agentService.AcceptAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, CancellationToken.None);
+
+        var startCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        startCommand.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+
+        var expired = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Unknown, expired.Durum);
+
+        await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = payment.AgentCommandId!.Value,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData
+                {
+                    SaleReference = payment.SaleReference,
+                    IsSuccessful = true,
+                    ResultCode = "00",
+                    Message = "accepted",
+                    TransactionStatus = "SUCCESS"
+                }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None);
+
+        var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Successful, after.Durum);
+
+        await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
+        {
+            Id = payment.AgentCommandId!.Value,
+            Success = true,
+            ResultPayload = JsonSerializer.Serialize(new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData
+                {
+                    SaleReference = payment.SaleReference,
+                    IsSuccessful = true,
+                    ResultCode = "00",
+                    Message = "accepted",
+                    TransactionStatus = "SUCCESS"
+                }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        }, CancellationToken.None);
+
+        var repeated = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.Equal(PosOdemeDurumlari.Processing, repeated.Durum);
 
         await CleanupAsync(db, suffix);
     }

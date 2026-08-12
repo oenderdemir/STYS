@@ -1538,6 +1538,35 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+## 2026-08-12 — PAVO Operations Faz D3
+
+- Timeout / ambiguity:
+  - `PavoStartPayment` command timeout’u artık payment’i `Failed` yapmıyor; payment `Unknown` olarak bırakılıyor.
+  - Timeout sonrası recovery için blind `StartPayment` tekrarına izin verilmiyor; aynı ödeme için `GetPaymentResult` reconciliation yolu kullanılıyor.
+- Idempotency:
+  - Aynı `PosOdemeIslemiId` / `SaleReference` / `IdempotencyKey` kombinasyonu için ikinci bir `StartPayment` komutu üretilmiyor.
+  - Aktif `PavoGetPaymentResult` reconciliation komutu varsa yeni bir tane yaratılmıyor.
+- Agent restart / late result:
+  - Expired payment command için late completion artık güvenli şekilde uygulanabiliyor.
+  - Aynı command’in tekrar completion’ı duplicate payment side-effect üretmiyor.
+- Reconciliation:
+  - `GetPaymentResult` ile `Unknown` ödeme yeniden sorgulanabiliyor.
+  - Successful / declined sonuçlar mevcut payment kaydına işleniyor.
+  - `Unknown` sonuç yeniden sorgulama için korunuyor.
+- Command expiry:
+  - Payment timeout artık server-side expiry sweep ile işleniyor; agent polling beklenmiyor.
+  - Payment command expiry, PAVO ping expiry ile aynı ortak expiry servis yolunu kullanıyor.
+- Tests:
+  - Hedefli payment-reconciliation testleri derlendi.
+  - Bu ortamda `STYS_INTEGRATION_TEST_CONNECTION_STRING` olmadığı için integration testler skip oldu.
+  - Full solution testi koşuldu; tek mevcut failure:
+    - `STYS.Tests.EBelgeOutboxWorkerTests.BirMesajinExceptionISonrakiMesajinIslenmesiniEngellemez`
+    - hata: `System.TimeoutException : Beklenen koşul zaman aşımı içinde gerçekleşmedi.`
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Bilinen kısıtlar:
+  - `GetPaymentResult` için mevcut tekrar çağrı koruması reconciliation active command durumunu baz alıyor; dağıtık çoklu süreç senaryoları ayrıca gözlenmeli.
+
 ### D2 Server-side Expiry Hardening — 2026-08-12
 
 - Server-side expiry:

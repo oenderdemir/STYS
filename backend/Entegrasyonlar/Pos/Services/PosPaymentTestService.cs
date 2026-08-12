@@ -219,6 +219,12 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
         }
 
+        if (await HasActiveReconciliationCommandAsync(cihaz.AgentId!.Value, payment.Id, cancellationToken))
+        {
+            await EnsureTerminalLoadedAsync(payment, cancellationToken);
+            return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
+        }
+
         var command = BuildResultCommand(cihaz, payment);
         var payload = JsonSerializer.Serialize(command, JsonOptions);
         var sentCommand = await _agentCommandService.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest
@@ -497,7 +503,6 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
     private static bool IsFinalPaymentState(string? durum) =>
         string.Equals(durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(durum, PosOdemeDurumlari.Unknown, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsInFlightPaymentState(string? durum) =>
@@ -524,6 +529,76 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         ex.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true
         || ex.InnerException?.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) == true
         || ex.InnerException?.Message.Contains("Cannot insert duplicate key", StringComparison.OrdinalIgnoreCase) == true;
+
+    private async Task<bool> HasActiveReconciliationCommandAsync(int agentId, int posOdemeIslemiId, CancellationToken cancellationToken)
+    {
+        var activeStatuses = new[]
+        {
+            STYS.Agent.Contracts.Enums.AgentCommandStatus.Pending,
+            STYS.Agent.Contracts.Enums.AgentCommandStatus.Delivered,
+            STYS.Agent.Contracts.Enums.AgentCommandStatus.Accepted,
+            STYS.Agent.Contracts.Enums.AgentCommandStatus.Running
+        };
+
+        var activeCommands = await _db.Set<STYS.Agent.Entities.AgentCommand>()
+            .AsNoTracking()
+            .Where(x => x.AgentId == agentId
+                        && !x.IsDeleted
+                        && x.CommandType == "PavoGetPaymentResult"
+                        && activeStatuses.Contains(x.Status))
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        foreach (var command in activeCommands)
+        {
+            if (TryGetPaymentIdFromCommandPayload(command.Payload) == posOdemeIslemiId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int? TryGetPaymentIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "PosOdemeIslemiId", out var idElement) && idElement.TryGetInt32(out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
 
     private static PosOdemeIslemiDto ToDto(PosOdemeIslemi x, string? saglayiciKodu) => new()
     {

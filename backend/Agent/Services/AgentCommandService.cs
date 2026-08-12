@@ -166,20 +166,27 @@ public sealed class AgentCommandService
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
 
         var target = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
-        AgentCommandStateMachine.EnforceTransition(cmd.Status, target, cmd.Id);
+        var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
+        if (!allowLatePavoPaymentCompletion)
+        {
+            AgentCommandStateMachine.EnforceTransition(cmd.Status, target, cmd.Id);
+        }
 
         var pavoContext = IsPavoCommand(cmd.CommandType)
             ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
         var prev = cmd.Status;
-        cmd.Status = target;
-        cmd.CompletedAt = DateTime.UtcNow;
+        if (!allowLatePavoPaymentCompletion)
+        {
+            cmd.Status = target;
+        }
+        cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
         ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
-        AddExecution(db, cmd, target.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
+        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
     }
@@ -189,18 +196,25 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
-        AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Failed, cmd.Id);
+        var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
+        if (!allowLatePavoPaymentCompletion)
+        {
+            AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Failed, cmd.Id);
+        }
 
         var pavoContext = IsPavoCommand(cmd.CommandType)
             ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
         var prev = cmd.Status;
-        cmd.Status = AgentCommandStatus.Failed;
-        cmd.CompletedAt = DateTime.UtcNow;
+        if (!allowLatePavoPaymentCompletion)
+        {
+            cmd.Status = AgentCommandStatus.Failed;
+        }
+        cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = errorMessage;
         ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
-        AddExecution(db, cmd, "Failed", prev, agentId, errorMessage: errorMessage);
+        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorMessage: errorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
     }
@@ -210,18 +224,25 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
-        AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Rejected, cmd.Id);
+        var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
+        if (!allowLatePavoPaymentCompletion)
+        {
+            AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Rejected, cmd.Id);
+        }
 
         var pavoContext = IsPavoCommand(cmd.CommandType)
             ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
         var prev = cmd.Status;
-        cmd.Status = AgentCommandStatus.Rejected;
-        cmd.CompletedAt = DateTime.UtcNow;
+        if (!allowLatePavoPaymentCompletion)
+        {
+            cmd.Status = AgentCommandStatus.Rejected;
+        }
+        cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = errorMessage;
         ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
-        AddExecution(db, cmd, "Rejected", prev, agentId, errorMessage: errorMessage);
+        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorMessage: errorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
     }

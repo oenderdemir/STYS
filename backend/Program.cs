@@ -196,6 +196,7 @@ builder.Services.AddScoped<IMuhasebeFisService, MuhasebeFisService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeService, MuhasebeHesapBakiyeService>();
 builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapBakiyeGuncellemeService>();
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
+builder.Services.AddScoped<AgentCommandExpiryService>();
 builder.Services.AddScoped<AgentCommandService>();
 builder.Services.AddScoped<IAgentCommandRealtimeNotifier, STYS.Agent.Hubs.AgentCommandRealtimeNotifier>();
 builder.Services.AddScoped<IAgentRealtimeNotifier, STYS.Agent.Hubs.AgentRealtimeNotifier>();
@@ -304,6 +305,7 @@ builder.Services.AddScoped<STYS.Muhasebe.NakitBankaPozisyonu.Services.INakitBank
 builder.Services.AddScoped<STYS.Muhasebe.OdemeIzleme.Services.IOdemeIzlemeService, STYS.Muhasebe.OdemeIzleme.Services.OdemeIzlemeService>();
 builder.Services.AddScoped<STYS.Muhasebe.OdemeIzleme.Services.IOdemeCaprazAramaService, STYS.Muhasebe.OdemeIzleme.Services.OdemeCaprazAramaService>();
 builder.Services.AddSignalR();
+builder.Services.AddHostedService<AgentCommandExpiryHostedService>();
 builder.Services.AddHostedService<LicenseAwareMaintenanceHostedService>();
 builder.Services.AddHostedService<STYS.Muhasebe.PosTahsilatValorleri.Services.PosValorAktarimHostedService>();
 

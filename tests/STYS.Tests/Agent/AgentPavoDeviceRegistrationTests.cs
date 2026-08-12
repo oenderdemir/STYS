@@ -321,11 +321,15 @@ public sealed class AgentPavoDeviceRegistrationTests : IAsyncLifetime
                 IsAuthenticated = true
             },
             db,
-            CreateAgentCommandService());
+            CreateAgentCommandService(),
+            CreateCommandExpiryService());
     }
 
     private AgentCommandService CreateAgentCommandService() =>
         new(new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(_connectionString)), new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+
+    private AgentCommandExpiryService CreateCommandExpiryService() =>
+        new(new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(_connectionString)), NullLogger<AgentCommandExpiryService>.Instance);
 
     private static IMapper CreateMapper()
     {

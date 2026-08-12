@@ -1538,6 +1538,33 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+### D2 Server-side Expiry Hardening — 2026-08-12
+
+- Server-side expiry:
+  - `AgentCommandExpiryService` ile komut zaman aşımı tek bir ortak servis altında toplandı.
+  - Expiry artık sadece Agent polling’e bağlı değil; `AgentCommandExpiryHostedService` background sweep çalıştırıyor.
+  - `PavoPing` için `Pending/Delivered/Accepted/Running` + `ExpiresAt <= now` durumları `Expired` oluyor.
+  - Timeout sonucu güvenli sağlık mesajı ile `LastHealthCheckAt`, `LastHealthStatus`, `LastHealthError` güncelleniyor; `LastHealthSuccessAt` korunuyor.
+- Offline-Agent recovery:
+  - Agent poll yokken bile server-side cleanup expired `PavoPing` komutlarını kapatıyor.
+  - Expired `Running` health command yeni health kontrolünü bloklamıyor.
+- Duplicate command recovery:
+  - `FindExistingActiveHealthCommandAsync` expired komutları aktif saymıyor.
+  - Cleanup sonrası yeni `PavoPing` üretimi devam edebiliyor.
+- Readiness reason priority:
+  - `LastError`, gerçek readiness blokajını yansıtacak şekilde önceliklendirildi.
+  - `Disabled` ve `AgentOffline` durumlarında health detayı ikinci plana atılıyor.
+  - Health reason, sadece asıl blokaj `DeviceOffline` olduğunda ana neden olarak kullanılıyor.
+- Tests:
+  - Targeted integration test paketi derlendi; connection string olmadığı için integration testler skip oldu.
+  - Full solution test başarılı: `dotnet test STYS.sln --configuration Release --no-restore`.
+  - Başarı/skip durumu dışında fail yok.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Targeted integration senaryoları lokal test DB connection string’i olmadan çalıştırılamadı.
+  - Angular/UI tarafında bu turda değişiklik yapılmadı.
+
 ## 2026-08-12 — PAVO Operations Faz D2
 
 - Health state modeli eklendi:

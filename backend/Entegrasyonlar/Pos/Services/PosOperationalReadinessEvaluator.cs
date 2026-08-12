@@ -43,55 +43,62 @@ internal static class PosOperationalReadinessEvaluator
             && cihaz.EslesmeOnayliMi
             && !string.IsNullOrWhiteSpace(cihaz.Fingerprint);
 
-        var reasons = new List<string>();
-        if (!string.IsNullOrWhiteSpace(healthReason))
-        {
-            reasons.Add(healthReason);
-        }
-
         var status = PavoOperationalReadiness.Ready;
+        string? primaryReason = null;
 
         if (!cihaz.AktifMi)
         {
             status = PavoOperationalReadiness.Disabled;
-            reasons.Add("POS cihazı devre dışı.");
+            primaryReason = "POS cihazı devre dışı.";
         }
         else if (cihaz.AgentId.HasValue && agent is null)
         {
             status = PavoOperationalReadiness.OwnershipConflict;
-            reasons.Add("Cihaza bağlı agent bulunamadı.");
+            primaryReason = "Cihaza bağlı agent bulunamadı.";
         }
         else if (!agentOnline)
         {
             status = PavoOperationalReadiness.AgentOffline;
-            reasons.Add(agent is null
+            primaryReason = agent is null
                 ? "Agent bilgisi bulunamadı."
-                : "Agent çevrimdışı.");
+                : "Agent çevrimdışı.";
         }
         else if (!cihaz.AgentId.HasValue || string.IsNullOrWhiteSpace(cihaz.AgentLocalDeviceId))
         {
             status = PavoOperationalReadiness.NotProvisioned;
-            reasons.Add("Cihaz henüz provision edilmemiş.");
+            primaryReason = "Cihaz henüz provision edilmemiş.";
         }
         else if (!cihaz.EslesmeOnayliMi || string.IsNullOrWhiteSpace(cihaz.Fingerprint))
         {
             status = PavoOperationalReadiness.PairingInvalid;
-            reasons.Add("Pairing geçersiz.");
+            primaryReason = "Pairing geçersiz.";
         }
         else if (deviceHealth is not PavoDeviceHealthStatus.Healthy)
         {
             status = PavoOperationalReadiness.DeviceOffline;
-            reasons.Add(GetDeviceHealthReason(deviceHealth));
+            primaryReason = healthReason ?? GetDeviceHealthReason(deviceHealth);
         }
         else if (!hasActiveTerminal)
         {
             status = PavoOperationalReadiness.NoActiveTerminal;
-            reasons.Add("Aktif terminal bulunamadı.");
+            primaryReason = "Aktif terminal bulunamadı.";
         }
         else if (!hasAccountMapping)
         {
             status = PavoOperationalReadiness.NoAccountMapping;
-            reasons.Add("Aktif terminal için kredi kartı hesabı eşleştirilmemiş.");
+            primaryReason = "Aktif terminal için kredi kartı hesabı eşleştirilmemiş.";
+        }
+
+        var reasons = new List<string>();
+        if (!string.IsNullOrWhiteSpace(primaryReason))
+        {
+            reasons.Add(primaryReason);
+        }
+
+        if (!string.IsNullOrWhiteSpace(healthReason)
+            && !string.Equals(healthReason, primaryReason, StringComparison.OrdinalIgnoreCase))
+        {
+            reasons.Add(healthReason);
         }
 
         var terminalReadiness = activeTerminals.Select(terminal =>
@@ -146,7 +153,7 @@ internal static class PosOperationalReadinessEvaluator
             LastHealthCheckAt = lastHealthCheckAt,
             LastHealthSuccessAt = lastHealthSuccessAt,
             LastHealthStatus = deviceHealth.ToString(),
-            LastError = reasons.FirstOrDefault(),
+            LastError = primaryReason ?? reasons.FirstOrDefault(),
             ActiveTerminalCount = activeTerminals.Count,
             AccountMappedTerminalCount = readyTerminals.Count,
             Terminals = terminalReadiness,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
@@ -19,6 +20,7 @@ public sealed class AgentCommandService
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly IAgentCommandRealtimeNotifier? _notifier;
+    private readonly AgentCommandExpiryService _commandExpiryService;
     private readonly ILogger<AgentCommandService> _logger;
 
     private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
@@ -52,9 +54,11 @@ public sealed class AgentCommandService
         IDbContextFactory<StysAppDbContext> dbContextFactory,
         ICurrentTenantAccessor tenantAccessor,
         ILogger<AgentCommandService> logger,
-        IAgentCommandRealtimeNotifier? notifier = null)
+        IAgentCommandRealtimeNotifier? notifier = null,
+        AgentCommandExpiryService? commandExpiryService = null)
     {
         _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _logger = logger; _notifier = notifier;
+        _commandExpiryService = commandExpiryService ?? new AgentCommandExpiryService(dbContextFactory, NullLogger<AgentCommandExpiryService>.Instance);
     }
 
     public async Task<AgentCommandDto> SendAsync(AgentCommandSendRequest request, string requestedBy, CancellationToken ct)
@@ -86,12 +90,13 @@ public sealed class AgentCommandService
 
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(int agentId, CancellationToken ct)
     {
+        await _commandExpiryService.ExpireTimedOutCommandsAsync(agentId, ct);
+
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await AcquirePollLockAsync(db, agentId, ct);
 
         var now = DateTime.UtcNow;
-        await ExpireTimedOutCommandsAsync(db, agentId, now, ct);
 
         var commands = await db.Set<AgentCommand>()
             .Where(x => x.AgentId == agentId && !x.IsDeleted && x.Status == AgentCommandStatus.Pending && (x.ExpiresAt == null || x.ExpiresAt > now))
@@ -340,57 +345,6 @@ public sealed class AgentCommandService
         device.SonBaglantiTarihi = DateTime.UtcNow;
 
         SyncDiscoveredTerminals(db, device, response.Terminals);
-    }
-
-    private async Task ExpireTimedOutCommandsAsync(StysAppDbContext db, int agentId, DateTime utcNow, CancellationToken ct)
-    {
-        var timedOutCommands = await db.Set<AgentCommand>()
-            .Where(x =>
-                x.AgentId == agentId
-                && !x.IsDeleted
-                && x.ExpiresAt.HasValue
-                && x.ExpiresAt.Value <= utcNow
-                && (x.Status == AgentCommandStatus.Pending
-                    || x.Status == AgentCommandStatus.Delivered
-                    || x.Status == AgentCommandStatus.Accepted
-                    || x.Status == AgentCommandStatus.Running))
-            .ToListAsync(ct);
-
-        if (timedOutCommands.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var cmd in timedOutCommands)
-        {
-            var previous = cmd.Status;
-            cmd.Status = AgentCommandStatus.Expired;
-            cmd.CompletedAt ??= utcNow;
-            AddExecution(db, cmd, "Expired", previous, agentId, errorCode: "COMMAND_EXPIRED", errorMessage: "Komut süresi doldu.");
-
-            if (string.Equals(cmd.CommandType, "PavoPing", StringComparison.OrdinalIgnoreCase))
-            {
-                var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
-                var device = deviceId.HasValue
-                    ? db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted)
-                    : null;
-                ApplyPavoPingExpiry(db, device, utcNow);
-            }
-        }
-
-        await db.SaveChangesAsync(ct);
-    }
-
-    private void ApplyPavoPingExpiry(StysAppDbContext db, PosCihazi? device, DateTime utcNow)
-    {
-        if (device is null)
-        {
-            return;
-        }
-
-        device.LastHealthCheckAt = utcNow;
-        device.LastHealthStatus = PavoDeviceHealthStatus.Timeout;
-        device.LastHealthError = "Komut süresi doldu.";
     }
 
     private void ApplyPavoPaymentResult(

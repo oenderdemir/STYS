@@ -26,6 +26,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     private readonly StysAppDbContext _db;
     private readonly IPosCihaziRepository _cihazRepository;
     private readonly AgentCommandService _agentCommandService;
+    private readonly AgentCommandExpiryService _commandExpiryService;
     private readonly PosOperationalHealthOptions _healthOptions;
 
     public PosCihaziService(
@@ -35,6 +36,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         ICurrentAgentContext agentContext,
         StysAppDbContext db,
         AgentCommandService agentCommandService,
+        AgentCommandExpiryService commandExpiryService,
         Microsoft.Extensions.Options.IOptions<PosOperationalHealthOptions>? healthOptions = null)
         : base(repository, mapper)
     {
@@ -43,6 +45,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         _db = db;
         _cihazRepository = repository;
         _agentCommandService = agentCommandService;
+        _commandExpiryService = commandExpiryService;
         _healthOptions = healthOptions?.Value ?? new PosOperationalHealthOptions();
     }
 
@@ -87,6 +90,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var device = await GetCommandTargetAsync(id, cancellationToken);
         EnsurePavoCommandReady(device);
+        await _commandExpiryService.ExpireTimedOutCommandsAsync(device.AgentId!.Value, cancellationToken);
         var existingCommand = await FindExistingActiveHealthCommandAsync(device.AgentId!.Value, device.Id, cancellationToken);
         if (existingCommand is not null)
         {

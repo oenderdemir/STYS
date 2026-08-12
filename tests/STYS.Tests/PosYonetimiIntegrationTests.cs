@@ -589,18 +589,16 @@ public sealed class PosYonetimiIntegrationTests
         var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == fixture.MainAgentId);
         agent.LastHeartbeatAt = DateTime.UtcNow.AddMinutes(-10);
         var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
-        device.SonBaglantiTarihi = DateTime.UtcNow;
-        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
-        device.Fingerprint = $"FP-{suffix}";
-        device.TargetFingerprint = $"FP-{suffix}";
-        device.EslesmeOnayliMi = true;
+        SetProvisionedDeviceHealth(device, suffix, PavoDeviceHealthStatus.Stale, DateTime.UtcNow.AddMinutes(-20), DateTime.UtcNow.AddMinutes(-20), "stale");
         await db.SaveChangesAsync();
 
         var service = CreateCihazService(db, cs, fixture.KurumId);
         var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
 
         Assert.Equal(PavoOperationalReadiness.AgentOffline, readiness.Status);
+        Assert.Equal(PavoDeviceHealthStatus.Stale, readiness.DeviceHealthStatus);
         Assert.False(readiness.Ready);
+        Assert.Equal("Agent çevrimdışı.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -620,7 +618,6 @@ public sealed class PosYonetimiIntegrationTests
         agent.LastHeartbeatAt = DateTime.UtcNow;
         var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
         device.AktifMi = false;
-        device.SonBaglantiTarihi = DateTime.UtcNow;
         device.AgentLocalDeviceId = $"LOCAL-{suffix}";
         device.Fingerprint = $"FP-{suffix}";
         device.TargetFingerprint = $"FP-{suffix}";
@@ -631,7 +628,9 @@ public sealed class PosYonetimiIntegrationTests
         var readiness = await service.GetReadinessAsync(fixture.DeviceId, CancellationToken.None);
 
         Assert.Equal(PavoOperationalReadiness.Disabled, readiness.Status);
+        Assert.Equal(PavoDeviceHealthStatus.Unknown, readiness.DeviceHealthStatus);
         Assert.False(readiness.Ready);
+        Assert.Equal("POS cihazı devre dışı.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -722,6 +721,7 @@ public sealed class PosYonetimiIntegrationTests
 
         Assert.Equal(PavoOperationalReadiness.NoActiveTerminal, readiness.Status);
         Assert.False(readiness.Ready);
+        Assert.Equal("Aktif terminal bulunamadı.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -755,6 +755,7 @@ public sealed class PosYonetimiIntegrationTests
 
         Assert.Equal(PavoOperationalReadiness.NoAccountMapping, readiness.Status);
         Assert.False(readiness.Ready);
+        Assert.Equal("Aktif terminal için kredi kartı hesabı eşleştirilmemiş.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -789,6 +790,7 @@ public sealed class PosYonetimiIntegrationTests
         var json = JsonSerializer.Serialize(readiness, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal(PavoOperationalReadiness.Ready, readiness.Status);
         Assert.True(readiness.Ready);
+        Assert.Null(readiness.LastError);
         Assert.Contains("\"ready\":true", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("fingerprint", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("targetFingerprint", json, StringComparison.OrdinalIgnoreCase);
@@ -852,6 +854,7 @@ public sealed class PosYonetimiIntegrationTests
         Assert.Equal(PavoOperationalReadiness.DeviceOffline, readiness.Status);
         Assert.Equal(PavoDeviceHealthStatus.Stale, readiness.DeviceHealthStatus);
         Assert.False(readiness.Ready);
+        Assert.Equal("Son başarılı PAVO sağlık kontrolü eski.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -882,6 +885,7 @@ public sealed class PosYonetimiIntegrationTests
         Assert.Equal(PavoOperationalReadiness.DeviceOffline, readiness.Status);
         Assert.Equal(PavoDeviceHealthStatus.Timeout, readiness.DeviceHealthStatus);
         Assert.False(readiness.Ready);
+        Assert.Equal("PAVO sağlık kontrolü zaman aşımına uğradı.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -912,6 +916,7 @@ public sealed class PosYonetimiIntegrationTests
         Assert.Equal(PavoOperationalReadiness.DeviceOffline, readiness.Status);
         Assert.Equal(PavoDeviceHealthStatus.Unreachable, readiness.DeviceHealthStatus);
         Assert.False(readiness.Ready);
+        Assert.Equal("PAVO cihazına ulaşılamıyor.", readiness.LastError);
 
         await CleanupAsync(db, suffix);
     }
@@ -1019,7 +1024,7 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
-    public async Task HealthExpiredCommandRecovery_MarksTimeout()
+    public async Task RunningPavoPing_ExpiresWithoutAgentPolling()
     {
         var cs = ConnectionString();
         if (cs is null) return;
@@ -1053,8 +1058,8 @@ public sealed class PosYonetimiIntegrationTests
         });
         await db.SaveChangesAsync();
 
-        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
-        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
 
         var expired = await db.Set<STYS.Agent.Entities.AgentCommand>().AsNoTracking().FirstAsync(x => x.Id == commandId);
         var updatedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
@@ -1063,6 +1068,56 @@ public sealed class PosYonetimiIntegrationTests
         Assert.Equal(PavoDeviceHealthStatus.Timeout, updatedDevice.LastHealthStatus);
         Assert.NotNull(updatedDevice.LastHealthCheckAt);
         Assert.Equal(previousSuccess, updatedDevice.LastHealthSuccessAt);
+        Assert.Equal("PAVO sağlık kontrolü zaman aşımına uğradı.", updatedDevice.LastHealthError);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task ExpiredRunningPing_NewPingUretiminiEngellemez()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+
+        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
+        SetHealthyDeviceHealth(device, suffix, DateTime.UtcNow.AddMinutes(-5), DateTime.UtcNow.AddMinutes(-5));
+        await db.SaveChangesAsync();
+
+        var expiredCommandId = Guid.NewGuid();
+        db.Set<STYS.Agent.Entities.AgentCommand>().Add(new STYS.Agent.Entities.AgentCommand
+        {
+            Id = expiredCommandId,
+            AgentId = fixture.MainAgentId,
+            KurumId = fixture.KurumId,
+            CommandType = "PavoPing",
+            Payload = JsonSerializer.Serialize(new PavoPingRequest { PosCihaziId = fixture.DeviceId }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            Status = AgentCommandStatus.Running,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-1),
+            Priority = 1,
+            CorrelationId = Guid.NewGuid().ToString("N"),
+            IdempotencyKey = Guid.NewGuid().ToString("N"),
+            RequestedBy = "test",
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateCihazService(db, cs, fixture.KurumId);
+        var command = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
+
+        Assert.NotEqual(expiredCommandId, command.Id);
+        Assert.Equal("PavoPing", command.CommandType);
+
+        var expired = await db.Set<STYS.Agent.Entities.AgentCommand>().AsNoTracking().FirstAsync(x => x.Id == expiredCommandId);
+        Assert.Equal(AgentCommandStatus.Expired, expired.Status);
+
+        var commandCount = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoPing" && !x.IsDeleted);
+        Assert.Equal(2, commandCount);
 
         await CleanupAsync(db, suffix);
     }
@@ -1807,7 +1862,8 @@ public sealed class PosYonetimiIntegrationTests
             new FakeKurumTenantAccessor(kurumId),
             new FakeCurrentAgentContext(),
             db,
-            CreateAgentCommandService(connectionString, kurumId));
+            CreateAgentCommandService(connectionString, kurumId),
+            CreateCommandExpiryService(connectionString));
     }
 
     private static PosTerminalService CreateTerminalService(StysAppDbContext db, int kurumId) =>
@@ -1815,6 +1871,9 @@ public sealed class PosYonetimiIntegrationTests
 
     private static PosPaymentTestService CreatePaymentService(StysAppDbContext db, string connectionString, int kurumId) =>
         new(db, CreateAgentCommandService(connectionString, kurumId), new FakeKurumTenantAccessor(kurumId));
+
+    private static AgentCommandExpiryService CreateCommandExpiryService(string connectionString) =>
+        new(new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(connectionString)), NullLogger<AgentCommandExpiryService>.Instance);
 
     private static PosTerminalKaydetRequest BuildTerminalRequest(Fixture fixture, int? hesapId, string suffix, string terminalId) =>
         new()

@@ -2,8 +2,8 @@
 param(
     [string]$ServiceName = "STYS Agent Updater",
     [string]$InstallDir = (Join-Path $env:ProgramFiles "STYS\Agent Updater"),
-    [string]$DataDir = (Join-Path $env:ProgramData "STYS\Agent\Updater"),
-    [string]$LogDir = (Join-Path $env:ProgramData "STYS\Agent\Updater\logs"),
+    [string]$DataDir = (Join-Path $env:ProgramData "STYS\AgentUpdater\private"),
+    [string]$LogDir = (Join-Path $env:ProgramData "STYS\AgentUpdater\logs"),
     [switch]$Purge
 )
 

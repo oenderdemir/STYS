@@ -35,8 +35,8 @@ Development secrets, bootstrap values, credentials, and enrollment codes are not
 Agent and updater both resolve the trusted release verification key from a deterministic, externally provisioned source. The private signing key is not deployed with the runtime artifacts.
 
 - expected public key file:
-  - Windows: `%ProgramData%\STYS\Agent\release-public-key.pem`
-  - Linux: `/var/lib/stys-agent/release-public-key.pem`
+  - Windows: `%ProgramData%\STYS\AgentTrust\release-public-key.pem`
+  - Linux: `/etc/stys-agent/trust/release-public-key.pem`
 - environment override:
   - `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH`
 - optional inline override:
@@ -57,7 +57,9 @@ Use `scripts/agent/install-agent.ps1` to install the service as `STYS Agent`.
 - shared runtime data root:
   - `%ProgramData%\STYS\Agent`
 - updater private data root:
-  - `%ProgramData%\STYS\Agent\Updater`
+  - `%ProgramData%\STYS\AgentUpdater\private`
+- trust anchor directory:
+  - `%ProgramData%\STYS\AgentTrust`
 - service-scoped environment overrides:
   - `STYS_AGENT_SHARED_DATA_DIR`
   - `STYS_AGENT_UPDATER_PRIVATE_DATA_DIR`
@@ -111,8 +113,9 @@ Windows:
 - service binary path: direct `STYS.Agent.Updater.exe`
 - install directory: `%ProgramFiles%\STYS\Agent Updater`
 - shared data directory: `%ProgramData%\STYS\Agent`
-- updater private data directory: `%ProgramData%\STYS\Agent\Updater`
-- release public key path: `%ProgramData%\STYS\Agent\release-public-key.pem`
+- updater private data directory: `%ProgramData%\STYS\AgentUpdater\private`
+- updater log directory: `%ProgramData%\STYS\AgentUpdater\logs`
+- release public key path: `%ProgramData%\STYS\AgentTrust\release-public-key.pem`
 
 Linux:
 
@@ -124,7 +127,7 @@ Linux:
 - shared data directory: `/var/lib/stys-agent`
 - updater private data directory: `/var/lib/stys-agent-updater`
 - log directory: `/var/log/stys-agent-updater`
-- release public key path: `/var/lib/stys-agent/release-public-key.pem`
+- release public key path: `/etc/stys-agent/trust/release-public-key.pem`
 
 Upgrade flow:
 

@@ -4,7 +4,7 @@ public interface IAgentPathResolver
 {
     string DataDirectory { get; }
     string SharedDataDirectory => DataDirectory;
-    string UpdaterPrivateDataDirectory => Path.Combine(SharedDataDirectory, "updater-private");
+    string UpdaterPrivateDataDirectory => AgentPaths.GetUpdaterPrivateDataDirectory(SharedDataDirectory);
     string LogDirectory { get; }
     string ReleaseStagingRootDirectory => Path.Combine(DataDirectory, "updates", "staging");
     string BootstrapConfigurationPath { get; }
@@ -134,7 +134,7 @@ internal static class AgentPaths
     {
         if (OperatingSystem.IsWindows())
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "STYS", "Agent", "Updater");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "STYS", "AgentUpdater", "private");
         }
 
         if (OperatingSystem.IsLinux())

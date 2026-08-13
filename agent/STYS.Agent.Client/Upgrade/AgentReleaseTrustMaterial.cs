@@ -27,7 +27,7 @@ public static class AgentReleaseTrustMaterial
             return ReadPemFromPath(path);
         }
 
-        throw new InvalidOperationException("Release public key provisioned değil.");
+        return ReadPemFromPath(GetDefaultPublicKeyPath());
     }
 
     private static string ResolveConfiguredValue(string? configuredPem, string? configuredPath)
@@ -60,5 +60,20 @@ public static class AgentReleaseTrustMaterial
         }
 
         return File.ReadAllText(fullPath);
+    }
+
+    private static string GetDefaultPublicKeyPath()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "STYS", "AgentTrust", "release-public-key.pem");
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return "/etc/stys-agent/trust/release-public-key.pem";
+        }
+
+        return Path.Combine(AppContext.BaseDirectory, "trust", "release-public-key.pem");
     }
 }

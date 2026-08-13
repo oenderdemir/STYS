@@ -1772,6 +1772,8 @@ public sealed class PosYonetimiIntegrationTests
 
         var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
         Assert.Equal(PosOdemeDurumlari.Processing, after.Durum);
+        var lateStartCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        Assert.Equal(STYS.Agent.Contracts.Enums.AgentCommandStatus.Expired, lateStartCommand.Status);
 
         await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
         {
@@ -1972,6 +1974,11 @@ public sealed class PosYonetimiIntegrationTests
 
         await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
         var resultCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().OrderByDescending(x => x.CreatedAt).FirstAsync(x => x.CommandType == "PavoGetPaymentResult");
+        resultCommand.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
 
         await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, resultCommand.Id, true, JsonSerializer.Serialize(new PavoGetPaymentResultResponse
         {
@@ -1986,6 +1993,8 @@ public sealed class PosYonetimiIntegrationTests
 
         var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
         Assert.Equal(PosOdemeDurumlari.Unknown, after.Durum);
+        var expiredResultCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == resultCommand.Id);
+        Assert.Equal(STYS.Agent.Contracts.Enums.AgentCommandStatus.Expired, expiredResultCommand.Status);
 
         await CleanupAsync(db, suffix);
     }

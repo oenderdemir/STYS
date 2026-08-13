@@ -304,6 +304,12 @@ public sealed class AgentCommandService
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         var prev = cmd.Status;
 
+        if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
+        {
+            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, request, ct);
+            return;
+        }
+
         var target = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
         if (TryHandleApplyUpgradeSettlement(cmd, target, out var noOp))
         {
@@ -311,10 +317,6 @@ public sealed class AgentCommandService
             {
                 return;
             }
-        }
-        else if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
-        {
-            // existing payment reconciliation behavior
         }
         else
         {
@@ -342,16 +344,19 @@ public sealed class AgentCommandService
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         var prev = cmd.Status;
+
+        if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
+        {
+            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, ct);
+            return;
+        }
+
         if (TryHandleApplyUpgradeSettlement(cmd, AgentCommandStatus.Failed, out var noOp))
         {
             if (noOp)
             {
                 return;
             }
-        }
-        else if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
-        {
-            // existing payment reconciliation behavior
         }
         else
         {
@@ -377,16 +382,19 @@ public sealed class AgentCommandService
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         var prev = cmd.Status;
+
+        if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
+        {
+            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, ct);
+            return;
+        }
+
         if (TryHandleApplyUpgradeSettlement(cmd, AgentCommandStatus.Rejected, out var noOp))
         {
             if (noOp)
             {
                 return;
             }
-        }
-        else if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
-        {
-            // existing payment reconciliation behavior
         }
         else
         {
@@ -426,7 +434,13 @@ public sealed class AgentCommandService
 
         if (cmd.Status == AgentCommandStatus.Expired)
         {
-            cmd.Status = target;
+            if (target == AgentCommandStatus.Completed || target == AgentCommandStatus.Failed)
+            {
+                cmd.Status = target;
+                return true;
+            }
+
+            noOp = true;
             return true;
         }
 
@@ -437,6 +451,27 @@ public sealed class AgentCommandService
         }
 
         return false;
+    }
+
+    private async Task HandleExpiredPaymentCommandAsync(
+        StysAppDbContext db,
+        AgentCommand cmd,
+        AgentCommandStatus prev,
+        int agentId,
+        AgentCommandCompleteRequest request,
+        CancellationToken ct)
+    {
+        var pavoContext = IsPavoCommand(cmd.CommandType)
+            ? ResolveValidatedPavoCommandTarget(db, cmd)
+            : null;
+
+        cmd.ResultPayload = request.ResultPayload;
+        cmd.ErrorCode = request.ErrorCode;
+        cmd.ErrorMessage = request.ErrorMessage;
+        ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
+        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
+        await db.SaveChangesAsync(ct);
+        NotifyIfNeeded(MapToDto(cmd));
     }
 
     private static async Task ValidateScopeAsync(StysAppDbContext db, int agentId, string commandType, CancellationToken ct)

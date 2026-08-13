@@ -6,9 +6,9 @@ param(
     [string]$ServiceDisplayName = "STYS Agent",
     [string]$ServiceAccount = "NT AUTHORITY\LocalService",
     [string]$SharedDataDir = (Join-Path $env:ProgramData "STYS\Agent"),
-    [string]$UpdaterPrivateDataDir = (Join-Path $env:ProgramData "STYS\Agent\Updater"),
+    [string]$UpdaterPrivateDataDir = (Join-Path $env:ProgramData "STYS\AgentUpdater\private"),
     [string]$LogDir = (Join-Path $env:ProgramData "STYS\Agent\logs"),
-    [string]$ReleasePublicKeyPath = (Join-Path $env:ProgramData "STYS\Agent\release-public-key.pem"),
+    [string]$ReleasePublicKeyPath = (Join-Path $env:ProgramData "STYS\AgentTrust\release-public-key.pem"),
     [int]$LocalUiPort = 5180
 )
 
@@ -35,6 +35,8 @@ Ensure-Directory -Path $InstallDir
 Ensure-Directory -Path $SharedDataDir
 Ensure-Directory -Path $UpdaterPrivateDataDir
 Ensure-Directory -Path $LogDir
+$releaseTrustDir = Split-Path -Path $ReleasePublicKeyPath -Parent
+Ensure-Directory -Path $releaseTrustDir
 if (-not (Test-Path -LiteralPath $ReleasePublicKeyPath)) {
     throw "ReleasePublicKeyPath not found: $ReleasePublicKeyPath"
 }
@@ -46,6 +48,10 @@ Grant-DirectoryAccess -Path $SharedDataDir -Identity $ServiceAccount -Rights 'M'
 Grant-DirectoryAccess -Path $SharedDataDir -Identity 'SYSTEM' -Rights 'M'
 Grant-DirectoryAccess -Path $UpdaterPrivateDataDir -Identity 'SYSTEM' -Rights 'M'
 Grant-DirectoryAccess -Path $LogDir -Identity $ServiceAccount -Rights 'M'
+
+& icacls $UpdaterPrivateDataDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" /C | Out-Null
+& icacls $releaseTrustDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" "$ServiceAccount:(OI)(CI)(RX)" /C | Out-Null
+& icacls $ReleasePublicKeyPath /inheritance:r /grant:r "SYSTEM:F" "BUILTIN\Administrators:F" "$ServiceAccount:R" /C | Out-Null
 
 $serviceExe = Join-Path $InstallDir "STYS.Agent.exe"
 $quotedServiceExe = '"' + $serviceExe + '"'

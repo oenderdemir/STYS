@@ -16,7 +16,7 @@ Environment=STYS_AGENT_SHARED_DATA_DIR=/var/lib/stys-agent
 Environment=STYS_AGENT_DATA_DIR=/var/lib/stys-agent
 Environment=STYS_AGENT_UPDATER_PRIVATE_DATA_DIR=/var/lib/stys-agent-updater
 Environment=STYS_AGENT_LOG_DIR=/var/log/stys-agent-updater
-Environment=STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH=/var/lib/stys-agent/release-public-key.pem
+Environment=STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH=/etc/stys-agent/trust/release-public-key.pem
 Environment=STYS_AGENT_LOCAL_UI_PORT=5180
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5180
 UMask=0077

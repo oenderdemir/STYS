@@ -1558,7 +1558,7 @@ Agent Regression:  0
   - Aynı agent + doğru release download testi geçti.
   - Aynı kurum başka agent reject testi geçti.
   - Wrong RID, wrong contract, downgrade/current version, disabled, no active stage command, manifest mismatch ve cross-tenant reject testleri geçti.
-  - `dotnet test STYS.sln --configuration Release` geçti.
+  - `dotnet test STYS.sln --configuration Release` ikinci çalıştırmada geçti; ilk çalıştırmada `STYS.Tests.EBelgeSchematronSidecarIntegrationTests.BuyukXmlLimitteReddedilir` geçici olarak fail oldu, tekil çalıştırmada geçti.
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 - Known limitations:
@@ -2084,3 +2084,34 @@ Agent Regression:  0
 - Known limitations:
   - Release public key dosyasının deployment pipeline tarafından ayrıca sağlanması gerekiyor.
   - Agent tarafında mevcut NuGet pruning uyarıları devam ediyor.
+
+### E2B2 Final Trust Seal — 2026-08-13
+
+- Trust anchor:
+  - Release public key artık shared data root altında değil.
+  - Linux default trust path `/etc/stys-agent/trust/release-public-key.pem`.
+  - Windows default trust path `%ProgramData%\STYS\AgentTrust\release-public-key.pem`.
+  - Agent service account trust anchor dosyasına write/modify alamıyor; updater root okuyabiliyor.
+- Updater private root:
+  - Windows updater private root `%ProgramData%\STYS\AgentUpdater\private` olarak ayrıldı.
+  - Backup/extract/temp bu private root altında tutuluyor.
+  - Agent LocalService bu dizinde write/modify sahibi değil.
+  - Linux updater private root `/var/lib/stys-agent-updater` olarak korunuyor.
+- Expired PAVO semantics:
+  - Expired `PavoStartPayment` ve `PavoGetPaymentResult` için AgentCommand status artık generic Completed/Failed/Rejected’e taşınmıyor.
+  - Geç sonuçlar payment reconciliation akışını yine çalıştırıyor; command Expired kalıyor.
+  - `AgentApplyUpgrade` için kontrollü settlement korundu: `Applied -> Completed`, `RolledBack -> Failed`, `Failed -> Failed`.
+- Scripts / docs:
+  - Windows ve Linux install scriptleri yeni trust/private path’leri kullanacak şekilde güncellendi.
+  - `docs/agent-production-installation.md` yeni trust anchor yerleşimiyle hizalandı.
+- Tests:
+  - Agent production deployment testleri yeni trust/private path beklentilerine göre güncellendi.
+  - Payment integration testleri expired start/result command’larının Expired kaldığını doğrulayacak şekilde genişletildi.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+  - `bash -n scripts/agent/install-agent.sh` geçti; installer/updater uninstall scriptleri de syntax olarak temiz.
+  - `npm run build` geçti.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Trust anchor provisioning deployment aşamasında doğru dosya/ACL ile sağlanmalı.
+  - Expired payment reconciliation command seviyesinde korunuyor; ödeme domain sonucu ayrı olarak reconcile ediliyor.

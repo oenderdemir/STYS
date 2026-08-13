@@ -7,6 +7,7 @@ public sealed class AgentApplyUpgradeCommand : IAgentCommand
     public string CommandType => "AgentApplyUpgrade";
 
     public Guid CommandId { get; set; }
+    public string? LeaseToken { get; set; }
     public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;

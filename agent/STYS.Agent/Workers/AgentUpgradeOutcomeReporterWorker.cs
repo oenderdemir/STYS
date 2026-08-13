@@ -72,6 +72,12 @@ public sealed class AgentUpgradeOutcomeReporterWorker : BackgroundService
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(request.LeaseToken))
+        {
+            _logger.LogWarning("Upgrade request lease token bulunamadı. CommandId={CommandId}", request.CommandId);
+            return;
+        }
+
         var outcome = await _outcomeStore.GetAsync(cancellationToken);
         if (outcome is null || outcome.CommandId != request.CommandId || outcome.ReportedAt.HasValue)
         {
@@ -92,6 +98,7 @@ public sealed class AgentUpgradeOutcomeReporterWorker : BackgroundService
         {
             Id = request.CommandId,
             Success = outcome.Status == AgentUpgradeOutcomeStatus.Applied,
+            LeaseToken = request.LeaseToken,
             ResultPayload = JsonSerializer.Serialize(response, JsonOptions),
             ErrorCode = outcome.Status == AgentUpgradeOutcomeStatus.Applied ? null : $"UPGRADE_{outcome.Status.ToString().ToUpperInvariant()}",
             ErrorMessage = outcome.Message

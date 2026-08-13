@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore.Storage;
+using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Entegrasyonlar.Pos.Dtos;
@@ -201,7 +202,15 @@ public sealed class AgentCommandExpiryService
     private void ApplyLeaseExpiration(StysAppDbContext db, AgentCommand cmd, int agentId, DateTime utcNow)
     {
         var previous = cmd.Status;
-        var shouldRetry = LeaseReplaySafeCommands.Contains(cmd.CommandType) && cmd.RetryCount < cmd.MaxRetryCount;
+        var isDelivered = cmd.Status == AgentCommandStatus.Delivered;
+        var isStartPayment = string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase);
+        var isPaymentResult = string.Equals(cmd.CommandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase);
+        var shouldRetry =
+            cmd.RetryCount < cmd.MaxRetryCount
+            && (
+                isDelivered
+                || (!isStartPayment && LeaseReplaySafeCommands.Contains(cmd.CommandType) && (cmd.Status == AgentCommandStatus.Accepted || cmd.Status == AgentCommandStatus.Running))
+            );
 
         if (shouldRetry)
         {
@@ -232,14 +241,26 @@ public sealed class AgentCommandExpiryService
             return;
         }
 
-        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(cmd.CommandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase))
+        if (isStartPayment)
         {
             var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload);
             var payment = paymentId.HasValue
                 ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
                 : null;
-            ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
+            if (!shouldRetry && cmd.Status != AgentCommandStatus.Delivered)
+            {
+                ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
+                if (payment is not null)
+                {
+                    EnsurePaymentReconciliationCommand(db, cmd, payment, utcNow);
+                }
+            }
+            return;
+        }
+
+        if (isPaymentResult)
+        {
+            return;
         }
     }
 
@@ -269,6 +290,67 @@ public sealed class AgentCommandExpiryService
         payment.PavoMessage = payment.HataMesaji;
         payment.SonSorgulamaTarihi = utcNow;
         payment.TamamlanmaTarihi = null;
+    }
+
+    private void EnsurePaymentReconciliationCommand(StysAppDbContext db, AgentCommand sourceCommand, PosOdemeIslemi payment, DateTime utcNow)
+    {
+        if (payment.PosCihaziId is null || payment.PosTerminalId <= 0 || IsFinalPaymentState(payment.Durum))
+        {
+            return;
+        }
+
+        var idempotencyKey = $"pavo-reconcile:{payment.Id}";
+        var existing = db.Set<AgentCommand>().FirstOrDefault(x =>
+            x.AgentId == sourceCommand.AgentId
+            && !x.IsDeleted
+            && x.IdempotencyKey == idempotencyKey);
+        if (existing is not null)
+        {
+            return;
+        }
+
+        var device = db.PosCihazlari.FirstOrDefault(x => x.Id == payment.PosCihaziId.Value && !x.IsDeleted);
+        if (device is null)
+        {
+            return;
+        }
+
+        var payload = JsonSerializer.Serialize(new PavoGetPaymentResultRequest
+        {
+            PosCihaziId = device.Id,
+            PosOdemeIslemiId = payment.Id,
+            PosTerminalId = payment.PosTerminalId,
+            SaleReference = payment.SaleReference ?? string.Empty,
+            IpAddress = device.IpAdresi ?? string.Empty,
+            HttpPort = device.HttpPort,
+            HttpsPort = device.HttpsPort,
+            UseHttps = device.HttpsPort.HasValue,
+            TransactionHandle = new PavoTransactionHandle
+            {
+                SerialNumber = device.SeriNo,
+                Fingerprint = device.Fingerprint ?? string.Empty,
+                TransactionSequence = 0,
+                TransactionDate = utcNow
+            }
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        db.Set<AgentCommand>().Add(new AgentCommand
+        {
+            Id = Guid.NewGuid(),
+            AgentId = sourceCommand.AgentId,
+            KurumId = sourceCommand.KurumId,
+            CommandType = "PavoGetPaymentResult",
+            Payload = payload,
+            Status = AgentCommandStatus.Pending,
+            Priority = 1,
+            ExpiresAt = utcNow.AddMinutes(10),
+            MaxRetryCount = 3,
+            CorrelationId = Guid.NewGuid().ToString("N"),
+            IdempotencyKey = idempotencyKey,
+            RequestedBy = "system",
+            CreatedBy = "system",
+            CreatedAt = utcNow
+        });
     }
 
     private static void AddExecution(

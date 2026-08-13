@@ -66,6 +66,7 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
         var request = new ClientApplyUpgradeRequest
         {
             CommandId = command.CommandId,
+            LeaseToken = command.LeaseToken,
             ReleaseId = command.ReleaseId,
             Version = command.Version,
             RuntimeIdentifier = command.RuntimeIdentifier,

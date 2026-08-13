@@ -48,6 +48,7 @@ public sealed class AgentCommandSendRequest
     public int AgentId { get; set; }
     public string CommandType { get; set; } = string.Empty;
     public string? Payload { get; set; }
+    public string? IdempotencyKey { get; set; }
     public int Priority { get; set; }
     public int? ExpirationMinutes { get; set; }
     public int MaxRetryCount { get; set; } = 3;
@@ -56,6 +57,7 @@ public sealed class AgentCommandSendRequest
 public sealed class AgentApplyUpgradeRequest
 {
     public Guid CommandId { get; set; }
+    public string? LeaseToken { get; set; }
     public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;

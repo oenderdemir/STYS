@@ -2,6 +2,7 @@ using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Dtos;
@@ -232,12 +233,16 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             AgentId = cihaz.AgentId!.Value,
             CommandType = "PavoGetPaymentResult",
             Payload = payload,
+            IdempotencyKey = $"pavo-reconcile:{payment.Id}",
             Priority = 1,
             ExpirationMinutes = 10,
             MaxRetryCount = 3
         }, requestedBy, cancellationToken);
 
-        payment.Durum = PosOdemeDurumlari.Processing;
+        if (sentCommand.Status == (int)AgentCommandStatus.Pending || sentCommand.Status == (int)AgentCommandStatus.Delivered)
+        {
+            payment.Durum = PosOdemeDurumlari.Processing;
+        }
         await _db.SaveChangesAsync(cancellationToken);
         await EnsureTerminalLoadedAsync(payment, cancellationToken);
         return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);

@@ -307,6 +307,42 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task ApplyUpgrade_WrongOrMissingLeaseToken_Rejects()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+        var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() =>
+            svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true, LeaseToken = "wrong-token" }, CancellationToken.None));
+
+        await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(() =>
+            svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true, LeaseToken = string.Empty }, CancellationToken.None));
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
+    public async Task History_DoesNotExposeLeaseToken()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+
+        var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1, IdempotencyKey = Guid.NewGuid().ToString("N") }, "test", CancellationToken.None);
+        await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+
+        var history = await svc.GetHistoryAsync(agentId, CancellationToken.None);
+        var row = history.Single(x => x.Id == cmd.Id);
+        Assert.Null(row.LeaseToken);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
     public async Task Idempotent_SecondExecuteBlocked()
     {
         var db = await SetupAsync(); if (db is null) return;

@@ -2143,7 +2143,40 @@ Agent Regression:  0
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 - Known limitations:
 - Full solution testte görülen `SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur` failure’ı bu değişiklikten bağımsız mevcut flake olarak kaldı.
-  - Updater installer’ın hedef agent dizini, deploy ortamında doğru izinlerle sağlanmalı.
+- Updater installer’ın hedef agent dizini, deploy ortamında doğru izinlerle sağlanmalı.
+
+### E2C1 Final Recovery Hardening — 2026-08-13
+
+- Delivered recovery:
+  - `Delivered` lease timeout artık command type'a göre ayrışmıyor; retry hakkı varsa `Pending`e dönüyor, lease alanları temizleniyor.
+  - `PavoStartPayment` Delivered timeout’unda payment `Unknown` yapılmıyor.
+  - Retry hakkı bitmiş Delivered komutlar `Expired` oluyor.
+- Running/Accepted StartPayment recovery:
+  - `PavoStartPayment` Accepted/Running lease timeout’unda tekrar çalıştırılmıyor.
+  - Komut `Expired` oluyor ve payment `Unknown/ReconciliationRequired` durumuna alınıyor.
+  - Aynı payment için tek aktif `PavoGetPaymentResult` reconciliation command oluşturuluyor.
+- `PavoGetPaymentResult` recovery:
+  - Lease timeout durumunda retry hakkı varsa komut `Pending`e dönüyor.
+  - Recovery akışı idempotent kalıyor.
+- AgentApplyUpgrade lease token:
+  - Apply request içine `LeaseToken` taşınıyor.
+  - Updater outcome reporter aynı lease token ile command completion yapabiliyor.
+  - Lease token history/UI/result payload’a açılmıyor.
+- Lease renewal:
+  - Transient lease yenileme hataları loop’u bitirmiyor.
+  - 409 lease ownership kaybı ayrı ele alınıyor.
+- Request/notification redaction:
+  - Command history ve realtime notification akışında lease token redaction uygulanıyor.
+  - Idempotency key destekli command send akışı eklendi.
+- Tests:
+  - Delivered timeout, running start timeout, concurrent reconciliation, result retry, lease token redaction ve upgrade token rejection testleri eklendi.
+  - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentPhase2FinalTests|FullyQualifiedName~PosYonetimiIntegrationTests"` compile açısından geçti.
+  - `dotnet test STYS.sln --configuration Release` çalıştırıldı; tek kalan failure mevcut repository flake’i olarak `STYS.Tests.EBelgeOutboxWorkerTests.StopSirasindaClaimExceptionIleProcessingTaskYarisiDeadlockOlusturmaz`.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Reconciliation command creation mevcut command expiry transaction/lock akışı içinde korunuyor.
+  - Gerçek LAN cihazı ve uzun süreli lease expiry senaryoları sahada ayrıca doğrulanmalı.
 
 ### E2C1 Durable Command Lease & Crash Recovery — 2026-08-13
 

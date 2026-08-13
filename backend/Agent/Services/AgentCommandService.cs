@@ -82,6 +82,18 @@ public sealed class AgentCommandService
 
         await EnsurePaymentCommandAllowedAsync(db, agent, request.CommandType, ct);
 
+        var normalizedIdempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey);
+        if (!string.IsNullOrWhiteSpace(normalizedIdempotencyKey))
+        {
+            var existingByIdempotencyKey = await db.Set<AgentCommand>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.AgentId == agent.Id && x.IdempotencyKey == normalizedIdempotencyKey && !x.IsDeleted, ct);
+            if (existingByIdempotencyKey is not null)
+            {
+                return MapToDto(existingByIdempotencyKey);
+            }
+        }
+
         var isReleaseUpgrade = TryGetReleaseCommandIdentity(request.CommandType, request.Payload, out var releaseIdentity);
         var useTransaction = db.Database.IsRelational();
 
@@ -298,7 +310,7 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         return await db.Set<AgentCommand>().Where(x => x.AgentId == agentId && !x.IsDeleted)
             .OrderByDescending(x => x.CreatedAt).Take(100)
-            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, LeaseToken = x.LeaseToken, LeaseExpiresAt = x.LeaseExpiresAt, DeliveredAt = x.DeliveredAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
+            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, LeaseToken = null, LeaseExpiresAt = null, DeliveredAt = x.DeliveredAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
             .ToListAsync(ct);
     }
 
@@ -1054,7 +1066,8 @@ public sealed class AgentCommandService
     private void NotifyIfNeeded(AgentCommandDto dto)
     {
         if (_notifier is null) return;
-        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(dto, CancellationToken.None); } catch { } });
+        var publicDto = RedactLeaseToken(dto);
+        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(publicDto, CancellationToken.None); } catch { } });
     }
 
     private static async Task AcquirePollLockAsync(StysAppDbContext db, int agentId, CancellationToken ct)
@@ -1226,8 +1239,8 @@ public sealed class AgentCommandService
     private static AgentCommand CreateCommand(AgentEntity agent, AgentCommandSendRequest request, string requestedBy, int? releaseId)
     {
         var now = DateTime.UtcNow;
-        var idempotencySeed = $"{request.CommandType}:{Guid.NewGuid():N}";
-        var idempotencyKey = idempotencySeed.Length > 64 ? idempotencySeed[..64] : idempotencySeed;
+        var idempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey)
+            ?? Truncate($"{request.CommandType}:{Guid.NewGuid():N}", 128) ?? Guid.NewGuid().ToString("N");
         return new AgentCommand
         {
             Id = Guid.NewGuid(),
@@ -1415,4 +1428,31 @@ public sealed class AgentCommandService
 
     private static string? NormalizeLeaseToken(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeIdempotencyKey(string? value)
+    {
+        var normalized = NormalizeLeaseToken(value);
+        return string.IsNullOrWhiteSpace(normalized) ? null : Truncate(normalized, 128);
+    }
+
+    private static AgentCommandDto RedactLeaseToken(AgentCommandDto dto) => new()
+    {
+        Id = dto.Id,
+        AgentId = dto.AgentId,
+        CommandType = dto.CommandType,
+        Payload = dto.Payload,
+        Status = dto.Status,
+        Priority = dto.Priority,
+        ScheduledAt = dto.ScheduledAt,
+        ExpiresAt = dto.ExpiresAt,
+        LeaseToken = null,
+        LeaseExpiresAt = null,
+        DeliveredAt = dto.DeliveredAt,
+        RetryCount = dto.RetryCount,
+        MaxRetryCount = dto.MaxRetryCount,
+        CorrelationId = dto.CorrelationId,
+        IdempotencyKey = dto.IdempotencyKey,
+        ResultPayload = dto.ResultPayload,
+        CreatedAt = dto.CreatedAt
+    };
 }

@@ -3,6 +3,7 @@ namespace STYS.Agent.Client.Upgrade;
 public sealed class AgentApplyUpgradeRequest
 {
     public Guid CommandId { get; set; }
+    public string? LeaseToken { get; set; }
     public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;
@@ -30,4 +31,3 @@ public sealed class AgentUpgradeOutcome
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? ReportedAt { get; set; }
 }
-

@@ -171,6 +171,7 @@ public sealed class CommandPollingWorker : BackgroundService
                 case "AgentApplyUpgrade":
                     var applyCommand = DeserializeCommand<AgentApplyUpgradeCommand>(dto.Payload);
                     applyCommand.CommandId = dto.Id;
+                    applyCommand.LeaseToken = dto.LeaseToken;
                     await ExecuteTypedCommandAsync(dto, applyCommand, _handlerRegistry.Resolve<AgentApplyUpgradeCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 default:
@@ -314,9 +315,9 @@ public sealed class CommandPollingWorker : BackgroundService
             return;
         }
 
-        try
+        while (!cancellationToken.IsCancellationRequested)
         {
-            while (!cancellationToken.IsCancellationRequested)
+            try
             {
                 await Task.Delay(LeaseRenewInterval, cancellationToken);
                 if (cancellationToken.IsCancellationRequested)
@@ -327,13 +328,19 @@ public sealed class CommandPollingWorker : BackgroundService
                 await _client.RenewCommandLeaseAsync(dto.Id, dto.LeaseToken, cancellationToken);
                 _logger.LogDebug("Komut lease yenilendi: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Lease yenileme başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (STYS.Agent.Client.AgentApiException ex) when ((int)ex.StatusCode == 409)
+            {
+                _logger.LogInformation("Lease ownership kaybedildi, yenileme durduruldu: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lease yenileme başarısız, yeniden denenecek: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            }
         }
     }
 

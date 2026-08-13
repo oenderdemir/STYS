@@ -59,10 +59,11 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
         var pending = await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
         Assert.Single(pending);
+        var leaseToken = pending.Single().LeaseToken!;
 
         await svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None);
         await svc.SetRunningAsync(cmd.Id, agentId, CancellationToken.None);
-        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true }, CancellationToken.None);
+        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true, LeaseToken = leaseToken }, CancellationToken.None);
 
         var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == cmd.Id);
         Assert.Equal(AgentCommandStatus.Completed, updated!.Status);
@@ -86,10 +87,11 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
         await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        var leaseToken = (await db.Set<AgentCommand>().Where(x => x.Id == cmd.Id).Select(x => x.LeaseToken).SingleAsync())!;
         await svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true }, CancellationToken.None));
+            svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true, LeaseToken = leaseToken }, CancellationToken.None));
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
     }
@@ -104,6 +106,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
         await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        var leaseToken = (await db.Set<AgentCommand>().Where(x => x.Id == cmd.Id).Select(x => x.LeaseToken).SingleAsync())!;
         await svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None);
         await svc.SetRunningAsync(cmd.Id, agentId, CancellationToken.None);
         await svc.FailAsync(cmd.Id, agentId, "test-error", CancellationToken.None);
@@ -151,9 +154,10 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
 
         var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
         await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        var leaseToken = (await db.Set<AgentCommand>().Where(x => x.Id == cmd.Id).Select(x => x.LeaseToken).SingleAsync())!;
         await svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None);
         await svc.SetRunningAsync(cmd.Id, agentId, CancellationToken.None);
-        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true }, CancellationToken.None);
+        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true, LeaseToken = leaseToken }, CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None));
@@ -244,9 +248,10 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
         var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
         var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+        var leaseToken = await db.Set<AgentCommand>().Where(x => x.Id == commandId).Select(x => x.LeaseToken).SingleAsync();
 
-        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true }, CancellationToken.None);
-        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true }, CancellationToken.None);
+        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true, LeaseToken = leaseToken! }, CancellationToken.None);
+        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true, LeaseToken = leaseToken! }, CancellationToken.None);
 
         var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId);
         Assert.Equal(AgentCommandStatus.Completed, updated!.Status);
@@ -265,6 +270,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
         var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
         var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+        var leaseToken = await db.Set<AgentCommand>().Where(x => x.Id == commandId).Select(x => x.LeaseToken).SingleAsync();
 
         await svc.FailAsync(commandId, agentId, "apply-failed", CancellationToken.None);
         await svc.FailAsync(commandId, agentId, "apply-failed", CancellationToken.None);
@@ -286,8 +292,9 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
         var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
         var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
         var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+        var leaseToken = await db.Set<AgentCommand>().Where(x => x.Id == commandId).Select(x => x.LeaseToken).SingleAsync();
 
-        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true }, CancellationToken.None);
+        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true, LeaseToken = leaseToken! }, CancellationToken.None);
         await svc.FailAsync(commandId, agentId, "late-failure", CancellationToken.None);
 
         var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId);
@@ -311,7 +318,8 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
         await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
         await svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None);
         await svc.SetRunningAsync(cmd.Id, agentId, CancellationToken.None);
-        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true }, CancellationToken.None);
+        var leaseToken = (await db.Set<AgentCommand>().Where(x => x.Id == cmd.Id).Select(x => x.LeaseToken).SingleAsync())!;
+        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true, LeaseToken = leaseToken }, CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None));
@@ -321,6 +329,7 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
 
     private async Task<Guid> SeedExpiredApplyCommandAsync(StysAppDbContext db, int agentId, AgentCommandStatus status)
     {
+        var leaseToken = Guid.NewGuid().ToString("N");
         var command = new AgentCommand
         {
             AgentId = agentId,
@@ -329,6 +338,8 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
             CommandType = "AgentApplyUpgrade",
             Status = status,
             Priority = 1,
+            LeaseToken = leaseToken,
+            LeaseExpiresAt = DateTime.UtcNow.AddMinutes(-1),
             ExpiresAt = DateTime.UtcNow.AddMinutes(-5),
             CorrelationId = Guid.NewGuid().ToString("N"),
             IdempotencyKey = Guid.NewGuid().ToString("N"),

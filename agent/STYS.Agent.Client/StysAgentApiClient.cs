@@ -60,11 +60,14 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
         return data ?? [];
     }
 
-    public Task AcceptCommandAsync(Guid commandId, CancellationToken cancellationToken) =>
-        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/accept", null, cancellationToken);
+    public Task AcceptCommandAsync(Guid commandId, string leaseToken, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/accept", new AgentCommandLeaseRequest { LeaseToken = leaseToken }, cancellationToken);
 
-    public Task SetRunningCommandAsync(Guid commandId, CancellationToken cancellationToken) =>
-        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/running", null, cancellationToken);
+    public Task SetRunningCommandAsync(Guid commandId, string leaseToken, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/running", new AgentCommandLeaseRequest { LeaseToken = leaseToken }, cancellationToken);
+
+    public Task RenewCommandLeaseAsync(Guid commandId, string leaseToken, CancellationToken cancellationToken) =>
+        SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/renew", new AgentCommandRenewRequest { LeaseToken = leaseToken }, cancellationToken);
 
     public Task CompleteCommandAsync(Guid commandId, AgentCommandCompleteRequest request, CancellationToken cancellationToken) =>
         SendForVoidAsync(HttpMethod.Post, $"api/agent/commands/{commandId}/complete", request, cancellationToken);

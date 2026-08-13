@@ -19,6 +19,7 @@ namespace STYS.Agent.Services;
 
 public sealed class AgentCommandService
 {
+    private static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(2);
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly IAgentCommandRealtimeNotifier? _notifier;
@@ -224,25 +225,64 @@ public sealed class AgentCommandService
             }
 
             var now = DateTime.UtcNow;
+            var activeLease = await db.Set<AgentCommand>()
+                .Where(x =>
+                    x.AgentId == agentId
+                    && !x.IsDeleted
+                    && x.LeaseToken != null
+                    && x.LeaseExpiresAt.HasValue
+                    && x.LeaseExpiresAt.Value > now
+                    && (x.Status == AgentCommandStatus.Delivered
+                        || x.Status == AgentCommandStatus.Accepted
+                        || x.Status == AgentCommandStatus.Running))
+                .OrderByDescending(x => x.Priority)
+                .ThenBy(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct);
 
-            var commands = await db.Set<AgentCommand>()
-                .Where(x => x.AgentId == agentId && !x.IsDeleted && x.Status == AgentCommandStatus.Pending && (x.ExpiresAt == null || x.ExpiresAt > now))
-                .OrderByDescending(x => x.Priority).ThenBy(x => x.CreatedAt)
-                .Take(50)
-                .ToListAsync(ct);
-
-            if (commands.Count > 0)
+            if (activeLease is not null)
             {
-                await db.Set<AgentCommand>()
-                    .Where(x => commands.Select(c => c.Id).Contains(x.Id))
-                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, AgentCommandStatus.Delivered), ct);
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(ct);
+                }
+
+                return Array.Empty<AgentCommandDto>();
             }
+
+            var command = await db.Set<AgentCommand>()
+                .Where(x =>
+                    x.AgentId == agentId
+                    && !x.IsDeleted
+                    && x.Status == AgentCommandStatus.Pending
+                    && (x.ExpiresAt == null || x.ExpiresAt > now))
+                .OrderByDescending(x => x.Priority)
+                .ThenBy(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (command is null)
+            {
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(ct);
+                }
+
+                return Array.Empty<AgentCommandDto>();
+            }
+
+            command.Status = AgentCommandStatus.Delivered;
+            command.DeliveredAt = now;
+            command.LeaseToken = Guid.NewGuid().ToString("N");
+            command.LeaseExpiresAt = now.Add(DefaultLeaseDuration);
+            command.StartedAt = null;
+            command.CompletedAt = null;
+
+            await db.SaveChangesAsync(ct);
 
             if (tx is not null)
             {
                 await tx.CommitAsync(ct);
             }
-            return commands.Select(MapToDto).ToList();
+            return [MapToDto(command)];
         }
         finally
         {
@@ -258,15 +298,16 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         return await db.Set<AgentCommand>().Where(x => x.AgentId == agentId && !x.IsDeleted)
             .OrderByDescending(x => x.CreatedAt).Take(100)
-            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
+            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, LeaseToken = x.LeaseToken, LeaseExpiresAt = x.LeaseExpiresAt, DeliveredAt = x.DeliveredAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
             .ToListAsync(ct);
     }
 
-    public async Task AcceptAsync(Guid commandId, int agentId, CancellationToken ct)
+    public async Task AcceptAsync(Guid commandId, int agentId, string leaseToken, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+        EnsureLeaseOwnership(cmd, leaseToken, requireActiveLease: true);
         AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Accepted, cmd.Id);
         if (cmd.ExpiresAt.HasValue && DateTime.UtcNow > cmd.ExpiresAt.Value)
         {
@@ -283,11 +324,18 @@ public sealed class AgentCommandService
         NotifyIfNeeded(MapToDto(cmd));
     }
 
-    public async Task SetRunningAsync(Guid commandId, int agentId, CancellationToken ct)
+    public async Task AcceptAsync(Guid commandId, int agentId, CancellationToken ct)
+    {
+        var leaseToken = await GetCurrentLeaseTokenAsync(commandId, agentId, ct);
+        await AcceptAsync(commandId, agentId, leaseToken, ct);
+    }
+
+    public async Task SetRunningAsync(Guid commandId, int agentId, string leaseToken, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+        EnsureLeaseOwnership(cmd, leaseToken, requireActiveLease: true);
         AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Running, cmd.Id);
 
         var prev = cmd.Status;
@@ -297,11 +345,18 @@ public sealed class AgentCommandService
         NotifyIfNeeded(MapToDto(cmd));
     }
 
+    public async Task SetRunningAsync(Guid commandId, int agentId, CancellationToken ct)
+    {
+        var leaseToken = await GetCurrentLeaseTokenAsync(commandId, agentId, ct);
+        await SetRunningAsync(commandId, agentId, leaseToken, ct);
+    }
+
     public async Task CompleteAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+        EnsureLeaseOwnership(cmd, request.LeaseToken, requireActiveLease: false);
         var prev = cmd.Status;
 
         if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
@@ -340,14 +395,21 @@ public sealed class AgentCommandService
 
     public async Task FailAsync(Guid commandId, int agentId, string errorMessage, CancellationToken ct)
     {
+        var leaseToken = await GetCurrentLeaseTokenAsync(commandId, agentId, ct);
+        await FailAsync(commandId, agentId, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = leaseToken, ErrorMessage = errorMessage }, ct);
+    }
+
+    public async Task FailAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
+    {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+        EnsureLeaseOwnership(cmd, request.LeaseToken, requireActiveLease: false);
         var prev = cmd.Status;
 
         if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
         {
-            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, ct);
+            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, request, ct);
             return;
         }
 
@@ -369,23 +431,24 @@ public sealed class AgentCommandService
 
         cmd.Status = AgentCommandStatus.Failed;
         cmd.CompletedAt ??= DateTime.UtcNow;
-        cmd.ErrorMessage = errorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
-        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorMessage: errorMessage);
+        cmd.ErrorMessage = request.ErrorMessage;
+        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
+        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorCode: request.ErrorCode, errorMessage: request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
     }
 
-    public async Task RejectAsync(Guid commandId, int agentId, string errorMessage, CancellationToken ct)
+    public async Task RejectAsync(Guid commandId, int agentId, AgentCommandCompleteRequest request, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+        EnsureLeaseOwnership(cmd, request.LeaseToken, requireActiveLease: false);
         var prev = cmd.Status;
 
         if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
         {
-            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, ct);
+            await HandleExpiredPaymentCommandAsync(db, cmd, prev, agentId, request, ct);
             return;
         }
 
@@ -407,11 +470,29 @@ public sealed class AgentCommandService
 
         cmd.Status = AgentCommandStatus.Rejected;
         cmd.CompletedAt ??= DateTime.UtcNow;
-        cmd.ErrorMessage = errorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
-        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorMessage: errorMessage);
+        cmd.ErrorMessage = request.ErrorMessage;
+        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
+        AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorCode: request.ErrorCode, errorMessage: request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
+    }
+
+    public async Task RejectAsync(Guid commandId, int agentId, string errorMessage, CancellationToken ct)
+    {
+        var leaseToken = await GetCurrentLeaseTokenAsync(commandId, agentId, ct);
+        await RejectAsync(commandId, agentId, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = leaseToken, ErrorMessage = errorMessage }, ct);
+    }
+
+    public async Task RenewLeaseAsync(Guid commandId, int agentId, string leaseToken, CancellationToken ct)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
+        if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+
+        EnsureLeaseOwnership(cmd, leaseToken, requireActiveLease: true);
+        var now = DateTime.UtcNow;
+        cmd.LeaseExpiresAt = now.Add(DefaultLeaseDuration);
+        await db.SaveChangesAsync(ct);
     }
 
     private static void AddExecution(StysAppDbContext db, AgentCommand cmd, string status, AgentCommandStatus prev, int agentId, string? errorCode = null, string? errorMessage = null)
@@ -1291,6 +1372,47 @@ public sealed class AgentCommandService
         Id = c.Id, AgentId = c.AgentId, CommandType = c.CommandType, Payload = c.Payload,
         Status = (int)c.Status, Priority = c.Priority, ScheduledAt = c.ScheduledAt,
         ExpiresAt = c.ExpiresAt, RetryCount = c.RetryCount, MaxRetryCount = c.MaxRetryCount,
+        LeaseToken = c.LeaseToken, LeaseExpiresAt = c.LeaseExpiresAt, DeliveredAt = c.DeliveredAt,
         CorrelationId = c.CorrelationId, IdempotencyKey = c.IdempotencyKey, ResultPayload = c.ResultPayload, CreatedAt = c.CreatedAt ?? DateTime.MinValue
     };
+
+    private static void EnsureLeaseOwnership(AgentCommand cmd, string? leaseToken, bool requireActiveLease)
+    {
+        var normalizedLeaseToken = NormalizeLeaseToken(leaseToken);
+        var storedLeaseToken = NormalizeLeaseToken(cmd.LeaseToken);
+        if (string.IsNullOrWhiteSpace(normalizedLeaseToken) || string.IsNullOrWhiteSpace(storedLeaseToken) || !string.Equals(normalizedLeaseToken, storedLeaseToken, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Komut lease doğrulaması başarısız.", 409);
+        }
+
+        if (!requireActiveLease)
+        {
+            return;
+        }
+
+        if (!cmd.LeaseExpiresAt.HasValue || cmd.LeaseExpiresAt.Value <= DateTime.UtcNow)
+        {
+            throw new BaseException("Komut lease süresi dolmuş.", 409);
+        }
+    }
+
+    private async Task<string> GetCurrentLeaseTokenAsync(Guid commandId, int agentId, CancellationToken ct)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        var cmd = await db.Set<AgentCommand>().AsNoTracking().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
+        if (cmd is null)
+        {
+            throw new BaseException("Komut bulunamadı.", 404);
+        }
+
+        if (string.IsNullOrWhiteSpace(cmd.LeaseToken))
+        {
+            throw new BaseException("Komut lease doğrulaması başarısız.", 409);
+        }
+
+        return cmd.LeaseToken;
+    }
+
+    private static string? NormalizeLeaseToken(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -446,7 +446,7 @@ public sealed class PosYonetimiIntegrationTests
         var agentService = CreateAgentCommandService(cs, fixture.KurumId);
 
         var command = await deviceService.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
-        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
         await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
 
@@ -470,6 +470,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             Id = command.Id,
             Success = true,
+            LeaseToken = leaseToken,
             ResultPayload = JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web))
         }, CancellationToken.None);
 
@@ -520,7 +521,7 @@ public sealed class PosYonetimiIntegrationTests
         var deviceService = CreateCihazService(db, cs, fixture.KurumId);
         var agentService = CreateAgentCommandService(cs, fixture.KurumId);
         var command = await deviceService.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
-        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
         await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
 
@@ -532,6 +533,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             Id = command.Id,
             Success = true,
+            LeaseToken = leaseToken,
             ResultPayload = JsonSerializer.Serialize(new PavoGetDeviceInfoResponse(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
         }, CancellationToken.None));
 
@@ -557,7 +559,7 @@ public sealed class PosYonetimiIntegrationTests
         var deviceService = CreateCihazService(db, cs, fixture.KurumId);
         var agentService = CreateAgentCommandService(cs, fixture.KurumId);
         var command = await deviceService.GetDeviceInfoAsync(fixture.DeviceId, "test", CancellationToken.None);
-        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
         await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
 
@@ -569,6 +571,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             Id = command.Id,
             Success = true,
+            LeaseToken = leaseToken,
             ResultPayload = JsonSerializer.Serialize(new PavoGetDeviceInfoResponse(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
         }, CancellationToken.None));
 
@@ -939,6 +942,7 @@ public sealed class PosYonetimiIntegrationTests
         var service = CreateCihazService(db, cs, fixture.KurumId);
         var command = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
         var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
 
         await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
         await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
@@ -946,6 +950,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             Id = command.Id,
             Success = true,
+            LeaseToken = leaseToken,
             ResultPayload = JsonSerializer.Serialize(new PavoPingResponse(), new JsonSerializerOptions(JsonSerializerDefaults.Web))
         }, CancellationToken.None);
 
@@ -977,6 +982,7 @@ public sealed class PosYonetimiIntegrationTests
         var service = CreateCihazService(db, cs, fixture.KurumId);
         var command = await service.PingAsync(fixture.DeviceId, "test", CancellationToken.None);
         var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
 
         await agentService.AcceptAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
         await agentService.SetRunningAsync(command.Id, fixture.MainAgentId, CancellationToken.None);
@@ -984,6 +990,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             Id = command.Id,
             Success = false,
+            LeaseToken = leaseToken,
             ErrorCode = "TIMEOUT",
             ErrorMessage = "timeout"
         }, CancellationToken.None);
@@ -1498,10 +1505,12 @@ public sealed class PosYonetimiIntegrationTests
         var expiryService = CreateCommandExpiryService(cs);
         await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
 
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
         {
             Id = payment.AgentCommandId!.Value,
             Success = false,
+            LeaseToken = leaseToken,
             ErrorMessage = "late failed start"
         }, CancellationToken.None);
 
@@ -1579,10 +1588,12 @@ public sealed class PosYonetimiIntegrationTests
         var expiryService = CreateCommandExpiryService(cs);
         await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
 
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.CompleteAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, new AgentCommandCompleteRequest
         {
             Id = payment.AgentCommandId!.Value,
             Success = true,
+            LeaseToken = leaseToken,
             ResultPayload = JsonSerializer.Serialize(new PavoStartPaymentResponse
             {
                 Data = new PavoPaymentOperationData
@@ -1740,6 +1751,7 @@ public sealed class PosYonetimiIntegrationTests
             IdempotencyKey = paymentKey
         }, "test", CancellationToken.None);
 
+        var leaseToken = (await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.AcceptAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, CancellationToken.None);
         await agentService.SetRunningAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, CancellationToken.None);
 
@@ -1757,6 +1769,7 @@ public sealed class PosYonetimiIntegrationTests
         {
             Id = payment.AgentCommandId!.Value,
             Success = true,
+            LeaseToken = leaseToken,
             ResultPayload = JsonSerializer.Serialize(new PavoStartPaymentResponse
             {
                 Data = new PavoPaymentOperationData
@@ -2350,13 +2363,14 @@ public sealed class PosYonetimiIntegrationTests
         string? errorCode = null,
         string? errorMessage = null)
     {
-        await agentService.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        var leaseToken = (await agentService.GetPendingCommandsAsync(agentId, CancellationToken.None)).Single().LeaseToken!;
         await agentService.AcceptAsync(commandId, agentId, CancellationToken.None);
         await agentService.SetRunningAsync(commandId, agentId, CancellationToken.None);
         await agentService.CompleteAsync(commandId, agentId, new AgentCommandCompleteRequest
         {
             Id = commandId,
             Success = success,
+            LeaseToken = leaseToken,
             ResultPayload = resultPayload,
             ErrorCode = errorCode,
             ErrorMessage = errorMessage

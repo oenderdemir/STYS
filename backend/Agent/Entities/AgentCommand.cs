@@ -18,6 +18,10 @@ public sealed class AgentCommand : BaseEntity<Guid>, ITenantEntity
     public DateTime? ExpiresAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    [MaxLength(128)]
+    public string? LeaseToken { get; set; }
+    public DateTime? LeaseExpiresAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
     public int RetryCount { get; set; }
     public int MaxRetryCount { get; set; } = 3;
     [MaxLength(64)]

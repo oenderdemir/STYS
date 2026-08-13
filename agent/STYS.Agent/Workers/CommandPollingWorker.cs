@@ -12,6 +12,7 @@ namespace STYS.Agent.Workers;
 
 public sealed class CommandPollingWorker : BackgroundService
 {
+    private static readonly TimeSpan LeaseRenewInterval = TimeSpan.FromSeconds(30);
     private readonly IStysAgentApiClient _client;
     private readonly IAgentAuthenticationState _authenticationState;
     private readonly IAgentRuntimeStatus _runtimeStatus;
@@ -118,10 +119,10 @@ public sealed class CommandPollingWorker : BackgroundService
                     return;
                 }
 
-                await _client.AcceptCommandAsync(dto.Id, cancellationToken);
+                await _client.AcceptCommandAsync(dto.Id, dto.LeaseToken ?? string.Empty, cancellationToken);
                 if (cached.Success)
                 {
-                    await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = true, ResultPayload = cached.ResultPayload }, cancellationToken);
+                    await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = true, LeaseToken = dto.LeaseToken, ResultPayload = cached.ResultPayload }, cancellationToken);
                 }
                 else
                 {
@@ -129,6 +130,7 @@ public sealed class CommandPollingWorker : BackgroundService
                     {
                         Id = dto.Id,
                         Success = false,
+                        LeaseToken = dto.LeaseToken,
                         ResultPayload = cached.ResultPayload,
                         ErrorCode = cached.ErrorCode,
                         ErrorMessage = cached.ErrorMessage
@@ -173,7 +175,7 @@ public sealed class CommandPollingWorker : BackgroundService
                     break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
-                    await _client.RejectCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = $"Unknown command: {dto.CommandType}", ErrorCode = "UNKNOWN_COMMAND" }, cancellationToken);
+                    await _client.RejectCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, LeaseToken = dto.LeaseToken ?? string.Empty, ErrorMessage = $"Unknown command: {dto.CommandType}", ErrorCode = "UNKNOWN_COMMAND" }, cancellationToken);
                     break;
             }
         }
@@ -182,7 +184,7 @@ public sealed class CommandPollingWorker : BackgroundService
             _logger.LogError(ex, "Komut işlenirken beklenmeyen hata: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
             try
             {
-                await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = ex.Message, ErrorCode = "HANDLER_EXCEPTION" }, CancellationToken.None);
+                await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, LeaseToken = dto.LeaseToken ?? string.Empty, ErrorMessage = ex.Message, ErrorCode = "HANDLER_EXCEPTION" }, CancellationToken.None);
             }
             catch
             {
@@ -202,40 +204,63 @@ public sealed class CommandPollingWorker : BackgroundService
             throw new InvalidOperationException($"Komut handler bulunamadı: {dto.CommandType}");
         }
 
+        if (string.IsNullOrWhiteSpace(dto.LeaseToken))
+        {
+            throw new InvalidOperationException($"Lease token missing for command: {dto.CommandType} ({dto.Id})");
+        }
+
         _logger.LogInformation("Komut işleniyor: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
 
-        await _client.AcceptCommandAsync(dto.Id, cancellationToken);
-        await _client.SetRunningCommandAsync(dto.Id, cancellationToken);
+        await _client.AcceptCommandAsync(dto.Id, dto.LeaseToken, cancellationToken);
+        await _client.SetRunningCommandAsync(dto.Id, dto.LeaseToken, cancellationToken);
         _executionStore.MarkExecuted(dto.IdempotencyKey);
 
-        var result = await handler.HandleAsync(command, cancellationToken);
-        if (!result.DeferCompletion)
+        using var renewalCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var renewalTask = RenewLeaseLoopAsync(dto, renewalCts.Token);
+        try
         {
-            _executionStore.StoreResult(dto.IdempotencyKey, result);
-        }
+            var result = await handler.HandleAsync(command, cancellationToken);
 
-        if (result.DeferCompletion)
-        {
-            _logger.LogInformation("Komut tamamlanması ertelendi: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
-            return;
-        }
-
-        if (result.Success)
-        {
-            await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = true, ResultPayload = result.ResultPayload }, cancellationToken);
-            _logger.LogInformation("Komut tamamlandı: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
-        }
-        else
-        {
-            await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest
+            if (!result.DeferCompletion)
             {
-                Id = dto.Id,
-                Success = false,
-                ResultPayload = result.ResultPayload,
-                ErrorMessage = result.ErrorMessage,
-                ErrorCode = result.ErrorCode
-            }, cancellationToken);
-            _logger.LogWarning("Komut başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+                _executionStore.StoreResult(dto.IdempotencyKey, result);
+            }
+
+            if (result.DeferCompletion)
+            {
+                _logger.LogInformation("Komut tamamlanması ertelendi: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+                return;
+            }
+
+            if (result.Success)
+            {
+                await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = true, LeaseToken = dto.LeaseToken, ResultPayload = result.ResultPayload }, cancellationToken);
+                _logger.LogInformation("Komut tamamlandı: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            }
+            else
+            {
+                await _client.CompleteCommandAsync(dto.Id, new AgentCommandCompleteRequest
+                {
+                    Id = dto.Id,
+                    Success = false,
+                    LeaseToken = dto.LeaseToken,
+                    ResultPayload = result.ResultPayload,
+                    ErrorMessage = result.ErrorMessage,
+                    ErrorCode = result.ErrorCode
+                }, cancellationToken);
+                _logger.LogWarning("Komut başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            }
+        }
+        finally
+        {
+            renewalCts.Cancel();
+            try
+            {
+                await renewalTask;
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -280,6 +305,36 @@ public sealed class CommandPollingWorker : BackgroundService
     {
         command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
+    }
+
+    private async Task RenewLeaseLoopAsync(AgentCommandDto dto, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(dto.LeaseToken))
+        {
+            return;
+        }
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(LeaseRenewInterval, cancellationToken);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                await _client.RenewCommandLeaseAsync(dto.Id, dto.LeaseToken, cancellationToken);
+                _logger.LogDebug("Komut lease yenilendi: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Lease yenileme başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+        }
     }
 
     private static TCommand DeserializeCommand<TCommand>(string? payload)

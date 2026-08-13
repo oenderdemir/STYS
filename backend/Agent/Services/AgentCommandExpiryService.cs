@@ -22,6 +22,17 @@ public sealed class AgentCommandExpiryService
         AgentCommandStatus.Running
     ];
 
+    private static readonly HashSet<string> LeaseReplaySafeCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Ping",
+        "HealthCheck",
+        "RefreshConfiguration",
+        "PavoPing",
+        "PavoGetDeviceInfo",
+        "PavoGetPaymentResult",
+        "AgentStageUpgrade"
+    };
+
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ILogger<AgentCommandExpiryService> _logger;
 
@@ -41,9 +52,10 @@ public sealed class AgentCommandExpiryService
             .AsNoTracking()
             .Where(x =>
                 !x.IsDeleted
-                && x.ExpiresAt.HasValue
-                && x.ExpiresAt.Value <= now
-                && ExpirableStatuses.Contains(x.Status))
+                && (
+                    (x.ExpiresAt.HasValue && x.ExpiresAt.Value <= now && ExpirableStatuses.Contains(x.Status))
+                    || (x.LeaseExpiresAt.HasValue && x.LeaseExpiresAt.Value <= now && IsLeaseRecoverableStatus(x.Status)))
+            )
             .Select(x => x.AgentId)
             .Distinct()
             .ToListAsync(ct);
@@ -84,17 +96,59 @@ public sealed class AgentCommandExpiryService
 
             if (timedOutCommands.Count == 0)
             {
+                var leaseExpiredCommands = await db.Set<AgentCommand>()
+                    .Where(x =>
+                        x.AgentId == agentId
+                        && !x.IsDeleted
+                        && x.LeaseExpiresAt.HasValue
+                        && x.LeaseExpiresAt.Value <= utcNow
+                        && IsLeaseRecoverableStatus(x.Status))
+                    .OrderBy(x => x.CreatedAt)
+                    .ToListAsync(ct);
+
+                if (leaseExpiredCommands.Count == 0)
+                {
+                    if (tx is not null)
+                    {
+                        await tx.CommitAsync(ct);
+                    }
+
+                    return 0;
+                }
+
+                foreach (var cmd in leaseExpiredCommands)
+                {
+                    ApplyLeaseExpiration(db, cmd, agentId, utcNow);
+                }
+
+                await db.SaveChangesAsync(ct);
                 if (tx is not null)
                 {
                     await tx.CommitAsync(ct);
                 }
 
-                return 0;
+                _logger.LogInformation("Timed out agent command leases recovered. AgentId={AgentId}, ExpiredCount={ExpiredCount}", agentId, leaseExpiredCommands.Count);
+                return leaseExpiredCommands.Count;
             }
 
             foreach (var cmd in timedOutCommands)
             {
                 MarkExpired(db, cmd, agentId, utcNow);
+            }
+
+            var timedOutLeaseCommands = await db.Set<AgentCommand>()
+                .Where(x =>
+                    x.AgentId == agentId
+                    && !x.IsDeleted
+                    && x.LeaseExpiresAt.HasValue
+                    && x.LeaseExpiresAt.Value <= utcNow
+                    && IsLeaseRecoverableStatus(x.Status))
+                .OrderBy(x => x.CreatedAt)
+                .ToListAsync(ct);
+
+            foreach (var cmd in timedOutLeaseCommands)
+            {
+                ApplyLeaseExpiration(db, cmd, agentId, utcNow);
             }
 
             await db.SaveChangesAsync(ct);
@@ -103,8 +157,9 @@ public sealed class AgentCommandExpiryService
                 await tx.CommitAsync(ct);
             }
 
-            _logger.LogInformation("Timed out agent commands expired. AgentId={AgentId}, ExpiredCount={ExpiredCount}", agentId, timedOutCommands.Count);
-            return timedOutCommands.Count;
+            var totalCount = timedOutCommands.Count + timedOutLeaseCommands.Count;
+            _logger.LogInformation("Timed out agent commands expired. AgentId={AgentId}, ExpiredCount={ExpiredCount}", agentId, totalCount);
+            return totalCount;
         }
         finally
         {
@@ -121,6 +176,51 @@ public sealed class AgentCommandExpiryService
         cmd.Status = AgentCommandStatus.Expired;
         cmd.CompletedAt ??= utcNow;
         AddExecution(db, cmd, "Expired", previous, agentId, errorCode: "COMMAND_EXPIRED", errorMessage: "Komut süresi doldu.");
+
+        if (string.Equals(cmd.CommandType, "PavoPing", StringComparison.OrdinalIgnoreCase))
+        {
+            var deviceId = TryGetDeviceIdFromCommandPayload(cmd.Payload);
+            var device = deviceId.HasValue
+                ? db.PosCihazlari.FirstOrDefault(x => x.Id == deviceId.Value && !x.IsDeleted)
+                : null;
+            ApplyPavoPingExpiry(device, utcNow);
+            return;
+        }
+
+        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cmd.CommandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase))
+        {
+            var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload);
+            var payment = paymentId.HasValue
+                ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
+                : null;
+            ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
+        }
+    }
+
+    private void ApplyLeaseExpiration(StysAppDbContext db, AgentCommand cmd, int agentId, DateTime utcNow)
+    {
+        var previous = cmd.Status;
+        var shouldRetry = LeaseReplaySafeCommands.Contains(cmd.CommandType) && cmd.RetryCount < cmd.MaxRetryCount;
+
+        if (shouldRetry)
+        {
+            cmd.Status = AgentCommandStatus.Pending;
+            cmd.RetryCount++;
+            cmd.StartedAt = null;
+            cmd.CompletedAt = null;
+            cmd.DeliveredAt = null;
+            cmd.LeaseToken = null;
+            cmd.LeaseExpiresAt = null;
+            AddExecution(db, cmd, "Pending", previous, agentId, errorCode: "LEASE_EXPIRED", errorMessage: "Komut lease süresi doldu, yeniden kuyruğa alındı.");
+        }
+        else
+        {
+            cmd.Status = AgentCommandStatus.Expired;
+            cmd.CompletedAt ??= utcNow;
+            cmd.LeaseExpiresAt = null;
+            AddExecution(db, cmd, "Expired", previous, agentId, errorCode: "LEASE_EXPIRED", errorMessage: "Komut lease süresi doldu.");
+        }
 
         if (string.Equals(cmd.CommandType, "PavoPing", StringComparison.OrdinalIgnoreCase))
         {
@@ -243,6 +343,11 @@ public sealed class AgentCommandExpiryService
         string.Equals(durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLeaseRecoverableStatus(AgentCommandStatus status) =>
+        status == AgentCommandStatus.Delivered
+        || status == AgentCommandStatus.Accepted
+        || status == AgentCommandStatus.Running;
 
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
     {

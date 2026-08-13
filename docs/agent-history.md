@@ -2142,5 +2142,32 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 - Known limitations:
-  - Full solution testte görülen `SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur` failure’ı bu değişiklikten bağımsız mevcut flake olarak kaldı.
+- Full solution testte görülen `SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur` failure’ı bu değişiklikten bağımsız mevcut flake olarak kaldı.
   - Updater installer’ın hedef agent dizini, deploy ortamında doğru izinlerle sağlanmalı.
+
+### E2C1 Durable Command Lease & Crash Recovery — 2026-08-13
+
+- Command lease modeli:
+  - `AgentCommand` için `LeaseToken`, `LeaseExpiresAt` ve `DeliveredAt` alanları eklendi.
+  - Agent polling artık aynı anda tek aktif leased command ile çalışıyor.
+  - Pending komutlar `Priority DESC, CreatedAt ASC` ile tek tek claim ediliyor.
+  - Accept / Running / Complete / Fail / Reject / Renew işlemleri lease token ile fence ediliyor.
+- Recovery policy:
+  - Lease süresi dolan replay-safe komutlar yeniden `Pending`e dönebiliyor.
+  - `PavoStartPayment` için blind retry engellendi; ödeme sonucu `Unknown/ReconciliationRequired` akışı korunuyor.
+  - `PavoGetPaymentResult` retry edilebilir bırakıldı.
+  - `AgentApplyUpgrade` için duplicated apply yeniden tetiklenmiyor; outcome mekanizması korunuyor.
+- Persistence:
+  - `FileAgentCommandExecutionStore` payment command’ları için restart-safe tutuldu.
+  - `PavoStartPayment` ve `PavoGetPaymentResult` execution marker/result’ları diske yazılıyor.
+  - Pairing/health/ping gibi komutlar memory fallback’te kaldı.
+- Migration:
+  - `AgentCommands` tablosuna lease alanları için migration ve model snapshot eklendi.
+- Tests:
+  - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentPhase2FinalTests|FullyQualifiedName~PosYonetimiIntegrationTests"` geçti.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Lease renewal interval ve timeout policy uygulama seviyesinde ayarlı; ortam bazlı tuning gerekebilir.
+  - Gerçek cihazda lease expiry davranışı, LAN gecikmesi ve process crash senaryolarıyla ayrıca doğrulanmalı.

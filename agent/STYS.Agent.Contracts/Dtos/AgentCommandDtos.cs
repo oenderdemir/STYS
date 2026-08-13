@@ -10,6 +10,9 @@ public sealed class AgentCommandDto
     public int Priority { get; set; }
     public DateTime? ScheduledAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
+    public string? LeaseToken { get; set; }
+    public DateTime? LeaseExpiresAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
     public int RetryCount { get; set; }
     public int MaxRetryCount { get; set; }
     public string CorrelationId { get; set; } = string.Empty;
@@ -18,18 +21,26 @@ public sealed class AgentCommandDto
     public DateTime CreatedAt { get; set; }
 }
 
-public sealed class AgentCommandAcceptRequest
+public class AgentCommandLeaseRequest
 {
-    public Guid Id { get; set; }
+    public string LeaseToken { get; set; } = string.Empty;
 }
 
-public sealed class AgentCommandCompleteRequest
+public sealed class AgentCommandAcceptRequest : AgentCommandLeaseRequest
+{
+}
+
+public sealed class AgentCommandCompleteRequest : AgentCommandLeaseRequest
 {
     public Guid Id { get; set; }
     public bool Success { get; set; }
     public string? ResultPayload { get; set; }
     public string? ErrorCode { get; set; }
     public string? ErrorMessage { get; set; }
+}
+
+public sealed class AgentCommandRenewRequest : AgentCommandLeaseRequest
+{
 }
 
 public sealed class AgentCommandSendRequest

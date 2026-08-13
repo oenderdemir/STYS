@@ -51,7 +51,22 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
         return WithGate(() =>
         {
             var items = ReadAllCore();
-            return items.TryGetValue(normalized, out var state) && (state.Started || state.Result is not null);
+            if (!items.TryGetValue(normalized, out var state))
+            {
+                return false;
+            }
+
+            if (IsStartPaymentKey(normalized))
+            {
+                return state.Started || state.Result is not null;
+            }
+
+            if (IsGetPaymentResultKey(normalized))
+            {
+                return state.Result is not null;
+            }
+
+            return state.Started || state.Result is not null;
         });
     }
 
@@ -207,6 +222,12 @@ public sealed class FileAgentCommandExecutionStore : IAgentCommandExecutionStore
 
     private static bool IsPersistentKey(string key) =>
         PersistentKeyPrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsStartPaymentKey(string key) =>
+        key.StartsWith("PavoStartPayment:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsGetPaymentResultKey(string key) =>
+        key.StartsWith("PavoGetPaymentResult:", StringComparison.OrdinalIgnoreCase);
 
     private static AgentCommandResult? Clone(AgentCommandResult? result) => result is null
         ? null

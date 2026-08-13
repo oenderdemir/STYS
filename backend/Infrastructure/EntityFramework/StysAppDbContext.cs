@@ -2038,6 +2038,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.CommandType).HasMaxLength(128).IsRequired();
             entity.Property(x => x.CorrelationId).HasMaxLength(64);
             entity.Property(x => x.IdempotencyKey).HasMaxLength(128);
+            entity.Property(x => x.LeaseToken).HasMaxLength(128);
+            entity.Property(x => x.LeaseExpiresAt);
+            entity.Property(x => x.DeliveredAt);
             entity.Property(x => x.RequestedBy).HasMaxLength(256);
             entity.Property(x => x.ResultPayload).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ErrorCode).HasMaxLength(128);

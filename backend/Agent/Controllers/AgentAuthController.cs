@@ -306,21 +306,31 @@ public sealed class AgentAuthController : ControllerBase
 
     [HttpPost("commands/{id:guid}/accept")]
     [Authorize(Policy = AgentPolicies.AgentCommandExecute)]
-    public async Task<ActionResult> AcceptCommand(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult> AcceptCommand(Guid id, [FromBody] AgentCommandAcceptRequest request, CancellationToken cancellationToken)
     {
         var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
         if (!agentContext.IsAuthenticated) return Unauthorized();
-        await _commandService.AcceptAsync(id, agentContext.AgentId, cancellationToken);
+        await _commandService.AcceptAsync(id, agentContext.AgentId, request.LeaseToken, cancellationToken);
         return Ok();
     }
 
     [HttpPost("commands/{id:guid}/running")]
     [Authorize(Policy = AgentPolicies.AgentCommandExecute)]
-    public async Task<ActionResult> SetRunningCommand(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult> SetRunningCommand(Guid id, [FromBody] AgentCommandAcceptRequest request, CancellationToken cancellationToken)
     {
         var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
         if (!agentContext.IsAuthenticated) return Unauthorized();
-        await _commandService.SetRunningAsync(id, agentContext.AgentId, cancellationToken);
+        await _commandService.SetRunningAsync(id, agentContext.AgentId, request.LeaseToken, cancellationToken);
+        return Ok();
+    }
+
+    [HttpPost("commands/{id:guid}/renew")]
+    [Authorize(Policy = AgentPolicies.AgentCommandExecute)]
+    public async Task<ActionResult> RenewCommandLease(Guid id, [FromBody] AgentCommandRenewRequest request, CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated) return Unauthorized();
+        await _commandService.RenewLeaseAsync(id, agentContext.AgentId, request.LeaseToken, cancellationToken);
         return Ok();
     }
 
@@ -340,7 +350,7 @@ public sealed class AgentAuthController : ControllerBase
     {
         var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
         if (!agentContext.IsAuthenticated) return Unauthorized();
-        await _commandService.FailAsync(id, agentContext.AgentId, request.ErrorMessage ?? "Unknown error", cancellationToken);
+        await _commandService.FailAsync(id, agentContext.AgentId, request, cancellationToken);
         return Ok();
     }
 
@@ -350,7 +360,7 @@ public sealed class AgentAuthController : ControllerBase
     {
         var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
         if (!agentContext.IsAuthenticated) return Unauthorized();
-        await _commandService.RejectAsync(id, agentContext.AgentId, request.ErrorMessage ?? "Unknown command", cancellationToken);
+        await _commandService.RejectAsync(id, agentContext.AgentId, request, cancellationToken);
         return Ok();
     }
 

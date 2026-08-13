@@ -341,23 +341,32 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         {
             if (File.Exists(targetPath))
             {
-                File.Move(tempPath, targetPath, overwrite: true);
+                File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
                 return;
             }
 
             File.Move(tempPath, targetPath);
             return;
         }
-        catch (IOException)
+        catch (IOException) when (File.Exists(tempPath))
         {
             if (File.Exists(targetPath))
             {
-                File.Delete(targetPath);
-                File.Move(tempPath, targetPath);
+                File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
                 return;
             }
 
-            throw;
+            File.Move(tempPath, targetPath);
+        }
+        catch (UnauthorizedAccessException) when (File.Exists(tempPath))
+        {
+            if (File.Exists(targetPath))
+            {
+                File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                return;
+            }
+
+            File.Move(tempPath, targetPath);
         }
     }
 

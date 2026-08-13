@@ -67,6 +67,8 @@ builder.Services.Configure<StysAgentClientOptions>(
     builder.Configuration.GetSection(StysAgentClientOptions.SectionName));
 builder.Services.PostConfigure<StysAgentClientOptions>(options => options.AgentVersion = AgentVersionInfo.Current);
 builder.Services.Configure<AgentUpgradeOptions>(builder.Configuration.GetSection(AgentUpgradeOptions.SectionName));
+builder.Services.PostConfigure<AgentUpgradeOptions>(options =>
+    options.ReleasePublicKeyPem = AgentReleaseTrustMaterial.Resolve(options.ReleasePublicKeyPem, options.ReleasePublicKeyPemPath));
 
 builder.Services.AddSingleton<IAgentPathResolver, AgentPathResolver>();
 builder.Services.AddSingleton<IAgentBootstrapConfigurationStore, FileAgentBootstrapConfigurationStore>();

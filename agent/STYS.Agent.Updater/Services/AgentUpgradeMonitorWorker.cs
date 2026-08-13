@@ -135,7 +135,7 @@ public sealed class AgentUpgradeMonitorWorker : BackgroundService
 
         var backupDirectory = Path.Combine(_paths.UpgradeBackupRootDirectory, request.CommandId.ToString("N"));
         Directory.CreateDirectory(backupDirectory);
-        var applyRoot = Path.Combine(_paths.DataDirectory, "updates", "apply", request.CommandId.ToString("N"));
+        var applyRoot = Path.Combine(_paths.UpgradeTempRootDirectory, request.CommandId.ToString("N"));
         Directory.CreateDirectory(applyRoot);
 
         try
@@ -145,12 +145,7 @@ public sealed class AgentUpgradeMonitorWorker : BackgroundService
 
             BackupInstallDirectory(backupDirectory);
             var extractDirectory = Path.Combine(applyRoot, "extract");
-            if (Directory.Exists(extractDirectory))
-            {
-                Directory.Delete(extractDirectory, true);
-            }
-
-            ExtractPackage(packagePath!, extractDirectory);
+            AgentPackageExtractionGuard.ExtractPackage(packagePath!, extractDirectory);
             ReplaceInstallDirectory(extractDirectory);
 
             await _serviceController.StartAsync(cancellationToken);
@@ -380,45 +375,6 @@ public sealed class AgentUpgradeMonitorWorker : BackgroundService
         }
 
         CopyDirectory(backupDirectory, _runtimeOptions.InstallDirectory, preserveExisting: false);
-    }
-
-    private static void ExtractPackage(string packagePath, string extractDirectory)
-    {
-        if (Directory.Exists(extractDirectory))
-        {
-            Directory.Delete(extractDirectory, true);
-        }
-
-        Directory.CreateDirectory(extractDirectory);
-        using var archive = ZipFile.OpenRead(packagePath);
-        foreach (var entry in archive.Entries)
-        {
-            var unixType = (entry.ExternalAttributes >> 16) & 0xF000;
-            if (unixType == 0xA000)
-            {
-                throw new InvalidOperationException($"Symlink içeren arşiv girişine izin verilmez: {entry.FullName}");
-            }
-
-            var destinationPath = Path.GetFullPath(Path.Combine(extractDirectory, entry.FullName));
-            if (!destinationPath.StartsWith(Path.GetFullPath(extractDirectory), StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"Güvensiz arşiv yolu: {entry.FullName}");
-            }
-
-            if (string.IsNullOrWhiteSpace(entry.Name))
-            {
-                Directory.CreateDirectory(destinationPath);
-                continue;
-            }
-
-            var parentDirectory = Path.GetDirectoryName(destinationPath);
-            if (!string.IsNullOrWhiteSpace(parentDirectory))
-            {
-                Directory.CreateDirectory(parentDirectory);
-            }
-
-            entry.ExtractToFile(destinationPath, overwrite: true);
-        }
     }
 
     private static void CopyDirectory(string sourceDirectory, string targetDirectory, bool preserveExisting)

@@ -28,6 +28,8 @@ try
             services.AddHttpClient<IAgentHealthProbe, AgentHealthProbe>();
             services.AddHostedService<AgentUpgradeMonitorWorker>();
             services.Configure<AgentUpgradeOptions>(context.Configuration.GetSection(AgentUpgradeOptions.SectionName));
+            services.PostConfigure<AgentUpgradeOptions>(options =>
+                options.ReleasePublicKeyPem = AgentReleaseTrustMaterial.Resolve(options.ReleasePublicKeyPem, options.ReleasePublicKeyPemPath));
             services.AddSingleton(provider =>
             {
                 var configuration = provider.GetRequiredService<IConfiguration>();

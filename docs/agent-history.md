@@ -2054,3 +2054,33 @@ Agent Regression:  0
 - Known limitations:
   - Update package publish/publish pipeline henüz bu committe üretilmedi; repo tarafında servis, apply ve rollback altyapısı tamamlandı.
   - Full solution test şu an EBelge outbox worker tarafındaki iki test nedeniyle kırmızı; agent upgrade/apply yüzeyi yeşil.
+
+### E2B2 Final Trust Boundary Hardening — 2026-08-13
+
+- Updater path model:
+  - Shared runtime data, apply request/outcome ve staging state shared root altında tutuluyor.
+  - Backup, extract/temp ve updater-private çalışma alanı ayrı private root altında tutuluyor.
+  - Agent shared root’a erişebiliyor; updater private root agent tarafından yazılamıyor.
+- ZIP extraction security:
+  - Rooted path, `..` escape, sibling-prefix escape ve symlink/reparse escape reddediliyor.
+  - Extraction trusted extract root dışına çıkamıyor.
+- Public key provisioning:
+  - Release public key `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH` üzerinden deterministik provision ediliyor.
+  - Private signing key deploy edilmiyor.
+  - Key bulunamazsa staging/apply fail-closed davranıyor.
+- Late apply outcome:
+  - Expired `AgentApplyUpgrade` settlement idempotent hale getirildi.
+  - `Applied -> Completed`, `RolledBack -> Failed`, `Failed -> Failed` settlement kuralları uygulandı.
+- Tests:
+  - Hedefli staging/apply/prod deployment testleri geçti.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+  - `bash -n scripts/agent/install-agent.sh` geçti.
+  - `bash -n scripts/agent/install-agent-updater.sh` geçti.
+  - `bash -n scripts/agent/uninstall-agent.sh` geçti.
+  - `bash -n scripts/agent/uninstall-agent-updater.sh` geçti.
+  - `npm run build` geçti.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Release public key dosyasının deployment pipeline tarafından ayrıca sağlanması gerekiyor.
+  - Agent tarafında mevcut NuGet pruning uyarıları devam ediyor.

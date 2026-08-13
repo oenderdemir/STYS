@@ -302,11 +302,21 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
+        var prev = cmd.Status;
 
         var target = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
-        var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
-        var allowLateApplyCompletion = cmd.Status == AgentCommandStatus.Expired && string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase);
-        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
+        if (TryHandleApplyUpgradeSettlement(cmd, target, out var noOp))
+        {
+            if (noOp)
+            {
+                return;
+            }
+        }
+        else if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
+        {
+            // existing payment reconciliation behavior
+        }
+        else
         {
             AgentCommandStateMachine.EnforceTransition(cmd.Status, target, cmd.Id);
         }
@@ -315,11 +325,7 @@ public sealed class AgentCommandService
             ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
-        var prev = cmd.Status;
-        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
-        {
-            cmd.Status = target;
-        }
+        cmd.Status = target;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
@@ -335,9 +341,19 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
-        var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
-        var allowLateApplyCompletion = cmd.Status == AgentCommandStatus.Expired && string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase);
-        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
+        var prev = cmd.Status;
+        if (TryHandleApplyUpgradeSettlement(cmd, AgentCommandStatus.Failed, out var noOp))
+        {
+            if (noOp)
+            {
+                return;
+            }
+        }
+        else if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
+        {
+            // existing payment reconciliation behavior
+        }
+        else
         {
             AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Failed, cmd.Id);
         }
@@ -346,11 +362,7 @@ public sealed class AgentCommandService
             ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
-        var prev = cmd.Status;
-        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
-        {
-            cmd.Status = AgentCommandStatus.Failed;
-        }
+        cmd.Status = AgentCommandStatus.Failed;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = errorMessage;
         ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
@@ -364,9 +376,19 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
-        var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
-        var allowLateApplyCompletion = cmd.Status == AgentCommandStatus.Expired && string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase);
-        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
+        var prev = cmd.Status;
+        if (TryHandleApplyUpgradeSettlement(cmd, AgentCommandStatus.Rejected, out var noOp))
+        {
+            if (noOp)
+            {
+                return;
+            }
+        }
+        else if (cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType))
+        {
+            // existing payment reconciliation behavior
+        }
+        else
         {
             AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Rejected, cmd.Id);
         }
@@ -375,11 +397,7 @@ public sealed class AgentCommandService
             ? ResolveValidatedPavoCommandTarget(db, cmd)
             : null;
 
-        var prev = cmd.Status;
-        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
-        {
-            cmd.Status = AgentCommandStatus.Rejected;
-        }
+        cmd.Status = AgentCommandStatus.Rejected;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = errorMessage;
         ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, ErrorMessage = errorMessage }, pavoContext?.Device, pavoContext?.Payment, ct);
@@ -396,6 +414,29 @@ public sealed class AgentCommandService
             PreviousStatus = prev.ToString(), ErrorCode = errorCode, ErrorMessage = errorMessage,
             MachineName = Environment.MachineName, CreatedBy = "agent", CreatedAt = DateTime.UtcNow
         });
+    }
+
+    private static bool TryHandleApplyUpgradeSettlement(AgentCommand cmd, AgentCommandStatus target, out bool noOp)
+    {
+        noOp = false;
+        if (!string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (cmd.Status == AgentCommandStatus.Expired)
+        {
+            cmd.Status = target;
+            return true;
+        }
+
+        if (cmd.Status == AgentCommandStatus.Completed || cmd.Status == AgentCommandStatus.Failed)
+        {
+            noOp = true;
+            return true;
+        }
+
+        return false;
     }
 
     private static async Task ValidateScopeAsync(StysAppDbContext db, int agentId, string commandType, CancellationToken ct)

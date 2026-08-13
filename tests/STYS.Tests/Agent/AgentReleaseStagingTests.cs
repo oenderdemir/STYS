@@ -2,12 +2,14 @@ using System.Security.Cryptography;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.IO.Compression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
+using STYS.Agent.Client.Upgrade;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Contracts.Versioning;
@@ -77,6 +79,18 @@ public sealed class AgentReleaseStagingTests : IDisposable
     }
 
     [Fact]
+    public async Task MissingPublicKey_Rejects()
+    {
+        var manifest = CreateSignedManifest("1.2.0", "win-x64", "Paket sahnelenebilir.");
+        var service = CreateStagingService(new DownloadClient(manifest.PackageBytes), string.Empty);
+
+        var result = await service.StageAsync(CreateStageCommand(manifest), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("imza", result.ErrorMessage ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task WrongSignature_Rejects()
     {
         var manifest = CreateSignedManifest("1.2.0", "win-x64", "Paket sahnelenebilir.");
@@ -133,6 +147,50 @@ public sealed class AgentReleaseStagingTests : IDisposable
         Assert.DoesNotContain("Fingerprint", rawJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TargetFingerprint", rawJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("ClientSecret", rawJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AbsolutePathEntry_Rejects()
+    {
+        var zipPath = CreateZipArchive(entries =>
+        {
+            var entry = entries.CreateEntry(Path.DirectorySeparatorChar == '\\' ? @"C:\evil.txt" : "/tmp/evil.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("evil");
+        });
+
+        var extractDir = Path.Combine(_tempDir, "abs");
+        var ex = Assert.Throws<InvalidOperationException>(() => AgentPackageExtractionGuard.ExtractPackage(zipPath, extractDir));
+        Assert.Contains("Kök yol", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TraversalEntry_Rejects()
+    {
+        var zipPath = CreateZipArchive(entries =>
+        {
+            var entry = entries.CreateEntry("../extract-evil/payload.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("evil");
+        });
+
+        var extractDir = Path.Combine(_tempDir, "traversal");
+        var ex = Assert.Throws<InvalidOperationException>(() => AgentPackageExtractionGuard.ExtractPackage(zipPath, extractDir));
+        Assert.Contains("Güvensiz", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SymlinkEntry_Rejects()
+    {
+        var zipPath = CreateZipArchive(entries =>
+        {
+            var entry = entries.CreateEntry("link");
+            entry.ExternalAttributes = unchecked((int)0xA0000000);
+        });
+
+        var extractDir = Path.Combine(_tempDir, "symlink");
+        var ex = Assert.Throws<InvalidOperationException>(() => AgentPackageExtractionGuard.ExtractPackage(zipPath, extractDir));
+        Assert.Contains("Symlink", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -514,8 +572,16 @@ public sealed class AgentReleaseStagingTests : IDisposable
 
     private sealed class TempAgentPathResolver : IAgentPathResolver
     {
-        public TempAgentPathResolver(string root) => DataDirectory = root;
+        public TempAgentPathResolver(string root)
+        {
+            DataDirectory = root;
+            SharedDataDirectory = root;
+            UpdaterPrivateDataDirectory = Path.Combine(root, "updater-private");
+        }
+
         public string DataDirectory { get; }
+        public string SharedDataDirectory { get; }
+        public string UpdaterPrivateDataDirectory { get; }
         public string LogDirectory => Path.Combine(DataDirectory, "logs");
         public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
         public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
@@ -524,7 +590,10 @@ public sealed class AgentReleaseStagingTests : IDisposable
         public string PavoPairingStorePath => Path.Combine(DataDirectory, "pavo-pairing.dat");
         public string AgentCommandExecutionStorePath => Path.Combine(DataDirectory, "agent-command-executions.json");
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
-        public string ReleaseStagingRootDirectory => Path.Combine(DataDirectory, "updates", "staging");
+        public string ReleaseStagingRootDirectory => Path.Combine(SharedDataDirectory, "updates", "staging");
+        public string UpgradeBackupRootDirectory => Path.Combine(UpdaterPrivateDataDirectory, "updates", "backup");
+        public string UpgradeExtractRootDirectory => Path.Combine(UpdaterPrivateDataDirectory, "updates", "extract");
+        public string UpgradeTempRootDirectory => Path.Combine(UpdaterPrivateDataDirectory, "updates", "temp");
         public string GetReleaseStagingDirectory(string version, string runtimeIdentifier) => Path.Combine(ReleaseStagingRootDirectory, version, runtimeIdentifier);
         public string GetReleaseStagingStatePath(string version, string runtimeIdentifier) => Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "staging-state.json");
         public string GetReleaseStagingPackagePath(string version, string runtimeIdentifier) => Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "package.bin");
@@ -577,4 +646,16 @@ public sealed class AgentReleaseStagingTests : IDisposable
 
     private TempAgentPathResolver servicePaths = null!;
     private string serviceStorePath = string.Empty;
+
+    private string CreateZipArchive(Action<ZipArchive> writer)
+    {
+        var zipPath = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.zip");
+        using (var stream = File.Create(zipPath))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false))
+        {
+            writer(archive);
+        }
+
+        return zipPath;
+    }
 }

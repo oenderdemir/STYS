@@ -30,6 +30,20 @@ dotnet publish agent/STYS.Agent.Updater/STYS.Agent.Updater.csproj -c Release -r 
 
 Development secrets, bootstrap values, credentials, and enrollment codes are not part of the publish output. The agent stores runtime state under its data directory at first run.
 
+## Trust boundary and release key provisioning
+
+Agent and updater both resolve the trusted release verification key from a deterministic, externally provisioned source. The private signing key is not deployed with the runtime artifacts.
+
+- expected public key file:
+  - Windows: `%ProgramData%\STYS\Agent\release-public-key.pem`
+  - Linux: `/var/lib/stys-agent/release-public-key.pem`
+- environment override:
+  - `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH`
+- optional inline override:
+  - `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM`
+
+If the public key cannot be resolved, upgrade staging/apply fails closed.
+
 ## Windows service
 
 Use `scripts/agent/install-agent.ps1` to install the service as `STYS Agent`.
@@ -40,9 +54,15 @@ Use `scripts/agent/install-agent.ps1` to install the service as `STYS Agent`.
 - service binPath: direct `STYS.Agent.exe`
 - local UI binding: loopback only
 - data/log directories are created under `%ProgramData%\STYS\Agent`
+- shared runtime data root:
+  - `%ProgramData%\STYS\Agent`
+- updater private data root:
+  - `%ProgramData%\STYS\Agent\Updater`
 - service-scoped environment overrides:
-  - `STYS_AGENT_DATA_DIR`
+  - `STYS_AGENT_SHARED_DATA_DIR`
+  - `STYS_AGENT_UPDATER_PRIVATE_DATA_DIR`
   - `STYS_AGENT_LOG_DIR`
+  - `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH`
   - `STYS_AGENT_LOCAL_UI_PORT`
 - uninstall preserves data by default
 
@@ -55,20 +75,25 @@ Use `scripts/agent/install-agent.sh` to deploy the agent and register the `stys-
 - positional parameters:
   - 1: publish directory
   - 2: install directory
-  - 3: data directory
-  - 4: log directory
-  - 5: local UI port
+  - 3: shared data directory
+  - 4: updater private data directory
+  - 5: log directory
+  - 6: local UI port
+  - 7: release public key path
 
 - dedicated low-privilege user: `stys-agent`
 - restart policy: `Restart=on-failure`
 - working directory: `/opt/stys-agent`
 - install directory ownership: `root:root`
 - install directory permissions: read/execute for the service user, no write access
-- data/log directories: `/var/lib/stys-agent` and `/var/log/stys-agent`
+- shared data/log directories: `/var/lib/stys-agent` and `/var/log/stys-agent`
+- updater private data directory: `/var/lib/stys-agent-updater`
 - local UI binding: loopback only
 - unit-scoped environment overrides:
-  - `STYS_AGENT_DATA_DIR`
+  - `STYS_AGENT_SHARED_DATA_DIR`
+  - `STYS_AGENT_UPDATER_PRIVATE_DATA_DIR`
   - `STYS_AGENT_LOG_DIR`
+  - `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH`
   - `STYS_AGENT_LOCAL_UI_PORT`
 
 Use `scripts/agent/uninstall-agent.sh` to remove the unit and binaries. Pass `--purge` only when you also want to delete data and logs.
@@ -85,7 +110,9 @@ Windows:
 - service account: `LocalSystem`
 - service binary path: direct `STYS.Agent.Updater.exe`
 - install directory: `%ProgramFiles%\STYS\Agent Updater`
-- data/log directories: `%ProgramData%\STYS\Agent\Updater`
+- shared data directory: `%ProgramData%\STYS\Agent`
+- updater private data directory: `%ProgramData%\STYS\Agent\Updater`
+- release public key path: `%ProgramData%\STYS\Agent\release-public-key.pem`
 
 Linux:
 
@@ -94,7 +121,10 @@ Linux:
 - unit file: `scripts/agent/stys-agent-updater.service`
 - service user: `root`
 - install directory: `/opt/stys-agent-updater`
-- data/log directories: `/var/lib/stys-agent-updater` and `/var/log/stys-agent-updater`
+- shared data directory: `/var/lib/stys-agent`
+- updater private data directory: `/var/lib/stys-agent-updater`
+- log directory: `/var/log/stys-agent-updater`
+- release public key path: `/var/lib/stys-agent/release-public-key.pem`
 
 Upgrade flow:
 

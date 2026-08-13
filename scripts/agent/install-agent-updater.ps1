@@ -5,8 +5,10 @@ param(
     [string]$ServiceName = "STYS Agent Updater",
     [string]$ServiceDisplayName = "STYS Agent Updater",
     [string]$ServiceAccount = "LocalSystem",
-    [string]$DataDir = (Join-Path $env:ProgramData "STYS\Agent\Updater"),
+    [string]$SharedDataDir = (Join-Path $env:ProgramData "STYS\Agent"),
+    [string]$UpdaterPrivateDataDir = (Join-Path $env:ProgramData "STYS\Agent\Updater"),
     [string]$LogDir = (Join-Path $env:ProgramData "STYS\Agent\Updater\logs"),
+    [string]$ReleasePublicKeyPath = (Join-Path $env:ProgramData "STYS\Agent\release-public-key.pem"),
     [int]$LocalUiPort = 5180
 )
 
@@ -34,13 +36,18 @@ if ($LocalUiPort -lt 1 -or $LocalUiPort -gt 65535) {
 
 $publishRoot = (Resolve-Path -LiteralPath $PublishDir).Path
 Ensure-Directory -Path $InstallDir
-Ensure-Directory -Path $DataDir
+Ensure-Directory -Path $SharedDataDir
+Ensure-Directory -Path $UpdaterPrivateDataDir
 Ensure-Directory -Path $LogDir
+if (-not (Test-Path -LiteralPath $ReleasePublicKeyPath)) {
+    throw "ReleasePublicKeyPath not found: $ReleasePublicKeyPath"
+}
 
 Copy-Item -Path (Join-Path $publishRoot '*') -Destination $InstallDir -Recurse -Force
 
 Grant-DirectoryAccess -Path $InstallDir -Identity 'SYSTEM' -Rights 'F'
-Grant-DirectoryAccess -Path $DataDir -Identity 'SYSTEM' -Rights 'F'
+Grant-DirectoryAccess -Path $SharedDataDir -Identity 'SYSTEM' -Rights 'M'
+Grant-DirectoryAccess -Path $UpdaterPrivateDataDir -Identity 'SYSTEM' -Rights 'F'
 Grant-DirectoryAccess -Path $LogDir -Identity 'SYSTEM' -Rights 'F'
 
 $serviceExe = Join-Path $InstallDir "STYS.Agent.Updater.exe"
@@ -62,14 +69,19 @@ $serviceKeyPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
 if (Test-Path -LiteralPath $serviceKeyPath) {
     New-ItemProperty -Path $serviceKeyPath -Name "Environment" -PropertyType MultiString -Force -Value @(
         "STYS_AGENT_INSTALL_DIR=$InstallDir"
-        "STYS_AGENT_DATA_DIR=$DataDir"
+        "STYS_AGENT_SHARED_DATA_DIR=$SharedDataDir"
+        "STYS_AGENT_DATA_DIR=$SharedDataDir"
+        "STYS_AGENT_UPDATER_PRIVATE_DATA_DIR=$UpdaterPrivateDataDir"
         "STYS_AGENT_LOG_DIR=$LogDir"
+        "STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH=$ReleasePublicKeyPath"
         "STYS_AGENT_LOCAL_UI_PORT=$LocalUiPort"
     ) | Out-Null
 }
 
 Write-Host "STYS Agent Updater service installed."
 Write-Host "InstallDir: $InstallDir"
-Write-Host "DataDir: $DataDir"
+Write-Host "SharedDataDir: $SharedDataDir"
+Write-Host "UpdaterPrivateDataDir: $UpdaterPrivateDataDir"
 Write-Host "LogDir: $LogDir"
+Write-Host "ReleasePublicKeyPath: $ReleasePublicKeyPath"
 Write-Host "LocalUiPort: $LocalUiPort"

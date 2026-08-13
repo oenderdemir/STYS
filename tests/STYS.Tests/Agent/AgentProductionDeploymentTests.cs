@@ -90,7 +90,9 @@ public sealed class AgentProductionDeploymentTests : IDisposable
         Assert.Contains("STYS.Agent.exe", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("binPath=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Grant-DirectoryAccess -Path $InstallDir -Identity $ServiceAccount -Rights 'RX'", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("STYS_AGENT_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_SHARED_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_UPDATER_PRIVATE_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_LOG_DIR", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_LOCAL_UI_PORT", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Start-STYS-Agent.ps1", script, StringComparison.OrdinalIgnoreCase);
@@ -109,7 +111,9 @@ public sealed class AgentProductionDeploymentTests : IDisposable
         Assert.Contains("STYS Agent Updater", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LocalSystem", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("STYS_AGENT_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_SHARED_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_UPDATER_PRIVATE_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_LOG_DIR", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_LOCAL_UI_PORT", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Start-STYS-Agent.ps1", script, StringComparison.OrdinalIgnoreCase);
@@ -125,10 +129,12 @@ public sealed class AgentProductionDeploymentTests : IDisposable
 
         var script = File.ReadAllText(scriptPath);
         Assert.DoesNotContain("$LocalUiPort", script, StringComparison.Ordinal);
-        Assert.Contains("LOCAL_UI_PORT=\"${5:-5180}\"", script, StringComparison.Ordinal);
+        Assert.Contains("LOCAL_UI_PORT=\"${6:-5180}\"", script, StringComparison.Ordinal);
         Assert.Contains("chown -R root:root \"$INSTALL_DIR\"", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("chmod -R u=rwX,go=rX \"$INSTALL_DIR\"", script, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Environment=STYS_AGENT_DATA_DIR=", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=STYS_AGENT_SHARED_DATA_DIR=", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=STYS_AGENT_UPDATER_PRIVATE_DATA_DIR=", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=STYS_AGENT_LOG_DIR=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=STYS_AGENT_LOCAL_UI_PORT=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=ASPNETCORE_URLS=http://127.0.0.1:$LOCAL_UI_PORT", script, StringComparison.OrdinalIgnoreCase);

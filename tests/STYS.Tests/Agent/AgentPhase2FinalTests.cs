@@ -237,6 +237,69 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task ApplyUpgrade_ExpiredCompletion_SettlesToCompleted_AndDuplicateIsIgnored()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+        var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+
+        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true }, CancellationToken.None);
+        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true }, CancellationToken.None);
+
+        var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId);
+        Assert.Equal(AgentCommandStatus.Completed, updated!.Status);
+
+        var executions = await db.Set<AgentCommandExecution>().Where(x => x.CommandId == commandId).ToListAsync();
+        Assert.Single(executions);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
+    public async Task ApplyUpgrade_ExpiredFailure_SettlesToFailed_AndDuplicateIsIgnored()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+        var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+
+        await svc.FailAsync(commandId, agentId, "apply-failed", CancellationToken.None);
+        await svc.FailAsync(commandId, agentId, "apply-failed", CancellationToken.None);
+
+        var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId);
+        Assert.Equal(AgentCommandStatus.Failed, updated!.Status);
+
+        var executions = await db.Set<AgentCommandExecution>().Where(x => x.CommandId == commandId).ToListAsync();
+        Assert.Single(executions);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
+    public async Task ApplyUpgrade_FinalSuccess_IsNotReplacedByLateFailure()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+        var commandId = await SeedExpiredApplyCommandAsync(db, agentId, AgentCommandStatus.Expired);
+
+        await svc.CompleteAsync(commandId, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = commandId, Success = true }, CancellationToken.None);
+        await svc.FailAsync(commandId, agentId, "late-failure", CancellationToken.None);
+
+        var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId);
+        Assert.Equal(AgentCommandStatus.Completed, updated!.Status);
+
+        var executions = await db.Set<AgentCommandExecution>().Where(x => x.CommandId == commandId).ToListAsync();
+        Assert.Single(executions);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
     public async Task Idempotent_SecondExecuteBlocked()
     {
         var db = await SetupAsync(); if (db is null) return;
@@ -254,5 +317,28 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
             svc.AcceptAsync(cmd.Id, agentId, CancellationToken.None));
 
         await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    private async Task<Guid> SeedExpiredApplyCommandAsync(StysAppDbContext db, int agentId, AgentCommandStatus status)
+    {
+        var command = new AgentCommand
+        {
+            AgentId = agentId,
+            KurumId = _kurumId,
+            ReleaseId = 1,
+            CommandType = "AgentApplyUpgrade",
+            Status = status,
+            Priority = 1,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-5),
+            CorrelationId = Guid.NewGuid().ToString("N"),
+            IdempotencyKey = Guid.NewGuid().ToString("N"),
+            RequestedBy = "test",
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        db.Set<AgentCommand>().Add(command);
+        await db.SaveChangesAsync();
+        return command.Id;
     }
 }

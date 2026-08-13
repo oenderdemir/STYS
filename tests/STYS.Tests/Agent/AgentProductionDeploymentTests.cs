@@ -112,6 +112,9 @@ public sealed class AgentProductionDeploymentTests : IDisposable
         Assert.Contains("STYS.Agent.Updater.exe", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS Agent Updater", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LocalSystem", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UpdaterInstallDir", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AgentInstallDir", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_UPDATER_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_SHARED_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("STYS_AGENT_UPDATER_PRIVATE_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
@@ -143,6 +146,8 @@ public sealed class AgentProductionDeploymentTests : IDisposable
         Assert.Contains("Environment=STYS_AGENT_LOCAL_UI_PORT=", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Environment=ASPNETCORE_URLS=http://127.0.0.1:$LOCAL_UI_PORT", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/etc/stys-agent/trust/release-public-key.pem", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chmod 0755 \"$TRUST_DIR\"", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chmod 0644 \"$RELEASE_PUBLIC_KEY_PATH\"", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("chown -R \"$SERVICE_USER:$SERVICE_USER\" \"$INSTALL_DIR\"", script, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -233,6 +238,59 @@ printf 'Environment=STYS_AGENT_LOCAL_UI_PORT=%s\nEnvironment=ASPNETCORE_URLS=htt
         Assert.Empty(stderr);
         Assert.Contains($"Environment=STYS_AGENT_LOCAL_UI_PORT={port}", stdout, StringComparison.Ordinal);
         Assert.Contains($"Environment=ASPNETCORE_URLS=http://127.0.0.1:{port}", stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsUpdaterInstallScript_TargetAgentDirDiffersFromUpdaterDir()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "scripts", "agent", "install-agent-updater.ps1"));
+
+        Assert.Contains("UpdaterInstallDir", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AgentInstallDir", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_UPDATER_INSTALL_DIR=$UpdaterInstallDir", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_INSTALL_DIR=$AgentInstallDir", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("STYS_AGENT_INSTALL_DIR=$UpdaterInstallDir", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LinuxUpdaterInstallScript_TargetAgentDirDiffersFromUpdaterDir_AndStaticUnitMatches()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "scripts", "agent", "install-agent-updater.sh"));
+        var unit = File.ReadAllText(Path.Combine(repoRoot, "scripts", "agent", "stys-agent-updater.service"));
+
+        Assert.Contains("UPDATER_INSTALL_DIR=\"${2:-/opt/stys-agent-updater}\"", script, StringComparison.Ordinal);
+        Assert.Contains("AGENT_INSTALL_DIR=\"${3:-/opt/stys-agent}\"", script, StringComparison.Ordinal);
+        Assert.Contains("Environment=STYS_AGENT_UPDATER_INSTALL_DIR=$UPDATER_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=STYS_AGENT_INSTALL_DIR=$AGENT_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=STYS_AGENT_UPDATER_INSTALL_DIR=/opt/stys-agent-updater", unit, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Environment=STYS_AGENT_INSTALL_DIR=/opt/stys-agent", unit, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LinuxTrustAnchorCommands_AreRootOwnedAndReadonly()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var agentScript = File.ReadAllText(Path.Combine(repoRoot, "scripts", "agent", "install-agent.sh"));
+        var updaterScript = File.ReadAllText(Path.Combine(repoRoot, "scripts", "agent", "install-agent-updater.sh"));
+
+        Assert.Contains("chown -R root:root \"$TRUST_DIR\"", agentScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chmod 0755 \"$TRUST_DIR\"", agentScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chmod 0644 \"$RELEASE_PUBLIC_KEY_PATH\"", agentScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chown -R root:root \"$TRUST_DIR\"", updaterScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chmod 0755 \"$TRUST_DIR\"", updaterScript, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chmod 0644 \"$RELEASE_PUBLIC_KEY_PATH\"", updaterScript, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UpdaterBackupAndReplaceTarget_AgentInstallDirOlarakAyrilir()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var script = File.ReadAllText(Path.Combine(repoRoot, "scripts", "agent", "install-agent-updater.sh"));
+
+        Assert.Contains("Environment=STYS_AGENT_INSTALL_DIR=$AGENT_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Environment=STYS_AGENT_INSTALL_DIR=$UPDATER_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

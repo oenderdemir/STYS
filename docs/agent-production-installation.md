@@ -111,7 +111,8 @@ Windows:
 - service name: `STYS Agent Updater`
 - service account: `LocalSystem`
 - service binary path: direct `STYS.Agent.Updater.exe`
-- install directory: `%ProgramFiles%\STYS\Agent Updater`
+- updater install directory: `%ProgramFiles%\STYS\Agent Updater`
+- agent install directory target: `%ProgramFiles%\STYS\Agent`
 - shared data directory: `%ProgramData%\STYS\Agent`
 - updater private data directory: `%ProgramData%\STYS\AgentUpdater\private`
 - updater log directory: `%ProgramData%\STYS\AgentUpdater\logs`
@@ -123,7 +124,8 @@ Linux:
 - install script: `scripts/agent/install-agent-updater.sh`
 - unit file: `scripts/agent/stys-agent-updater.service`
 - service user: `root`
-- install directory: `/opt/stys-agent-updater`
+- updater install directory: `/opt/stys-agent-updater`
+- agent install directory target: `/opt/stys-agent`
 - shared data directory: `/var/lib/stys-agent`
 - updater private data directory: `/var/lib/stys-agent-updater`
 - log directory: `/var/log/stys-agent-updater`

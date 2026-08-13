@@ -2115,3 +2115,32 @@ Agent Regression:  0
 - Known limitations:
   - Trust anchor provisioning deployment aşamasında doğru dosya/ACL ile sağlanmalı.
   - Expired payment reconciliation command seviyesinde korunuyor; ödeme domain sonucu ayrı olarak reconcile ediliyor.
+
+### E2B2 Installer Target Correction — 2026-08-13
+
+- Updater installer target split:
+  - Windows updater installer artık `UpdaterInstallDir` ve `AgentInstallDir` parametrelerini ayrı tutuyor.
+  - `STYS_AGENT_INSTALL_DIR` hedefi updater install root değil, agent install root oluyor.
+  - Linux updater installer `/opt/stys-agent-updater` ile `/opt/stys-agent` hedeflerini ayrı env’lerde yayımlıyor.
+  - Static systemd unit ile generated unit aynı target agent dir değerini kullanıyor.
+- Linux trust anchor permissions:
+  - `/etc/stys-agent/trust` root-owned/read-only modele göre installer tarafında işleniyor.
+  - `release-public-key.pem` için root ownership ve 0644 read-only model uygulanıyor.
+  - Private signing key deploy edilmiyor.
+- Tests:
+  - Windows updater installer testleri `STYS_AGENT_INSTALL_DIR` hedefinin `AgentInstallDir` olduğunu doğruladı.
+  - Linux updater installer testleri agent install target ile updater install root’un farklı olduğunu doğruladı.
+  - Linux trust key root-owned/read-only komutları mevcut ve test edildi.
+  - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentProductionDeploymentTests"` geçti.
+  - `bash -n scripts/agent/install-agent.sh` geçti.
+  - `bash -n scripts/agent/install-agent-updater.sh` geçti.
+  - `bash -n scripts/agent/uninstall-agent.sh` geçti.
+  - `bash -n scripts/agent/uninstall-agent-updater.sh` geçti.
+  - `npm run build` geçti.
+  - `dotnet test STYS.sln --configuration Release` bir mevcut full-suite flake nedeniyle kırmızı kaldı:
+    - `STYS.Tests.SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur`
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Full solution testte görülen `SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur` failure’ı bu değişiklikten bağımsız mevcut flake olarak kaldı.
+  - Updater installer’ın hedef agent dizini, deploy ortamında doğru izinlerle sağlanmalı.

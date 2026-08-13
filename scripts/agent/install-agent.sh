@@ -23,6 +23,8 @@ if [[ ! -f "$RELEASE_PUBLIC_KEY_PATH" ]]; then
     echo "Release public key not found: $RELEASE_PUBLIC_KEY_PATH" >&2
     exit 1
 fi
+TRUST_DIR="$(dirname "$RELEASE_PUBLIC_KEY_PATH")"
+mkdir -p "$TRUST_DIR"
 
 if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
     useradd --system --home-dir "$SHARED_DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
@@ -35,6 +37,9 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$SHARED_DATA_DIR" "$LOG_DIR"
 chown -R root:root "$UPDATER_PRIVATE_DATA_DIR"
 chmod -R u+rwX,go-rwx "$SHARED_DATA_DIR" "$LOG_DIR"
 chmod -R u+rwX,go-rwx "$UPDATER_PRIVATE_DATA_DIR"
+chown -R root:root "$TRUST_DIR"
+chmod 0755 "$TRUST_DIR"
+chmod 0644 "$RELEASE_PUBLIC_KEY_PATH"
 
 cat > "$SERVICE_FILE" <<EOF
 [Unit]

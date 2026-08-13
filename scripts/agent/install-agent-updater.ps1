@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$PublishDir = (Join-Path $PSScriptRoot "..\..\artifacts\agent-updater\win-x64"),
-    [string]$InstallDir = (Join-Path $env:ProgramFiles "STYS\Agent Updater"),
+    [string]$UpdaterInstallDir = (Join-Path $env:ProgramFiles "STYS\Agent Updater"),
+    [string]$AgentInstallDir = (Join-Path $env:ProgramFiles "STYS\Agent"),
     [string]$ServiceName = "STYS Agent Updater",
     [string]$ServiceDisplayName = "STYS Agent Updater",
     [string]$ServiceAccount = "LocalSystem",
@@ -35,7 +36,7 @@ if ($LocalUiPort -lt 1 -or $LocalUiPort -gt 65535) {
 }
 
 $publishRoot = (Resolve-Path -LiteralPath $PublishDir).Path
-Ensure-Directory -Path $InstallDir
+Ensure-Directory -Path $UpdaterInstallDir
 Ensure-Directory -Path $SharedDataDir
 Ensure-Directory -Path $UpdaterPrivateDataDir
 Ensure-Directory -Path $LogDir
@@ -45,9 +46,9 @@ if (-not (Test-Path -LiteralPath $ReleasePublicKeyPath)) {
     throw "ReleasePublicKeyPath not found: $ReleasePublicKeyPath"
 }
 
-Copy-Item -Path (Join-Path $publishRoot '*') -Destination $InstallDir -Recurse -Force
+Copy-Item -Path (Join-Path $publishRoot '*') -Destination $UpdaterInstallDir -Recurse -Force
 
-Grant-DirectoryAccess -Path $InstallDir -Identity 'SYSTEM' -Rights 'F'
+Grant-DirectoryAccess -Path $UpdaterInstallDir -Identity 'SYSTEM' -Rights 'F'
 Grant-DirectoryAccess -Path $SharedDataDir -Identity 'SYSTEM' -Rights 'M'
 Grant-DirectoryAccess -Path $UpdaterPrivateDataDir -Identity 'SYSTEM' -Rights 'F'
 Grant-DirectoryAccess -Path $LogDir -Identity 'SYSTEM' -Rights 'F'
@@ -56,7 +57,7 @@ Grant-DirectoryAccess -Path $LogDir -Identity 'SYSTEM' -Rights 'F'
 & icacls $releaseTrustDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" "$ServiceAccount:(OI)(CI)(R)" /C | Out-Null
 & icacls $ReleasePublicKeyPath /inheritance:r /grant:r "SYSTEM:F" "BUILTIN\Administrators:F" "$ServiceAccount:R" /C | Out-Null
 
-$serviceExe = Join-Path $InstallDir "STYS.Agent.Updater.exe"
+$serviceExe = Join-Path $UpdaterInstallDir "STYS.Agent.Updater.exe"
 $quotedServiceExe = '"' + $serviceExe + '"'
 
 if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
@@ -74,7 +75,8 @@ sc.exe description $ServiceName "STYS Agent privileged updater service." | Out-N
 $serviceKeyPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
 if (Test-Path -LiteralPath $serviceKeyPath) {
     New-ItemProperty -Path $serviceKeyPath -Name "Environment" -PropertyType MultiString -Force -Value @(
-        "STYS_AGENT_INSTALL_DIR=$InstallDir"
+        "STYS_AGENT_UPDATER_INSTALL_DIR=$UpdaterInstallDir"
+        "STYS_AGENT_INSTALL_DIR=$AgentInstallDir"
         "STYS_AGENT_SHARED_DATA_DIR=$SharedDataDir"
         "STYS_AGENT_DATA_DIR=$SharedDataDir"
         "STYS_AGENT_UPDATER_PRIVATE_DATA_DIR=$UpdaterPrivateDataDir"
@@ -85,7 +87,8 @@ if (Test-Path -LiteralPath $serviceKeyPath) {
 }
 
 Write-Host "STYS Agent Updater service installed."
-Write-Host "InstallDir: $InstallDir"
+Write-Host "UpdaterInstallDir: $UpdaterInstallDir"
+Write-Host "AgentInstallDir: $AgentInstallDir"
 Write-Host "SharedDataDir: $SharedDataDir"
 Write-Host "UpdaterPrivateDataDir: $UpdaterPrivateDataDir"
 Write-Host "LogDir: $LogDir"

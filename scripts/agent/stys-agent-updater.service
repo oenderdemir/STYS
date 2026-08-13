@@ -12,6 +12,7 @@ ExecStart=/opt/stys-agent-updater/STYS.Agent.Updater
 Restart=on-failure
 RestartSec=5
 Environment=STYS_AGENT_INSTALL_DIR=/opt/stys-agent
+Environment=STYS_AGENT_UPDATER_INSTALL_DIR=/opt/stys-agent-updater
 Environment=STYS_AGENT_SHARED_DATA_DIR=/var/lib/stys-agent
 Environment=STYS_AGENT_DATA_DIR=/var/lib/stys-agent
 Environment=STYS_AGENT_UPDATER_PRIVATE_DATA_DIR=/var/lib/stys-agent-updater

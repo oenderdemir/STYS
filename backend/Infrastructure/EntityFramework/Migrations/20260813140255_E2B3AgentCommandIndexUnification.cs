@@ -10,10 +10,21 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply",
-                schema: "entegrasyon",
-                table: "AgentCommands");
+            migrationBuilder.Sql(
+                """
+                IF EXISTS (
+                    SELECT 1
+                    FROM sys.indexes i
+                    INNER JOIN sys.objects o ON o.object_id = i.object_id
+                    INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+                    WHERE s.name = N'entegrasyon'
+                      AND o.name = N'AgentCommands'
+                      AND i.name = N'IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply'
+                )
+                BEGIN
+                    DROP INDEX [IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply] ON [entegrasyon].[AgentCommands];
+                END
+                """);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply",
@@ -27,10 +38,21 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply",
-                schema: "entegrasyon",
-                table: "AgentCommands");
+            migrationBuilder.Sql(
+                """
+                IF EXISTS (
+                    SELECT 1
+                    FROM sys.indexes i
+                    INNER JOIN sys.objects o ON o.object_id = i.object_id
+                    INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+                    WHERE s.name = N'entegrasyon'
+                      AND o.name = N'AgentCommands'
+                      AND i.name = N'IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply'
+                )
+                BEGIN
+                    DROP INDEX [IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply] ON [entegrasyon].[AgentCommands];
+                END
+                """);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply",

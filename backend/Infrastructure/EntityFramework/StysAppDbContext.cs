@@ -2045,11 +2045,8 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.AgentId, x.IdempotencyKey }).HasFilter("[IdempotencyKey] <> '' AND [IsDeleted] = 0");
             entity.HasIndex(x => new { x.AgentId, x.CommandType, x.ReleaseId })
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [ReleaseId] IS NOT NULL AND [CommandType] = 'AgentStageUpgrade' AND [Status] IN (0,1,2,3)");
-            entity.HasIndex(x => new { x.AgentId, x.CommandType, x.ReleaseId })
-                .IsUnique()
                 .HasDatabaseName("IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply")
-                .HasFilter("[IsDeleted] = 0 AND [ReleaseId] IS NOT NULL AND [CommandType] = 'AgentApplyUpgrade' AND [Status] IN (0,1,2,3)");
+                .HasFilter("[IsDeleted] = 0 AND [ReleaseId] IS NOT NULL AND [Status] IN (0,1,2,3)");
             entity.HasIndex(x => new { x.AgentId, x.Status });
             entity.HasOne(x => x.Agent).WithMany().HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
         });

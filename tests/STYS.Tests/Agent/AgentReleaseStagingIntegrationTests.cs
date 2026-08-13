@@ -34,8 +34,8 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         if (db is null) return;
 
         var (agentKurumId, agentId, releaseId) = await SeedAsync(db, agentRuntimeIdentifier: "win-x64", releaseRuntimeIdentifier: "win-x64", releaseVersion: "1.2.0", contractVersion: "1.0.0");
-        var firstService = CreateReleaseService(agentKurumId);
-        var secondService = CreateReleaseService(agentKurumId);
+        var firstService = CreateReleaseService(agentId, agentKurumId);
+        var secondService = CreateReleaseService(agentId, agentKurumId);
 
         var firstTask = firstService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
         var secondTask = secondService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
@@ -55,7 +55,7 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         if (db is null) return;
 
         var (agentKurumId, agentId, releaseId) = await SeedAsync(db, agentRuntimeIdentifier: "win-x64", releaseRuntimeIdentifier: "win-x64", releaseVersion: "1.2.0", contractVersion: "1.0.0");
-        var service = CreateReleaseService(agentKurumId);
+        var service = CreateReleaseService(agentId, agentKurumId);
 
         var expired = new AgentCommand
         {
@@ -89,7 +89,7 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         if (db is null) return;
 
         var (agentKurumId, agentId, releaseId) = await SeedAsync(db, agentRuntimeIdentifier: "win-x64", releaseRuntimeIdentifier: "win-x64", releaseVersion: "1.2.0", contractVersion: "1.0.0");
-        var service = CreateReleaseService(agentKurumId);
+        var service = CreateReleaseService(agentId, agentKurumId);
 
         var (release, bytes) = await service.GetReleasePackageAsync(releaseId, CancellationToken.None);
 
@@ -106,7 +106,7 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         if (db is null) return;
 
         var (agentKurumId, agentId, _) = await SeedAsync(db, agentRuntimeIdentifier: "win-x64", releaseRuntimeIdentifier: "win-x64", releaseVersion: "1.2.0", contractVersion: "1.0.0", separateReleaseKurum: true);
-        var service = CreateReleaseService(agentKurumId);
+        var service = CreateReleaseService(agentId, agentKurumId);
 
         await Assert.ThrowsAsync<BaseException>(() => service.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
 
@@ -124,7 +124,7 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         release.Enabled = false;
         await db.SaveChangesAsync();
 
-        var service = CreateReleaseService(agentKurumId);
+        var service = CreateReleaseService(agentId, agentKurumId);
         await Assert.ThrowsAsync<BaseException>(() => service.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
 
         await CleanupAsync(db);
@@ -137,7 +137,7 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         if (db is null) return;
 
         var (agentKurumId, agentId, _) = await SeedAsync(db, agentRuntimeIdentifier: "linux-x64", releaseRuntimeIdentifier: "win-x64", releaseVersion: "1.2.0", contractVersion: "2.0.0");
-        var service = CreateReleaseService(agentKurumId);
+        var service = CreateReleaseService(agentId, agentKurumId);
 
         await Assert.ThrowsAsync<BaseException>(() => service.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
 
@@ -156,10 +156,16 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
         return AgentTestSupport.CreateDbContext(_connectionString);
     }
 
-    private AgentReleaseService CreateReleaseService(int agentKurumId) =>
+    private AgentReleaseService CreateReleaseService(int agentId, int agentKurumId) =>
         new(
             new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(_connectionString!)),
             new FakeKurumTenantAccessor(agentKurumId),
+            new FakeCurrentAgentContext
+            {
+                AgentId = agentId,
+                KurumId = agentKurumId,
+                IsAuthenticated = true
+            },
             new AgentCommandService(
                 new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(_connectionString!)),
                 new FakeKurumTenantAccessor(agentKurumId),

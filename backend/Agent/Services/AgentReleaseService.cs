@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using STYS.Agent.Authorization;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Contracts.Versioning;
 using STYS.Agent.Entities;
 using STYS.Agent.Options;
@@ -19,17 +21,20 @@ public sealed class AgentReleaseService : IAgentReleaseService
 
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly ICurrentAgentContext _currentAgentContext;
     private readonly AgentCommandService _commandService;
     private readonly AgentCompatibilityOptions _compatibilityOptions;
 
     public AgentReleaseService(
         IDbContextFactory<StysAppDbContext> dbContextFactory,
         ICurrentTenantAccessor tenantAccessor,
+        ICurrentAgentContext currentAgentContext,
         AgentCommandService commandService,
         IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
     {
         _dbContextFactory = dbContextFactory;
         _tenantAccessor = tenantAccessor;
+        _currentAgentContext = currentAgentContext;
         _commandService = commandService;
         _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
     }
@@ -75,17 +80,81 @@ public sealed class AgentReleaseService : IAgentReleaseService
 
     public async Task<(AgentRelease Release, byte[] PackageBytes)> GetReleasePackageAsync(int releaseId, CancellationToken cancellationToken)
     {
-        var agentContext = _tenantAccessor.IsSuperAdmin() ? null : _tenantAccessor.GetCurrentKurumId();
+        if (!_currentAgentContext.IsAuthenticated || _currentAgentContext.AgentId <= 0 || _currentAgentContext.KurumId <= 0)
+        {
+            throw new BaseException("Agent doğrulanamadı.", 401);
+        }
+
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Set<AgentRelease>().Where(x => !x.IsDeleted && x.Enabled && x.Id == releaseId);
-        if (agentContext.HasValue)
+        var agent = await db.Set<AgentEntity>()
+            .FirstOrDefaultAsync(x => x.Id == _currentAgentContext.AgentId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Agent bulunamadı.", 404);
+
+        if (agent.KurumId != _currentAgentContext.KurumId)
         {
-            query = query.Where(x => x.KurumId == agentContext.Value);
+            throw new BaseException("Agent kurum kapsamı doğrulanamadı.", 403);
         }
+
+        if (agent.Durum != AgentDurum.Active)
+        {
+            throw new BaseException("Agent aktif değil.", 400);
+        }
+
+        var query = db.Set<AgentRelease>().Where(x => !x.IsDeleted && x.Enabled && x.Id == releaseId && x.KurumId == agent.KurumId);
 
         var release = await query.FirstOrDefaultAsync(cancellationToken)
             ?? throw new BaseException("Release bulunamadı.", 404);
+
+        if (!string.Equals(AgentSemVer.NormalizeVersionText(release.ContractVersion), AgentSemVer.NormalizeVersionText(_compatibilityOptions.SupportedContractVersion), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Release contract sürümü desteklenmiyor.", 400);
+        }
+
+        if (!string.Equals(release.RuntimeIdentifier?.Trim(), agent.RuntimeIdentifier?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Release runtime kimliği agent ile uyumsuz.", 400);
+        }
+
+        if (!AgentSemVer.TryParse(agent.AgentVersion, out var agentVersion))
+        {
+            throw new BaseException("Agent sürümü doğrulanamadı.", 400);
+        }
+
+        if (!AgentSemVer.TryParse(release.Version, out var releaseVersion))
+        {
+            throw new BaseException("Release sürümü doğrulanamadı.", 400);
+        }
+
+        if (releaseVersion.CompareTo(agentVersion) <= 0)
+        {
+            throw new BaseException("Release agent için yükseltme sürümü değil.", 400);
+        }
+
+        var stageCommand = await db.Set<AgentCommand>()
+            .Where(x =>
+                !x.IsDeleted
+                && x.AgentId == agent.Id
+                && x.ReleaseId == release.Id
+                && x.CommandType == "AgentStageUpgrade"
+                && (x.Status == AgentCommandStatus.Pending
+                    || x.Status == AgentCommandStatus.Delivered
+                    || x.Status == AgentCommandStatus.Accepted
+                    || x.Status == AgentCommandStatus.Running))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (stageCommand is null)
+        {
+            throw new BaseException("Geçerli staging komutu bulunamadı.", 404);
+        }
+
+        var stageRequest = JsonSerializer.Deserialize<AgentStageUpgradeRequest>(stageCommand.Payload ?? string.Empty, JsonOptions)
+            ?? throw new BaseException("Stage komutu doğrulanamadı.", 409);
+
+        if (!ReleaseMatchesRequest(release, stageRequest))
+        {
+            throw new BaseException("Stage komutu release kaydıyla eşleşmiyor.", 409);
+        }
 
         if (!File.Exists(release.PackagePath))
         {
@@ -106,6 +175,16 @@ public sealed class AgentReleaseService : IAgentReleaseService
 
         return (release, packageBytes);
     }
+
+    private static bool ReleaseMatchesRequest(AgentRelease release, AgentStageUpgradeRequest request) =>
+        release.Id == request.ReleaseId
+        && string.Equals(release.Version, request.Version, StringComparison.Ordinal)
+        && string.Equals(release.ContractVersion, request.ContractVersion, StringComparison.Ordinal)
+        && string.Equals(release.RuntimeIdentifier, request.RuntimeIdentifier, StringComparison.Ordinal)
+        && string.Equals(release.Sha256, request.Sha256, StringComparison.OrdinalIgnoreCase)
+        && release.PackageSize == request.PackageSize
+        && release.PublishedAt == request.PublishedAt
+        && string.Equals(release.ReleaseNotes ?? string.Empty, request.ReleaseNotes ?? string.Empty, StringComparison.Ordinal);
 
     private async Task<AgentRelease?> SelectBestReleaseAsync(StysAppDbContext db, AgentEntity agent, CancellationToken cancellationToken)
     {

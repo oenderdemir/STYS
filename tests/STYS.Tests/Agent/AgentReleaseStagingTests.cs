@@ -191,6 +191,124 @@ public sealed class AgentReleaseStagingTests : IDisposable
         Assert.DoesNotContain("file://", command.Payload ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Download_SameAgentAndCorrectRelease_Basarili()
+    {
+        var (releaseService, agentId, releaseId, _) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        var (release, bytes) = await releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None);
+
+        Assert.Equal(releaseId, release.Id);
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public async Task Download_SameKurumBaskaAgent_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 100, false);
+        var otherAgent = await SeedDownloadAgentAsync(db, 100, "other-agent");
+        var otherService = CreateReleaseService(dbName, 100, otherAgent.Id, 100);
+
+        await Assert.ThrowsAsync<BaseException>(() => otherService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_WrongRid_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 100, false);
+        var release = await db.Set<AgentRelease>().FirstAsync(x => x.Id == releaseId);
+        release.RuntimeIdentifier = "linux-x64";
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_WrongContract_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 100, false);
+        var release = await db.Set<AgentRelease>().FirstAsync(x => x.Id == releaseId);
+        release.ContractVersion = "2.0.0";
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_DowngradeOrCurrentVersion_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 100, false);
+        var release = await db.Set<AgentRelease>().FirstAsync(x => x.Id == releaseId);
+        release.Version = "1.0.0";
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_DisabledRelease_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 100, false);
+        var release = await db.Set<AgentRelease>().FirstAsync(x => x.Id == releaseId);
+        release.Enabled = false;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_NoActiveStageCommand_Rejects()
+    {
+        var (releaseService, _, releaseId, _) = await CreateBackendReleaseServiceAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_CommandManifestMismatch_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 100, false);
+        var command = await db.Set<AgentCommand>().FirstAsync(x => x.AgentId == agentId && x.ReleaseId == releaseId && x.CommandType == "AgentStageUpgrade");
+        var payload = JsonSerializer.Deserialize<AgentStageUpgradeRequest>(command.Payload!)!;
+        payload.Sha256 = "BAD-SHA";
+        command.Payload = JsonSerializer.Serialize(payload);
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BaseException>(() => releaseService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_CrossTenant_Rejects()
+    {
+        var (releaseService, agentId, releaseId, dbName) = await CreateBackendReleaseServiceAsync();
+        await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+
+        await using var db = CreateBackendDbContext(dbName, 200, true);
+        var tenantTwoAgent = await SeedDownloadAgentAsync(db, 200, "tenant-two");
+        var otherService = CreateReleaseService(dbName, 200, tenantTwoAgent.Id, 200);
+
+        await Assert.ThrowsAsync<BaseException>(() => otherService.GetReleasePackageAsync(releaseId, CancellationToken.None));
+    }
+
     private (int ReleaseId, string Version, string RuntimeIdentifier, string Sha256, string Signature, long PackageSize, string PublicKeyPem, byte[] PackageBytes, AgentStageUpgradeRequest Request) CreateSignedManifest(string version, string runtimeIdentifier, string releaseNotes)
     {
         using var rsa = RSA.Create(2048);
@@ -264,14 +382,23 @@ public sealed class AgentReleaseStagingTests : IDisposable
         int releaseKurumId = 100)
     {
         var dbName = Guid.NewGuid().ToString("N");
-        var tenantAccessor = new FakeKurumTenantAccessor(agentKurumId);
         var db = CreateBackendDbContext(dbName, agentKurumId, false);
         var (agentId, releaseId) = await SeedBackendAsync(dbName, db, agentKurumId, releaseKurumId, agentRuntimeIdentifier, releaseRuntimeIdentifier, releaseVersion, contractVersion);
+        return (CreateReleaseService(dbName, agentKurumId, agentId, agentKurumId), agentId, releaseId, dbName);
+    }
 
-        var factory = new DbContextFactoryForTest<StysAppDbContext>(() => CreateBackendDbContext(dbName, agentKurumId, false));
+    private AgentReleaseService CreateReleaseService(string dbName, int tenantKurumId, int currentAgentId, int currentAgentKurumId)
+    {
+        var tenantAccessor = new FakeKurumTenantAccessor(tenantKurumId);
+        var currentAgentContext = new FakeCurrentAgentContext
+        {
+            AgentId = currentAgentId,
+            KurumId = currentAgentKurumId,
+            IsAuthenticated = true
+        };
+        var factory = new DbContextFactoryForTest<StysAppDbContext>(() => CreateBackendDbContext(dbName, tenantKurumId, false));
         var commandService = new AgentCommandService(factory, tenantAccessor, NullLogger<AgentCommandService>.Instance, compatibilityOptions: Options.Create(new AgentCompatibilityOptions()));
-        var releaseService = new AgentReleaseService(factory, tenantAccessor, commandService, Options.Create(new AgentCompatibilityOptions()));
-        return (releaseService, agentId, releaseId, dbName);
+        return new AgentReleaseService(factory, tenantAccessor, currentAgentContext, commandService, Options.Create(new AgentCompatibilityOptions()));
     }
 
     private static StysAppDbContext CreateBackendDbContext(string dbName, int currentKurumId, bool isSuperAdmin)
@@ -351,6 +478,38 @@ public sealed class AgentReleaseStagingTests : IDisposable
         await releaseContext.SaveChangesAsync();
         releaseContext.AllowExplicitTenantWritesWithoutAmbientTenant = false;
         return (agent.Id, release.Id);
+    }
+
+    private static async Task<AgentEntity> SeedDownloadAgentAsync(StysAppDbContext db, int kurumId, string suffix)
+    {
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
+        var agent = new AgentEntity
+        {
+            Ad = $"Agent-{suffix}",
+            AgentKey = $"AGNT-{Guid.NewGuid():N}"[..16],
+            KurumId = kurumId,
+            Durum = AgentDurum.Active,
+            AgentVersion = "1.0.0",
+            ContractVersion = "1.0.0",
+            RuntimeIdentifier = "win-x64",
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Set<AgentEntity>().Add(agent);
+        await db.SaveChangesAsync();
+        db.Set<AgentScope>().Add(new AgentScope
+        {
+            AgentId = agent.Id,
+            KurumId = kurumId,
+            Scope = "agent.command.execute",
+            AktifMi = true,
+            CreatedBy = "test",
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = false;
+        return agent;
     }
 
     private sealed class TempAgentPathResolver : IAgentPathResolver

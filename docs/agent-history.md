@@ -1538,6 +1538,33 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+### E2B1 Agent-bound Download Hardening — 2026-08-13
+
+- Download binding:
+  - `GET /api/agent/releases/{releaseId}/package` artık request yapan agent’ın server-side kimliğine bağlı.
+  - `AgentId` ve `KurumId` client payload/query’den alınmıyor; `ICurrentAgentContext` üzerinden çözülüyor.
+- Validation:
+  - Agent aktif değilse paket verilmiyor.
+  - Release aynı kuruma ait değilse paket verilmiyor.
+  - `RuntimeIdentifier` agent ile eşleşmiyorsa paket verilmiyor.
+  - Release contract sürümü desteklenen contract ile uyumlu değilse reject ediliyor.
+  - Release gerçekten upgrade değilse reject ediliyor.
+  - Aynı `Agent + ReleaseId` için geçerli active `AgentStageUpgrade` komutu yoksa paket verilmiyor.
+  - Komut payload’ı release kaydıyla tam eşleşmiyorsa reject ediliyor.
+- Tenant / agent isolation:
+  - Aynı kurumdaki başka agent aynı `ReleaseId` ile paket indiremez.
+  - Cross-tenant erişim paket download yolunda da reddediliyor.
+- Tests:
+  - Aynı agent + doğru release download testi geçti.
+  - Aynı kurum başka agent reject testi geçti.
+  - Wrong RID, wrong contract, downgrade/current version, disabled, no active stage command, manifest mismatch ve cross-tenant reject testleri geçti.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Download hâlâ yalnız stage edilmiş release için çalışıyor; apply/restart yok.
+  - Integration testler connection string yoksa skip olacak şekilde korunuyor.
+
 ### E2B1 Migration & Race Hardening — 2026-08-13
 
 - EF migration:

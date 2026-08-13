@@ -5,12 +5,6 @@ namespace STYS.Agent.Client.Commands;
 public sealed class AgentCommandHandlerRegistry : IAgentCommandHandlerRegistry
 {
     private readonly Dictionary<string, Type> _handlerTypes = new(StringComparer.OrdinalIgnoreCase);
-    private readonly IServiceProvider _serviceProvider;
-
-    public AgentCommandHandlerRegistry(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
 
     public IReadOnlyCollection<string> RegisteredCommandTypes => _handlerTypes.Keys.ToList();
 
@@ -21,11 +15,11 @@ public sealed class AgentCommandHandlerRegistry : IAgentCommandHandlerRegistry
         _handlerTypes[commandType] = typeof(THandler);
     }
 
-    public IAgentCommandHandler<TCommand>? Resolve<TCommand>(string commandType) where TCommand : IAgentCommand
+    public IAgentCommandHandler<TCommand>? Resolve<TCommand>(string commandType, IServiceProvider serviceProvider) where TCommand : IAgentCommand
     {
         if (!_handlerTypes.TryGetValue(commandType, out var handlerType))
             return null;
 
-        return (IAgentCommandHandler<TCommand>?)_serviceProvider.GetService(handlerType);
+        return (IAgentCommandHandler<TCommand>?)serviceProvider.GetService(handlerType);
     }
 }

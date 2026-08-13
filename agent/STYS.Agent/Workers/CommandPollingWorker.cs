@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
@@ -15,6 +16,7 @@ public sealed class CommandPollingWorker : BackgroundService
     private readonly IAgentAuthenticationState _authenticationState;
     private readonly IAgentRuntimeStatus _runtimeStatus;
     private readonly IAgentCommandHandlerRegistry _handlerRegistry;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IAgentCommandExecutionStore _executionStore;
     private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<CommandPollingWorker> _logger;
@@ -25,6 +27,7 @@ public sealed class CommandPollingWorker : BackgroundService
         IAgentAuthenticationState authenticationState,
         IAgentRuntimeStatus runtimeStatus,
         IAgentCommandHandlerRegistry handlerRegistry,
+        IServiceScopeFactory scopeFactory,
         IAgentCommandExecutionStore executionStore,
         IPavoCommandSequenceReservationService sequenceReservationService,
         ILogger<CommandPollingWorker> logger)
@@ -33,6 +36,7 @@ public sealed class CommandPollingWorker : BackgroundService
         _authenticationState = authenticationState;
         _runtimeStatus = runtimeStatus;
         _handlerRegistry = handlerRegistry;
+        _scopeFactory = scopeFactory;
         _executionStore = executionStore;
         _sequenceReservationService = sequenceReservationService;
         _logger = logger;
@@ -81,6 +85,8 @@ public sealed class CommandPollingWorker : BackgroundService
     {
         try
         {
+            using var scope = _scopeFactory.CreateScope();
+
             if (dto.ExpiresAt.HasValue && DateTime.UtcNow > dto.ExpiresAt.Value)
             {
                 _logger.LogWarning("Komut süresi dolmuş: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
@@ -134,36 +140,36 @@ public sealed class CommandPollingWorker : BackgroundService
             switch (dto.CommandType)
             {
                 case "Ping":
-                    await ExecuteTypedCommandAsync(dto, new PingCommand(), _handlerRegistry.Resolve<PingCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, new PingCommand(), _handlerRegistry.Resolve<PingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "HealthCheck":
-                    await ExecuteTypedCommandAsync(dto, new HealthCheckCommand(), _handlerRegistry.Resolve<HealthCheckCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, new HealthCheckCommand(), _handlerRegistry.Resolve<HealthCheckCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "RefreshConfiguration":
-                    await ExecuteTypedCommandAsync(dto, new RefreshConfigurationCommand(), _handlerRegistry.Resolve<RefreshConfigurationCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, new RefreshConfigurationCommand(), _handlerRegistry.Resolve<RefreshConfigurationCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "PavoPairing":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "PavoPing":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "PavoGetDeviceInfo":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "PavoStartPayment":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "PavoGetPaymentResult":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "AgentStageUpgrade":
-                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<AgentStageUpgradeCommand>(dto.Payload), _handlerRegistry.Resolve<AgentStageUpgradeCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<AgentStageUpgradeCommand>(dto.Payload), _handlerRegistry.Resolve<AgentStageUpgradeCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "AgentApplyUpgrade":
                     var applyCommand = DeserializeCommand<AgentApplyUpgradeCommand>(dto.Payload);
                     applyCommand.CommandId = dto.Id;
-                    await ExecuteTypedCommandAsync(dto, applyCommand, _handlerRegistry.Resolve<AgentApplyUpgradeCommand>(dto.CommandType), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, applyCommand, _handlerRegistry.Resolve<AgentApplyUpgradeCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);

@@ -24,6 +24,6 @@ public interface IAgentCommandHandler<in TCommand> where TCommand : IAgentComman
 
 public interface IAgentCommandHandlerRegistry
 {
-    IAgentCommandHandler<TCommand>? Resolve<TCommand>(string commandType) where TCommand : IAgentCommand;
+    IAgentCommandHandler<TCommand>? Resolve<TCommand>(string commandType, IServiceProvider serviceProvider) where TCommand : IAgentCommand;
     IReadOnlyCollection<string> RegisteredCommandTypes { get; }
 }

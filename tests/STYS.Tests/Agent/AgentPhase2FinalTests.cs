@@ -120,6 +120,28 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task Transition_DeliveredToFailed_Passes()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+
+        var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
+        await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        await svc.FailAsync(cmd.Id, agentId, "delivery-error", CancellationToken.None);
+
+        var updated = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == cmd.Id);
+        Assert.Equal(AgentCommandStatus.Failed, updated!.Status);
+
+        var ex = await db.Set<AgentCommandExecution>().Where(x => x.CommandId == cmd.Id).OrderBy(x => x.Id).LastAsync();
+        Assert.Equal("Failed", ex.Status);
+        Assert.Equal("Delivered", ex.PreviousStatus);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
     public async Task Transition_FromTerminalState_Fails()
     {
         var db = await SetupAsync(); if (db is null) return;

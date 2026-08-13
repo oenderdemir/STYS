@@ -14,7 +14,7 @@ public static class AgentCommandStateMachine
     private static readonly Dictionary<AgentCommandStatus, HashSet<AgentCommandStatus>> ValidTransitions = new()
     {
         [AgentCommandStatus.Pending] = new() { AgentCommandStatus.Delivered, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired, AgentCommandStatus.Rejected },
-        [AgentCommandStatus.Delivered] = new() { AgentCommandStatus.Accepted, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
+        [AgentCommandStatus.Delivered] = new() { AgentCommandStatus.Accepted, AgentCommandStatus.Failed, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
         [AgentCommandStatus.Accepted] = new() { AgentCommandStatus.Running, AgentCommandStatus.Failed, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
         [AgentCommandStatus.Running] = new() { AgentCommandStatus.Completed, AgentCommandStatus.Failed, AgentCommandStatus.Cancelled, AgentCommandStatus.Expired },
         [AgentCommandStatus.Completed] = new() { },

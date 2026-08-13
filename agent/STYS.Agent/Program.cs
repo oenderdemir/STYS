@@ -107,7 +107,7 @@ builder.Services.AddHostedService<AgentUpgradeOutcomeReporterWorker>();
 builder.Services.AddAgentProductionInfrastructure();
 builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
 {
-    var registry = new AgentCommandHandlerRegistry(sp);
+    var registry = new AgentCommandHandlerRegistry();
     registry.Register<PingCommand, PingCommandHandler>("Ping");
     registry.Register<HealthCheckCommand, HealthCheckCommandHandler>("HealthCheck");
     registry.Register<RefreshConfigurationCommand, RefreshConfigCommandHandler>("RefreshConfiguration");

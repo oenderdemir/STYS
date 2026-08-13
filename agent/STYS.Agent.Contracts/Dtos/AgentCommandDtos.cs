@@ -14,6 +14,7 @@ public sealed class AgentCommandDto
     public int MaxRetryCount { get; set; }
     public string CorrelationId { get; set; } = string.Empty;
     public string IdempotencyKey { get; set; } = string.Empty;
+    public string? ResultPayload { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -39,4 +40,24 @@ public sealed class AgentCommandSendRequest
     public int Priority { get; set; }
     public int? ExpirationMinutes { get; set; }
     public int MaxRetryCount { get; set; } = 3;
+}
+
+public sealed class AgentApplyUpgradeRequest
+{
+    public Guid CommandId { get; set; }
+    public int ReleaseId { get; set; }
+    public string Version { get; set; } = string.Empty;
+    public string RuntimeIdentifier { get; set; } = string.Empty;
+    public string Sha256 { get; set; } = string.Empty;
+    public string Signature { get; set; } = string.Empty;
+}
+
+public sealed class AgentApplyUpgradeResponse
+{
+    public Guid CommandId { get; set; }
+    public int ReleaseId { get; set; }
+    public string Version { get; set; } = string.Empty;
+    public string RuntimeIdentifier { get; set; } = string.Empty;
+    public string ApplyStatus { get; set; } = string.Empty;
+    public string? Message { get; set; }
 }

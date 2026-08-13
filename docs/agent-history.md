@@ -2011,3 +2011,46 @@ Agent Regression:  0
     - `STYS.Tests.SaxonSidecarEBelgeSchematronValidatorTests.TimeoutServiceUnavailableOlur`
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+
+## 2026-08-13 — Agent Production Faz E2B2
+
+- Trust boundary:
+  - `AgentStageUpgrade` ile paket sahneleniyor.
+  - `AgentApplyUpgrade` ayrı, typed komut olarak eklendi.
+  - Uygulama süreci agent service user’dan ayrı bir privileged updater servisine bırakıldı.
+- Privileged updater:
+  - Windows’ta `STYS Agent Updater`, Linux’ta `stys-agent-updater` ayrı servis olarak tanımlandı.
+  - Updater kendi doğrulama setini yeniden çalıştırıyor; agent’ın staging sonucuna kör güvenmiyor.
+  - Apply request yalnız gerekli identity alanlarını içeriyor; install/package path request’ten alınmıyor.
+- Apply / rollback:
+  - Verify → extract → replace → service start → post-start health check akışı eklendi.
+  - Sağlık başarısızsa rollback ve eski binary restore yapılıyor.
+  - Config/data/credentials korunuyor; sadece application binaries değişiyor.
+- Payment safety:
+  - Aktif apply işlemi sırasında yeni `PavoStartPayment` komutu engelleniyor.
+  - Unknown payment reconciliation akışı korunuyor.
+- Race safety:
+  - Duplicate active apply komutu için DB seviyesinde unique filtre eklendi.
+  - Command polling ve outcome reporting apply flow ile uyumlu hale getirildi.
+- Migration:
+  - `AgentCommands` için `AgentApplyUpgrade` active-unique index migration’ı eklendi.
+- UI:
+  - Agent detayında staged release için `Güncellemeyi Uygula` aksiyonu eklendi.
+  - Apply durumları `Applying / Applied / RolledBack / Failed` olarak gösteriliyor.
+- Tests:
+  - `dotnet test tests/STYS.Tests/STYS.Tests.csproj --configuration Release --filter "FullyQualifiedName~AgentProductionDeploymentTests"` geçti.
+  - `bash -n scripts/agent/install-agent.sh`
+  - `bash -n scripts/agent/install-agent-updater.sh`
+  - `bash -n scripts/agent/uninstall-agent.sh`
+  - `bash -n scripts/agent/uninstall-agent-updater.sh`
+    geçti.
+  - `npm run build` geçti.
+  - `dotnet test STYS.sln --configuration Release` iki EBelge outbox worker testinde fail etti:
+    - `STYS.Tests.EBelgeOutboxWorkerTests.DogruIsTuruIleClaimIsleAsyncEGider(isTuru: ArtefaktOlustur)`
+    - `STYS.Tests.EBelgeOutboxWorkerTests.DogruIsTuruIleClaimIsleAsyncEGider(isTuru: UblImzala)`
+  - Bu iki failure, agent upgrade/apply yoluna ait değil; mevcut full-suite flake olarak doğrulandı.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Update package publish/publish pipeline henüz bu committe üretilmedi; repo tarafında servis, apply ve rollback altyapısı tamamlandı.
+  - Full solution test şu an EBelge outbox worker tarafındaki iki test nedeniyle kırmızı; agent upgrade/apply yüzeyi yeşil.

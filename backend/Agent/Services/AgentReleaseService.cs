@@ -78,6 +78,42 @@ public sealed class AgentReleaseService : IAgentReleaseService
         }, requestedBy, cancellationToken);
     }
 
+    public async Task<AgentCommandDto> ApplyUpgradeAsync(int agentId, string requestedBy, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var agent = await db.Set<AgentEntity>()
+            .FirstOrDefaultAsync(x => x.Id == agentId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Agent bulunamadı.", 404);
+
+        EnforceTenantAccess(agent.KurumId);
+
+        var staged = await GetStagedReleaseAsync(db, agent, cancellationToken);
+        if (staged is null)
+        {
+            throw new BaseException("Uygun sahnelenmiş release bulunamadı.", 404);
+        }
+
+        var applyRequest = new AgentApplyUpgradeRequest
+        {
+            CommandId = Guid.Empty,
+            ReleaseId = staged.Release.Id,
+            Version = staged.Release.Version,
+            RuntimeIdentifier = staged.Release.RuntimeIdentifier,
+            Sha256 = staged.Release.Sha256,
+            Signature = staged.Release.Signature
+        };
+
+        return await _commandService.SendAsync(new AgentCommandSendRequest
+        {
+            AgentId = agent.Id,
+            CommandType = "AgentApplyUpgrade",
+            Payload = JsonSerializer.Serialize(applyRequest, JsonOptions),
+            Priority = 1,
+            ExpirationMinutes = 120,
+            MaxRetryCount = 1
+        }, requestedBy, cancellationToken);
+    }
+
     public async Task<(AgentRelease Release, byte[] PackageBytes)> GetReleasePackageAsync(int releaseId, CancellationToken cancellationToken)
     {
         if (!_currentAgentContext.IsAuthenticated || _currentAgentContext.AgentId <= 0 || _currentAgentContext.KurumId <= 0)
@@ -185,6 +221,48 @@ public sealed class AgentReleaseService : IAgentReleaseService
         && release.PackageSize == request.PackageSize
         && release.PublishedAt == request.PublishedAt
         && string.Equals(release.ReleaseNotes ?? string.Empty, request.ReleaseNotes ?? string.Empty, StringComparison.Ordinal);
+
+    private async Task<StagedReleaseContext?> GetStagedReleaseAsync(
+        StysAppDbContext db,
+        AgentEntity agent,
+        CancellationToken cancellationToken)
+    {
+        var stageCommand = await db.Set<AgentCommand>()
+            .Where(x =>
+                !x.IsDeleted
+                && x.AgentId == agent.Id
+                && x.CommandType == "AgentStageUpgrade"
+                && x.Status == AgentCommandStatus.Completed)
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (stageCommand is null || string.IsNullOrWhiteSpace(stageCommand.ResultPayload))
+        {
+            return null;
+        }
+
+        var stageResponse = JsonSerializer.Deserialize<AgentStageUpgradeResponse>(stageCommand.ResultPayload, JsonOptions)
+            ?? throw new BaseException("Stage sonucu doğrulanamadı.", 409);
+
+        if (stageResponse.StageStatus != AgentReleaseStageStatus.Staged)
+        {
+            return null;
+        }
+
+        var release = await db.Set<AgentRelease>()
+            .FirstOrDefaultAsync(x => x.Id == stageResponse.ReleaseId && !x.IsDeleted && x.KurumId == agent.KurumId, cancellationToken)
+            ?? throw new BaseException("Release bulunamadı.", 404);
+
+        if (!string.Equals(release.Version, stageResponse.Version, StringComparison.Ordinal)
+            || !string.Equals(release.RuntimeIdentifier, stageResponse.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException("Stage sonucu release kaydıyla eşleşmiyor.", 409);
+        }
+
+        return new StagedReleaseContext(release, stageResponse);
+    }
+
+    private sealed record StagedReleaseContext(AgentRelease Release, AgentStageUpgradeResponse StageResponse);
 
     private async Task<AgentRelease?> SelectBestReleaseAsync(StysAppDbContext db, AgentEntity agent, CancellationToken cancellationToken)
     {

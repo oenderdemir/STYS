@@ -148,15 +148,27 @@
                                 <div class="text-color-secondary">
                                     Güncellemeyi yalnızca imzalı release STYS tarafından seçildiğinde hazırlayabilirsiniz.
                                 </div>
-                                <button
-                                    pButton
-                                    pRipple
-                                    label="Güncellemeyi Hazırla"
-                                    icon="pi pi-upload"
-                                    class="p-button-help"
-                                    [loading]="stagingUpgrade()"
-                                    [disabled]="!canStageUpgrade(detail)"
-                                    (click)="stageUpgrade(detail.id)"></button>
+                                <div class="flex gap-2">
+                                    <button
+                                        pButton
+                                        pRipple
+                                        label="Güncellemeyi Hazırla"
+                                        icon="pi pi-upload"
+                                        class="p-button-help"
+                                        [loading]="stagingUpgrade()"
+                                        [disabled]="!canStageUpgrade(detail)"
+                                        (click)="stageUpgrade(detail.id)"></button>
+                                    @if (canApplyUpgrade(detail)) {
+                                        <button
+                                            pButton
+                                            pRipple
+                                            label="Güncellemeyi Uygula"
+                                            icon="pi pi-arrow-circle-right"
+                                            class="p-button-success"
+                                            [loading]="stagingUpgrade()"
+                                            (click)="applyUpgrade(detail.id)"></button>
+                                    }
+                                </div>
                             </div>
                         </div>
                     } @else {
@@ -188,6 +200,13 @@
                                 <td>{{ cmd.priority }}</td>
                                 <td>{{ cmd.createdAt | date:'short' }}</td>
                             </tr>
+                            @if (cmd.resultPayload && (cmd.commandType === 'AgentStageUpgrade' || cmd.commandType === 'AgentApplyUpgrade')) {
+                                <tr>
+                                    <td colspan="4">
+                                        <small class="text-color-secondary">Sonuç: {{ cmd.resultPayload }}</small>
+                                    </td>
+                                </tr>
+                            }
                         </ng-template>
                     </p-table>
                 </p-tabpanel>

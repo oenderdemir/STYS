@@ -160,6 +160,11 @@ public sealed class CommandPollingWorker : BackgroundService
                 case "AgentStageUpgrade":
                     await ExecuteTypedCommandAsync(dto, DeserializeCommand<AgentStageUpgradeCommand>(dto.Payload), _handlerRegistry.Resolve<AgentStageUpgradeCommand>(dto.CommandType), cancellationToken);
                     break;
+                case "AgentApplyUpgrade":
+                    var applyCommand = DeserializeCommand<AgentApplyUpgradeCommand>(dto.Payload);
+                    applyCommand.CommandId = dto.Id;
+                    await ExecuteTypedCommandAsync(dto, applyCommand, _handlerRegistry.Resolve<AgentApplyUpgradeCommand>(dto.CommandType), cancellationToken);
+                    break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
                     await _client.RejectCommandAsync(dto.Id, new AgentCommandCompleteRequest { Id = dto.Id, Success = false, ErrorMessage = $"Unknown command: {dto.CommandType}", ErrorCode = "UNKNOWN_COMMAND" }, cancellationToken);
@@ -198,7 +203,16 @@ public sealed class CommandPollingWorker : BackgroundService
         _executionStore.MarkExecuted(dto.IdempotencyKey);
 
         var result = await handler.HandleAsync(command, cancellationToken);
-        _executionStore.StoreResult(dto.IdempotencyKey, result);
+        if (!result.DeferCompletion)
+        {
+            _executionStore.StoreResult(dto.IdempotencyKey, result);
+        }
+
+        if (result.DeferCompletion)
+        {
+            _logger.LogInformation("Komut tamamlanması ertelendi: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
+            return;
+        }
 
         if (result.Success)
         {

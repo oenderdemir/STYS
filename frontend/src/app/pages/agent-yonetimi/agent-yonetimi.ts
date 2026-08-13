@@ -363,9 +363,44 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         return labels[status] ?? 'Unknown';
     }
 
+    getApplyCommandStatus(): { label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary'; commandId?: string } | null {
+        const stagedCommand = [...this.commands()]
+            .filter((cmd) => cmd.commandType === 'AgentStageUpgrade' && cmd.status === 4 && !!cmd.resultPayload)
+            .sort((left, right) => (right.createdAt ?? '').localeCompare(left.createdAt ?? ''))[0];
+
+        if (!stagedCommand?.resultPayload) {
+            return null;
+        }
+
+        const parsed = this.tryParseStageResponse(stagedCommand.resultPayload);
+        if (!parsed || parsed.stageStatus !== 3) {
+            return null;
+        }
+
+        const applyCommand = [...this.commands()]
+            .filter((cmd) => cmd.commandType === 'AgentApplyUpgrade')
+            .sort((left, right) => (right.createdAt ?? '').localeCompare(left.createdAt ?? ''))[0];
+
+        if (!applyCommand) {
+            return { label: 'Hazır', severity: 'info', commandId: stagedCommand.id };
+        }
+
+        const statusLabel = this.getCommandStatusLabel(applyCommand.status);
+        const severity = this.getCommandStatusSeverity(applyCommand.status);
+        return { label: statusLabel, severity, commandId: applyCommand.id };
+    }
+
     canStageUpgrade(detail: AgentDto | null): boolean {
         if (!detail) return false;
         return detail.compatibilityStatus === 1 || detail.compatibilityStatus === 2;
+    }
+
+    canApplyUpgrade(detail: AgentDto | null): boolean {
+        if (!detail || !this.canStageUpgrade(detail)) {
+            return false;
+        }
+
+        return this.getApplyCommandStatus() !== null;
     }
 
     stageUpgrade(agentId: number): void {
@@ -379,7 +414,18 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         });
     }
 
-    getCommandStatusSeverity(status: number): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {
+    applyUpgrade(agentId: number): void {
+        this.stagingUpgrade.set(true);
+        this.service.applyUpgrade(agentId).pipe(finalize(() => this.stagingUpgrade.set(false))).subscribe({
+            next: () => {
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Güncelleme uygulama komutu gönderildi.' });
+                this.loadCommands(agentId);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    getCommandStatusSeverity(status: number): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
         switch (status) {
             case 0: case 1: return 'info';
             case 2: case 3: return 'warn';
@@ -421,5 +467,22 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
 
     private createDefaultAgentForm(): AgentFormState {
         return { ad: '', tesisIds: this.selectedTesisFilterId() != null ? [this.selectedTesisFilterId()!] : [], scopes: [] };
+    }
+
+    private tryParseStageResponse(payload: string): { stageStatus: number; releaseId?: number; version?: string } | null {
+        try {
+            const parsed = JSON.parse(payload) as { stageStatus?: number; releaseId?: number; version?: string };
+            if (typeof parsed?.stageStatus !== 'number') {
+                return null;
+            }
+
+            return {
+                stageStatus: parsed.stageStatus,
+                releaseId: parsed.releaseId,
+                version: parsed.version
+            };
+        } catch {
+            return null;
+        }
     }
 }

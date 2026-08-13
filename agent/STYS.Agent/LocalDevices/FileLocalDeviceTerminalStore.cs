@@ -204,14 +204,7 @@ public sealed class FileLocalDeviceTerminalStore : ILocalDeviceTerminalStore
             await stream.FlushAsync(cancellationToken);
         }
 
-        if (File.Exists(_paths.LocalDeviceTerminalsStorePath))
-        {
-            File.Move(tempPath, _paths.LocalDeviceTerminalsStorePath, true);
-        }
-        else
-        {
-            File.Move(tempPath, _paths.LocalDeviceTerminalsStorePath);
-        }
+        ReplaceAtomically(tempPath, _paths.LocalDeviceTerminalsStorePath);
     }
 
     private static LocalDeviceTerminal NormalizeForWrite(LocalDeviceTerminal terminal, DateTimeOffset now, string? forcedLocalDeviceId = null)
@@ -270,4 +263,15 @@ public sealed class FileLocalDeviceTerminalStore : ILocalDeviceTerminalStore
         CreatedAt = terminal.CreatedAt,
         UpdatedAt = terminal.UpdatedAt
     };
+
+    private static void ReplaceAtomically(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            return;
+        }
+
+        File.Move(tempPath, targetPath);
+    }
 }

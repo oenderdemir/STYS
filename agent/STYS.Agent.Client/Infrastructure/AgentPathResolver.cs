@@ -11,6 +11,9 @@ public interface IAgentPathResolver
     string LocalDeviceTerminalsStorePath { get; }
     string PavoPairingStorePath { get; }
     string AgentCommandExecutionStorePath { get; }
+    string UpgradeRequestPath => Path.Combine(DataDirectory, "updates", "apply-request.json");
+    string UpgradeOutcomePath => Path.Combine(DataDirectory, "updates", "apply-outcome.json");
+    string UpgradeBackupRootDirectory => Path.Combine(DataDirectory, "updates", "backup");
     string InstanceIdPath { get; }
     string GetReleaseStagingDirectory(string version, string runtimeIdentifier) =>
         Path.Combine(ReleaseStagingRootDirectory, AgentPaths.SanitizePathSegment(version), AgentPaths.SanitizePathSegment(runtimeIdentifier));

@@ -1,0 +1,23 @@
+[Unit]
+Description=STYS Agent Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/stys-agent-updater
+ExecStart=/opt/stys-agent-updater/STYS.Agent.Updater
+Restart=on-failure
+RestartSec=5
+Environment=STYS_AGENT_INSTALL_DIR=/opt/stys-agent
+Environment=STYS_AGENT_DATA_DIR=/var/lib/stys-agent-updater
+Environment=STYS_AGENT_LOG_DIR=/var/log/stys-agent-updater
+Environment=STYS_AGENT_LOCAL_UI_PORT=5180
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5180
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

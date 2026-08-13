@@ -6,6 +6,7 @@ public sealed class AgentReleaseStagingState
 {
     public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
+    public string ContractVersion { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;
     public AgentReleaseStageStatus StageStatus { get; set; } = AgentReleaseStageStatus.None;
     public string? Message { get; set; }

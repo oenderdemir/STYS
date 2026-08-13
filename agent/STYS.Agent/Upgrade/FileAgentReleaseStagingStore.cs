@@ -110,14 +110,7 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
             stream.Flush(true);
         }
 
-        if (File.Exists(_storePath))
-        {
-            File.Move(tempPath, _storePath, true);
-        }
-        else
-        {
-            File.Move(tempPath, _storePath);
-        }
+        ReplaceAtomically(tempPath, _storePath);
     }
 
     private static AgentReleaseStagingState? Clone(AgentReleaseStagingState? state) => state is null
@@ -126,6 +119,7 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
         {
             ReleaseId = state.ReleaseId,
             Version = state.Version,
+            ContractVersion = state.ContractVersion,
             RuntimeIdentifier = state.RuntimeIdentifier,
             StageStatus = state.StageStatus,
             Message = state.Message,
@@ -143,4 +137,15 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
 
     private static string BuildKey(int releaseId) =>
         releaseId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static void ReplaceAtomically(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            return;
+        }
+
+        File.Move(tempPath, targetPath);
+    }
 }

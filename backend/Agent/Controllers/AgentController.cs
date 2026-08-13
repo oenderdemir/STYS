@@ -112,6 +112,11 @@ public sealed class AgentController : ControllerBase
     public async Task<ActionResult<AgentCommandDto>> StageUpgrade(int id, CancellationToken cancellationToken) =>
         Ok(await _releaseService.StageUpgradeAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
 
+    [HttpPost("{id:int}/apply-upgrade")]
+    [Permission(StructurePermissions.AgentYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> ApplyUpgrade(int id, CancellationToken cancellationToken) =>
+        Ok(await _releaseService.ApplyUpgradeAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
+
     [HttpGet("{id:int}/commands")]
     [Permission(StructurePermissions.AgentYonetimi.View)]
     public async Task<ActionResult<IReadOnlyCollection<AgentCommandDto>>> GetCommandHistory(int id, CancellationToken cancellationToken) =>

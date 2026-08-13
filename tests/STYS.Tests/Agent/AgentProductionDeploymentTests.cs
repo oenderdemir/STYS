@@ -98,6 +98,25 @@ public sealed class AgentProductionDeploymentTests : IDisposable
     }
 
     [Fact]
+    public void WindowsUpdaterInstallScript_DirectExeBinPath_And_ServiceSeparation()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var scriptPath = Path.Combine(repoRoot, "scripts", "agent", "install-agent-updater.ps1");
+        Assert.True(File.Exists(scriptPath));
+
+        var script = File.ReadAllText(scriptPath);
+        Assert.Contains("STYS.Agent.Updater.exe", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS Agent Updater", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LocalSystem", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_INSTALL_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_DATA_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_LOG_DIR", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("STYS_AGENT_LOCAL_UI_PORT", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Start-STYS-Agent.ps1", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("powershell.exe", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void LinuxInstallScript_InstallDirRootOwned_And_DataLogOverridesSet()
     {
         var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
@@ -145,10 +164,71 @@ public sealed class AgentProductionDeploymentTests : IDisposable
     }
 
     [Fact]
+    public void LinuxUpdaterInstallScript_BashSyntaxIsValid()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var scriptPath = Path.Combine(repoRoot, "scripts", "agent", "install-agent-updater.sh");
+        var bashScriptPath = ToBashPath(scriptPath);
+
+        var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "bash",
+            Arguments = $"-n \"{bashScriptPath}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        Assert.NotNull(process);
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            var stderr = process.StandardError.ReadToEnd();
+            var stdout = process.StandardOutput.ReadToEnd();
+            Assert.Fail($"bash -n failed with exit code {process.ExitCode}. stderr: {stderr} stdout: {stdout}");
+        }
+    }
+
+    [Fact]
     public void LinuxInstallScript_CustomPortIsReflectedInUnitTemplate()
     {
         var port = 6123;
         var tempScript = Path.Combine(_tempDir, "render-unit.sh");
+        File.WriteAllText(tempScript, $$"""
+#!/usr/bin/env bash
+set -euo pipefail
+LOCAL_UI_PORT={{port}}
+printf 'Environment=STYS_AGENT_LOCAL_UI_PORT=%s\nEnvironment=ASPNETCORE_URLS=http://127.0.0.1:%s\n' "$LOCAL_UI_PORT" "$LOCAL_UI_PORT"
+""");
+
+        var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "bash",
+            Arguments = $"\"{ToBashPath(tempScript)}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        Assert.NotNull(process);
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        Assert.Equal(0, process.ExitCode);
+        Assert.Empty(stderr);
+        Assert.Contains($"Environment=STYS_AGENT_LOCAL_UI_PORT={port}", stdout, StringComparison.Ordinal);
+        Assert.Contains($"Environment=ASPNETCORE_URLS=http://127.0.0.1:{port}", stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LinuxUpdaterInstallScript_CustomPortIsReflectedInUnitTemplate()
+    {
+        var port = 6124;
+        var tempScript = Path.Combine(_tempDir, "render-updater-unit.sh");
         File.WriteAllText(tempScript, $$"""
 #!/usr/bin/env bash
 set -euo pipefail

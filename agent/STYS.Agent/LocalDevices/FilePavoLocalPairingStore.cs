@@ -171,14 +171,7 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
             await stream.FlushAsync(cancellationToken);
         }
 
-        if (File.Exists(_paths.PavoPairingStorePath))
-        {
-            File.Move(tempPath, _paths.PavoPairingStorePath, true);
-        }
-        else
-        {
-            File.Move(tempPath, _paths.PavoPairingStorePath);
-        }
+        ReplaceAtomically(tempPath, _paths.PavoPairingStorePath);
 
         SecureFile(_paths.PavoPairingStorePath);
     }
@@ -340,6 +333,17 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         catch
         {
         }
+    }
+
+    private static void ReplaceAtomically(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            return;
+        }
+
+        File.Move(tempPath, targetPath);
     }
 
     private sealed class EncryptedPayload

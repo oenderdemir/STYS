@@ -66,6 +66,7 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
         {
             ReleaseId = command.ReleaseId,
             Version = command.Version,
+            ContractVersion = command.ContractVersion,
             RuntimeIdentifier = command.RuntimeIdentifier,
             Sha256 = command.Sha256,
             Signature = command.Signature,
@@ -108,12 +109,7 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
                 throw new InvalidOperationException("Paket imzası doğrulanamadı.");
             }
 
-            if (File.Exists(finalPath))
-            {
-                File.Delete(finalPath);
-            }
-
-            File.Move(tempPath, finalPath);
+            ReplaceAtomically(tempPath, finalPath);
 
             state.StageStatus = AgentReleaseStageStatus.Staged;
             state.Message = "Paket sahnelendi.";
@@ -168,5 +164,16 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
         }
 
         return value.Trim();
+    }
+
+    private static void ReplaceAtomically(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            return;
+        }
+
+        File.Move(tempPath, targetPath);
     }
 }

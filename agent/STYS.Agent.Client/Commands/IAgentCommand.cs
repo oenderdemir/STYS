@@ -6,9 +6,10 @@ public sealed class AgentCommandResult
     public string? ResultPayload { get; set; }
     public string? ErrorCode { get; set; }
     public string? ErrorMessage { get; set; }
+    public bool DeferCompletion { get; set; }
 
-    public static AgentCommandResult Ok(string? resultPayload = null) => new() { Success = true, ResultPayload = resultPayload };
-    public static AgentCommandResult Fail(string errorMessage, string? errorCode = null) => new() { Success = false, ErrorMessage = errorMessage, ErrorCode = errorCode };
+    public static AgentCommandResult Ok(string? resultPayload = null, bool deferCompletion = false) => new() { Success = true, ResultPayload = resultPayload, DeferCompletion = deferCompletion };
+    public static AgentCommandResult Fail(string errorMessage, string? errorCode = null, bool deferCompletion = false) => new() { Success = false, ErrorMessage = errorMessage, ErrorCode = errorCode, DeferCompletion = deferCompletion };
 }
 
 public interface IAgentCommand

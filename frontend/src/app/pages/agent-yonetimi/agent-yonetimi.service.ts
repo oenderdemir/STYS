@@ -146,4 +146,13 @@ export class AgentYonetimiService {
             })
         );
     }
+
+    applyUpgrade(agentId: number): Observable<AgentCommandDto> {
+        return this.http.post<ApiResponse<AgentCommandDto>>(`${this.apiBaseUrl}/ui/agent/${agentId}/apply-upgrade`, {}).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Güncelleme uygulanamadı.');
+            })
+        );
+    }
 }

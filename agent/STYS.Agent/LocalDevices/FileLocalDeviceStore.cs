@@ -169,13 +169,7 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
             await stream.FlushAsync(cancellationToken);
         }
 
-        if (File.Exists(_paths.LocalDevicesStorePath))
-        {
-            File.Move(tempPath, _paths.LocalDevicesStorePath, true);
-            return;
-        }
-
-        File.Move(tempPath, _paths.LocalDevicesStorePath);
+        ReplaceAtomically(tempPath, _paths.LocalDevicesStorePath);
     }
 
     private static LocalDevice NormalizeForWrite(LocalDevice device, bool isNew)
@@ -276,6 +270,17 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
         }
 
         return port;
+    }
+
+    private static void ReplaceAtomically(string tempPath, string targetPath)
+    {
+        if (File.Exists(targetPath))
+        {
+            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            return;
+        }
+
+        File.Move(tempPath, targetPath);
     }
 
     private static LocalDevice Clone(LocalDevice device) => new()

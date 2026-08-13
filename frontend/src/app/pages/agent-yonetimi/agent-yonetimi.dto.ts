@@ -87,6 +87,7 @@ export interface AgentCommandDto {
     maxRetryCount: number;
     correlationId: string;
     idempotencyKey: string;
+    resultPayload?: string;
     createdAt: string;
 }
 

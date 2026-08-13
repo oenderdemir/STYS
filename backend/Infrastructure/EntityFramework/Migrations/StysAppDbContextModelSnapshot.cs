@@ -260,6 +260,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
 
                     b.HasIndex("AgentId", "CommandType", "ReleaseId")
                         .IsUnique()
+                        .HasDatabaseName("IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply")
+                        .HasFilter("[IsDeleted] = 0 AND [ReleaseId] IS NOT NULL AND [CommandType] = 'AgentApplyUpgrade' AND [Status] IN (0,1,2,3)");
+
+                    b.HasIndex("AgentId", "CommandType", "ReleaseId")
+                        .IsUnique()
                         .HasFilter("[IsDeleted] = 0 AND [ReleaseId] IS NOT NULL AND [CommandType] = 'AgentStageUpgrade' AND [Status] IN (0,1,2,3)");
 
                     b.ToTable("AgentCommands", "entegrasyon");

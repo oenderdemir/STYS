@@ -7,6 +7,7 @@ using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Client.Infrastructure;
+using STYS.Agent.Client.Upgrade;
 using STYS.Agent.Configuration;
 using STYS.Agent.Diagnostics;
 using STYS.Agent.LocalDevices;
@@ -101,6 +102,7 @@ builder.Services.AddHttpClient(nameof(AgentBootstrapConnectionTester));
 builder.Services.AddHostedService<AgentHostedService>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<CommandPollingWorker>();
+builder.Services.AddHostedService<AgentUpgradeOutcomeReporterWorker>();
 
 builder.Services.AddAgentProductionInfrastructure();
 builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
@@ -110,6 +112,7 @@ builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
     registry.Register<HealthCheckCommand, HealthCheckCommandHandler>("HealthCheck");
     registry.Register<RefreshConfigurationCommand, RefreshConfigCommandHandler>("RefreshConfiguration");
     registry.Register<AgentStageUpgradeCommand, AgentStageUpgradeCommandHandler>("AgentStageUpgrade");
+    registry.Register<AgentApplyUpgradeCommand, AgentApplyUpgradeCommandHandler>("AgentApplyUpgrade");
     PavoModuleExtensions.RegisterPavoCommands(registry);
     return registry;
 });
@@ -118,6 +121,7 @@ builder.Services.AddScoped<PingCommandHandler>();
 builder.Services.AddScoped<HealthCheckCommandHandler>();
 builder.Services.AddScoped<RefreshConfigCommandHandler>();
 builder.Services.AddScoped<AgentStageUpgradeCommandHandler>();
+builder.Services.AddScoped<AgentApplyUpgradeCommandHandler>();
 builder.Services.AddPavoModule();
 
 Log.Logger = new LoggerConfiguration()

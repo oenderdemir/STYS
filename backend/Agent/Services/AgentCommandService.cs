@@ -36,6 +36,7 @@ public sealed class AgentCommandService
         ["PavoStartPayment"] = "agent.command.execute",
         ["PavoGetPaymentResult"] = "agent.command.execute",
         ["AgentStageUpgrade"] = "agent.command.execute",
+        ["AgentApplyUpgrade"] = "agent.command.execute",
         ["PavoConnectionTest"] = "stys.pavo.connection.test"
     };
 
@@ -75,14 +76,15 @@ public sealed class AgentCommandService
         if (!_tenantAccessor.IsSuperAdmin() && !_tenantAccessor.GetAccessibleKurumIds().Contains(agent.KurumId))
             throw new BaseException("Bu agent'a komut gönderme yetkiniz yok.", 403);
         if (agent.Durum != AgentDurum.Active) throw new BaseException("Agent aktif değil.", 400);
-        EnsurePaymentCommandAllowed(agent, request.CommandType);
 
         await _commandExpiryService.ExpireTimedOutCommandsAsync(agent.Id, ct);
 
-        var isStageUpgrade = TryGetStageUpgradeIdentity(request.CommandType, request.Payload, out var stageIdentity);
+        await EnsurePaymentCommandAllowedAsync(db, agent, request.CommandType, ct);
+
+        var isReleaseUpgrade = TryGetReleaseCommandIdentity(request.CommandType, request.Payload, out var releaseIdentity);
         var useTransaction = db.Database.IsRelational();
 
-        if (isStageUpgrade)
+        if (isReleaseUpgrade)
         {
             IDbContextTransaction? tx = null;
             try
@@ -90,25 +92,25 @@ public sealed class AgentCommandService
                 if (useTransaction)
                 {
                     tx = await db.Database.BeginTransactionAsync(ct);
-                    await AcquireStageUpgradeLockAsync(db, agent.Id, stageIdentity, ct);
+                    await AcquireReleaseCommandLockAsync(db, agent.Id, request.CommandType, releaseIdentity, ct);
                 }
 
-                var existingStageCommand = await FindActiveStageUpgradeCommandAsync(db, agent.Id, stageIdentity, ct);
-                if (existingStageCommand is not null)
+                var existingReleaseCommand = await FindActiveReleaseCommandAsync(db, agent.Id, request.CommandType, releaseIdentity, ct);
+                if (existingReleaseCommand is not null)
                 {
                     if (tx is not null)
                     {
                         await tx.CommitAsync(ct);
                     }
 
-                    return MapToDto(existingStageCommand);
+                    return MapToDto(existingReleaseCommand);
                 }
 
                 await ValidateScopeAsync(db, agent.Id, request.CommandType, ct);
                 await ValidateCapabilityAsync(db, agent.Id, request.CommandType, ct);
 
-                var stageCommand = CreateCommand(agent, request, requestedBy, stageIdentity.ReleaseId);
-                db.Set<AgentCommand>().Add(stageCommand);
+                var releaseCommand = CreateCommand(agent, request, requestedBy, releaseIdentity.ReleaseId);
+                db.Set<AgentCommand>().Add(releaseCommand);
                 try
                 {
                     await db.SaveChangesAsync(ct);
@@ -117,18 +119,18 @@ public sealed class AgentCommandService
                         await tx.CommitAsync(ct);
                     }
 
-                    var stageDto = MapToDto(stageCommand);
-                    NotifyIfNeeded(stageDto);
-                    return stageDto;
+                    var releaseDto = MapToDto(releaseCommand);
+                    NotifyIfNeeded(releaseDto);
+                    return releaseDto;
                 }
-                catch (DbUpdateException ex) when (IsStageUpgradeUniqueConflict(ex))
+                catch (DbUpdateException ex) when (IsReleaseUpgradeUniqueConflict(ex))
                 {
                     if (tx is not null)
                     {
                         await tx.RollbackAsync(ct);
                     }
 
-                    var existingAfterConflict = await FindActiveStageUpgradeCommandAsync(db, agent.Id, stageIdentity, ct);
+                    var existingAfterConflict = await FindActiveReleaseCommandAsync(db, agent.Id, request.CommandType, releaseIdentity, ct);
                     if (existingAfterConflict is not null)
                     {
                         return MapToDto(existingAfterConflict);
@@ -181,6 +183,31 @@ public sealed class AgentCommandService
         throw new BaseException(message, 400);
     }
 
+    private async Task EnsurePaymentCommandAllowedAsync(StysAppDbContext db, AgentEntity agent, string commandType, CancellationToken ct)
+    {
+        EnsurePaymentCommandAllowed(agent, commandType);
+
+        if (!string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var hasActiveApplyUpgrade = await db.Set<AgentCommand>()
+            .AnyAsync(x =>
+                x.AgentId == agent.Id
+                && !x.IsDeleted
+                && x.CommandType == "AgentApplyUpgrade"
+                && (x.Status == AgentCommandStatus.Pending
+                    || x.Status == AgentCommandStatus.Delivered
+                    || x.Status == AgentCommandStatus.Accepted
+                    || x.Status == AgentCommandStatus.Running), ct);
+
+        if (hasActiveApplyUpgrade)
+        {
+            throw new BaseException("Yükseltme uygulanırken yeni PAVO ödeme başlatılamaz.", 400);
+        }
+    }
+
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetPendingCommandsAsync(int agentId, CancellationToken ct)
     {
         await _commandExpiryService.ExpireTimedOutCommandsAsync(agentId, ct);
@@ -231,7 +258,7 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         return await db.Set<AgentCommand>().Where(x => x.AgentId == agentId && !x.IsDeleted)
             .OrderByDescending(x => x.CreatedAt).Take(100)
-            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
+            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
             .ToListAsync(ct);
     }
 
@@ -278,7 +305,8 @@ public sealed class AgentCommandService
 
         var target = request.Success ? AgentCommandStatus.Completed : AgentCommandStatus.Failed;
         var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
-        if (!allowLatePavoPaymentCompletion)
+        var allowLateApplyCompletion = cmd.Status == AgentCommandStatus.Expired && string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase);
+        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
         {
             AgentCommandStateMachine.EnforceTransition(cmd.Status, target, cmd.Id);
         }
@@ -288,7 +316,7 @@ public sealed class AgentCommandService
             : null;
 
         var prev = cmd.Status;
-        if (!allowLatePavoPaymentCompletion)
+        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
         {
             cmd.Status = target;
         }
@@ -308,7 +336,8 @@ public sealed class AgentCommandService
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
-        if (!allowLatePavoPaymentCompletion)
+        var allowLateApplyCompletion = cmd.Status == AgentCommandStatus.Expired && string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase);
+        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
         {
             AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Failed, cmd.Id);
         }
@@ -318,7 +347,7 @@ public sealed class AgentCommandService
             : null;
 
         var prev = cmd.Status;
-        if (!allowLatePavoPaymentCompletion)
+        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
         {
             cmd.Status = AgentCommandStatus.Failed;
         }
@@ -336,7 +365,8 @@ public sealed class AgentCommandService
         var cmd = await db.Set<AgentCommand>().FirstOrDefaultAsync(x => x.Id == commandId && x.AgentId == agentId && !x.IsDeleted, ct);
         if (cmd is null) throw new BaseException("Komut bulunamadı.", 404);
         var allowLatePavoPaymentCompletion = cmd.Status == AgentCommandStatus.Expired && IsPaymentCommand(cmd.CommandType);
-        if (!allowLatePavoPaymentCompletion)
+        var allowLateApplyCompletion = cmd.Status == AgentCommandStatus.Expired && string.Equals(cmd.CommandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase);
+        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
         {
             AgentCommandStateMachine.EnforceTransition(cmd.Status, AgentCommandStatus.Rejected, cmd.Id);
         }
@@ -346,7 +376,7 @@ public sealed class AgentCommandService
             : null;
 
         var prev = cmd.Status;
-        if (!allowLatePavoPaymentCompletion)
+        if (!allowLatePavoPaymentCompletion && !allowLateApplyCompletion)
         {
             cmd.Status = AgentCommandStatus.Rejected;
         }
@@ -981,11 +1011,12 @@ public sealed class AgentCommandService
         return null;
     }
 
-    private static bool TryGetStageUpgradeIdentity(string? commandType, string? payload, out AgentStageUpgradeIdentity identity)
+    private static bool TryGetReleaseCommandIdentity(string? commandType, string? payload, out ReleaseCommandIdentity identity)
     {
         identity = default;
 
-        if (!string.Equals(commandType, "AgentStageUpgrade", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(commandType, "AgentStageUpgrade", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(commandType, "AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -1004,14 +1035,15 @@ public sealed class AgentCommandService
             return false;
         }
 
-        identity = new AgentStageUpgradeIdentity(releaseId, version, runtimeIdentifier);
+        identity = new ReleaseCommandIdentity(releaseId, version, runtimeIdentifier);
         return true;
     }
 
-    private async Task<AgentCommand?> FindActiveStageUpgradeCommandAsync(
+    private async Task<AgentCommand?> FindActiveReleaseCommandAsync(
         StysAppDbContext db,
         int agentId,
-        AgentStageUpgradeIdentity identity,
+        string commandType,
+        ReleaseCommandIdentity identity,
         CancellationToken cancellationToken)
     {
         var activeStatuses = new[]
@@ -1025,13 +1057,13 @@ public sealed class AgentCommandService
         var candidates = await db.Set<AgentCommand>()
             .Where(x => x.AgentId == agentId
                 && !x.IsDeleted
-                && x.CommandType == "AgentStageUpgrade"
+                && x.CommandType == commandType
                 && activeStatuses.Contains(x.Status))
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
 
         return candidates.FirstOrDefault(candidate =>
-            TryGetStageUpgradeIdentity(candidate.CommandType, candidate.Payload, out var existing) && existing.Equals(identity));
+            TryGetReleaseCommandIdentity(candidate.CommandType, candidate.Payload, out var existing) && existing.Equals(identity));
     }
 
     private static AgentCommand CreateCommand(AgentEntity agent, AgentCommandSendRequest request, string requestedBy, int? releaseId)
@@ -1059,15 +1091,16 @@ public sealed class AgentCommandService
         };
     }
 
-    private static bool IsStageUpgradeUniqueConflict(DbUpdateException ex)
+    private static bool IsReleaseUpgradeUniqueConflict(DbUpdateException ex)
     {
         var message = ex.InnerException?.Message ?? ex.Message;
         return message.Contains("IX_AgentCommands_AgentId_CommandType_ReleaseId", StringComparison.OrdinalIgnoreCase)
             || message.Contains("AgentStageUpgrade", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("AgentApplyUpgrade", StringComparison.OrdinalIgnoreCase)
             || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task AcquireStageUpgradeLockAsync(StysAppDbContext db, int agentId, AgentStageUpgradeIdentity identity, CancellationToken ct)
+    private static async Task AcquireReleaseCommandLockAsync(StysAppDbContext db, int agentId, string commandType, ReleaseCommandIdentity identity, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();
         var shouldClose = connection.State != System.Data.ConnectionState.Open;
@@ -1091,7 +1124,7 @@ public sealed class AgentCommandService
                 """;
             var resource = command.CreateParameter();
             resource.ParameterName = "@resource";
-            resource.Value = $"agent-stage-upgrade:{agentId}:{identity.ReleaseId}";
+            resource.Value = $"agent-release-command:{commandType}:{agentId}:{identity.ReleaseId}";
             command.Parameters.Add(resource);
 
             var result = await command.ExecuteScalarAsync(ct);
@@ -1175,13 +1208,13 @@ public sealed class AgentCommandService
 
     private sealed record PavoCommandValidationContext(PosCihazi Device, PosOdemeIslemi? Payment);
 
-    private readonly record struct AgentStageUpgradeIdentity(int ReleaseId, string Version, string RuntimeIdentifier);
+    private readonly record struct ReleaseCommandIdentity(int ReleaseId, string Version, string RuntimeIdentifier);
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()
     {
         Id = c.Id, AgentId = c.AgentId, CommandType = c.CommandType, Payload = c.Payload,
         Status = (int)c.Status, Priority = c.Priority, ScheduledAt = c.ScheduledAt,
         ExpiresAt = c.ExpiresAt, RetryCount = c.RetryCount, MaxRetryCount = c.MaxRetryCount,
-        CorrelationId = c.CorrelationId, IdempotencyKey = c.IdempotencyKey, CreatedAt = c.CreatedAt ?? DateTime.MinValue
+        CorrelationId = c.CorrelationId, IdempotencyKey = c.IdempotencyKey, ResultPayload = c.ResultPayload, CreatedAt = c.CreatedAt ?? DateTime.MinValue
     };
 }

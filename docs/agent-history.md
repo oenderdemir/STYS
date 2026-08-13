@@ -1538,6 +1538,31 @@ Agent Regression:  0
 - Real PAVO device test status:
   - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
 
+### E2B1 Migration & Race Hardening — 2026-08-13
+
+- EF migration:
+  - `AgentReleases` tablosu migration ile eklendi.
+  - `Agentler.RuntimeIdentifier` ve `AgentCommands.ReleaseId` model snapshot’a işlendi.
+  - `AgentReleases` için `(KurumId, Version, RuntimeIdentifier)` bazlı unique constraint uygulandı.
+  - `AgentCommands` için active `AgentStageUpgrade` komutlarında `AgentId + CommandType + ReleaseId` bazlı filtered unique index eklendi.
+- Exact ReleaseId correlation:
+  - Upgrade staging artık version/rid ile ilk eşleşeni seçmiyor; `ReleaseId` üzerinden exact package download yapıyor.
+  - Backend `KurumId` ve agent context’i JWT / `ICurrentAgentContext` üzerinden türetiyor.
+  - `PackagePath` client payload’dan alınmıyor.
+- Race safety:
+  - Aynı Agent + Release için active stage komutu tek kaynaktan korunuyor.
+  - SQL-safe app-lock + filtered unique index ile concurrent insert yarışları engelleniyor.
+  - Expired stage komutlar yeni stage açmayı engellemiyor; önce expiry cleanup çalışıyor.
+- Tests:
+  - Release staging hedefli testler geçti.
+  - Tüm solution testleri geçti: `dotnet test STYS.sln --configuration Release`
+  - Integration testler connection string sağlanmadığı için local ortamda `skip` oldu.
+- Real PAVO device test status:
+  - Bu tur release correlation / race hardening için gerçek cihaz testi yapılmadı.
+- Known limitations:
+  - SQL Server app-lock koruması relational provider’da aktif; in-memory test path’i transaction/lock kullanmıyor.
+  - Release staging halen apply/restart yapmıyor; yalnız stage ediyor.
+
 ### E2A Authoritative Version Hardening — 2026-08-12
 
 - Gerçek binary version kaynağı:

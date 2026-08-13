@@ -51,6 +51,7 @@ public sealed class AgentReleaseService : IAgentReleaseService
 
         var payload = new AgentStageUpgradeRequest
         {
+            ReleaseId = release.Id,
             Version = release.Version,
             ContractVersion = release.ContractVersion,
             RuntimeIdentifier = release.RuntimeIdentifier,
@@ -72,20 +73,16 @@ public sealed class AgentReleaseService : IAgentReleaseService
         }, requestedBy, cancellationToken);
     }
 
-    public async Task<(AgentRelease Release, byte[] PackageBytes)> GetReleasePackageAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken)
+    public async Task<(AgentRelease Release, byte[] PackageBytes)> GetReleasePackageAsync(int releaseId, CancellationToken cancellationToken)
     {
         var agentContext = _tenantAccessor.IsSuperAdmin() ? null : _tenantAccessor.GetCurrentKurumId();
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-        var query = db.Set<AgentRelease>().Where(x => !x.IsDeleted && x.Enabled);
+        var query = db.Set<AgentRelease>().Where(x => !x.IsDeleted && x.Enabled && x.Id == releaseId);
         if (agentContext.HasValue)
         {
             query = query.Where(x => x.KurumId == agentContext.Value);
         }
-
-        query = query.Where(x =>
-            x.RuntimeIdentifier == runtimeIdentifier
-            && x.Version == version);
 
         var release = await query.FirstOrDefaultAsync(cancellationToken)
             ?? throw new BaseException("Release bulunamadı.", 404);

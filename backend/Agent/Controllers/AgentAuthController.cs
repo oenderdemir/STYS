@@ -192,18 +192,17 @@ public sealed class AgentAuthController : ControllerBase
         });
     }
 
-    [HttpGet("releases/{version}/{runtimeIdentifier}/package")]
+    [HttpGet("releases/{releaseId:int}/package")]
     [Authorize(Policy = AgentPolicies.AgentPolicy)]
     public async Task<ActionResult> DownloadReleasePackage(
-        string version,
-        string runtimeIdentifier,
+        int releaseId,
         CancellationToken cancellationToken)
     {
         var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
         if (!agentContext.IsAuthenticated)
             return Unauthorized();
 
-        var (release, packageBytes) = await _releaseService.GetReleasePackageAsync(version, runtimeIdentifier, cancellationToken);
+        var (release, packageBytes) = await _releaseService.GetReleasePackageAsync(releaseId, cancellationToken);
         return File(packageBytes, "application/octet-stream", $"{release.Version}-{release.RuntimeIdentifier}.bin");
     }
 

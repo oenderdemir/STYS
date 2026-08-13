@@ -8,6 +8,7 @@ public sealed class AgentCommand : BaseEntity<Guid>, ITenantEntity
 {
     public int AgentId { get; set; }
     public int KurumId { get; set; }
+    public int? ReleaseId { get; set; }
     [MaxLength(128)]
     public string CommandType { get; set; } = string.Empty;
     public string? Payload { get; set; }

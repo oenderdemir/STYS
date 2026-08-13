@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +53,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
         var service = CreateStagingService(client, manifest.PublicKeyPem);
 
         var result = await service.StageAsync(CreateStageCommand(manifest), CancellationToken.None);
-        var stagedFile = servicePaths.GetReleaseStagingPackagePath(manifest.Version, manifest.RuntimeIdentifier);
+        var stagedFile = servicePaths.GetReleaseStagingPackagePath(manifest.ReleaseId.ToString(CultureInfo.InvariantCulture), manifest.RuntimeIdentifier);
 
         Assert.True(result.Success);
         Assert.True(File.Exists(stagedFile));
@@ -114,7 +115,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
         var service = CreateStagingService(client, manifest.PublicKeyPem);
 
         var result = await service.StageAsync(CreateStageCommand(manifest), CancellationToken.None);
-        var stagedFile = servicePaths.GetReleaseStagingPackagePath(manifest.Version, manifest.RuntimeIdentifier);
+        var stagedFile = servicePaths.GetReleaseStagingPackagePath(manifest.ReleaseId.ToString(CultureInfo.InvariantCulture), manifest.RuntimeIdentifier);
 
         Assert.False(result.Success);
         Assert.False(File.Exists(stagedFile));
@@ -137,7 +138,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
     [Fact]
     public async Task WrongRid_Rejects()
     {
-        var (releaseService, agentId, _) = await CreateBackendReleaseServiceAsync(agentRuntimeIdentifier: "linux-x64");
+        var (releaseService, agentId, _, _) = await CreateBackendReleaseServiceAsync(agentRuntimeIdentifier: "linux-x64");
 
         await Assert.ThrowsAsync<BaseException>(() => releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
     }
@@ -145,7 +146,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
     [Fact]
     public async Task IncompatibleContract_Rejects()
     {
-        var (releaseService, agentId, _) = await CreateBackendReleaseServiceAsync(contractVersion: "2.0.0");
+        var (releaseService, agentId, _, _) = await CreateBackendReleaseServiceAsync(contractVersion: "2.0.0");
 
         await Assert.ThrowsAsync<BaseException>(() => releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
     }
@@ -153,7 +154,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
     [Fact]
     public async Task Downgrade_Rejects()
     {
-        var (releaseService, agentId, _) = await CreateBackendReleaseServiceAsync(releaseVersion: "0.9.0");
+        var (releaseService, agentId, _, _) = await CreateBackendReleaseServiceAsync(releaseVersion: "0.9.0");
 
         await Assert.ThrowsAsync<BaseException>(() => releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
     }
@@ -161,7 +162,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
     [Fact]
     public async Task CrossTenantRelease_Rejects()
     {
-        var (releaseService, agentId, _) = await CreateBackendReleaseServiceAsync(agentKurumId: 100, releaseKurumId: 200);
+        var (releaseService, agentId, _, _) = await CreateBackendReleaseServiceAsync(agentKurumId: 100, releaseKurumId: 200);
 
         await Assert.ThrowsAsync<BaseException>(() => releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None));
     }
@@ -169,7 +170,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
     [Fact]
     public async Task DuplicateActiveStage_TekCommand()
     {
-        var (releaseService, agentId, dbName) = await CreateBackendReleaseServiceAsync();
+        var (releaseService, agentId, _, dbName) = await CreateBackendReleaseServiceAsync();
         var first = await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
         var second = await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
 
@@ -182,7 +183,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
     [Fact]
     public async Task StagePayload_UrlIcermiyor()
     {
-        var (releaseService, agentId, _) = await CreateBackendReleaseServiceAsync();
+        var (releaseService, agentId, _, _) = await CreateBackendReleaseServiceAsync();
         var command = await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
 
         Assert.DoesNotContain("http://", command.Payload ?? string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -190,12 +191,14 @@ public sealed class AgentReleaseStagingTests : IDisposable
         Assert.DoesNotContain("file://", command.Payload ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
-    private (string Version, string RuntimeIdentifier, string Sha256, string Signature, long PackageSize, string PublicKeyPem, byte[] PackageBytes, AgentStageUpgradeRequest Request) CreateSignedManifest(string version, string runtimeIdentifier, string releaseNotes)
+    private (int ReleaseId, string Version, string RuntimeIdentifier, string Sha256, string Signature, long PackageSize, string PublicKeyPem, byte[] PackageBytes, AgentStageUpgradeRequest Request) CreateSignedManifest(string version, string runtimeIdentifier, string releaseNotes)
     {
         using var rsa = RSA.Create(2048);
+        var releaseId = Random.Shared.Next(1, int.MaxValue);
         var packageBytes = Encoding.UTF8.GetBytes($"package::{Guid.NewGuid():N}");
         var request = new AgentStageUpgradeRequest
         {
+            ReleaseId = releaseId,
             Version = version,
             ContractVersion = "1.0.0",
             RuntimeIdentifier = runtimeIdentifier,
@@ -210,6 +213,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
             RSASignaturePadding.Pss));
 
         return (
+            request.ReleaseId,
             request.Version,
             request.RuntimeIdentifier,
             request.Sha256,
@@ -220,9 +224,10 @@ public sealed class AgentReleaseStagingTests : IDisposable
             request);
     }
 
-    private AgentStageUpgradeCommand CreateStageCommand((string Version, string RuntimeIdentifier, string Sha256, string Signature, long PackageSize, string PublicKeyPem, byte[] PackageBytes, AgentStageUpgradeRequest Request) manifest) =>
+    private AgentStageUpgradeCommand CreateStageCommand((int ReleaseId, string Version, string RuntimeIdentifier, string Sha256, string Signature, long PackageSize, string PublicKeyPem, byte[] PackageBytes, AgentStageUpgradeRequest Request) manifest) =>
         new()
         {
+            ReleaseId = manifest.ReleaseId,
             Version = manifest.Version,
             ContractVersion = manifest.Request.ContractVersion,
             RuntimeIdentifier = manifest.RuntimeIdentifier,
@@ -250,7 +255,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
             NullLogger<AgentReleaseStagingService>.Instance);
     }
 
-    private async Task<(AgentReleaseService releaseService, int agentId, string dbName)> CreateBackendReleaseServiceAsync(
+    private async Task<(AgentReleaseService releaseService, int agentId, int releaseId, string dbName)> CreateBackendReleaseServiceAsync(
         string releaseVersion = "1.2.0",
         string contractVersion = "1.0.0",
         string agentRuntimeIdentifier = "win-x64",
@@ -261,12 +266,12 @@ public sealed class AgentReleaseStagingTests : IDisposable
         var dbName = Guid.NewGuid().ToString("N");
         var tenantAccessor = new FakeKurumTenantAccessor(agentKurumId);
         var db = CreateBackendDbContext(dbName, agentKurumId, false);
-        var agentId = await SeedBackendAsync(dbName, db, agentKurumId, releaseKurumId, agentRuntimeIdentifier, releaseRuntimeIdentifier, releaseVersion, contractVersion);
+        var (agentId, releaseId) = await SeedBackendAsync(dbName, db, agentKurumId, releaseKurumId, agentRuntimeIdentifier, releaseRuntimeIdentifier, releaseVersion, contractVersion);
 
         var factory = new DbContextFactoryForTest<StysAppDbContext>(() => CreateBackendDbContext(dbName, agentKurumId, false));
         var commandService = new AgentCommandService(factory, tenantAccessor, NullLogger<AgentCommandService>.Instance, compatibilityOptions: Options.Create(new AgentCompatibilityOptions()));
         var releaseService = new AgentReleaseService(factory, tenantAccessor, commandService, Options.Create(new AgentCompatibilityOptions()));
-        return (releaseService, agentId, dbName);
+        return (releaseService, agentId, releaseId, dbName);
     }
 
     private static StysAppDbContext CreateBackendDbContext(string dbName, int currentKurumId, bool isSuperAdmin)
@@ -282,7 +287,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
         return new StysAppDbContext(options, currentTenantAccessor: new FakeKurumTenantAccessor(currentKurumId));
     }
 
-    private static async Task<int> SeedBackendAsync(
+    private static async Task<(int AgentId, int ReleaseId)> SeedBackendAsync(
         string dbName,
         StysAppDbContext db,
         int agentKurumId,
@@ -326,7 +331,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
             : CreateBackendDbContext(dbName, releaseKurumId, isSuperAdmin: true);
 
         releaseContext.AllowExplicitTenantWritesWithoutAmbientTenant = true;
-        releaseContext.Set<AgentRelease>().Add(new AgentRelease
+        var release = new AgentRelease
         {
             KurumId = releaseKurumId,
             Version = releaseVersion,
@@ -341,10 +346,11 @@ public sealed class AgentReleaseStagingTests : IDisposable
             PackagePath = releasePath,
             CreatedBy = "test",
             CreatedAt = DateTime.UtcNow
-        });
+        };
+        releaseContext.Set<AgentRelease>().Add(release);
         await releaseContext.SaveChangesAsync();
         releaseContext.AllowExplicitTenantWritesWithoutAmbientTenant = false;
-        return agent.Id;
+        return (agent.Id, release.Id);
     }
 
     private sealed class TempAgentPathResolver : IAgentPathResolver
@@ -371,7 +377,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
 
         public DownloadClient(byte[] bytes) => _bytes = bytes;
 
-        public Task<byte[]> DownloadReleasePackageAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken) =>
+        public Task<byte[]> DownloadReleasePackageAsync(int releaseId, CancellationToken cancellationToken) =>
             Task.FromResult(_bytes);
 
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -394,7 +400,7 @@ public sealed class AgentReleaseStagingTests : IDisposable
         private readonly Exception _exception;
 
         public ThrowingDownloadClient(Exception exception) => _exception = exception;
-        public Task<byte[]> DownloadReleasePackageAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken) => throw _exception;
+        public Task<byte[]> DownloadReleasePackageAsync(int releaseId, CancellationToken cancellationToken) => throw _exception;
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken) => Task.CompletedTask;

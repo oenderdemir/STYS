@@ -29,10 +29,10 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
         Directory.CreateDirectory(paths.ReleaseStagingRootDirectory);
     }
 
-    public Task<AgentReleaseStagingState?> GetAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken)
+    public Task<AgentReleaseStagingState?> GetAsync(int releaseId, CancellationToken cancellationToken)
     {
         _ = cancellationToken;
-        var key = BuildKey(version, runtimeIdentifier);
+        var key = BuildKey(releaseId);
         return Task.FromResult(WithGate(() =>
         {
             var items = ReadAllCore();
@@ -46,7 +46,7 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
         WithGate(() =>
         {
             var items = ReadAllCore();
-            items[BuildKey(state.Version, state.RuntimeIdentifier)] = Clone(state) ?? state;
+            items[BuildKey(state.ReleaseId)] = Clone(state) ?? state;
             WriteAllCore(items);
         });
         return Task.CompletedTask;
@@ -124,6 +124,7 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
         ? null
         : new AgentReleaseStagingState
         {
+            ReleaseId = state.ReleaseId,
             Version = state.Version,
             RuntimeIdentifier = state.RuntimeIdentifier,
             StageStatus = state.StageStatus,
@@ -140,6 +141,6 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
             UpdatedAt = state.UpdatedAt
         };
 
-    private static string BuildKey(string version, string runtimeIdentifier) =>
-        $"{version.Trim()}::{runtimeIdentifier.Trim()}";
+    private static string BuildKey(int releaseId) =>
+        releaseId.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }

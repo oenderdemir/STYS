@@ -45,8 +45,8 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
     public Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken) =>
         SendForDataAsync<AgentSelfDto>(HttpMethod.Get, "api/agent/me", null, cancellationToken);
 
-    public Task<byte[]> DownloadReleasePackageAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken) =>
-        SendForBinaryAsync(HttpMethod.Get, $"api/agent/releases/{Uri.EscapeDataString(version)}/{Uri.EscapeDataString(runtimeIdentifier)}/package", cancellationToken);
+    public Task<byte[]> DownloadReleasePackageAsync(int releaseId, CancellationToken cancellationToken) =>
+        SendForBinaryAsync(HttpMethod.Get, $"api/agent/releases/{releaseId}/package", cancellationToken);
 
     public Task<AgentPavoDeviceRegistrationResult> RegisterPavoDeviceAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken) =>
         SendForDataAsync<AgentPavoDeviceRegistrationResult>(HttpMethod.Post, "api/agent/pos-devices/register", request, cancellationToken);

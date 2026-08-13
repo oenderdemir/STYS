@@ -25,6 +25,7 @@ public sealed class AgentStageUpgradeCommandHandler : IAgentCommandHandler<Agent
         {
             var response = new AgentStageUpgradeResponse
             {
+                ReleaseId = command.ReleaseId,
                 Version = command.Version,
                 RuntimeIdentifier = command.RuntimeIdentifier,
                 StageStatus = result.Success ? STYS.Agent.Contracts.Enums.AgentReleaseStageStatus.Staged : STYS.Agent.Contracts.Enums.AgentReleaseStageStatus.Failed,

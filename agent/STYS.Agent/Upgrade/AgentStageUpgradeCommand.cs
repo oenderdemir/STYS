@@ -7,6 +7,7 @@ public sealed class AgentStageUpgradeCommand : IAgentCommand
 {
     public string CommandType => "AgentStageUpgrade";
 
+    public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string ContractVersion { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;
@@ -18,6 +19,7 @@ public sealed class AgentStageUpgradeCommand : IAgentCommand
 
     public AgentStageUpgradeRequest ToRequest() => new()
     {
+        ReleaseId = ReleaseId,
         Version = Version,
         ContractVersion = ContractVersion,
         RuntimeIdentifier = RuntimeIdentifier,

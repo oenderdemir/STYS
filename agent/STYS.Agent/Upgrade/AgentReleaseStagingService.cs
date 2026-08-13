@@ -35,18 +35,18 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
 
     public async Task<AgentCommandResult> StageAsync(AgentStageUpgradeCommand command, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(command.Version) || string.IsNullOrWhiteSpace(command.RuntimeIdentifier))
+        if (command.ReleaseId <= 0 || string.IsNullOrWhiteSpace(command.Version) || string.IsNullOrWhiteSpace(command.RuntimeIdentifier))
         {
             return AgentCommandResult.Fail("Güncelleme manifesti eksik.", "INVALID_RELEASE_MANIFEST");
         }
 
-        var stageDirectory = _paths.GetReleaseStagingDirectory(command.Version, command.RuntimeIdentifier);
+        var stageDirectory = _paths.GetReleaseStagingDirectory(command.ReleaseId.ToString(System.Globalization.CultureInfo.InvariantCulture), command.RuntimeIdentifier);
         Directory.CreateDirectory(stageDirectory);
 
-        var existing = await _store.GetAsync(command.Version, command.RuntimeIdentifier, cancellationToken);
+        var existing = await _store.GetAsync(command.ReleaseId, cancellationToken);
         if (existing is not null && existing.StageStatus == AgentReleaseStageStatus.Staged)
         {
-            var stagedPackagePath = existing.PackagePath ?? _paths.GetReleaseStagingPackagePath(command.Version, command.RuntimeIdentifier);
+            var stagedPackagePath = existing.PackagePath ?? _paths.GetReleaseStagingPackagePath(command.ReleaseId.ToString(System.Globalization.CultureInfo.InvariantCulture), command.RuntimeIdentifier);
             if (File.Exists(stagedPackagePath))
             {
                 var stagedBytes = await File.ReadAllBytesAsync(stagedPackagePath, cancellationToken);
@@ -64,6 +64,7 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
 
         var state = new AgentReleaseStagingState
         {
+            ReleaseId = command.ReleaseId,
             Version = command.Version,
             RuntimeIdentifier = command.RuntimeIdentifier,
             Sha256 = command.Sha256,
@@ -78,11 +79,11 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
         await _store.UpsertAsync(state, cancellationToken);
 
         var tempPath = Path.Combine(stageDirectory, $"{Path.GetRandomFileName()}.tmp");
-        var finalPath = _paths.GetReleaseStagingPackagePath(command.Version, command.RuntimeIdentifier);
+        var finalPath = _paths.GetReleaseStagingPackagePath(command.ReleaseId.ToString(System.Globalization.CultureInfo.InvariantCulture), command.RuntimeIdentifier);
 
         try
         {
-            var packageBytes = await _client.DownloadReleasePackageAsync(command.Version, command.RuntimeIdentifier, cancellationToken);
+            var packageBytes = await _client.DownloadReleasePackageAsync(command.ReleaseId, cancellationToken);
             await File.WriteAllBytesAsync(tempPath, packageBytes, cancellationToken);
 
             if (command.PackageSize > 0 && packageBytes.LongLength != command.PackageSize)
@@ -142,7 +143,7 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
             state.UpdatedAt = DateTimeOffset.UtcNow;
             await _store.UpsertAsync(state, cancellationToken);
 
-            _logger.LogWarning(ex, "Agent release staging failed for {Version}/{RuntimeIdentifier}", command.Version, command.RuntimeIdentifier);
+            _logger.LogWarning(ex, "Agent release staging failed for {ReleaseId} {Version}/{RuntimeIdentifier}", command.ReleaseId, command.Version, command.RuntimeIdentifier);
             var failure = AgentCommandResult.Fail(state.Message, "RELEASE_STAGING_FAILED");
             failure.ResultPayload = System.Text.Json.JsonSerializer.Serialize(CreateResponse(command, AgentReleaseStageStatus.Failed, state.Message, null));
             return failure;
@@ -152,6 +153,7 @@ public sealed class AgentReleaseStagingService : IAgentReleaseStagingService
     private static AgentStageUpgradeResponse CreateResponse(AgentStageUpgradeCommand command, AgentReleaseStageStatus status, string? message, string? packagePath) =>
         new()
         {
+            ReleaseId = command.ReleaseId,
             Version = command.Version,
             RuntimeIdentifier = command.RuntimeIdentifier,
             StageStatus = status,

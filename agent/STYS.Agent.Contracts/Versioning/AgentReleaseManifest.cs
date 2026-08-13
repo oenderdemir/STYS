@@ -7,16 +7,18 @@ namespace STYS.Agent.Contracts.Versioning;
 public static class AgentReleaseManifest
 {
     public static byte[] BuildSignaturePayload(
+        int releaseId,
         string version,
         string contractVersion,
         string runtimeIdentifier,
         string sha256,
         long packageSize,
         DateTimeOffset publishedAt) =>
-        Encoding.UTF8.GetBytes(BuildCanonicalString(version, contractVersion, runtimeIdentifier, sha256, packageSize, publishedAt));
+        Encoding.UTF8.GetBytes(BuildCanonicalString(releaseId, version, contractVersion, runtimeIdentifier, sha256, packageSize, publishedAt));
 
     public static byte[] BuildSignaturePayload(AgentStageUpgradeRequest request) =>
         BuildSignaturePayload(
+            request.ReleaseId,
             request.Version,
             request.ContractVersion,
             request.RuntimeIdentifier,
@@ -25,6 +27,7 @@ public static class AgentReleaseManifest
             request.PublishedAt);
 
     public static string BuildCanonicalString(
+        int releaseId,
         string version,
         string contractVersion,
         string runtimeIdentifier,
@@ -32,6 +35,7 @@ public static class AgentReleaseManifest
         long packageSize,
         DateTimeOffset publishedAt) =>
         string.Join("|",
+            releaseId.ToString(CultureInfo.InvariantCulture),
             Normalize(version),
             Normalize(contractVersion),
             Normalize(runtimeIdentifier),

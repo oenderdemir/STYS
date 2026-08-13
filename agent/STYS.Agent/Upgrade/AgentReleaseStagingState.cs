@@ -4,6 +4,7 @@ namespace STYS.Agent.Upgrade;
 
 public sealed class AgentReleaseStagingState
 {
+    public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;
     public AgentReleaseStageStatus StageStatus { get; set; } = AgentReleaseStageStatus.None;
@@ -19,4 +20,3 @@ public sealed class AgentReleaseStagingState
     public DateTimeOffset? FailedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
-

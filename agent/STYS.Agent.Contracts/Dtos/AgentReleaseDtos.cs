@@ -18,6 +18,7 @@ public sealed class AgentReleaseDto
 
 public sealed class AgentStageUpgradeRequest
 {
+    public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string ContractVersion { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;
@@ -30,6 +31,7 @@ public sealed class AgentStageUpgradeRequest
 
 public sealed class AgentStageUpgradeResponse
 {
+    public int ReleaseId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string RuntimeIdentifier { get; set; } = string.Empty;
     public AgentReleaseStageStatus StageStatus { get; set; } = AgentReleaseStageStatus.None;

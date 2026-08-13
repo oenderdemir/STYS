@@ -77,27 +77,79 @@ public sealed class AgentCommandService
         if (agent.Durum != AgentDurum.Active) throw new BaseException("Agent aktif değil.", 400);
         EnsurePaymentCommandAllowed(agent, request.CommandType);
 
-        if (TryGetStageUpgradeIdentity(request.CommandType, request.Payload, out var stageIdentity))
+        await _commandExpiryService.ExpireTimedOutCommandsAsync(agent.Id, ct);
+
+        var isStageUpgrade = TryGetStageUpgradeIdentity(request.CommandType, request.Payload, out var stageIdentity);
+        var useTransaction = db.Database.IsRelational();
+
+        if (isStageUpgrade)
         {
-            var existingStageCommand = await FindActiveStageUpgradeCommandAsync(db, agent.Id, stageIdentity, ct);
-            if (existingStageCommand is not null)
+            IDbContextTransaction? tx = null;
+            try
             {
-                return MapToDto(existingStageCommand);
+                if (useTransaction)
+                {
+                    tx = await db.Database.BeginTransactionAsync(ct);
+                    await AcquireStageUpgradeLockAsync(db, agent.Id, stageIdentity, ct);
+                }
+
+                var existingStageCommand = await FindActiveStageUpgradeCommandAsync(db, agent.Id, stageIdentity, ct);
+                if (existingStageCommand is not null)
+                {
+                    if (tx is not null)
+                    {
+                        await tx.CommitAsync(ct);
+                    }
+
+                    return MapToDto(existingStageCommand);
+                }
+
+                await ValidateScopeAsync(db, agent.Id, request.CommandType, ct);
+                await ValidateCapabilityAsync(db, agent.Id, request.CommandType, ct);
+
+                var stageCommand = CreateCommand(agent, request, requestedBy, stageIdentity.ReleaseId);
+                db.Set<AgentCommand>().Add(stageCommand);
+                try
+                {
+                    await db.SaveChangesAsync(ct);
+                    if (tx is not null)
+                    {
+                        await tx.CommitAsync(ct);
+                    }
+
+                    var stageDto = MapToDto(stageCommand);
+                    NotifyIfNeeded(stageDto);
+                    return stageDto;
+                }
+                catch (DbUpdateException ex) when (IsStageUpgradeUniqueConflict(ex))
+                {
+                    if (tx is not null)
+                    {
+                        await tx.RollbackAsync(ct);
+                    }
+
+                    var existingAfterConflict = await FindActiveStageUpgradeCommandAsync(db, agent.Id, stageIdentity, ct);
+                    if (existingAfterConflict is not null)
+                    {
+                        return MapToDto(existingAfterConflict);
+                    }
+
+                    throw;
+                }
+            }
+            finally
+            {
+                if (tx is not null)
+                {
+                    await tx.DisposeAsync();
+                }
             }
         }
 
         await ValidateScopeAsync(db, agent.Id, request.CommandType, ct);
         await ValidateCapabilityAsync(db, agent.Id, request.CommandType, ct);
 
-        var cmd = new AgentCommand
-        {
-            Id = Guid.NewGuid(), AgentId = agent.Id, KurumId = agent.KurumId, CommandType = request.CommandType,
-            Payload = request.Payload, Status = AgentCommandStatus.Pending, Priority = request.Priority,
-            ExpiresAt = request.ExpirationMinutes.HasValue ? DateTime.UtcNow.AddMinutes(request.ExpirationMinutes.Value) : null,
-            MaxRetryCount = request.MaxRetryCount, CorrelationId = Guid.NewGuid().ToString("N"),
-            IdempotencyKey = ($"{request.CommandType}:{Guid.NewGuid():N}").Length > 64 ? ($"{request.CommandType}:{Guid.NewGuid():N}")[..64] : $"{request.CommandType}:{Guid.NewGuid():N}",
-            RequestedBy = requestedBy, CreatedBy = requestedBy, CreatedAt = DateTime.UtcNow
-        };
+        var cmd = CreateCommand(agent, request, requestedBy, null);
         db.Set<AgentCommand>().Add(cmd);
         await db.SaveChangesAsync(ct);
         var dto = MapToDto(cmd);
@@ -134,26 +186,44 @@ public sealed class AgentCommandService
         await _commandExpiryService.ExpireTimedOutCommandsAsync(agentId, ct);
 
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await AcquirePollLockAsync(db, agentId, ct);
-
-        var now = DateTime.UtcNow;
-
-        var commands = await db.Set<AgentCommand>()
-            .Where(x => x.AgentId == agentId && !x.IsDeleted && x.Status == AgentCommandStatus.Pending && (x.ExpiresAt == null || x.ExpiresAt > now))
-            .OrderByDescending(x => x.Priority).ThenBy(x => x.CreatedAt)
-            .Take(50)
-            .ToListAsync(ct);
-
-        if (commands.Count > 0)
+        var useTransaction = db.Database.IsRelational();
+        IDbContextTransaction? tx = null;
+        try
         {
-            await db.Set<AgentCommand>()
-                .Where(x => commands.Select(c => c.Id).Contains(x.Id))
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, AgentCommandStatus.Delivered), ct);
-        }
+            if (useTransaction)
+            {
+                tx = await db.Database.BeginTransactionAsync(ct);
+                await AcquirePollLockAsync(db, agentId, ct);
+            }
 
-        await tx.CommitAsync(ct);
-        return commands.Select(MapToDto).ToList();
+            var now = DateTime.UtcNow;
+
+            var commands = await db.Set<AgentCommand>()
+                .Where(x => x.AgentId == agentId && !x.IsDeleted && x.Status == AgentCommandStatus.Pending && (x.ExpiresAt == null || x.ExpiresAt > now))
+                .OrderByDescending(x => x.Priority).ThenBy(x => x.CreatedAt)
+                .Take(50)
+                .ToListAsync(ct);
+
+            if (commands.Count > 0)
+            {
+                await db.Set<AgentCommand>()
+                    .Where(x => commands.Select(c => c.Id).Contains(x.Id))
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, AgentCommandStatus.Delivered), ct);
+            }
+
+            if (tx is not null)
+            {
+                await tx.CommitAsync(ct);
+            }
+            return commands.Select(MapToDto).ToList();
+        }
+        finally
+        {
+            if (tx is not null)
+            {
+                await tx.DisposeAsync();
+            }
+        }
     }
 
     public async Task<IReadOnlyCollection<AgentCommandDto>> GetHistoryAsync(int agentId, CancellationToken ct)
@@ -802,6 +872,11 @@ public sealed class AgentCommandService
 
     private static async Task AcquirePollLockAsync(StysAppDbContext db, int agentId, CancellationToken ct)
     {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
         var connection = db.Database.GetDbConnection();
         var shouldClose = connection.State != System.Data.ConnectionState.Open;
         if (shouldClose)
@@ -921,14 +996,15 @@ public sealed class AgentCommandService
             return false;
         }
 
+        var releaseId = request.ReleaseId;
         var version = request.Version?.Trim();
         var runtimeIdentifier = request.RuntimeIdentifier?.Trim();
-        if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(runtimeIdentifier))
+        if (releaseId <= 0 || string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(runtimeIdentifier))
         {
             return false;
         }
 
-        identity = new AgentStageUpgradeIdentity(version, runtimeIdentifier);
+        identity = new AgentStageUpgradeIdentity(releaseId, version, runtimeIdentifier);
         return true;
     }
 
@@ -956,6 +1032,87 @@ public sealed class AgentCommandService
 
         return candidates.FirstOrDefault(candidate =>
             TryGetStageUpgradeIdentity(candidate.CommandType, candidate.Payload, out var existing) && existing.Equals(identity));
+    }
+
+    private static AgentCommand CreateCommand(AgentEntity agent, AgentCommandSendRequest request, string requestedBy, int? releaseId)
+    {
+        var now = DateTime.UtcNow;
+        var idempotencySeed = $"{request.CommandType}:{Guid.NewGuid():N}";
+        var idempotencyKey = idempotencySeed.Length > 64 ? idempotencySeed[..64] : idempotencySeed;
+        return new AgentCommand
+        {
+            Id = Guid.NewGuid(),
+            AgentId = agent.Id,
+            KurumId = agent.KurumId,
+            ReleaseId = releaseId,
+            CommandType = request.CommandType,
+            Payload = request.Payload,
+            Status = AgentCommandStatus.Pending,
+            Priority = request.Priority,
+            ExpiresAt = request.ExpirationMinutes.HasValue ? now.AddMinutes(request.ExpirationMinutes.Value) : null,
+            MaxRetryCount = request.MaxRetryCount,
+            CorrelationId = Guid.NewGuid().ToString("N"),
+            IdempotencyKey = idempotencyKey,
+            RequestedBy = requestedBy,
+            CreatedBy = requestedBy,
+            CreatedAt = now
+        };
+    }
+
+    private static bool IsStageUpgradeUniqueConflict(DbUpdateException ex)
+    {
+        var message = ex.InnerException?.Message ?? ex.Message;
+        return message.Contains("IX_AgentCommands_AgentId_CommandType_ReleaseId", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("AgentStageUpgrade", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task AcquireStageUpgradeLockAsync(StysAppDbContext db, int agentId, AgentStageUpgradeIdentity identity, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+            command.CommandText = """
+                DECLARE @lockResult int;
+                EXEC @lockResult = sp_getapplock
+                    @Resource = @resource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction',
+                    @LockTimeout = 10000;
+                SELECT @lockResult;
+                """;
+            var resource = command.CreateParameter();
+            resource.ParameterName = "@resource";
+            resource.Value = $"agent-stage-upgrade:{agentId}:{identity.ReleaseId}";
+            command.Parameters.Add(resource);
+
+            var result = await command.ExecuteScalarAsync(ct);
+            if (result is null)
+            {
+                throw new InvalidOperationException("Agent stage upgrade lock alınamadı.");
+            }
+
+            var code = Convert.ToInt32(result);
+            if (code < 0)
+            {
+                throw new InvalidOperationException($"Agent stage upgrade lock alınamadı. Code={code}");
+            }
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
     }
 
     private static string NormalizeCanonicalValue(string? value) =>
@@ -1018,7 +1175,7 @@ public sealed class AgentCommandService
 
     private sealed record PavoCommandValidationContext(PosCihazi Device, PosOdemeIslemi? Payment);
 
-    private readonly record struct AgentStageUpgradeIdentity(string Version, string RuntimeIdentifier);
+    private readonly record struct AgentStageUpgradeIdentity(int ReleaseId, string Version, string RuntimeIdentifier);
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()
     {

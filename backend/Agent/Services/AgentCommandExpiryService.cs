@@ -60,35 +60,59 @@ public sealed class AgentCommandExpiryService
     public async Task<int> ExpireTimedOutCommandsAsync(int agentId, CancellationToken ct)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await AcquireAgentExpiryLockAsync(db, agentId, ct);
+        var useTransaction = db.Database.IsRelational();
+        IDbContextTransaction? tx = null;
 
-        var utcNow = DateTime.UtcNow;
-        var timedOutCommands = await db.Set<AgentCommand>()
-            .Where(x =>
-                x.AgentId == agentId
-                && !x.IsDeleted
-                && x.ExpiresAt.HasValue
-                && x.ExpiresAt.Value <= utcNow
-                && ExpirableStatuses.Contains(x.Status))
-            .OrderBy(x => x.CreatedAt)
-            .ToListAsync(ct);
-
-        if (timedOutCommands.Count == 0)
+        try
         {
-            await tx.CommitAsync(ct);
-            return 0;
-        }
+            if (useTransaction)
+            {
+                tx = await db.Database.BeginTransactionAsync(ct);
+                await AcquireAgentExpiryLockAsync(db, agentId, ct);
+            }
 
-        foreach (var cmd in timedOutCommands)
+            var utcNow = DateTime.UtcNow;
+            var timedOutCommands = await db.Set<AgentCommand>()
+                .Where(x =>
+                    x.AgentId == agentId
+                    && !x.IsDeleted
+                    && x.ExpiresAt.HasValue
+                    && x.ExpiresAt.Value <= utcNow
+                    && ExpirableStatuses.Contains(x.Status))
+                .OrderBy(x => x.CreatedAt)
+                .ToListAsync(ct);
+
+            if (timedOutCommands.Count == 0)
+            {
+                if (tx is not null)
+                {
+                    await tx.CommitAsync(ct);
+                }
+
+                return 0;
+            }
+
+            foreach (var cmd in timedOutCommands)
+            {
+                MarkExpired(db, cmd, agentId, utcNow);
+            }
+
+            await db.SaveChangesAsync(ct);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(ct);
+            }
+
+            _logger.LogInformation("Timed out agent commands expired. AgentId={AgentId}, ExpiredCount={ExpiredCount}", agentId, timedOutCommands.Count);
+            return timedOutCommands.Count;
+        }
+        finally
         {
-            MarkExpired(db, cmd, agentId, utcNow);
+            if (tx is not null)
+            {
+                await tx.DisposeAsync();
+            }
         }
-
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-        _logger.LogInformation("Timed out agent commands expired. AgentId={AgentId}, ExpiredCount={ExpiredCount}", agentId, timedOutCommands.Count);
-        return timedOutCommands.Count;
     }
 
     private void MarkExpired(StysAppDbContext db, AgentCommand cmd, int agentId, DateTime utcNow)
@@ -240,6 +264,11 @@ public sealed class AgentCommandExpiryService
 
     private static async Task AcquireAgentExpiryLockAsync(StysAppDbContext db, int agentId, CancellationToken ct)
     {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
         var connection = db.Database.GetDbConnection();
         var shouldClose = connection.State != ConnectionState.Open;
         if (shouldClose)

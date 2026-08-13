@@ -2034,6 +2034,7 @@ public class StysAppDbContext : DbContext
             entity.ToTable("AgentCommands", entegrasyonSchema);
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.ReleaseId);
             entity.Property(x => x.CommandType).HasMaxLength(128).IsRequired();
             entity.Property(x => x.CorrelationId).HasMaxLength(64);
             entity.Property(x => x.IdempotencyKey).HasMaxLength(128);
@@ -2042,6 +2043,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ErrorCode).HasMaxLength(128);
             entity.Property(x => x.Payload).HasColumnType("nvarchar(max)");
             entity.HasIndex(x => new { x.AgentId, x.IdempotencyKey }).HasFilter("[IdempotencyKey] <> '' AND [IsDeleted] = 0");
+            entity.HasIndex(x => new { x.AgentId, x.CommandType, x.ReleaseId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [ReleaseId] IS NOT NULL AND [CommandType] = 'AgentStageUpgrade' AND [Status] IN (0,1,2,3)");
             entity.HasIndex(x => new { x.AgentId, x.Status });
             entity.HasOne(x => x.Agent).WithMany().HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
         });

@@ -9,7 +9,7 @@ public interface IStysAgentApiClient
     Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken);
     Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken);
     Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken);
-    Task<byte[]> DownloadReleasePackageAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken) =>
+    Task<byte[]> DownloadReleasePackageAsync(int releaseId, CancellationToken cancellationToken) =>
         throw new NotSupportedException();
     Task<AgentPavoDeviceRegistrationResult> RegisterPavoDeviceAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken) =>
         throw new NotSupportedException();

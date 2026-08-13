@@ -144,6 +144,20 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="col-12 flex align-items-center justify-content-between">
+                                <div class="text-color-secondary">
+                                    Güncellemeyi yalnızca imzalı release STYS tarafından seçildiğinde hazırlayabilirsiniz.
+                                </div>
+                                <button
+                                    pButton
+                                    pRipple
+                                    label="Güncellemeyi Hazırla"
+                                    icon="pi pi-upload"
+                                    class="p-button-help"
+                                    [loading]="stagingUpgrade()"
+                                    [disabled]="!canStageUpgrade(detail)"
+                                    (click)="stageUpgrade(detail.id)"></button>
+                            </div>
                         </div>
                     } @else {
                         <div class="text-color-secondary">Uyumluluk bilgisi için bir agent seçin.</div>

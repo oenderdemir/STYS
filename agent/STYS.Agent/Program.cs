@@ -12,7 +12,9 @@ using STYS.Agent.Diagnostics;
 using STYS.Agent.LocalDevices;
 using STYS.Agent.LocalManagement;
 using STYS.Agent.Modules.Pavo;
+using STYS.Agent.Options;
 using STYS.Agent.Services;
+using STYS.Agent.Upgrade;
 using STYS.Agent.Workers;
 using STYS.Agent.Versioning;
 
@@ -63,6 +65,7 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.Configure<StysAgentClientOptions>(
     builder.Configuration.GetSection(StysAgentClientOptions.SectionName));
 builder.Services.PostConfigure<StysAgentClientOptions>(options => options.AgentVersion = AgentVersionInfo.Current);
+builder.Services.Configure<AgentUpgradeOptions>(builder.Configuration.GetSection(AgentUpgradeOptions.SectionName));
 
 builder.Services.AddSingleton<IAgentPathResolver, AgentPathResolver>();
 builder.Services.AddSingleton<IAgentBootstrapConfigurationStore, FileAgentBootstrapConfigurationStore>();
@@ -79,6 +82,8 @@ builder.Services.AddSingleton<IPavoCommandSequenceReservationService, PavoComman
 builder.Services.AddSingleton<ILocalDeviceConnectionTester, PavoLocalDeviceConnectionTester>();
 builder.Services.AddSingleton<ILocalDeviceConnectionTesterRegistry, LocalDeviceConnectionTesterRegistry>();
 builder.Services.AddScoped<ILocalDeviceManagementService, LocalDeviceManagementService>();
+builder.Services.AddSingleton<IAgentReleaseStagingStore, FileAgentReleaseStagingStore>();
+builder.Services.AddScoped<IAgentReleaseStagingService, AgentReleaseStagingService>();
 
 builder.Services.AddSingleton<AgentTokenStore>();
 builder.Services.AddSingleton<IAgentAuthenticationState, AgentAuthenticationState>();
@@ -104,6 +109,7 @@ builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
     registry.Register<PingCommand, PingCommandHandler>("Ping");
     registry.Register<HealthCheckCommand, HealthCheckCommandHandler>("HealthCheck");
     registry.Register<RefreshConfigurationCommand, RefreshConfigCommandHandler>("RefreshConfiguration");
+    registry.Register<AgentStageUpgradeCommand, AgentStageUpgradeCommandHandler>("AgentStageUpgrade");
     PavoModuleExtensions.RegisterPavoCommands(registry);
     return registry;
 });
@@ -111,6 +117,7 @@ builder.Services.AddSingleton<IAgentCommandHandlerRegistry>(sp =>
 builder.Services.AddScoped<PingCommandHandler>();
 builder.Services.AddScoped<HealthCheckCommandHandler>();
 builder.Services.AddScoped<RefreshConfigCommandHandler>();
+builder.Services.AddScoped<AgentStageUpgradeCommandHandler>();
 builder.Services.AddPavoModule();
 
 Log.Logger = new LoggerConfiguration()

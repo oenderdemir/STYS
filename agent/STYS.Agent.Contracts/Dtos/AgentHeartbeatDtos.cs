@@ -7,6 +7,7 @@ public sealed class AgentHeartbeatRequest
 {
     public string AgentVersion { get; set; } = string.Empty;
     public string ContractVersion { get; set; } = AgentContractVersion.Current;
+    public string RuntimeIdentifier { get; set; } = string.Empty;
     public IReadOnlyCollection<string> SupportedApiVersions { get; set; } = [];
     public IReadOnlyCollection<string> SupportedCapabilities { get; set; } = [];
     public IReadOnlyCollection<AgentModuleInfo> InstalledModules { get; set; } = [];

@@ -12,11 +12,13 @@ public sealed class AgentController : ControllerBase
 {
     private readonly IAgentService _agentService;
     private readonly AgentCommandService _commandService;
+    private readonly IAgentReleaseService _releaseService;
 
-    public AgentController(IAgentService agentService, AgentCommandService commandService)
+    public AgentController(IAgentService agentService, AgentCommandService commandService, IAgentReleaseService releaseService)
     {
         _agentService = agentService;
         _commandService = commandService;
+        _releaseService = releaseService;
     }
 
     [HttpGet]
@@ -104,6 +106,11 @@ public sealed class AgentController : ControllerBase
         request.AgentId = id;
         return Ok(await _commandService.SendAsync(request, User?.Identity?.Name ?? "system", cancellationToken));
     }
+
+    [HttpPost("{id:int}/stage-upgrade")]
+    [Permission(StructurePermissions.AgentYonetimi.Manage)]
+    public async Task<ActionResult<AgentCommandDto>> StageUpgrade(int id, CancellationToken cancellationToken) =>
+        Ok(await _releaseService.StageUpgradeAsync(id, User?.Identity?.Name ?? "system", cancellationToken));
 
     [HttpGet("{id:int}/commands")]
     [Permission(StructurePermissions.AgentYonetimi.View)]

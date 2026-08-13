@@ -12,6 +12,7 @@ public sealed class AgentDto
     public int Durum { get; set; }
     public string? AgentVersion { get; set; }
     public string? ContractVersion { get; set; }
+    public string? RuntimeIdentifier { get; set; }
     public string? MinimumSupportedAgentVersion { get; set; }
     public string? RecommendedAgentVersion { get; set; }
     public string? SupportedContractVersion { get; set; }
@@ -35,6 +36,7 @@ public sealed class AgentListDto
     public int Durum { get; set; }
     public string? AgentVersion { get; set; }
     public string? ContractVersion { get; set; }
+    public string? RuntimeIdentifier { get; set; }
     public string? MinimumSupportedAgentVersion { get; set; }
     public string? RecommendedAgentVersion { get; set; }
     public string? SupportedContractVersion { get; set; }

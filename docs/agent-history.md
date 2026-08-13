@@ -1908,6 +1908,42 @@ Agent Regression:  0
   - Angular bundle budget warning devam ediyor.
   - Ready olmayan cihazlarda hata nedeni ilk blokaj üzerinden raporlanıyor; bu, guard davranışı için kasıtlı.
 
+## 2026-08-13 — Agent Production Faz E2B1
+
+- Release trust model:
+  - STYS artık release seçimini merkezi olarak yapıyor.
+  - Agent sadece typed `AgentStageUpgrade` komutunu alıyor.
+  - Package URL client/body üzerinden taşınmıyor.
+- Signature / hash:
+  - Manifest için RSA-PSS SHA-256 doğrulaması eklendi.
+  - SHA-256 hash ve imza ikisi de reject koşulu olarak kullanılıyor.
+  - İmzalama public key’i sadece agent upgrade config’te tutuluyor; private key repoya eklenmedi.
+- Staging:
+  - Paket `updates/staging/<version>/<runtimeIdentifier>/` altına atomik olarak indiriliyor.
+  - `Downloading → Verifying → Staged / Failed` durumları kalıcı tutuluyor.
+  - Secret / fingerprint / JWT staging metadata’ya yazılmıyor.
+- Tenant güvenliği:
+  - Stage selection ve package download tenant erişim kontrolünden geçiyor.
+  - Cross-tenant release/stage istekleri reddediliyor.
+- Compatibility:
+  - RID ve contract uyumu backend policy ile kontrol ediliyor.
+  - Downgrade reddediliyor.
+  - Aynı sürüm/rid için duplicate aktif stage komutu oluşturulmuyor.
+- Strict SemVer:
+  - `v1.2.3` desteği korundu.
+  - Malformed build metadata artık reject ediliyor.
+  - `1.0.0-rc.1 < 1.0.0` precedence davranışı korunuyor.
+- Tests:
+  - `dotnet test STYS.sln --configuration Release` geçti.
+  - `npm run build` geçti.
+  - `npm test -- --watch=false --browsers=ChromeHeadless` geçti.
+  - Hedefli staging ve compatibility testleri geçti.
+- Real PAVO device test status:
+  - Bu tur release staging akışı gerçek PAVO cihazı gerektirmiyor; manuel cihaz testi yapılmadı.
+- Known limitations:
+  - Bu faz yalnız stage eder; apply/restart/rollback yok.
+  - Angular bundle budget warning devam ediyor.
+
 ### D1 Pairing Readiness Fix — 2026-08-12
 
 - `Fingerprint == TargetFingerprint` varsayımı kaldırıldı.

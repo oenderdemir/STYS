@@ -4,6 +4,7 @@ public interface IAgentPathResolver
 {
     string DataDirectory { get; }
     string LogDirectory { get; }
+    string ReleaseStagingRootDirectory => Path.Combine(DataDirectory, "updates", "staging");
     string BootstrapConfigurationPath { get; }
     string CredentialStorePath { get; }
     string LocalDevicesStorePath { get; }
@@ -11,12 +12,19 @@ public interface IAgentPathResolver
     string PavoPairingStorePath { get; }
     string AgentCommandExecutionStorePath { get; }
     string InstanceIdPath { get; }
+    string GetReleaseStagingDirectory(string version, string runtimeIdentifier) =>
+        Path.Combine(ReleaseStagingRootDirectory, AgentPaths.SanitizePathSegment(version), AgentPaths.SanitizePathSegment(runtimeIdentifier));
+    string GetReleaseStagingStatePath(string version, string runtimeIdentifier) =>
+        Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "staging-state.json");
+    string GetReleaseStagingPackagePath(string version, string runtimeIdentifier) =>
+        Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "package.bin");
 }
 
 public sealed class AgentPathResolver : IAgentPathResolver
 {
     public string DataDirectory => AgentPaths.GetDataDirectory();
     public string LogDirectory => AgentPaths.GetLogDirectory();
+    public string ReleaseStagingRootDirectory => Path.Combine(DataDirectory, "updates", "staging");
     public string BootstrapConfigurationPath => Path.Combine(DataDirectory, "bootstrap.json");
     public string CredentialStorePath => Path.Combine(DataDirectory, "credential.dat");
     public string LocalDevicesStorePath => Path.Combine(DataDirectory, "local-devices.json");
@@ -24,6 +32,12 @@ public sealed class AgentPathResolver : IAgentPathResolver
     public string PavoPairingStorePath => Path.Combine(DataDirectory, "pavo-pairing.dat");
     public string AgentCommandExecutionStorePath => Path.Combine(DataDirectory, "agent-command-executions.json");
     public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
+    public string GetReleaseStagingDirectory(string version, string runtimeIdentifier) =>
+        Path.Combine(ReleaseStagingRootDirectory, AgentPaths.SanitizePathSegment(version), AgentPaths.SanitizePathSegment(runtimeIdentifier));
+    public string GetReleaseStagingStatePath(string version, string runtimeIdentifier) =>
+        Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "staging-state.json");
+    public string GetReleaseStagingPackagePath(string version, string runtimeIdentifier) =>
+        Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "package.bin");
 }
 
 internal static class AgentPaths
@@ -39,6 +53,15 @@ internal static class AgentPaths
     public static string GetLogDirectory()
     {
         return ResolveDirectory(LogDirectoryEnvironmentVariable, GetDefaultLogDirectory);
+    }
+
+    public static string SanitizePathSegment(string value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "unknown" : value.Trim();
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = normalized.Select(character => invalid.Contains(character) ? '_' : character).ToArray();
+        var sanitized = new string(chars);
+        return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
     }
 
     private static string ResolveDirectory(string environmentVariable, Func<string> defaultFactory)

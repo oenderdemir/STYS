@@ -79,6 +79,7 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     selectedCommandType = signal<string>('Ping');
     viewingAgentId = signal<number | null>(null);
     selectedAgentDetail = signal<AgentDto | null>(null);
+    stagingUpgrade = signal(false);
 
     agentForm: AgentFormState = { ad: '', tesisIds: [], scopes: [] };
     enrollmentForm: AgentEnrollmentCodeRequest = { tesisIds: [], allowedScopes: [] };
@@ -360,6 +361,22 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     getCommandStatusLabel(status: number): string {
         const labels: Record<number, string> = { 0: 'Pending', 1: 'Delivered', 2: 'Accepted', 3: 'Running', 4: 'Completed', 5: 'Failed', 6: 'Cancelled', 7: 'Expired', 8: 'Rejected' };
         return labels[status] ?? 'Unknown';
+    }
+
+    canStageUpgrade(detail: AgentDto | null): boolean {
+        if (!detail) return false;
+        return detail.compatibilityStatus === 1 || detail.compatibilityStatus === 2;
+    }
+
+    stageUpgrade(agentId: number): void {
+        this.stagingUpgrade.set(true);
+        this.service.stageUpgrade(agentId).pipe(finalize(() => this.stagingUpgrade.set(false))).subscribe({
+            next: () => {
+                this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Güncelleme hazırlama komutu gönderildi.' });
+                this.loadCommands(agentId);
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
     }
 
     getCommandStatusSeverity(status: number): 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast' {

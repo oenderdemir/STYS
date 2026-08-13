@@ -893,6 +893,10 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         public string PavoPairingStorePath => Path.Combine(DataDirectory, "pavo-pairing.dat");
         public string AgentCommandExecutionStorePath => Path.Combine(DataDirectory, "agent-command-executions.json");
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
+        public string ReleaseStagingRootDirectory => Path.Combine(DataDirectory, "updates", "staging");
+        public string GetReleaseStagingDirectory(string version, string runtimeIdentifier) => Path.Combine(ReleaseStagingRootDirectory, version, runtimeIdentifier);
+        public string GetReleaseStagingStatePath(string version, string runtimeIdentifier) => Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "staging-state.json");
+        public string GetReleaseStagingPackagePath(string version, string runtimeIdentifier) => Path.Combine(GetReleaseStagingDirectory(version, runtimeIdentifier), "package.bin");
     }
 
     private sealed class FixedTester : ILocalDeviceConnectionTester

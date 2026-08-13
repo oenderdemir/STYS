@@ -44,6 +44,7 @@ public sealed class AgentStartupValidationService : IAgentStartupValidationServi
             ValidateWritableLocation(_paths.PavoPairingStorePath, checkedPaths);
             ValidateWritableLocation(_paths.AgentCommandExecutionStorePath, checkedPaths);
             ValidateWritableLocation(_paths.InstanceIdPath, checkedPaths);
+            ValidateWritableDirectory(_paths.ReleaseStagingRootDirectory, checkedPaths);
 
             _runtimeStatus.MarkStartupHealthy();
             return Task.FromResult(new AgentStartupValidationResult(true, "Critical stores writable.", checkedPaths));

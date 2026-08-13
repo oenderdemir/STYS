@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -44,6 +45,9 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
     public Task<AgentSelfDto> GetMeAsync(CancellationToken cancellationToken) =>
         SendForDataAsync<AgentSelfDto>(HttpMethod.Get, "api/agent/me", null, cancellationToken);
 
+    public Task<byte[]> DownloadReleasePackageAsync(string version, string runtimeIdentifier, CancellationToken cancellationToken) =>
+        SendForBinaryAsync(HttpMethod.Get, $"api/agent/releases/{Uri.EscapeDataString(version)}/{Uri.EscapeDataString(runtimeIdentifier)}/package", cancellationToken);
+
     public Task<AgentPavoDeviceRegistrationResult> RegisterPavoDeviceAsync(AgentPavoDeviceRegisterRequest request, CancellationToken cancellationToken) =>
         SendForDataAsync<AgentPavoDeviceRegistrationResult>(HttpMethod.Post, "api/agent/pos-devices/register", request, cancellationToken);
 
@@ -85,6 +89,20 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
         using var timeoutCts = CreateTimeoutCancellationTokenSource(cancellationToken);
         using var response = await _http.SendAsync(request, timeoutCts.Token);
         await EnsureSuccessAsync(response, timeoutCts.Token);
+    }
+
+    private async Task<byte[]> SendForBinaryAsync(HttpMethod method, string relativePath, CancellationToken cancellationToken)
+    {
+        using var request = CreateRequest(method, relativePath, body: null);
+        using var timeoutCts = CreateTimeoutCancellationTokenSource(cancellationToken);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+        if (!response.IsSuccessStatusCode)
+        {
+            var envelope = await ReadEnvelopeAsync<object?>(response, timeoutCts.Token);
+            throw CreateException(response, envelope);
+        }
+
+        return await response.Content.ReadAsByteArrayAsync(timeoutCts.Token);
     }
 
     private HttpRequestMessage CreateRequest(HttpMethod method, string relativePath, object? body)

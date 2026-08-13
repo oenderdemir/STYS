@@ -207,6 +207,7 @@ public class StysAppDbContext : DbContext
     public DbSet<KurumEBelgePolitikaRevizyonu> KurumEBelgePolitikaRevizyonlari => Set<KurumEBelgePolitikaRevizyonu>();
     public DbSet<KurumFaturaNumaraSayaci> KurumFaturaNumaraSayaclari => Set<KurumFaturaNumaraSayaci>();
     public DbSet<AgentEntity> Agentler => Set<AgentEntity>();
+    public DbSet<AgentRelease> AgentReleases => Set<AgentRelease>();
     public DbSet<AgentCredential> AgentCredentialler => Set<AgentCredential>();
     public DbSet<AgentTesis> AgentTesisler => Set<AgentTesis>();
     public DbSet<AgentEnrollment> AgentEnrollments => Set<AgentEnrollment>();
@@ -1865,6 +1866,22 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.AgentLocalDeviceId).HasFilter("[AgentLocalDeviceId] IS NOT NULL");
         });
 
+        modelBuilder.Entity<AgentRelease>(entity =>
+        {
+            entity.ToTable("AgentReleases", entegrasyonSchema);
+            entity.Property(x => x.Version).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.ContractVersion).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.RuntimeIdentifier).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Signature).HasMaxLength(2048).IsRequired();
+            entity.Property(x => x.ReleaseNotes).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.PackagePath).HasMaxLength(1024).IsRequired();
+            entity.HasIndex(x => new { x.KurumId, x.RuntimeIdentifier, x.Version })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KurumId, x.Enabled, x.PublishedAt });
+        });
+
         modelBuilder.Entity<PosTerminal>(entity =>
         {
             entity.ToTable("PosTerminaller", entegrasyonSchema);
@@ -1970,6 +1987,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AgentKey).HasMaxLength(128).IsRequired();
             entity.Property(x => x.AgentVersion).HasMaxLength(50);
             entity.Property(x => x.ContractVersion).HasMaxLength(50);
+            entity.Property(x => x.RuntimeIdentifier).HasMaxLength(64);
             entity.Property(x => x.CihazKimligi).HasMaxLength(500);
             entity.Property(x => x.PublicKey).HasColumnType("nvarchar(max)");
             entity.HasIndex(x => new { x.KurumId, x.AgentKey }).IsUnique().HasFilter("[IsDeleted] = 0");

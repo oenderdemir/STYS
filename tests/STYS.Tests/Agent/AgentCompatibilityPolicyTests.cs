@@ -42,6 +42,8 @@ public sealed class AgentCompatibilityPolicyTests
     [InlineData("1.0.0", "")]
     [InlineData("bad.version", "1.0.0")]
     [InlineData("1..2", "1.0.0")]
+    [InlineData("1.0.0+build..5", "1.0.0")]
+    [InlineData("1.0.0+", "1.0.0")]
     public void InvalidOrMissingVersion_ShouldReturnUnknown(string? agentVersion, string? contractVersion)
     {
         var evaluation = Evaluate(agentVersion, contractVersion);

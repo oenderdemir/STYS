@@ -5,6 +5,7 @@ using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Services;
+using STYS.Agent.Upgrade;
 
 namespace STYS.Agent.Workers;
 
@@ -155,6 +156,9 @@ public sealed class CommandPollingWorker : BackgroundService
                     break;
                 case "PavoGetPaymentResult":
                     await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType), cancellationToken);
+                    break;
+                case "AgentStageUpgrade":
+                    await ExecuteTypedCommandAsync(dto, DeserializeCommand<AgentStageUpgradeCommand>(dto.Payload), _handlerRegistry.Resolve<AgentStageUpgradeCommand>(dto.CommandType), cancellationToken);
                     break;
                 default:
                     _logger.LogWarning("Bilinmeyen komut tipi, rejected: {CommandType} ({CommandId})", dto.CommandType, dto.Id);

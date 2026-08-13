@@ -137,4 +137,13 @@ export class AgentYonetimiService {
             })
         );
     }
+
+    stageUpgrade(agentId: number): Observable<AgentCommandDto> {
+        return this.http.post<ApiResponse<AgentCommandDto>>(`${this.apiBaseUrl}/ui/agent/${agentId}/stage-upgrade`, {}).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Güncelleme hazırlanamadı.');
+            })
+        );
+    }
 }

@@ -22,6 +22,7 @@ public sealed class AgentAuthController : ControllerBase
     private readonly IAgentTokenService _tokenService;
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly AgentCommandService _commandService;
+    private readonly IAgentReleaseService _releaseService;
     private readonly IPosCihaziService _posCihaziService;
     private readonly IAgentRealtimeNotifier _realtimeNotifier;
     private readonly AgentCompatibilityOptions _compatibilityOptions;
@@ -30,6 +31,7 @@ public sealed class AgentAuthController : ControllerBase
         IAgentTokenService tokenService,
         IDbContextFactory<StysAppDbContext> dbContextFactory,
         AgentCommandService commandService,
+        IAgentReleaseService releaseService,
         IPosCihaziService posCihaziService,
         IAgentRealtimeNotifier realtimeNotifier,
         IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
@@ -37,6 +39,7 @@ public sealed class AgentAuthController : ControllerBase
         _tokenService = tokenService;
         _dbContextFactory = dbContextFactory;
         _commandService = commandService;
+        _releaseService = releaseService;
         _posCihaziService = posCihaziService;
         _realtimeNotifier = realtimeNotifier;
         _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
@@ -76,6 +79,7 @@ public sealed class AgentAuthController : ControllerBase
             agent.SonGorulmeTarihi = DateTime.UtcNow;
             agent.AgentVersion = NormalizeNullable(request.AgentVersion);
             agent.ContractVersion = NormalizeNullable(request.ContractVersion);
+            agent.RuntimeIdentifier = NormalizeNullable(request.RuntimeIdentifier);
             agent.CihazKimligi ??= NormalizeNullable(request.CihazKimligi);
             await db.SaveChangesAsync(cancellationToken);
             await _realtimeNotifier.AgentChangedAsync(cancellationToken);
@@ -186,6 +190,21 @@ public sealed class AgentAuthController : ControllerBase
             LastHeartbeatAt = agent.LastHeartbeatAt,
             OnlineMi = agent.LastHeartbeatAt.HasValue && (DateTime.UtcNow - agent.LastHeartbeatAt.Value) <= TimeSpan.FromSeconds(90)
         });
+    }
+
+    [HttpGet("releases/{version}/{runtimeIdentifier}/package")]
+    [Authorize(Policy = AgentPolicies.AgentPolicy)]
+    public async Task<ActionResult> DownloadReleasePackage(
+        string version,
+        string runtimeIdentifier,
+        CancellationToken cancellationToken)
+    {
+        var agentContext = HttpContext.RequestServices.GetRequiredService<ICurrentAgentContext>();
+        if (!agentContext.IsAuthenticated)
+            return Unauthorized();
+
+        var (release, packageBytes) = await _releaseService.GetReleasePackageAsync(version, runtimeIdentifier, cancellationToken);
+        return File(packageBytes, "application/octet-stream", $"{release.Version}-{release.RuntimeIdentifier}.bin");
     }
 
     [HttpPost("pos-devices/register")]

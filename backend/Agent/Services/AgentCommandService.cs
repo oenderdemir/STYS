@@ -35,6 +35,7 @@ public sealed class AgentCommandService
         ["PavoGetDeviceInfo"] = "agent.command.execute",
         ["PavoStartPayment"] = "agent.command.execute",
         ["PavoGetPaymentResult"] = "agent.command.execute",
+        ["AgentStageUpgrade"] = "agent.command.execute",
         ["PavoConnectionTest"] = "stys.pavo.connection.test"
     };
 
@@ -75,6 +76,16 @@ public sealed class AgentCommandService
             throw new BaseException("Bu agent'a komut gönderme yetkiniz yok.", 403);
         if (agent.Durum != AgentDurum.Active) throw new BaseException("Agent aktif değil.", 400);
         EnsurePaymentCommandAllowed(agent, request.CommandType);
+
+        if (TryGetStageUpgradeIdentity(request.CommandType, request.Payload, out var stageIdentity))
+        {
+            var existingStageCommand = await FindActiveStageUpgradeCommandAsync(db, agent.Id, stageIdentity, ct);
+            if (existingStageCommand is not null)
+            {
+                return MapToDto(existingStageCommand);
+            }
+        }
+
         await ValidateScopeAsync(db, agent.Id, request.CommandType, ct);
         await ValidateCapabilityAsync(db, agent.Id, request.CommandType, ct);
 
@@ -895,6 +906,58 @@ public sealed class AgentCommandService
         return null;
     }
 
+    private static bool TryGetStageUpgradeIdentity(string? commandType, string? payload, out AgentStageUpgradeIdentity identity)
+    {
+        identity = default;
+
+        if (!string.Equals(commandType, "AgentStageUpgrade", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var request = DeserializePayload<AgentStageUpgradeRequest>(payload);
+        if (request is null)
+        {
+            return false;
+        }
+
+        var version = request.Version?.Trim();
+        var runtimeIdentifier = request.RuntimeIdentifier?.Trim();
+        if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(runtimeIdentifier))
+        {
+            return false;
+        }
+
+        identity = new AgentStageUpgradeIdentity(version, runtimeIdentifier);
+        return true;
+    }
+
+    private async Task<AgentCommand?> FindActiveStageUpgradeCommandAsync(
+        StysAppDbContext db,
+        int agentId,
+        AgentStageUpgradeIdentity identity,
+        CancellationToken cancellationToken)
+    {
+        var activeStatuses = new[]
+        {
+            AgentCommandStatus.Pending,
+            AgentCommandStatus.Delivered,
+            AgentCommandStatus.Accepted,
+            AgentCommandStatus.Running
+        };
+
+        var candidates = await db.Set<AgentCommand>()
+            .Where(x => x.AgentId == agentId
+                && !x.IsDeleted
+                && x.CommandType == "AgentStageUpgrade"
+                && activeStatuses.Contains(x.Status))
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return candidates.FirstOrDefault(candidate =>
+            TryGetStageUpgradeIdentity(candidate.CommandType, candidate.Payload, out var existing) && existing.Equals(identity));
+    }
+
     private static string NormalizeCanonicalValue(string? value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
 
@@ -954,6 +1017,8 @@ public sealed class AgentCommandService
         string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
 
     private sealed record PavoCommandValidationContext(PosCihazi Device, PosOdemeIslemi? Payment);
+
+    private readonly record struct AgentStageUpgradeIdentity(string Version, string RuntimeIdentifier);
 
     private static AgentCommandDto MapToDto(AgentCommand c) => new()
     {

@@ -617,6 +617,72 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
     }
 
     [Fact]
+    public async Task YerelPaymentTest_SampleDefaultsVeSequence_IleCalisir()
+    {
+        var client = new FakePavoRestClient
+        {
+            GetDeviceInfoResponse = BuildDeviceInfoResponse(
+                serialNumber: "SN-PAY",
+                deviceName: "PAVO Pay",
+                new[]
+                {
+                    new PavoDeviceTerminalInfo
+                    {
+                        TerminalId = "TERM-PAY",
+                        MerchantId = "MER-PAY",
+                        AcquirerId = "ACQ-PAY",
+                        AcquirerName = "Bank Pay"
+                    }
+                }),
+            StartPaymentResponse = new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData
+                {
+                    IsSuccessful = true,
+                    TransactionStatus = "Completed",
+                    SaleReference = "SALE-LOCAL-1",
+                    Message = "Başarılı"
+                }
+            }
+        };
+        var store = CreateStore();
+        var terminalStore = CreateTerminalStore();
+        var pairingStore = CreatePairingStore();
+        var service = CreateService(client, store, terminalStore, pairingStore);
+        var device = await CreatePairedDeviceAsync(service, store, pairingStore);
+
+        await service.TestAsync(device.Id, CancellationToken.None);
+        await service.DiscoverTerminalsAsync(device.Id, CancellationToken.None);
+
+        var result = await service.StartPaymentTestAsync(device.Id, new LocalDevicePaymentTestRequest
+        {
+            Amount = 125.50m,
+            CurrencyCode = "TRY",
+            Description = "Örnek ödeme",
+            SelectedTerminalId = "TERM-PAY"
+        }, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal("Completed", result.Status);
+        Assert.False(string.IsNullOrWhiteSpace(result.SaleReference));
+        Assert.StartsWith("STYS-PAY-", result.SaleReference, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(125.50m, result.Amount);
+        Assert.Equal("TRY", result.CurrencyCode);
+        Assert.Equal("TERM-PAY", result.SelectedTerminalId);
+        Assert.Equal(1, client.StartPaymentCallCount);
+        Assert.NotNull(client.LastStartPaymentRequest);
+        Assert.Equal(2, client.LastStartPaymentRequest!.TransactionHandle.TransactionSequence);
+        Assert.Equal("SN-PAY", client.LastStartPaymentRequest.TransactionHandle.SerialNumber);
+        Assert.Equal("FP-SEED", client.LastStartPaymentRequest.TransactionHandle.Fingerprint);
+        Assert.Equal(125.50m, client.LastStartPaymentRequest.Amount);
+        Assert.Equal("TRY", client.LastStartPaymentRequest.CurrencyCode);
+        Assert.Equal("TERM-PAY", client.LastStartPaymentRequest.SelectedTerminals?.Single());
+        Assert.Equal(0, client.LastStartPaymentRequest.InstallmentCount);
+        Assert.False(client.LastStartPaymentRequest.PrintReceipt);
+        Assert.True(client.LastStartPaymentRequest.ReceiptTextEnabled);
+    }
+
+    [Fact]
     public async Task RePair_Sonrasi_ProvisionedDevice_ReProvisionRequiredOlur()
     {
         var client = new FakePavoRestClient
@@ -929,6 +995,9 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         public int PairingCallCount { get; private set; }
         public PavoPairingResponse? PairingResponse { get; set; }
         public PavoPairingRequest? LastPairingRequest { get; private set; }
+        public int StartPaymentCallCount { get; private set; }
+        public PavoStartPaymentRequest? LastStartPaymentRequest { get; private set; }
+        public PavoStartPaymentResponse? StartPaymentResponse { get; set; }
 
         public Task<PavoPairingResponse> PairingAsync(PavoPairingRequest request, CancellationToken cancellationToken)
         {
@@ -956,8 +1025,20 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
             return Task.FromResult(GetDeviceInfoResponse ?? new PavoGetDeviceInfoResponse());
         }
 
-        public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken)
+        {
+            StartPaymentCallCount++;
+            LastStartPaymentRequest = request;
+            return Task.FromResult(StartPaymentResponse ?? new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData
+                {
+                    IsSuccessful = true,
+                    TransactionStatus = "Completed",
+                    SaleReference = request.SaleReference
+                }
+            });
+        }
 
         public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

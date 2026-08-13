@@ -482,7 +482,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         SerialNumber = cihaz.SeriNo,
         Fingerprint = cihaz.Fingerprint ?? string.Empty,
         TransactionSequence = 0,
-        TransactionDate = DateTime.UtcNow
+        TransactionDate = DateTime.Now
     };
 
     private static PavoPairingRequest BuildPairingRequest(PosCihazi cihaz) => new()

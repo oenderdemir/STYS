@@ -129,6 +129,122 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         return reconciled;
     }
 
+    public async Task<LocalDevicePaymentTestResult> StartPaymentTestAsync(string id, LocalDevicePaymentTestRequest request, CancellationToken cancellationToken)
+    {
+        var device = await GetDeviceOrThrowAsync(id, cancellationToken);
+        ValidatePavoLocalDevice(device, "Ödeme testi");
+
+        if (device.LastConnectionSuccess != true || device.Status is not LocalDeviceConnectionStatus.Connected)
+        {
+            throw new InvalidOperationException("Önce bağlantı testi başarılı olmalıdır.");
+        }
+
+        if (device.ProvisioningStatus is LocalDeviceProvisioningStatus.ReProvisionRequired
+            or LocalDeviceProvisioningStatus.Conflict
+            or LocalDeviceProvisioningStatus.Disabled)
+        {
+            throw new InvalidOperationException("Bu cihaz ödeme için hazır değil.");
+        }
+
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
+        if (pairingState is null || pairingState.PairingStatus != LocalDevicePairingStatus.Paired || string.IsNullOrWhiteSpace(pairingState.Fingerprint))
+        {
+            throw new InvalidOperationException("Önce PAVO cihazı ile pairing yapılmalıdır.");
+        }
+
+        var terminals = await _terminalStore.GetByLocalDeviceIdAsync(device.Id, cancellationToken);
+        var activeTerminals = terminals.Where(x => x.Active).ToList();
+        if (activeTerminals.Count == 0)
+        {
+            throw new InvalidOperationException("Ödeme testi için en az bir aktif terminal gerekli.");
+        }
+
+        LocalDeviceTerminal selectedTerminal;
+        if (!string.IsNullOrWhiteSpace(request.SelectedTerminalId))
+        {
+            selectedTerminal = activeTerminals.FirstOrDefault(x => string.Equals(x.TerminalId, request.SelectedTerminalId.Trim(), StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Seçilen terminal bulunamadı.");
+        }
+        else
+        {
+            selectedTerminal = activeTerminals[0];
+        }
+
+        var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
+        var saleReference = string.IsNullOrWhiteSpace(request.SaleReference)
+            ? GenerateSaleReference(device.Id, selectedTerminal.SourceReference, DateTime.Now)
+            : request.SaleReference.Trim();
+
+        var pavoRequest = new PavoStartPaymentRequest
+        {
+            PosCihaziId = 0,
+            PosOdemeIslemiId = 0,
+            PosTerminalId = 0,
+            SaleReference = saleReference,
+            Amount = request.Amount,
+            CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode) ? "TRY" : request.CurrencyCode.Trim(),
+            Description = request.Description?.Trim(),
+            InstallmentCount = request.InstallmentCount,
+            MinInstallmentCount = request.MinInstallmentCount,
+            MaxInstallmentCount = request.MaxInstallmentCount,
+            IsPfInstallmentEnabled = request.IsPfInstallmentEnabled,
+            Puan = request.Puan,
+            SelectedSlots = request.SelectedSlots,
+            CardReadTimeout = request.CardReadTimeout,
+            AllowDismissCardRead = request.AllowDismissCardRead,
+            PinEntryTimeout = request.PinEntryTimeout,
+            SelectedTerminals = [selectedTerminal.TerminalId],
+            CustomApp = request.CustomApp,
+            CustomLogin = request.CustomLogin,
+            CustomCommission = request.CustomCommission,
+            PrintReceipt = request.PrintReceipt,
+            ResponseBeforePrintEnabled = request.ResponseBeforePrintEnabled,
+            CustomerReceiptPrintEnabled = request.CustomerReceiptPrintEnabled,
+            MerchantReceiptPrintEnabled = request.MerchantReceiptPrintEnabled,
+            ReceiptImage = request.ReceiptImage,
+            CustomerReceiptImageEnabled = request.CustomerReceiptImageEnabled,
+            MerchantReceiptImageEnabled = request.MerchantReceiptImageEnabled,
+            ReceiptWidth = request.ReceiptWidth,
+            HeadUnmaskLength = request.HeadUnmaskLength,
+            TailUnmaskLength = request.TailUnmaskLength,
+            ReceiptHeader = request.ReceiptHeader,
+            ReceiptFooter = request.ReceiptFooter,
+            ReceiptJsonEnabled = request.ReceiptJsonEnabled,
+            CustomerReceiptJsonEnabled = request.CustomerReceiptJsonEnabled,
+            MerchantReceiptJsonEnabled = request.MerchantReceiptJsonEnabled,
+            ReceiptTextEnabled = request.ReceiptTextEnabled,
+            ReceiptTextWidth = request.ReceiptTextWidth,
+            CustomerReceiptTextEnabled = request.CustomerReceiptTextEnabled,
+            CustomerReceiptTextWidth = request.CustomerReceiptTextWidth,
+            MerchantReceiptTextEnabled = request.MerchantReceiptTextEnabled,
+            MerchantReceiptTextWidth = request.MerchantReceiptTextWidth,
+            TransactionHandle = new PavoTransactionHandle
+            {
+                SerialNumber = device.SerialNumber ?? string.Empty,
+                Fingerprint = pairingState.Fingerprint,
+                TransactionSequence = reserved.TransactionSequence,
+                TransactionDate = DateTime.Now
+            }
+        };
+
+        var response = await _pavoRestClient.StartPaymentAsync(pavoRequest, cancellationToken);
+        return new LocalDevicePaymentTestResult
+        {
+            DeviceId = device.Id,
+            Success = !response.HasError && !response.HasAbondon && response.Data?.IsSuccessful == true,
+            Status = response.Data?.TransactionStatus ?? (response.HasError ? "Failed" : response.HasAbondon ? "Abondoned" : "Unknown"),
+            Message = response.Message ?? response.Data?.Message ?? "Ödeme testi tamamlandı.",
+            ErrorCode = response.ErrorCode ?? response.Data?.ResultCode,
+            SaleReference = saleReference,
+            Amount = request.Amount,
+            CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode) ? "TRY" : request.CurrencyCode.Trim(),
+            SelectedTerminalId = selectedTerminal.TerminalId,
+            Data = response.Data,
+            Response = response,
+            TestedAt = DateTimeOffset.UtcNow
+        };
+    }
+
     public async Task<PavoDeviceProvisioningCandidate> BuildProvisioningCandidateAsync(string id, int tesisId, AgentSelfDto agentSelf, CancellationToken cancellationToken)
     {
         var device = await GetDeviceOrThrowAsync(id, cancellationToken);
@@ -682,7 +798,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             SerialNumber = device.SerialNumber ?? string.Empty,
             Fingerprint = state?.Fingerprint ?? string.Empty,
             TransactionSequence = transactionSequence,
-            TransactionDate = DateTime.UtcNow
+            TransactionDate = DateTime.Now
         }
     };
 
@@ -699,7 +815,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             SerialNumber = device.SerialNumber ?? string.Empty,
             Fingerprint = pairingState.Fingerprint ?? string.Empty,
             TransactionSequence = transactionSequence,
-            TransactionDate = DateTime.UtcNow
+            TransactionDate = DateTime.Now
         }
     };
 
@@ -867,6 +983,13 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
     private static string BuildTerminalIdentity(PavoDeviceProvisioningCandidateTerminal terminal) =>
         $"{terminal.AcquirerId?.Trim().ToUpperInvariant() ?? string.Empty}:{terminal.TerminalId.Trim()}";
+
+    private static string GenerateSaleReference(string deviceId, string terminalReference, DateTime now)
+    {
+        var safeTerminal = string.IsNullOrWhiteSpace(terminalReference) ? "TERM" : terminalReference.Trim();
+        var value = $"STYS-PAY-{now:yyyyMMddHHmmssfff}-{deviceId}-{safeTerminal}-{Guid.NewGuid():N}";
+        return value.Length <= 96 ? value : value[..96];
+    }
 
     private static bool HasLifecycleRelevantChanges(LocalDevice existing, LocalDevice updated)
     {

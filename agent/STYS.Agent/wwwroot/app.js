@@ -8,7 +8,8 @@ const state = {
   selectedLocalDeviceTerminals: [],
   agentSelf: null,
   selectedProvisioningTesisId: null,
-  selectedProvisioningCandidate: null
+  selectedProvisioningCandidate: null,
+  selectedPaymentTerminalId: null
 };
 
 const RESET_CONFIRMATION_TEXT = "Bu işlem yerel Agent kimlik bilgilerini silecek. Merkezi STYS kaydı silinmeyecektir. Agent yeniden enrollment gerektirecektir.";
@@ -220,6 +221,9 @@ function mapLocalDeviceError(error) {
   if (message.includes("eşleştirilmiş")) return "Bu cihaz zaten eşleştirilmiş.";
   if (message.includes("önce cihaz bilgisini getir") || message.includes("cihaz bilgisi alınmalıdır")) return "Önce cihaz bilgisini alın.";
   if (message.includes("önce pavo cihazı ile pairing yapılmalıdır")) return "Önce PAVO cihazı ile pairing yapılmalıdır.";
+  if (message.includes("ödeme testi") && message.includes("hazır değil")) return "Cihaz ödeme için hazır değil.";
+  if (message.includes("ödeme testi") && message.includes("aktif terminal")) return "Ödeme testi için aktif terminal gerekli.";
+  if (message.includes("ödeme testi") && message.includes("bağlantı testi")) return "Önce bağlantı testi başarılı olmalıdır.";
   if (message.includes("tesis seçimi zorunludur")) return "Tesis seçimi zorunludur.";
   if (message.includes("agent kapsamı")) return "Seçilen tesis agent kapsamı dışında.";
   if (message.includes("başka agent'a bağlı") || message.includes("başka agent yerel cihazına bağlı")) return "Bu cihaz başka Agent'a bağlı.";
@@ -391,6 +395,16 @@ function renderLocalDeviceDetail(device) {
     candidateBtn.disabled = !isPaired;
   }
 
+  const paymentSubmitBtn = $("local-device-payment-submit-btn");
+  if (paymentSubmitBtn) {
+    paymentSubmitBtn.disabled = !isPaired;
+  }
+
+  const paymentTerminalSelect = $("local-device-payment-terminal");
+  if (paymentTerminalSelect) {
+    paymentTerminalSelect.disabled = !isPaired || state.selectedLocalDeviceTerminals.length === 0;
+  }
+
   const saveBtn = $("provisioning-save-btn");
   if (saveBtn) {
     saveBtn.disabled = !state.selectedProvisioningCandidate;
@@ -410,6 +424,7 @@ function renderLocalDeviceTerminalRows(terminals) {
 
   const items = Array.isArray(terminals) ? terminals : [];
   state.selectedLocalDeviceTerminals = items;
+  renderPaymentTerminalOptions(items);
   body.innerHTML = items.length
     ? items.map((terminal) => {
         const badge = localDeviceTerminalStatusBadge(terminal);
@@ -424,6 +439,49 @@ function renderLocalDeviceTerminalRows(terminals) {
           </tr>`;
       }).join("")
     : `<tr><td colspan="6" class="muted">Keşfedilmiş terminal yok.</td></tr>`;
+}
+
+function renderPaymentTerminalOptions(terminals) {
+  const select = $("local-device-payment-terminal");
+  if (!select) return;
+
+  const activeTerminals = (Array.isArray(terminals) ? terminals : []).filter((terminal) => terminal?.active);
+  const previous = select.value;
+  select.innerHTML = activeTerminals.length
+    ? activeTerminals.map((terminal) => `<option value="${escapeHtml(terminal.terminalId || "")}">${escapeHtml(`${terminal.acquirerName || terminal.acquirerId || "-"} • ${terminal.terminalId || "-"}`)}</option>`).join("")
+    : '<option value="">Aktif terminal yok</option>';
+
+  if (activeTerminals.some((terminal) => String(terminal.terminalId) === String(previous))) {
+    select.value = previous;
+  } else if (activeTerminals.length > 0) {
+    select.value = String(activeTerminals[0].terminalId || "");
+  }
+
+  state.selectedPaymentTerminalId = select.value || null;
+  ensureLocalPaymentSaleReference();
+}
+
+function generateLocalPaymentSaleReference() {
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+    String(now.getHours()).padStart(2, "0"),
+    String(now.getMinutes()).padStart(2, "0"),
+    String(now.getSeconds()).padStart(2, "0")
+  ].join("");
+  const devicePart = String(state.selectedLocalDeviceId || "LOCAL")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+  return `STYS-PAY-${stamp}-${devicePart}`;
+}
+
+function ensureLocalPaymentSaleReference() {
+  const input = $("local-device-payment-sale-ref");
+  if (!input || input.value.trim()) return;
+  input.value = generateLocalPaymentSaleReference();
 }
 
 function renderProvisioningTesisOptions() {
@@ -469,6 +527,51 @@ function renderProvisioningCandidate(candidate) {
   if (saveBtn) saveBtn.disabled = false;
 }
 
+function collectLocalPaymentTestPayload() {
+  const amount = Number($("local-device-payment-amount")?.value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Tutar sıfırdan büyük olmalıdır.");
+  }
+
+  return {
+    amount,
+    currencyCode: ($("local-device-payment-currency")?.value || "TRY").trim() || "TRY",
+    saleReference: $("local-device-payment-sale-ref")?.value?.trim() || null,
+    description: $("local-device-payment-desc")?.value?.trim() || null,
+    installmentCount: Number($("local-device-payment-installment")?.value || 0),
+    selectedTerminalId: $("local-device-payment-terminal")?.value || null,
+    selectedSlots: ["rf", "icc", "magneticStripe", "qr", "manual"],
+    cardReadTimeout: 60,
+    allowDismissCardRead: true,
+    pinEntryTimeout: 30,
+    printReceipt: false,
+    responseBeforePrintEnabled: false,
+    customerReceiptPrintEnabled: true,
+    merchantReceiptPrintEnabled: true,
+    receiptImage: false,
+    customerReceiptImageEnabled: false,
+    merchantReceiptImageEnabled: false,
+    receiptWidth: "58mm",
+    headUnmaskLength: 0,
+    tailUnmaskLength: 4,
+    receiptJsonEnabled: false,
+    customerReceiptJsonEnabled: false,
+    merchantReceiptJsonEnabled: false,
+    receiptTextEnabled: true,
+    receiptTextWidth: "40",
+    customerReceiptTextEnabled: true,
+    customerReceiptTextWidth: "40",
+    merchantReceiptTextEnabled: true,
+    merchantReceiptTextWidth: "40"
+  };
+}
+
+function renderPaymentTestResult(result) {
+  const pre = $("local-device-payment-result");
+  if (!pre) return;
+  pre.textContent = JSON.stringify(result, null, 2);
+}
+
 async function loadLocalDeviceDetail(id) {
   if (!id) {
     state.selectedLocalDeviceId = null;
@@ -485,6 +588,7 @@ async function loadLocalDeviceDetail(id) {
   renderProvisioningCandidate(null);
   setStatus("provisioning-preview-status", "Önizleme bekleniyor.", "muted");
   await loadLocalDeviceTerminals(state.selectedLocalDeviceId).catch(() => {});
+  ensureLocalPaymentSaleReference();
   return device;
 }
 
@@ -580,6 +684,26 @@ async function loadProvisioningCandidateForSelectedDevice() {
   renderProvisioningCandidate(candidate);
   setStatus("provisioning-preview-status", "Provisioning önizlemesi hazır.", "ok");
   return candidate;
+}
+
+async function submitLocalPaymentTest() {
+  if (!state.selectedLocalDeviceId) {
+    throw new Error("Önce bir cihaz seçin.");
+  }
+
+  const payload = collectLocalPaymentTestPayload();
+  setStatus("local-device-payment-status", "Ödeme testi gönderiliyor...", "muted");
+  const result = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/payment-test`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+  renderPaymentTestResult(result);
+  const badge = result?.success ? { text: "Ödeme testi tamamlandı.", kind: "ok" } : { text: result?.message || "Ödeme testi başarısız.", kind: "warn" };
+  setStatus("local-device-payment-status", badge.text, badge.kind);
+  setText("local-device-last-action", `Payment test: ${state.selectedLocalDeviceId}`);
+  setText("local-device-last-result", result?.message || badge.text);
+  return result;
 }
 
 async function registerSelectedLocalDevice() {
@@ -1041,6 +1165,16 @@ function bindLocalDevicesPage() {
     resetLocalDeviceForm();
   });
   $("local-device-protocol")?.addEventListener("change", () => syncLocalDevicePortDefaults());
+  $("local-device-payment-terminal")?.addEventListener("change", () => {
+    state.selectedPaymentTerminalId = $("local-device-payment-terminal")?.value || null;
+  });
+  $("local-device-payment-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitLocalPaymentTest().catch((error) => {
+      setStatus("local-device-payment-status", mapLocalDeviceError(error), "error");
+      setText("local-device-payment-result", error?.message || String(error));
+    });
+  });
   $("local-device-detail-test-btn")?.addEventListener("click", () => {
     testSelectedLocalDevice().catch((error) => {
       setStatus("local-devices-status", mapLocalDeviceError(error), "error");

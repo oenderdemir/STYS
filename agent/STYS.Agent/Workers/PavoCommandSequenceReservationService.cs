@@ -57,7 +57,7 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
             SerialNumber = device.SerialNumber ?? string.Empty,
             Fingerprint = pairingState.Fingerprint,
             TransactionSequence = reserved.TransactionSequence,
-            TransactionDate = transactionDate ?? DateTime.UtcNow
+            TransactionDate = transactionDate ?? DateTime.Now
         };
     }
 }

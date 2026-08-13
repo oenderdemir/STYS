@@ -221,6 +221,46 @@
     <section class="card section">
       <div class="section-head">
         <div>
+          <h2>Yerel Ödeme Testi</h2>
+          <p class="muted">Örnek projedeki PAVO StartPayment yapısına göre cihazı yerelden test eder. Merkezi ödeme başlatma değil.</p>
+        </div>
+      </div>
+      <div id="local-device-payment-status" class="status muted">Hazır.</div>
+      <form id="local-device-payment-form" class="form section">
+        <div class="field">
+          <label for="local-device-payment-terminal">Terminal</label>
+          <select id="local-device-payment-terminal"></select>
+        </div>
+        <div class="field">
+          <label for="local-device-payment-amount">Tutar</label>
+          <input id="local-device-payment-amount" type="number" min="0.01" step="0.01" value="1.00">
+        </div>
+        <div class="field">
+          <label for="local-device-payment-currency">Para Birimi</label>
+          <input id="local-device-payment-currency" type="text" value="TRY" maxlength="3">
+        </div>
+        <div class="field">
+          <label for="local-device-payment-sale-ref">Sale Reference</label>
+          <input id="local-device-payment-sale-ref" type="text" placeholder="Boş bırakılırsa otomatik üretilir">
+        </div>
+        <div class="field">
+          <label for="local-device-payment-desc">Açıklama</label>
+          <input id="local-device-payment-desc" type="text" placeholder="İsteğe bağlı">
+        </div>
+        <div class="field">
+          <label for="local-device-payment-installment">Taksit</label>
+          <input id="local-device-payment-installment" type="number" min="0" step="1" value="0">
+        </div>
+        <div class="wizard-actions">
+          <button id="local-device-payment-submit-btn" type="submit">Ödeme Testi Yap</button>
+        </div>
+      </form>
+      <pre id="local-device-payment-result" class="json-preview">Henüz test yapılmadı.</pre>
+    </section>
+
+    <section class="card section">
+      <div class="section-head">
+        <div>
           <h2>Kayıtlı Cihazlar</h2>
           <p class="muted">Bağlantı testi sonuçları cihaz durumuna yazılır. Local UI sayfa yenilenmeden güncellenir.</p>
         </div>

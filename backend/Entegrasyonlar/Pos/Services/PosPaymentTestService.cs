@@ -481,7 +481,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
                 SerialNumber = cihaz.SeriNo,
                 Fingerprint = cihaz.Fingerprint ?? string.Empty,
                 TransactionSequence = 0,
-                TransactionDate = DateTime.UtcNow
+                TransactionDate = DateTime.Now
             }
         };
     }

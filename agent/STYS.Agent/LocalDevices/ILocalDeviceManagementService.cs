@@ -13,6 +13,7 @@ public interface ILocalDeviceManagementService
     Task<LocalDevice> GetDeviceInfoAsync(string id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocalDeviceTerminal>> DiscoverTerminalsAsync(string id, CancellationToken cancellationToken);
     Task<LocalDevice> PairAsync(string id, bool forceRePair, CancellationToken cancellationToken);
+    Task<LocalDevicePaymentTestResult> StartPaymentTestAsync(string id, LocalDevicePaymentTestRequest request, CancellationToken cancellationToken);
     Task<PavoDeviceProvisioningCandidate> BuildProvisioningCandidateAsync(string id, int tesisId, AgentSelfDto agentSelf, CancellationToken cancellationToken);
     Task<AgentPavoDeviceRegistrationResult> RegisterAsync(PavoDeviceProvisioningCandidate candidate, AgentSelfDto agentSelf, CancellationToken cancellationToken);
     Task<LocalDeviceStysReconciliationResult> CheckStysStatusAsync(string id, CancellationToken cancellationToken);

@@ -337,13 +337,28 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
 
     private static void ReplaceAtomically(string tempPath, string targetPath)
     {
-        if (File.Exists(targetPath))
+        try
         {
-            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            if (File.Exists(targetPath))
+            {
+                File.Move(tempPath, targetPath, overwrite: true);
+                return;
+            }
+
+            File.Move(tempPath, targetPath);
             return;
         }
+        catch (IOException)
+        {
+            if (File.Exists(targetPath))
+            {
+                File.Delete(targetPath);
+                File.Move(tempPath, targetPath);
+                return;
+            }
 
-        File.Move(tempPath, targetPath);
+            throw;
+        }
     }
 
     private sealed class EncryptedPayload

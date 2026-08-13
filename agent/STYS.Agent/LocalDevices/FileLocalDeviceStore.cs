@@ -274,13 +274,26 @@ public sealed class FileLocalDeviceStore : ILocalDeviceStore
 
     private static void ReplaceAtomically(string tempPath, string targetPath)
     {
-        if (File.Exists(targetPath))
+        try
         {
-            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            return;
+            File.Move(tempPath, targetPath, overwrite: true);
         }
+        catch (IOException)
+        {
+            if (File.Exists(targetPath))
+            {
+                try
+                {
+                    File.Delete(targetPath);
+                }
+                catch
+                {
+                    // Ignore; the following move will surface the real error if the file is still locked.
+                }
+            }
 
-        File.Move(tempPath, targetPath);
+            File.Move(tempPath, targetPath, overwrite: true);
+        }
     }
 
     private static LocalDevice Clone(LocalDevice device) => new()

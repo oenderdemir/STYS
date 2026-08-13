@@ -1,3 +1,5 @@
+using STYS.Agent.Contracts.Dtos;
+
 namespace STYS.Agent.LocalDevices;
 
 public enum LocalDeviceType
@@ -128,6 +130,64 @@ public sealed class LocalDeviceTestRequest
     public int? HttpsPort { get; set; }
     public LocalDeviceProtocol Protocol { get; set; } = LocalDeviceProtocol.Http;
     public string? SerialNumber { get; set; }
+}
+
+public sealed class LocalDevicePaymentTestRequest
+{
+    public decimal Amount { get; set; }
+    public string CurrencyCode { get; set; } = "TRY";
+    public string? SaleReference { get; set; }
+    public string? Description { get; set; }
+    public int InstallmentCount { get; set; }
+    public int? MinInstallmentCount { get; set; }
+    public int? MaxInstallmentCount { get; set; }
+    public bool IsPfInstallmentEnabled { get; set; }
+    public decimal Puan { get; set; }
+    public IReadOnlyList<string>? SelectedSlots { get; set; }
+    public int CardReadTimeout { get; set; } = 60;
+    public bool AllowDismissCardRead { get; set; } = true;
+    public int PinEntryTimeout { get; set; } = 30;
+    public string? SelectedTerminalId { get; set; }
+    public string? CustomApp { get; set; }
+    public string? CustomLogin { get; set; }
+    public decimal? CustomCommission { get; set; }
+    public bool PrintReceipt { get; set; }
+    public bool ResponseBeforePrintEnabled { get; set; }
+    public bool CustomerReceiptPrintEnabled { get; set; } = true;
+    public bool MerchantReceiptPrintEnabled { get; set; } = true;
+    public bool ReceiptImage { get; set; }
+    public bool CustomerReceiptImageEnabled { get; set; }
+    public bool MerchantReceiptImageEnabled { get; set; }
+    public string ReceiptWidth { get; set; } = "58mm";
+    public int HeadUnmaskLength { get; set; }
+    public int TailUnmaskLength { get; set; } = 4;
+    public string? ReceiptHeader { get; set; }
+    public string? ReceiptFooter { get; set; }
+    public bool ReceiptJsonEnabled { get; set; }
+    public bool CustomerReceiptJsonEnabled { get; set; }
+    public bool MerchantReceiptJsonEnabled { get; set; }
+    public bool ReceiptTextEnabled { get; set; } = true;
+    public string ReceiptTextWidth { get; set; } = "40";
+    public bool CustomerReceiptTextEnabled { get; set; } = true;
+    public string CustomerReceiptTextWidth { get; set; } = "40";
+    public bool MerchantReceiptTextEnabled { get; set; } = true;
+    public string MerchantReceiptTextWidth { get; set; } = "40";
+}
+
+public sealed class LocalDevicePaymentTestResult
+{
+    public string DeviceId { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string Status { get; set; } = "Unknown";
+    public string Message { get; set; } = string.Empty;
+    public string? ErrorCode { get; set; }
+    public string SaleReference { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string CurrencyCode { get; set; } = "TRY";
+    public string? SelectedTerminalId { get; set; }
+    public PavoPaymentOperationData? Data { get; set; }
+    public PavoStartPaymentResponse? Response { get; set; }
+    public DateTimeOffset TestedAt { get; set; }
 }
 
 public sealed class LocalDeviceConnectionTestResult

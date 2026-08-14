@@ -195,8 +195,7 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
         if (string.IsNullOrWhiteSpace(session.TargetRid))
             throw new BaseException("Kurulum oturumu RID bilgisi eksik.", 400);
 
-        var repoRoot = ResolveRepositoryRoot();
-        var packageBytes = AgentInstallerPackageBuilder.Build(session, baseUrl, repoRoot);
+        var packageBytes = AgentInstallerPackageBuilder.Build(session, baseUrl);
 
         if (session.Status is AgentInstallationSessionStatus.Created or AgentInstallationSessionStatus.EnrollmentPending)
         {
@@ -326,20 +325,4 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
         return new string(code);
     }
 
-    private static string ResolveRepositoryRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "README.md"))
-                && Directory.Exists(Path.Combine(current.FullName, "scripts", "agent")))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException("Repository kökü bulunamadı. Installer paketi üretilemedi.");
-    }
 }

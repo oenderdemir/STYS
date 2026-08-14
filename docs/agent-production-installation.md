@@ -38,13 +38,13 @@ The recommended deployment path for initial installation is the unified installe
   - `GET /api/ui/agent-installations/{id}/package`
 - package root scripts:
   - `install-stys-agent.ps1`
-  - `install-stys-agent.sh`
 - package layout:
   - `agent/` publish output
   - `updater/` publish output
   - `config/bootstrap.json`
   - `trust/release-public-key.pem`
-  - `scripts/` helper scripts
+  - `scripts/install-agent.ps1`
+  - `scripts/install-agent-updater.ps1`
 
 The bootstrap config is written by STYS and contains only operational bootstrap values such as base URL, local UI port, target RID, and display name. It does not contain enrollment codes, client secrets, private signing keys, or JWTs.
 
@@ -62,7 +62,6 @@ Expected Windows-first package layout:
 <installer-root>/
   scripts/
     install-stys-agent.ps1
-    install-stys-agent.sh
     install-agent.ps1
     install-agent-updater.ps1
   trust/

@@ -2406,3 +2406,11 @@ Agent Regression:  0
 - Known limitations:
   - Paket üretimi repo içindeki publish çıktılarına dayanıyor; publish çıktısı yoksa paket üretimi fail-closed çalışıyor.
   - Kurulum sonrası enrollment yine local UI üzerinden etkileşimli kod girişine bağlı.
+
+### E2D3 Production Artifact Root Final Fix — 2026-08-14
+
+- `STYS_AGENT_INSTALLER_ROOT` configured olduğunda package generation artık source repository gerektirmiyor.
+- Configured root eksik veya hatalıysa repository fallback yapılmadan fail-fast çalışıyor.
+- Development repository fallback yalnız environment variable set edilmediğinde kullanılıyor.
+- Windows package output canonical `scripts/` yapısına sadeleştirildi.
+- Linux halen acceptance scope dışında.

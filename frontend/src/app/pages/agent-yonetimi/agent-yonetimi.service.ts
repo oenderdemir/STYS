@@ -150,6 +150,10 @@ export class AgentYonetimiService {
         );
     }
 
+    downloadInstallationPackage(id: number): Observable<Blob> {
+        return this.http.get(`${this.apiBaseUrl}/ui/agent-installations/${id}/package`, { responseType: 'blob' });
+    }
+
     cancelInstallation(id: number): Observable<void> {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent-installations/${id}/cancel`, {}).pipe(
             map((r) => {

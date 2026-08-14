@@ -2345,3 +2345,33 @@ Agent Regression:  0
 - Tests / build:
   - Expired-session integration testi kalıcı `Expired` durumlarını doğruluyor.
   - Frontend wizard spec’i ikinci create denemesinin bloke edildiğini kontrol ediyor.
+
+### E2D3 Unified Agent Installer — 2026-08-14
+
+- Unified installer package:
+  - STYS artık kurulum için tek bir paket üretiyor.
+  - Paket kökünde `install-stys-agent.ps1` ve `install-stys-agent.sh` bulunuyor.
+  - Paket içinde agent publish çıktısı, updater publish çıktısı, bootstrap konfigürasyonu ve trust anchor yer alıyor.
+- Backend download flow:
+  - `GET /api/ui/agent-installations/{id}/package` kurulum oturumuna bağlı paket üretip indirtiyor.
+  - Paket erişimi kurum bazlı server-side yetkilendirme ile sınırlandırılıyor.
+- Bootstrap / trust material:
+  - Bootstrap JSON yalnızca operasyonel başlangıç değerlerini içeriyor.
+  - Enrollment code, client secret, private key ve JWT paket içine yazılmıyor.
+  - Trust anchor deterministik public key dosyasından geliyor.
+- Windows / Linux installer:
+  - Windows ve Linux için unified installer scriptleri agent ve updater kurulumunu tek akışta yapıyor.
+  - Enrollment code interactive olarak isteniyor; script argümanı, log veya paket içine taşınmıyor.
+  - Local UI loopback üzerinde bekleniyor ve kurulum sonrası enrollment tetikleniyor.
+- UI integration:
+  - Agent yönetimi ekranında kurulum oturumu için paket indirme aksiyonu eklendi.
+  - Wizard tarafı gerçek indirme akışını kullanıyor; placeholder yerine package download var.
+- Tests:
+  - Unified installer paket testleri eklendi; secret sızıntısı ve tenant sınırı doğrulanıyor.
+  - Frontend package download davranışı test kapsamına alındı.
+- Build / verification:
+  - Bu turda hedeflenen compile ve test doğrulaması yapılıyor.
+  - Gerçek Windows/Linux makinede manuel kurulum testi bu oturumda yapılmadı.
+- Known limitations:
+  - Paket üretimi repo içindeki publish çıktılarına dayanıyor; publish çıktısı yoksa paket üretimi fail-closed çalışıyor.
+  - Kurulum sonrası enrollment yine local UI üzerinden etkileşimli kod girişine bağlı.

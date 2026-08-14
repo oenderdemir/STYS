@@ -180,6 +180,37 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<(string FileName, string ContentType, byte[] Content)> GetPackageAsync(int id, string baseUrl, CancellationToken cancellationToken)
+    {
+        var kurumId = RequireCurrentKurumId();
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
+
+        var session = await db.Set<AgentInstallationSession>()
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted && x.KurumId == kurumId, cancellationToken);
+
+        if (session is null)
+            throw new BaseException("Kurulum oturumu bulunamadı.", 404);
+
+        if (string.IsNullOrWhiteSpace(session.TargetRid))
+            throw new BaseException("Kurulum oturumu RID bilgisi eksik.", 400);
+
+        var repoRoot = ResolveRepositoryRoot();
+        var packageBytes = AgentInstallerPackageBuilder.Build(session, baseUrl, repoRoot);
+
+        if (session.Status is AgentInstallationSessionStatus.Created or AgentInstallationSessionStatus.EnrollmentPending)
+        {
+            session.Status = AgentInstallationSessionStatus.PackageReady;
+            session.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return (
+            FileName: $"stys-agent-install-{session.TargetRid}-{session.Id}.zip",
+            ContentType: "application/zip",
+            Content: packageBytes);
+    }
+
     private async Task<IReadOnlyCollection<AgentInstallationSessionDto>> MapAsync(StysAppDbContext db, IReadOnlyCollection<AgentInstallationSession> sessions, CancellationToken cancellationToken)
     {
         var tesisIds = sessions.Select(x => x.TesisId).Distinct().ToList();
@@ -293,5 +324,22 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
         for (var i = 0; i < 16; i++)
             code[i] = chars[bytes[i] % chars.Length];
         return new string(code);
+    }
+
+    private static string ResolveRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "README.md"))
+                && Directory.Exists(Path.Combine(current.FullName, "scripts", "agent")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException("Repository kökü bulunamadı. Installer paketi üretilemedi.");
     }
 }

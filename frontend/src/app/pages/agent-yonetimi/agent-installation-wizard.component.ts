@@ -56,6 +56,7 @@ export class AgentInstallationWizardComponent implements OnInit {
     wizardVisible = signal(false);
     wizardStep = signal<number | undefined>(1);
     wizardLoading = signal(false);
+    packageDownloadLoading = signal(false);
     sessionsLoading = signal(false);
     sessionDetailLoading = signal(false);
 
@@ -181,6 +182,32 @@ export class AgentInstallationWizardComponent implements OnInit {
                     error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
                 });
             }
+        });
+    }
+
+    downloadPackage(): void {
+        const session = this.selectedSession();
+        if (!session) {
+            this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Önce bir kurulum oturumu oluşturun.' });
+            return;
+        }
+
+        this.packageDownloadLoading.set(true);
+        this.service.downloadInstallationPackage(session.id).pipe(finalize(() => this.packageDownloadLoading.set(false))).subscribe({
+            next: (blob) => {
+                const fileName = `stys-agent-install-${session.targetRid}-${session.id}.zip`;
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = fileName;
+                anchor.style.display = 'none';
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                this.messageService.add({ severity: 'success', summary: 'Paket Hazır', detail: 'Kurulum paketi indirildi.' });
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
     }
 

@@ -30,6 +30,26 @@ dotnet publish agent/STYS.Agent.Updater/STYS.Agent.Updater.csproj -c Release -r 
 
 Development secrets, bootstrap values, credentials, and enrollment codes are not part of the publish output. The agent stores runtime state under its data directory at first run.
 
+## Unified installer package
+
+The recommended deployment path for initial installation is the unified installer package produced by the backend for an installation session.
+
+- package download endpoint:
+  - `GET /api/ui/agent-installations/{id}/package`
+- package root scripts:
+  - `install-stys-agent.ps1`
+  - `install-stys-agent.sh`
+- package layout:
+  - `agent/` publish output
+  - `updater/` publish output
+  - `config/bootstrap.json`
+  - `trust/release-public-key.pem`
+  - `scripts/agent/` helper scripts
+
+The bootstrap config is written by STYS and contains only operational bootstrap values such as base URL, local UI port, target RID, and display name. It does not contain enrollment codes, client secrets, private signing keys, or JWTs.
+
+The Windows and Linux installers prompt for the enrollment code interactively at install time and keep it out of script arguments, logs, and package contents.
+
 ## Trust boundary and release key provisioning
 
 Agent and updater both resolve the trusted release verification key from a deterministic, externally provisioned source. The private signing key is not deployed with the runtime artifacts.

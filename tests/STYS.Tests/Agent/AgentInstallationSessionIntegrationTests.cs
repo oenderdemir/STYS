@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
@@ -246,6 +248,85 @@ public sealed class AgentInstallationSessionIntegrationTests : IAsyncLifetime
         Assert.Equal("win-x64", agent.RuntimeIdentifier);
 
         await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    [IntegrationFact]
+    public async Task UnifiedInstallerPackage_SecretIcermedenOlusturulur_veTenantSiniriKorunur()
+    {
+        await SetupAsync();
+        if (string.IsNullOrWhiteSpace(_cs))
+            return;
+
+        var previousPublicKeyPem = Environment.GetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM");
+        var previousPublicKeyPath = Environment.GetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH");
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+
+        try
+        {
+            Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM", rsa.ExportSubjectPublicKeyInfoPem());
+            Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH", null);
+
+            var service = new AgentInstallationSessionService(NewFactory(), new FakeKurumTenantAccessor(_kurumAId));
+            var create = await service.CreateAsync(new AgentInstallationSessionCreateRequest
+            {
+                TesisId = _tesisAId,
+                AgentDisplayName = $"Session-{_suffix}-package",
+                TargetRid = "win-x64",
+                Scopes = ["agent.heartbeat", "agent.command.read", "agent.command.execute", "agent.result.write", "agent.config.read"]
+            }, "tester", CancellationToken.None);
+
+            var package = await service.GetPackageAsync(create.Session.Id, "https://stys.example", CancellationToken.None);
+
+            Assert.Equal("application/zip", package.ContentType);
+            Assert.EndsWith(".zip", package.FileName, StringComparison.OrdinalIgnoreCase);
+
+            using var archive = new ZipArchive(new MemoryStream(package.Content), ZipArchiveMode.Read, leaveOpen: false);
+            Assert.NotNull(archive.GetEntry("install-stys-agent.ps1"));
+            Assert.NotNull(archive.GetEntry("install-stys-agent.sh"));
+            Assert.NotNull(archive.GetEntry("config/bootstrap.json"));
+            Assert.NotNull(archive.GetEntry("trust/release-public-key.pem"));
+
+            var bootstrapEntry = archive.GetEntry("config/bootstrap.json");
+            Assert.NotNull(bootstrapEntry);
+            await using (var stream = bootstrapEntry!.Open())
+            {
+                var bootstrap = await JsonDocument.ParseAsync(stream);
+                Assert.Equal(create.Session.Id, bootstrap.RootElement.GetProperty("installationSessionId").GetInt32());
+                Assert.Equal("Session-" + _suffix + "-package", bootstrap.RootElement.GetProperty("agentDisplayName").GetString());
+                Assert.Equal("win-x64", bootstrap.RootElement.GetProperty("targetRid").GetString());
+                Assert.Equal("https://stys.example", bootstrap.RootElement.GetProperty("stysBaseUrl").GetString());
+                Assert.False(string.IsNullOrWhiteSpace(bootstrap.RootElement.GetProperty("packageVersion").GetString()));
+            }
+
+            var textEntries = archive.Entries
+                .Where(x => x.FullName.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase)
+                    || x.FullName.EndsWith(".sh", StringComparison.OrdinalIgnoreCase)
+                    || x.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                    || x.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                    || x.FullName.EndsWith(".service", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var entry in textEntries)
+            {
+                await using var stream = entry.Open();
+                using var reader = new StreamReader(stream);
+                var text = await reader.ReadToEndAsync();
+                Assert.DoesNotContain("EnrollmentCode", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("ClientSecret", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("JWT", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("private key", text, StringComparison.OrdinalIgnoreCase);
+            }
+
+            await using var otherDb = AgentTestSupport.CreateDbContext(_cs);
+            var otherService = new AgentInstallationSessionService(NewFactory(), new FakeKurumTenantAccessor(_kurumBId));
+            await Assert.ThrowsAsync<BaseException>(() => otherService.GetPackageAsync(create.Session.Id, "https://stys.example", CancellationToken.None));
+            await AgentTestSupport.CleanupAsync(otherDb, _suffix);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM", previousPublicKeyPem);
+            Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH", previousPublicKeyPath);
+        }
     }
 
     [IntegrationFact]

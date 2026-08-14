@@ -207,24 +207,44 @@
                 <p-step-panel [value]="4">
                     <ng-template #content let-activateCallback="activateCallback">
                         <div class="surface-ground border-round p-4">
-                            <div class="font-semibold mb-2">Kurulum Paketi</div>
-                            <p class="m-0 text-color-secondary">
-                                Windows ve Linux kurulum paketi E2D3 fazında sunulacaktır. Bu fazda gerçek indirme veya sahte paket oluşturulmaz.
-                            </p>
-                            <div class="grid mt-3">
-                                <div class="col-12 md:col-6">
-                                    <div class="border-round border-1 surface-border p-3 h-full">
-                                        <div class="font-semibold mb-1">Windows</div>
-                                        <div class="text-color-secondary">Windows Agent paketi E2D3 installer fazında burada sunulacaktır.</div>
-                                    </div>
+                            <div class="flex align-items-center justify-content-between gap-2">
+                                <div>
+                                    <div class="font-semibold mb-2">Kurulum Paketi</div>
+                                    <p class="m-0 text-color-secondary">
+                                        Bu paket Agent, Updater, trust anchor ve bootstrap konfigürasyonunu secret içermeden birleştirir.
+                                    </p>
                                 </div>
-                                <div class="col-12 md:col-6">
-                                    <div class="border-round border-1 surface-border p-3 h-full">
-                                        <div class="font-semibold mb-1">Linux</div>
-                                        <div class="text-color-secondary">Linux Agent paketi E2D3 installer fazında burada sunulacaktır.</div>
-                                    </div>
-                                </div>
+                                <button
+                                    pButton
+                                    pRipple
+                                    label="Paket İndir"
+                                    icon="pi pi-download"
+                                    class="p-button-outlined"
+                                    [loading]="packageDownloadLoading()"
+                                    [disabled]="!selectedSession()"
+                                    (click)="downloadPackage()"></button>
                             </div>
+
+                            @if (selectedSession(); as session) {
+                                <div class="grid mt-3">
+                                    <div class="col-12 md:col-6">
+                                        <div class="border-round border-1 surface-border p-3 h-full">
+                                            <div class="font-semibold mb-1">Hedef RID</div>
+                                            <div class="text-color-secondary">{{ session.targetRid }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 md:col-6">
+                                        <div class="border-round border-1 surface-border p-3 h-full">
+                                            <div class="font-semibold mb-1">Kurulum Oturumu</div>
+                                            <div class="text-color-secondary">#{{ session.id }} · {{ session.agentDisplayName }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            } @else {
+                                <div class="mt-3 text-color-secondary">
+                                    Önce bir kurulum oturumu oluşturun. Paket bu oturuma göre hazırlanır.
+                                </div>
+                            }
                         </div>
 
                         <div class="flex justify-content-between gap-2 mt-3">

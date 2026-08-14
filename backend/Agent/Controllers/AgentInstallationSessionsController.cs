@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Services;
@@ -41,5 +42,14 @@ public sealed class AgentInstallationSessionsController : ControllerBase
     {
         await _service.CancelAsync(id, User?.Identity?.Name ?? "system", cancellationToken);
         return Ok();
+    }
+
+    [HttpGet("{id:int}/package")]
+    [Permission(StructurePermissions.AgentYonetimi.Manage)]
+    public async Task<ActionResult> DownloadPackage(int id, CancellationToken cancellationToken)
+    {
+        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+        var package = await _service.GetPackageAsync(id, baseUrl, cancellationToken);
+        return File(package.Content, package.ContentType, package.FileName);
     }
 }

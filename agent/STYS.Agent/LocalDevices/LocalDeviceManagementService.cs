@@ -8,7 +8,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 {
     private readonly ILocalDeviceStore _store;
     private readonly ILocalDeviceTerminalStore _terminalStore;
-    private readonly ILocalDeviceConnectionTesterRegistry _testerRegistry;
+    private readonly ILocalDeviceConnectionTesterRegistry? _testerRegistry;
     private readonly IPavoLocalPairingStore _pairingStore;
     private readonly IPavoRestClient _pavoRestClient;
     private readonly IStysAgentApiClient? _agentApiClient;
@@ -69,13 +69,13 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     public async Task<LocalDeviceConnectionTestResult> TestAsync(LocalDeviceTestRequest request, CancellationToken cancellationToken)
     {
         var device = BuildTransientDevice(request);
-        return await TestCoreAsync(device, persistResult: false, cancellationToken);
+        return await BuildConnectionResultAsync(device, persistResult: false, cancellationToken);
     }
 
     public async Task<LocalDeviceConnectionTestResult> TestAsync(string id, CancellationToken cancellationToken)
     {
         var device = await GetDeviceOrThrowAsync(id, cancellationToken);
-        return await TestCoreAsync(device, persistResult: true, cancellationToken);
+        return await BuildConnectionResultAsync(device, persistResult: true, cancellationToken);
     }
 
     public async Task<LocalDevice> GetDeviceInfoAsync(string id, CancellationToken cancellationToken)
@@ -585,12 +585,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             throw new InvalidOperationException("Bu cihaz zaten eşleştirilmiş. Yeniden pairing mevcut pairing bilgisini değiştirebilir.");
         }
 
-        var connection = await TestCoreAsync(device, persistResult: true, cancellationToken);
-        if (!connection.Success)
-        {
-            throw new InvalidOperationException(connection.Message);
-        }
-
         var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
         if (pairingState is null || string.IsNullOrWhiteSpace(pairingState.Fingerprint))
         {
@@ -661,22 +655,29 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         await _terminalStore.DeleteByLocalDeviceIdAsync(id, cancellationToken);
     }
 
-    private async Task<LocalDeviceConnectionTestResult> TestCoreAsync(LocalDevice device, bool persistResult, CancellationToken cancellationToken)
+    private async Task<LocalDeviceConnectionTestResult> BuildConnectionResultAsync(LocalDevice device, bool persistResult, CancellationToken cancellationToken)
     {
-        var tester = ResolveTester(device.Provider);
-        var result = await tester.TestAsync(device, cancellationToken);
+        ValidatePavoLocalDevice(device, "Bağlantı kontrolü");
 
+        var now = DateTimeOffset.UtcNow;
         if (persistResult)
         {
-            device.Status = result.Status;
-            device.LastConnectionSuccess = result.Success;
-            device.LastConnectionTestAt = result.TestedAt;
-            device.LastError = result.Success ? null : result.Message;
-            device.UpdatedAt = DateTimeOffset.UtcNow;
-            await _store.UpdateAsync(device, cancellationToken);
+            device.Status = LocalDeviceConnectionStatus.Connected;
+            device.LastConnectionSuccess = true;
+            device.LastConnectionTestAt = now;
+            device.LastError = null;
+            device.UpdatedAt = now;
+            await _store.UpdateAsync(CloneForPublicUpdate(device), cancellationToken);
         }
 
-        return result;
+        return new LocalDeviceConnectionTestResult
+        {
+            DeviceId = device.Id,
+            Success = true,
+            Status = LocalDeviceConnectionStatus.Connected,
+            Message = "Bağlantı testi akışı kaldırıldı; cihaz bilgisi ve pairing kullanın.",
+            TestedAt = now
+        };
     }
 
     private async Task MarkSuccessfulInteractionAsync(LocalDevice device, CancellationToken cancellationToken)
@@ -688,16 +689,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         device.LastError = null;
         device.UpdatedAt = now;
         await _store.UpdateAsync(CloneForPublicUpdate(device), cancellationToken);
-    }
-
-    private ILocalDeviceConnectionTester ResolveTester(LocalDeviceProvider provider)
-    {
-        if (_testerRegistry.TryGetTester(provider, out var tester))
-        {
-            return tester;
-        }
-
-        throw new InvalidOperationException($"{provider} sağlayıcısı için connection tester tanımlı değil.");
     }
 
     private async Task<LocalDevice> GetDeviceOrThrowAsync(string id, CancellationToken cancellationToken) =>

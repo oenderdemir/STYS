@@ -223,7 +223,7 @@ function mapLocalDeviceError(error) {
   if (message.includes("önce pavo cihazı ile pairing yapılmalıdır")) return "Önce PAVO cihazı ile pairing yapılmalıdır.";
   if (message.includes("ödeme testi") && message.includes("hazır değil")) return "Cihaz ödeme için hazır değil.";
   if (message.includes("ödeme testi") && message.includes("aktif terminal")) return "Ödeme testi için aktif terminal gerekli.";
-  if (message.includes("ödeme testi") && message.includes("bağlantı testi")) return "Önce bağlantı testi başarılı olmalıdır.";
+  if (message.includes("ödeme testi") && message.includes("bağlantı testi")) return "Cihazla iletişim kurulamadı.";
   if (message.includes("tesis seçimi zorunludur")) return "Tesis seçimi zorunludur.";
   if (message.includes("agent kapsamı")) return "Seçilen tesis agent kapsamı dışında.";
   if (message.includes("başka agent'a bağlı") || message.includes("başka agent yerel cihazına bağlı")) return "Bu cihaz başka Agent'a bağlı.";
@@ -760,7 +760,6 @@ function renderLocalDeviceRows(devices) {
               <div class="table-actions">
                 <button type="button" class="secondary" data-local-device-action="details" data-local-device-id="${escapeHtml(device.id)}">Detay</button>
                 <button type="button" class="secondary" data-local-device-action="edit" data-local-device-id="${escapeHtml(device.id)}">Düzenle</button>
-                <button type="button" class="secondary" data-local-device-action="test" data-local-device-id="${escapeHtml(device.id)}">Bağlantıyı Test Et</button>
                 <button type="button" class="danger" data-local-device-action="delete" data-local-device-id="${escapeHtml(device.id)}">Sil</button>
               </div>
             </td>
@@ -781,10 +780,6 @@ function renderLocalDeviceRows(devices) {
         });
       } else if (action === "edit") {
         fillLocalDeviceForm(device);
-      } else if (action === "test") {
-        testSavedLocalDevice(device.id).catch((error) => {
-          setStatus("local-devices-status", mapLocalDeviceError(error), "error");
-        });
       } else if (action === "delete") {
         deleteLocalDevice(id).catch((error) => {
           setStatus("local-devices-status", mapLocalDeviceError(error), "error");
@@ -853,23 +848,6 @@ async function saveLocalDevice(event) {
   await selectLocalDevice(result.id || result.Id || payload.id || null).catch(() => {});
 }
 
-async function testSavedLocalDevice(id) {
-  setStatus("local-devices-status", "Bağlantı testi çalışıyor...", "muted");
-  const result = await getJson(`/api/local-devices/${encodeURIComponent(id)}/test-connection`, {
-    method: "POST"
-  });
-
-  const badge = localDeviceStatusBadge(result.status);
-  setText("local-device-last-action", `Test: ${result.deviceId || id}`);
-  setText("local-device-last-result", result.message || badge.text);
-  setStatus("local-devices-status", result.success ? "Bağlantı testi başarılı." : (result.message || "Bağlantı testi başarısız."), result.success ? "ok" : "error");
-  await loadLocalDevices();
-  if (state.selectedLocalDeviceId) {
-    await selectLocalDevice(state.selectedLocalDeviceId).catch(() => {});
-  }
-  return result;
-}
-
 async function deleteLocalDevice(id) {
   const ok = window.confirm("Bu yerel cihaz kaydı silinsin mi?");
   if (!ok) return;
@@ -889,23 +867,6 @@ async function deleteLocalDevice(id) {
     renderLocalDeviceDetail(null);
   }
   await loadLocalDevices();
-}
-
-async function testSelectedLocalDevice() {
-  if (!state.selectedLocalDeviceId) {
-    setStatus("local-devices-status", "Önce bir cihaz seçin.", "warn");
-    return null;
-  }
-
-  const result = await getJson(`/api/local-devices/${encodeURIComponent(state.selectedLocalDeviceId)}/test-connection`, {
-    method: "POST"
-  });
-
-  setText("local-device-detail-last-result", result.message || "Bağlantı testi tamamlandı.");
-  setStatus("local-devices-status", result.success ? "Bağlantı testi başarılı." : (result.message || "Bağlantı testi başarısız."), result.success ? "ok" : "error");
-  await loadLocalDevices();
-  await selectLocalDevice(state.selectedLocalDeviceId).catch(() => {});
-  return result;
 }
 
 async function loadSelectedLocalDeviceInfo() {
@@ -1173,11 +1134,6 @@ function bindLocalDevicesPage() {
     submitLocalPaymentTest().catch((error) => {
       setStatus("local-device-payment-status", mapLocalDeviceError(error), "error");
       setText("local-device-payment-result", error?.message || String(error));
-    });
-  });
-  $("local-device-detail-test-btn")?.addEventListener("click", () => {
-    testSelectedLocalDevice().catch((error) => {
-      setStatus("local-devices-status", mapLocalDeviceError(error), "error");
     });
   });
   $("local-device-detail-info-btn")?.addEventListener("click", () => {

@@ -134,11 +134,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         var device = await GetDeviceOrThrowAsync(id, cancellationToken);
         ValidatePavoLocalDevice(device, "Ödeme testi");
 
-        if (device.LastConnectionSuccess != true || device.Status is not LocalDeviceConnectionStatus.Connected)
-        {
-            throw new InvalidOperationException("Önce bağlantı testi başarılı olmalıdır.");
-        }
-
         if (device.ProvisioningStatus is LocalDeviceProvisioningStatus.ReProvisionRequired
             or LocalDeviceProvisioningStatus.Conflict
             or LocalDeviceProvisioningStatus.Disabled)
@@ -228,6 +223,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         };
 
         var response = await _pavoRestClient.StartPaymentAsync(pavoRequest, cancellationToken);
+        await MarkSuccessfulInteractionAsync(device, cancellationToken);
         return new LocalDevicePaymentTestResult
         {
             DeviceId = device.Id,
@@ -474,12 +470,6 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             EnsurePaired(pairingState);
         }
 
-        var connection = await TestCoreAsync(device, persistResult: true, cancellationToken);
-        if (!connection.Success)
-        {
-            throw new InvalidOperationException(connection.Message);
-        }
-
         var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
         var response = await _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, pairingState, reserved.TransactionSequence), cancellationToken);
 
@@ -496,6 +486,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         updatedDevice.UpdatedAt = now;
 
         await _store.UpdateAsync(updatedDevice, cancellationToken);
+        await MarkSuccessfulInteractionAsync(updatedDevice, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(response.Fingerprint) || !string.IsNullOrWhiteSpace(response.TargetFingerprint) || pairingState is not null)
         {
@@ -613,6 +604,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         try
         {
             var response = await _pavoRestClient.PairingAsync(request, cancellationToken);
+            await MarkSuccessfulInteractionAsync(device, cancellationToken);
             if (response.HasError || response.HasAbondon || !string.IsNullOrWhiteSpace(response.ErrorCode) || !response.OnayliMi)
             {
                 await RecordPairingFailureAsync(device, pairingState, reserved.TransactionSequence, response.Message ?? response.ErrorCode ?? "Pairing başarısız.", now, cancellationToken);
@@ -685,6 +677,17 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         }
 
         return result;
+    }
+
+    private async Task MarkSuccessfulInteractionAsync(LocalDevice device, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        device.Status = LocalDeviceConnectionStatus.Connected;
+        device.LastConnectionSuccess = true;
+        device.LastConnectionTestAt = now;
+        device.LastError = null;
+        device.UpdatedAt = now;
+        await _store.UpdateAsync(CloneForPublicUpdate(device), cancellationToken);
     }
 
     private ILocalDeviceConnectionTester ResolveTester(LocalDeviceProvider provider)

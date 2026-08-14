@@ -176,46 +176,6 @@ public static class AgentLocalManagementApplication
             return await ExecuteDeviceSaveAsync(request, id, service, cancellationToken);
         });
 
-        localDeviceApi.MapPost("/test-connection", async (
-            LocalDeviceTestRequest request,
-            ILocalDeviceManagementService service,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var result = await service.TestAsync(request, cancellationToken);
-                return Results.Ok(result);
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new { message = ex.Message });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { message = ex.Message });
-            }
-        });
-
-        localDeviceApi.MapPost("/{id}/test-connection", async (
-            string id,
-            ILocalDeviceManagementService service,
-            CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                var result = await service.TestAsync(id, cancellationToken);
-                return Results.Ok(result);
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new { message = ex.Message });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.BadRequest(new { message = ex.Message });
-            }
-        });
-
         localDeviceApi.MapPost("/{id}/device-info", async (
             string id,
             ILocalDeviceManagementService service,

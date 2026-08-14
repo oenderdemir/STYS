@@ -2223,6 +2223,22 @@ Agent Regression:  0
 - Known limitations:
   - SQL-backend entegrasyon doğrulaması için ayrı bir test ortamı gerektiğinde preflight testi tekrar çalıştırılmalı.
 
+### E2C1 Absolute Expiry Fix — 2026-08-14
+
+- Payment expiry semantics:
+  - `AgentCommandExpiryService.MarkExpired` artık `PavoStartPayment` için execution state’e göre ayrışıyor.
+  - `Pending` / `Delivered` → command `Expired`, payment state değişmiyor, reconciliation üretilmiyor.
+  - `Accepted` / `Running` → command `Expired`, payment `Unknown`, tek bir `PavoGetPaymentResult` reconciliation command oluşturuluyor.
+  - Lease timeout ve `ExpiresAt` timeout aynı payment güvenlik semantiğini kullanıyor.
+- Tests:
+  - Pending / Delivered / Accepted / Running `ExpiresAt` senaryoları için hedefli integration testler eklendi.
+  - Lease tabanlı mevcut davranışlar korunuyor.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+- Real SQL integration test status:
+  - Bu turda hedefli payment integration testleri lokal ortamda SQL bağlantı olmadan skip edilebildi; çözüm testi yine başarıyla geçti.
+- Known limitations:
+  - SQL Server ortamı olmadan yalnız çözüm testi çalıştırılabiliyor; gerçek DB entegrasyon doğrulaması için uygun test env gerekli.
+
 ### E2C1 Durable Command Lease & Crash Recovery — 2026-08-13
 
 - Command lease modeli:

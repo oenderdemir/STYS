@@ -188,8 +188,13 @@ public sealed class AgentCommandExpiryService
             return;
         }
 
-        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(cmd.CommandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(cmd.CommandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase))
+        {
+            HandlePavoStartPaymentTimeout(db, cmd, previous, agentId, utcNow, shouldRetry: false);
+            return;
+        }
+
+        if (string.Equals(cmd.CommandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase))
         {
             var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload);
             var payment = paymentId.HasValue
@@ -243,18 +248,7 @@ public sealed class AgentCommandExpiryService
 
         if (isStartPayment)
         {
-            var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload);
-            var payment = paymentId.HasValue
-                ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
-                : null;
-            if (!shouldRetry && !isDelivered)
-            {
-                ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
-                if (payment is not null)
-                {
-                    EnsurePaymentReconciliationCommand(db, cmd, payment, utcNow);
-                }
-            }
+            HandlePavoStartPaymentTimeout(db, cmd, previous, agentId, utcNow, shouldRetry);
             return;
         }
 
@@ -290,6 +284,36 @@ public sealed class AgentCommandExpiryService
         payment.PavoMessage = payment.HataMesaji;
         payment.SonSorgulamaTarihi = utcNow;
         payment.TamamlanmaTarihi = null;
+    }
+
+    private void HandlePavoStartPaymentTimeout(
+        StysAppDbContext db,
+        AgentCommand cmd,
+        AgentCommandStatus originalStatus,
+        int agentId,
+        DateTime utcNow,
+        bool shouldRetry)
+    {
+        if (originalStatus == AgentCommandStatus.Pending || originalStatus == AgentCommandStatus.Delivered)
+        {
+            return;
+        }
+
+        if (originalStatus != AgentCommandStatus.Accepted && originalStatus != AgentCommandStatus.Running)
+        {
+            return;
+        }
+
+        var paymentId = TryGetPaymentIdFromCommandPayload(cmd.Payload);
+        var payment = paymentId.HasValue
+            ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
+            : null;
+
+        ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
+        if (payment is not null && !shouldRetry)
+        {
+            EnsurePaymentReconciliationCommand(db, cmd, payment, utcNow);
+        }
     }
 
     private void EnsurePaymentReconciliationCommand(StysAppDbContext db, AgentCommand sourceCommand, PosOdemeIslemi payment, DateTime utcNow)

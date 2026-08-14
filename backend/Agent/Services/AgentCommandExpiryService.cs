@@ -55,7 +55,10 @@ public sealed class AgentCommandExpiryService
                 !x.IsDeleted
                 && (
                     (x.ExpiresAt.HasValue && x.ExpiresAt.Value <= now && ExpirableStatuses.Contains(x.Status))
-                    || (x.LeaseExpiresAt.HasValue && x.LeaseExpiresAt.Value <= now && IsLeaseRecoverableStatus(x.Status)))
+                    || (x.LeaseExpiresAt.HasValue && x.LeaseExpiresAt.Value <= now && (
+                        x.Status == AgentCommandStatus.Delivered
+                        || x.Status == AgentCommandStatus.Accepted
+                        || x.Status == AgentCommandStatus.Running)))
             )
             .Select(x => x.AgentId)
             .Distinct()
@@ -103,7 +106,10 @@ public sealed class AgentCommandExpiryService
                         && !x.IsDeleted
                         && x.LeaseExpiresAt.HasValue
                         && x.LeaseExpiresAt.Value <= utcNow
-                        && IsLeaseRecoverableStatus(x.Status))
+                    && (
+                        x.Status == AgentCommandStatus.Delivered
+                        || x.Status == AgentCommandStatus.Accepted
+                        || x.Status == AgentCommandStatus.Running))
                     .OrderBy(x => x.CreatedAt)
                     .ToListAsync(ct);
 
@@ -143,7 +149,10 @@ public sealed class AgentCommandExpiryService
                     && !x.IsDeleted
                     && x.LeaseExpiresAt.HasValue
                     && x.LeaseExpiresAt.Value <= utcNow
-                    && IsLeaseRecoverableStatus(x.Status))
+                    && (
+                        x.Status == AgentCommandStatus.Delivered
+                        || x.Status == AgentCommandStatus.Accepted
+                        || x.Status == AgentCommandStatus.Running))
                 .OrderBy(x => x.CreatedAt)
                 .ToListAsync(ct);
 
@@ -449,11 +458,6 @@ public sealed class AgentCommandExpiryService
         string.Equals(durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsLeaseRecoverableStatus(AgentCommandStatus status) =>
-        status == AgentCommandStatus.Delivered
-        || status == AgentCommandStatus.Accepted
-        || status == AgentCommandStatus.Running;
 
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
     {

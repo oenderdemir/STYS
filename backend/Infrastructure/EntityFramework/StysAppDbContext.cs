@@ -211,6 +211,7 @@ public class StysAppDbContext : DbContext
     public DbSet<AgentCredential> AgentCredentialler => Set<AgentCredential>();
     public DbSet<AgentTesis> AgentTesisler => Set<AgentTesis>();
     public DbSet<AgentEnrollment> AgentEnrollments => Set<AgentEnrollment>();
+    public DbSet<AgentInstallationSession> AgentInstallationSessions => Set<AgentInstallationSession>();
     public DbSet<AgentScope> AgentScopes => Set<AgentScope>();
     public DbSet<AgentCommand> AgentCommands => Set<AgentCommand>();
     public DbSet<AgentCommandExecution> AgentCommandExecutions => Set<AgentCommandExecution>();
@@ -2018,7 +2019,19 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.AllowedScopes).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
             entity.HasIndex(x => x.Code).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.AgentInstallationSessionId).IsUnique().HasFilter("[IsDeleted] = 0 AND [AgentInstallationSessionId] IS NOT NULL");
             entity.HasOne(x => x.Agent).WithMany(x => x.Enrollments).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.InstallationSession).WithOne(x => x.Enrollment).HasForeignKey<AgentEnrollment>(x => x.AgentInstallationSessionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AgentInstallationSession>(entity =>
+        {
+            entity.ToTable("AgentInstallationSessions", entegrasyonSchema);
+            entity.Property(x => x.AgentDisplayName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.TargetRid).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Scopes).HasColumnType("nvarchar(max)").IsRequired();
+            entity.HasIndex(x => new { x.KurumId, x.TesisId, x.Status });
+            entity.HasOne(x => x.EnrolledAgent).WithMany().HasForeignKey(x => x.EnrolledAgentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<AgentScope>(entity =>

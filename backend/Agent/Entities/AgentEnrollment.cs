@@ -16,6 +16,8 @@ public sealed class AgentEnrollment : BaseEntity<int>, ITenantEntity
     public AgentEnrollmentDurum Durum { get; set; } = AgentEnrollmentDurum.Active;
     public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
     public int? AgentId { get; set; }
+    public int? AgentInstallationSessionId { get; set; }
 
     public Agent? Agent { get; set; }
+    public AgentInstallationSession? InstallationSession { get; set; }
 }

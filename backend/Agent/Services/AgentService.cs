@@ -145,11 +145,23 @@ public sealed class AgentService : IAgentService
     public async Task ApproveAsync(int id, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        var agent = await db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        var agent = await db.Set<AgentEntity>()
+            .Include(x => x.Enrollments)
+            .ThenInclude(x => x.InstallationSession)
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
         if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
         EnforceKurumAccess(agent);
         if (agent.Durum != AgentDurum.PendingApproval) throw new BaseException("Sadece onay bekleyen agent onaylanabilir.", 400);
         agent.Durum = AgentDurum.Active;
+
+        foreach (var session in agent.Enrollments
+                     .Where(x => !x.IsDeleted && x.InstallationSession is not null && x.InstallationSession.Status == AgentInstallationSessionStatus.PendingApproval)
+                     .Select(x => x.InstallationSession!))
+        {
+            session.Status = AgentInstallationSessionStatus.Enrolled;
+            session.UpdatedAt = DateTime.UtcNow;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

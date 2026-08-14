@@ -2239,6 +2239,38 @@ Agent Regression:  0
 - Known limitations:
   - SQL Server ortamı olmadan yalnız çözüm testi çalıştırılabiliyor; gerçek DB entegrasyon doğrulaması için uygun test env gerekli.
 
+### E2D1 Agent Installation Session — 2026-08-14
+
+- Installation session domain:
+  - `AgentInstallationSession` entity'si eklendi; kurum/tesis, agent display name, target RID, scope listesi, durum ve zaman damgaları tutuluyor.
+  - Session ile linked enrollment arasında `AgentEnrollment.AgentInstallationSessionId` üzerinden bire bir ilişki kuruldu.
+  - Enrollment code ve client secret session içine yazılmıyor; only create response ile code tek sefer veriliyor.
+- API / backend akışı:
+  - `GET /api/ui/agent-installations`
+  - `GET /api/ui/agent-installations/{id}`
+  - `POST /api/ui/agent-installations`
+  - `POST /api/ui/agent-installations/{id}/cancel`
+  - Kurum ve tesis doğrulaması server-side current tenant üzerinden yapılıyor.
+  - RID whitelist ve scope whitelist backend’de enforced.
+  - Session create sırasında linked enrollment `MaxKullanimSayisi = 1` ile oluşturuluyor.
+  - `AgentTokenService` enrollment sırasında session verisini authoritative kabul ediyor; agent display name ve runtime identifier session’dan geliyor.
+  - RequiresApproval akışında session `PendingApproval`, approval sonrası `Enrolled`, first heartbeat sonrası `Online` olacak şekilde lifecycle bağlandı.
+- Tenant / security:
+  - Client payload’dan KurumId alınmıyor.
+  - Cancel/expired session’lar enrollment’a izin vermiyor.
+  - Session response’ları secret içermiyor.
+- Tests:
+  - Valid create, tenant isolation, unknown RID/scope, cancelled/expired session rejection, successful enrollment link ve RequiresApproval akış testleri eklendi.
+  - `dotnet test tests/STYS.Tests/STYS.Tests.csproj -c Release --filter "FullyQualifiedName~AgentInstallationSessionIntegrationTests"` gerçek SQL ortamında geçti.
+  - `dotnet test STYS.sln --configuration Release` default ortamda geçti; SQL integration testleri connection string olmadığı için skip edildi.
+  - SQL connection string verilerek full suite tekrar çalıştırıldığında bu fazdan bağımsız mevcut DB integration testleri de çalıştı ve `AgentReleaseStagingIntegrationTests.ConcurrentStageUpgrade_OnlyOneActiveCommandOlusur` benzeri önceden var olan query-translation failures açığa çıktı.
+- Real PAVO device test status:
+  - Bu faz yalnız backend session altyapısıydı; gerçek PAVO cihaz testi yapılmadı.
+- Known limitations:
+  - `Completed/Online` ilerleme hook’ları hazır; ancak bu fazda üst seviye UI wizard ve canlı SignalR ilerleme akışı eklenmedi.
+  - Kurum seçimi olmayan superadmin oturumları için session create fail-closed davranıyor.
+  - Full SQL-enabled suite’de mevcut, bu fazdan bağımsız integration failures var; bu çalışma yalnız E2D1 kapsamındaki session akışını tamamladı.
+
 ### E2C1 Durable Command Lease & Crash Recovery — 2026-08-13
 
 - Command lease modeli:

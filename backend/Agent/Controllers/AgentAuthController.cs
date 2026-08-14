@@ -81,6 +81,20 @@ public sealed class AgentAuthController : ControllerBase
             agent.ContractVersion = NormalizeNullable(request.ContractVersion);
             agent.RuntimeIdentifier = NormalizeNullable(request.RuntimeIdentifier);
             agent.CihazKimligi ??= NormalizeNullable(request.CihazKimligi);
+
+            var session = await db.Set<AgentInstallationSession>()
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(x =>
+                    !x.IsDeleted
+                    && x.EnrolledAgentId == agent.Id
+                    && x.Status == AgentInstallationSessionStatus.Enrolled,
+                    cancellationToken);
+            if (session is not null)
+            {
+                session.Status = AgentInstallationSessionStatus.Online;
+                session.UpdatedAt = DateTime.UtcNow;
+            }
+
             await db.SaveChangesAsync(cancellationToken);
             await _realtimeNotifier.AgentChangedAsync(cancellationToken);
         }

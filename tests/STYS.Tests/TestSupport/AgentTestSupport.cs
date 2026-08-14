@@ -98,6 +98,20 @@ public static class AgentTestSupport
             var enrollments = await db.Set<AgentEnrollment>().Where(x => x.AgentId == entry.Id).ToListAsync(ct);
             db.Set<AgentEnrollment>().RemoveRange(enrollments);
         }
+
+        var sessions = await db.Set<AgentInstallationSession>()
+            .Where(x => x.AgentDisplayName.Contains(uniqueSuffix) || x.CreatedBy == "test")
+            .ToListAsync(ct);
+        var sessionIds = sessions.Select(x => x.Id).ToList();
+        if (sessionIds.Count > 0)
+        {
+            var linkedEnrollments = await db.Set<AgentEnrollment>()
+                .Where(x => x.AgentInstallationSessionId != null && sessionIds.Contains(x.AgentInstallationSessionId.Value))
+                .ToListAsync(ct);
+            db.Set<AgentEnrollment>().RemoveRange(linkedEnrollments);
+            db.Set<AgentInstallationSession>().RemoveRange(sessions);
+        }
+
         db.Set<AgentEntity>().RemoveRange(agentEntries);
         await db.SaveChangesAsync(ct);
     }

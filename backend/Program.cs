@@ -206,6 +206,7 @@ builder.Services.AddScoped<IAgentReleaseService, AgentReleaseService>();
 builder.Services.AddScoped<IAgentCommandRealtimeNotifier, STYS.Agent.Hubs.AgentCommandRealtimeNotifier>();
 builder.Services.AddScoped<IAgentRealtimeNotifier, STYS.Agent.Hubs.AgentRealtimeNotifier>();
 builder.Services.AddScoped<IAgentService, AgentService>();
+builder.Services.AddScoped<IAgentInstallationSessionService, AgentInstallationSessionService>();
 builder.Services.AddScoped<IAgentTokenService, AgentTokenService>();
 builder.Services.AddSingleton<IAgentEnrollmentExecutionHook, NoOpAgentEnrollmentExecutionHook>();
 builder.Services.AddScoped<IAgentJwtTokenService, AgentJwtTokenService>();

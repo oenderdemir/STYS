@@ -41,6 +41,7 @@ public sealed class AgentTokenService : IAgentTokenService
         {
             var enrollment = await db.Set<AgentEnrollment>()
                 .IgnoreQueryFilters()
+                .Include(x => x.InstallationSession)
                 .FirstOrDefaultAsync(x => x.Code == request.EnrollmentCode && !x.IsDeleted, cancellationToken);
 
             if (enrollment is null)
@@ -52,6 +53,33 @@ public sealed class AgentTokenService : IAgentTokenService
             if (enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
                 throw new BaseException("Enrollment kodu maksimum kullanım sayısına ulaştı.", 400);
 
+            if (enrollment.InstallationSession is not null)
+            {
+                var session = enrollment.InstallationSession;
+                if (session.KurumId != enrollment.KurumId)
+                    throw new BaseException("Kurulum oturumu ile enrollment kurum bilgisi uyuşmuyor.", 400);
+
+                if (DateTime.UtcNow > session.ExpiresAt)
+                {
+                    session.Status = AgentInstallationSessionStatus.Expired;
+                    if (enrollment.Durum == AgentEnrollmentDurum.Active)
+                        enrollment.Durum = AgentEnrollmentDurum.Expired;
+                    await db.SaveChangesAsync(cancellationToken);
+                    throw new BaseException("Kurulum oturumu süresi dolmuş.", 400);
+                }
+
+                if (session.Status is AgentInstallationSessionStatus.Cancelled
+                    or AgentInstallationSessionStatus.Expired
+                    or AgentInstallationSessionStatus.Failed
+                    or AgentInstallationSessionStatus.Completed
+                    or AgentInstallationSessionStatus.PendingApproval
+                    or AgentInstallationSessionStatus.Enrolled
+                    or AgentInstallationSessionStatus.Online)
+                {
+                    throw new BaseException("Kurulum oturumu artık enroll edilmeye uygun değil.", 400);
+                }
+            }
+
             var allowedScopes = JsonSerializer.Deserialize<List<string>>(enrollment.AllowedScopes) ?? new List<string>();
             var allowedTesisIds = JsonSerializer.Deserialize<List<int>>(enrollment.TesisIds) ?? new List<int>();
 
@@ -61,7 +89,8 @@ public sealed class AgentTokenService : IAgentTokenService
             var agent = await db.Set<AgentEntity>()
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(x => x.KurumId == enrollment.KurumId && x.AgentKey == request.AgentKey && !x.IsDeleted, cancellationToken);
-            var agentDisplayName = NormalizeAgentDisplayName(request.AgentDisplayName, request.AgentKey);
+            var agentDisplayName = enrollment.InstallationSession?.AgentDisplayName ?? NormalizeAgentDisplayName(request.AgentDisplayName, request.AgentKey);
+            var runtimeIdentifier = enrollment.InstallationSession?.TargetRid;
 
             if (agent is null)
             {
@@ -72,6 +101,7 @@ public sealed class AgentTokenService : IAgentTokenService
                     KurumId = enrollment.KurumId,
                     Durum = agentDurum,
                     AgentVersion = request.AgentVersion,
+                    RuntimeIdentifier = runtimeIdentifier,
                     CihazKimligi = request.CihazKimligi,
                     PublicKey = request.PublicKey,
                     CreatedBy = "agent-enrollment",
@@ -86,6 +116,7 @@ public sealed class AgentTokenService : IAgentTokenService
                 agent.Ad = agentDisplayName;
                 agent.Durum = agentDurum;
                 agent.AgentVersion = request.AgentVersion;
+                agent.RuntimeIdentifier = runtimeIdentifier;
                 agent.CihazKimligi = request.CihazKimligi;
                 agent.PublicKey = request.PublicKey;
                 agent.IsDeleted = false;
@@ -130,6 +161,15 @@ public sealed class AgentTokenService : IAgentTokenService
             enrollment.ConcurrencyToken = Guid.NewGuid();
             if (enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
                 enrollment.Durum = AgentEnrollmentDurum.Used;
+
+            if (enrollment.InstallationSession is not null)
+            {
+                enrollment.InstallationSession.EnrolledAgentId = agent.Id;
+                enrollment.InstallationSession.Status = enrollment.RequiresApproval
+                    ? AgentInstallationSessionStatus.PendingApproval
+                    : AgentInstallationSessionStatus.Enrolled;
+                enrollment.InstallationSession.UpdatedAt = DateTime.UtcNow;
+            }
 
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

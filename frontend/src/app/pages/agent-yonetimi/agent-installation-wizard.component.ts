@@ -121,6 +121,10 @@ export class AgentInstallationWizardComponent implements OnInit {
     }
 
     createSession(): void {
+        if (this.isCreationLocked()) {
+            return;
+        }
+
         if (!this.canCreateSession()) {
             this.messageService.add({ severity: 'warn', summary: 'Eksik Bilgi', detail: 'Lütfen tesis, agent adı, yetkiler ve platform seçin.' });
             return;
@@ -243,12 +247,17 @@ export class AgentInstallationWizardComponent implements OnInit {
         return this.wizardForm.tesisId > 0
             && this.wizardForm.agentDisplayName.trim().length > 0
             && this.wizardForm.targetRid.length > 0
-            && this.wizardForm.scopes.length > 0;
+            && this.wizardForm.scopes.length > 0
+            && !this.isCreationLocked();
     }
 
     isSelectedSessionTerminal(): boolean {
         const session = this.selectedSession();
         return !!session && this.isTerminalStatus(session.status);
+    }
+
+    isCreationLocked(): boolean {
+        return this.generatedEnrollmentCode() !== null || this.selectedSession() !== null;
     }
 
     private loadTesisler(): void {

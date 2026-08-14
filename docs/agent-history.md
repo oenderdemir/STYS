@@ -2328,3 +2328,20 @@ Agent Regression:  0
 - Known limitations:
   - Eski enrollment kodu ekranı için kullanılmayan legacy UI parçası repoda kaldı; aktif akış wizard üzerinden çalışıyor.
   - Installer/download, live tracking ve SignalR canlı ilerleme E2D3/E2D5 kapsamına bırakıldı.
+
+### E2D1/E2D2 Final Follow-up — 2026-08-14
+
+- Expired installation session persistence:
+  - Süresi dolan kurulum oturumu artık enrollment reddedilse bile `AgentInstallationSession.Status = Expired` ve `AgentEnrollment.Durum = Expired` olarak kalıcı biçimde işaretleniyor.
+  - Enrollment akışı rollback ile bu iki durumu geri almıyor.
+- Heartbeat lifecycle:
+  - Agent heartbeat sonrası session online güncellemesi controller içinden çıkarıldı.
+  - `IAgentInstallationSessionService.MarkOnlineFromHeartbeatAsync(...)` üzerinden merkezi servis çağrısı yapılıyor.
+- Scope constants:
+  - Kurulum oturumu oluştururken agent heartbeat/command/result/config scope’ları string literal yerine merkezî policy sabitlerinden okunuyor.
+- Wizard duplicate-create protection:
+  - Başarılı kurulumdan sonra wizard create akışı kilitleniyor.
+  - Enrollment kodu gösterildikten sonra ikinci create denemesi ve form değişikliği engelleniyor.
+- Tests / build:
+  - Expired-session integration testi kalıcı `Expired` durumlarını doğruluyor.
+  - Frontend wizard spec’i ikinci create denemesinin bloke edildiğini kontrol ediyor.

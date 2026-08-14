@@ -26,6 +26,7 @@ public sealed class AgentAuthController : ControllerBase
     private readonly IPosCihaziService _posCihaziService;
     private readonly IAgentRealtimeNotifier _realtimeNotifier;
     private readonly AgentCompatibilityOptions _compatibilityOptions;
+    private readonly IAgentInstallationSessionService _installationSessionService;
 
     public AgentAuthController(
         IAgentTokenService tokenService,
@@ -34,6 +35,7 @@ public sealed class AgentAuthController : ControllerBase
         IAgentReleaseService releaseService,
         IPosCihaziService posCihaziService,
         IAgentRealtimeNotifier realtimeNotifier,
+        IAgentInstallationSessionService installationSessionService,
         IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
     {
         _tokenService = tokenService;
@@ -42,6 +44,7 @@ public sealed class AgentAuthController : ControllerBase
         _releaseService = releaseService;
         _posCihaziService = posCihaziService;
         _realtimeNotifier = realtimeNotifier;
+        _installationSessionService = installationSessionService;
         _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
     }
 
@@ -82,20 +85,8 @@ public sealed class AgentAuthController : ControllerBase
             agent.RuntimeIdentifier = NormalizeNullable(request.RuntimeIdentifier);
             agent.CihazKimligi ??= NormalizeNullable(request.CihazKimligi);
 
-            var session = await db.Set<AgentInstallationSession>()
-                .OrderByDescending(x => x.CreatedAt)
-                .FirstOrDefaultAsync(x =>
-                    !x.IsDeleted
-                    && x.EnrolledAgentId == agent.Id
-                    && x.Status == AgentInstallationSessionStatus.Enrolled,
-                    cancellationToken);
-            if (session is not null)
-            {
-                session.Status = AgentInstallationSessionStatus.Online;
-                session.UpdatedAt = DateTime.UtcNow;
-            }
-
             await db.SaveChangesAsync(cancellationToken);
+            await _installationSessionService.MarkOnlineFromHeartbeatAsync(agent.Id, cancellationToken);
             await _realtimeNotifier.AgentChangedAsync(cancellationToken);
         }
 

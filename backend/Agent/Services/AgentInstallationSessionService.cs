@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using STYS.Agent.Authorization;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
@@ -22,11 +23,11 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
 
     private static readonly HashSet<string> AllowedScopes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "agent.heartbeat",
-        "agent.command.read",
-        "agent.command.execute",
-        "agent.result.write",
-        "agent.config.read"
+        AgentPolicies.AgentHeartbeat,
+        AgentPolicies.AgentCommandRead,
+        AgentPolicies.AgentCommandExecute,
+        AgentPolicies.AgentResultWrite,
+        AgentPolicies.AgentConfigRead
     };
 
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
@@ -155,6 +156,28 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task MarkOnlineFromHeartbeatAsync(int agentId, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
+
+        var session = await db.Set<AgentInstallationSession>()
+            .FirstOrDefaultAsync(x =>
+                !x.IsDeleted
+                && x.EnrolledAgentId == agentId
+                && x.Status == AgentInstallationSessionStatus.Enrolled,
+                cancellationToken);
+
+        if (session is null)
+        {
+            return;
+        }
+
+        session.Status = AgentInstallationSessionStatus.Online;
+        session.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<IReadOnlyCollection<AgentInstallationSessionDto>> MapAsync(StysAppDbContext db, IReadOnlyCollection<AgentInstallationSession> sessions, CancellationToken cancellationToken)

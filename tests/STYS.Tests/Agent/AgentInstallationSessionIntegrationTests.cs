@@ -200,6 +200,11 @@ public sealed class AgentInstallationSessionIntegrationTests : IAsyncLifetime
         Assert.Contains("süresi dolmuş", ex.Message, StringComparison.OrdinalIgnoreCase);
 
         await using var verify = AgentTestSupport.CreateDbContext(_cs);
+        var reloadedSession = await verify.Set<AgentInstallationSession>().FirstAsync(x => x.Id == create.Session.Id);
+        var enrollment = await verify.Set<AgentEnrollment>().FirstAsync(x => x.AgentInstallationSessionId == reloadedSession.Id);
+
+        Assert.Equal(AgentInstallationSessionStatus.Expired, reloadedSession.Status);
+        Assert.Equal(AgentEnrollmentDurum.Expired, enrollment.Durum);
         await AgentTestSupport.CleanupAsync(verify, _suffix);
     }
 

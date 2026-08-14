@@ -58,9 +58,11 @@ describe('AgentInstallationWizardComponent', () => {
         const storageSpy = spyOn(localStorage, 'setItem');
 
         component.createSession();
+        component.createSession();
 
         expect(agentServiceSpy.createInstallation).toHaveBeenCalledTimes(1);
         expect(component.generatedEnrollmentCode()).toBe('ABCD-EFGH');
         expect(storageSpy).not.toHaveBeenCalled();
+        expect(component.isCreationLocked()).toBeTrue();
     });
 });

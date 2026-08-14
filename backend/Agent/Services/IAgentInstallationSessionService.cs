@@ -8,4 +8,5 @@ public interface IAgentInstallationSessionService
     Task<AgentInstallationSessionDto> GetByIdAsync(int id, CancellationToken cancellationToken);
     Task<AgentInstallationSessionCreateResponse> CreateAsync(AgentInstallationSessionCreateRequest request, string createdBy, CancellationToken cancellationToken);
     Task CancelAsync(int id, string cancelledBy, CancellationToken cancellationToken);
+    Task MarkOnlineFromHeartbeatAsync(int agentId, CancellationToken cancellationToken);
 }

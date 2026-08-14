@@ -36,6 +36,7 @@ public sealed class AgentTokenService : IAgentTokenService
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var transactionCompleted = false;
 
         try
         {
@@ -61,10 +62,9 @@ public sealed class AgentTokenService : IAgentTokenService
 
                 if (DateTime.UtcNow > session.ExpiresAt)
                 {
-                    session.Status = AgentInstallationSessionStatus.Expired;
-                    if (enrollment.Durum == AgentEnrollmentDurum.Active)
-                        enrollment.Durum = AgentEnrollmentDurum.Expired;
-                    await db.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    transactionCompleted = true;
+                    await PersistExpiredInstallationSessionAsync(session.Id, enrollment.Id, cancellationToken);
                     throw new BaseException("Kurulum oturumu süresi dolmuş.", 400);
                 }
 
@@ -173,6 +173,7 @@ public sealed class AgentTokenService : IAgentTokenService
 
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            transactionCompleted = true;
 
             if (_realtimeNotifier is not null)
                 await _realtimeNotifier.AgentChangedAsync(cancellationToken);
@@ -181,9 +182,36 @@ public sealed class AgentTokenService : IAgentTokenService
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (!transactionCompleted)
+                await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    private async Task PersistExpiredInstallationSessionAsync(int sessionId, int enrollmentId, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        db.AllowExplicitTenantWritesWithoutAmbientTenant = true;
+
+        var session = await db.Set<AgentInstallationSession>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == sessionId && !x.IsDeleted, cancellationToken);
+        if (session is not null)
+        {
+            session.Status = AgentInstallationSessionStatus.Expired;
+            session.UpdatedAt = DateTime.UtcNow;
+        }
+
+        var enrollment = await db.Set<AgentEnrollment>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == enrollmentId && !x.IsDeleted, cancellationToken);
+        if (enrollment is not null)
+        {
+            enrollment.Durum = AgentEnrollmentDurum.Expired;
+            enrollment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task RemoveExistingAgentEnrollmentDataAsync(StysAppDbContext db, int agentId, CancellationToken ct)

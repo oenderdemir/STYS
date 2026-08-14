@@ -91,6 +91,7 @@
                                         (ngModelChange)="wizardForm.tesisId = $event ?? 0"
                                         [filter]="true"
                                         [showClear]="true"
+                                        [disabled]="isCreationLocked()"
                                         appendTo="body"
                                         placeholder="Aktif kurum kapsamındaki tesislerden birini seçin"
                                         styleClass="w-full" />
@@ -107,7 +108,7 @@
                         </div>
 
                         <div class="flex justify-content-end gap-2 mt-3">
-                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.tesisId <= 0" (click)="activateCallback(2)"></button>
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.tesisId <= 0 || isCreationLocked()" (click)="activateCallback(2)"></button>
                         </div>
                     </ng-template>
                 </p-step-panel>
@@ -123,12 +124,13 @@
                                         id="wizardAgentName"
                                         [(ngModel)]="wizardForm.agentDisplayName"
                                         placeholder="Örn. TRT Merkez Agent"
+                                        [disabled]="isCreationLocked()"
                                         autocomplete="off" />
                                 </div>
                             </div>
                             <div class="col-12 md:col-4">
                                 <div class="field-checkbox mt-4">
-                                    <p-checkbox inputId="wizardRequiresApproval" [binary]="true" [(ngModel)]="wizardForm.requiresApproval" />
+                                    <p-checkbox inputId="wizardRequiresApproval" [binary]="true" [(ngModel)]="wizardForm.requiresApproval" [disabled]="isCreationLocked()" />
                                     <label for="wizardRequiresApproval">Kurulum sonrası onay gerektir</label>
                                 </div>
                                 <small class="text-color-secondary block mt-2">
@@ -147,6 +149,7 @@
                                         [maxSelectedLabels]="3"
                                         appendTo="body"
                                         [(ngModel)]="wizardForm.scopes"
+                                        [disabled]="isCreationLocked()"
                                         styleClass="w-full"
                                         placeholder="Agent yetkilerini seçin">
                                         <ng-template pTemplate="item" let-option>
@@ -162,7 +165,7 @@
 
                         <div class="flex justify-content-between gap-2 mt-3">
                             <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(1)"></button>
-                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.agentDisplayName.trim().length === 0 || wizardForm.scopes.length === 0" (click)="activateCallback(3)"></button>
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.agentDisplayName.trim().length === 0 || wizardForm.scopes.length === 0 || isCreationLocked()" (click)="activateCallback(3)"></button>
                         </div>
                     </ng-template>
                 </p-step-panel>
@@ -180,6 +183,7 @@
                                         optionValue="rid"
                                         [ngModel]="wizardForm.targetRid"
                                         (ngModelChange)="wizardForm.targetRid = $event"
+                                        [disabled]="isCreationLocked()"
                                         appendTo="body"
                                         styleClass="w-full"
                                         placeholder="Platform seçin" />
@@ -195,7 +199,7 @@
 
                         <div class="flex justify-content-between gap-2 mt-3">
                             <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(2)"></button>
-                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.targetRid.length === 0" (click)="activateCallback(4)"></button>
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.targetRid.length === 0 || isCreationLocked()" (click)="activateCallback(4)"></button>
                         </div>
                     </ng-template>
                 </p-step-panel>
@@ -265,7 +269,7 @@
                         <div class="flex justify-content-between gap-2 mt-3">
                             <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(4)"></button>
                             <div class="flex gap-2">
-                                <button pButton pRipple label="Kurulum Oturumu Oluştur" icon="pi pi-key" class="p-button-success" [loading]="wizardLoading()" [disabled]="!canCreateSession()" (click)="createSession()"></button>
+                                <button pButton pRipple label="Kurulum Oturumu Oluştur" icon="pi pi-key" class="p-button-success" [loading]="wizardLoading()" [disabled]="!canCreateSession() || isCreationLocked()" (click)="createSession()"></button>
                                 <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="!generatedEnrollmentCode()" (click)="activateCallback(6)"></button>
                             </div>
                         </div>

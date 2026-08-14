@@ -2297,3 +2297,34 @@ Agent Regression:  0
 - Known limitations:
   - Lease renewal interval ve timeout policy uygulama seviyesinde ayarlı; ortam bazlı tuning gerekebilir.
   - Gerçek cihazda lease expiry davranışı, LAN gecikmesi ve process crash senaryolarıyla ayrıca doğrulanmalı.
+
+### E2D2 Initial Deployment Wizard — 2026-08-14
+
+- Yeni Agent Kurulumu wizard:
+  - `frontend/src/app/pages/agent-yonetimi` ekranına PrimeNG stepper tabanlı 6 adımlı kurulum akışı eklendi.
+  - Akış: Tesis → Agent / Yetkiler → Platform → Kurulum Paketi → Enrollment → Canlı Durum.
+  - Wizard mevcut Agent yönetimi ekranının doğal bir parçası olarak sunuldu; ayrı ekran açılmadı.
+- Installation session entegrasyonu:
+  - `GET /api/ui/agent-installations`
+  - `GET /api/ui/agent-installations/{id}`
+  - `POST /api/ui/agent-installations`
+  - `POST /api/ui/agent-installations/{id}/cancel`
+  - Frontend model/service katmanına installation session DTO’ları ve API helper metodları eklendi.
+- Enrollment code güvenliği:
+  - Kod yalnız wizard içinde tek seferlik gösteriliyor.
+  - Browser storage’a yazılmıyor.
+  - Route/query string, console ve fake download akışına eklenmedi.
+- Status view / cancel:
+  - Mevcut kurulum oturumları küçük bir listede gösteriliyor.
+  - Session detail ekranı ile durum, expiration ve enrolled agent bilgisi görülebiliyor.
+  - Terminal olmayan session’lar iptal edilebiliyor; cancel confirmation var.
+- Installer/download scope:
+  - Gerçek installer üretimi ve download backend’i E2D3 fazına bırakıldı.
+- Tests / build:
+  - `npm run build` geçti.
+  - `npx ng test --watch=false --browsers=ChromeHeadless --progress=false --include=src/app/pages/agent-yonetimi/agent-yonetimi.service.spec.ts --include=src/app/pages/agent-yonetimi/agent-installation-wizard.component.spec.ts` geçti.
+- Real device test status:
+  - Bu faz yalnız frontend wizard ve session UI katmanını ekledi; fiziksel PAVO veya Agent kurulum cihaz testi yapılmadı.
+- Known limitations:
+  - Eski enrollment kodu ekranı için kullanılmayan legacy UI parçası repoda kaldı; aktif akış wizard üzerinden çalışıyor.
+  - Installer/download, live tracking ve SignalR canlı ilerleme E2D3/E2D5 kapsamına bırakıldı.

@@ -52,6 +52,38 @@ export interface AgentEnrollmentCodeRequest {
     requiresApproval?: boolean;
 }
 
+export interface AgentInstallationSessionCreateRequest {
+    tesisId: number;
+    agentDisplayName: string;
+    targetRid: string;
+    scopes: string[];
+    requiresApproval: boolean;
+    expirationHours?: number;
+}
+
+export interface AgentInstallationSessionCreateResponse {
+    session: AgentInstallationSessionModel;
+    enrollmentCode: string;
+}
+
+export interface AgentInstallationSessionModel {
+    id: number;
+    kurumId: number;
+    tesisId: number;
+    tesisAd?: string;
+    agentDisplayName: string;
+    targetRid: string;
+    scopes: string[];
+    status: number;
+    enrollmentId?: number;
+    enrolledAgentId?: number;
+    expiresAt: string;
+    completedAt?: string | null;
+    cancelledAt?: string | null;
+    createdAt: string;
+    updatedAt?: string | null;
+}
+
 export const AgentDurumLabels: Record<number, string> = {
     0: 'Onay Bekliyor',
     1: 'Aktif',
@@ -72,6 +104,20 @@ export const AgentEnrollmentDurumLabels: Record<number, string> = {
     1: 'Kullanıldı',
     2: 'Süresi Doldu',
     3: 'İptal Edildi'
+};
+
+export const AgentInstallationSessionStatusLabels: Record<number, string> = {
+    0: 'Oluşturuldu',
+    1: 'Paket Hazır',
+    2: 'Paket İndirildi',
+    3: 'Enrollment Bekleniyor',
+    4: 'Onay Bekleniyor',
+    5: 'Kayıt Tamamlandı',
+    6: 'Online',
+    7: 'Tamamlandı',
+    8: 'Süresi Doldu',
+    9: 'İptal Edildi',
+    10: 'Başarısız'
 };
 
 export interface AgentCommandDto {

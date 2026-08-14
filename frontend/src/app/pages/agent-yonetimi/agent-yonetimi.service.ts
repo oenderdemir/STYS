@@ -7,6 +7,9 @@ import {
     AgentDto,
     AgentEnrollmentCodeDto,
     AgentEnrollmentCodeRequest,
+    AgentInstallationSessionCreateRequest,
+    AgentInstallationSessionCreateResponse,
+    AgentInstallationSessionModel,
     AgentListDto,
     AgentKaydetRequest,
     AgentCommandDto,
@@ -116,6 +119,41 @@ export class AgentYonetimiService {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent/enrollment-codes/${enrollmentId}/revoke`, {}).pipe(
             map((r) => {
                 if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Enrollment kodu iptal edilemedi.');
+            })
+        );
+    }
+
+    getInstallations(): Observable<AgentInstallationSessionModel[]> {
+        return this.http.get<ApiResponse<AgentInstallationSessionModel[]>>(`${this.apiBaseUrl}/ui/agent-installations`).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Kurulum oturumları alınamadı.');
+            })
+        );
+    }
+
+    getInstallation(id: number): Observable<AgentInstallationSessionModel> {
+        return this.http.get<ApiResponse<AgentInstallationSessionModel>>(`${this.apiBaseUrl}/ui/agent-installations/${id}`).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Kurulum oturumu alınamadı.');
+            })
+        );
+    }
+
+    createInstallation(request: AgentInstallationSessionCreateRequest): Observable<AgentInstallationSessionCreateResponse> {
+        return this.http.post<ApiResponse<AgentInstallationSessionCreateResponse>>(`${this.apiBaseUrl}/ui/agent-installations`, request).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Kurulum oturumu oluşturulamadı.');
+            })
+        );
+    }
+
+    cancelInstallation(id: number): Observable<void> {
+        return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent-installations/${id}/cancel`, {}).pipe(
+            map((r) => {
+                if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Kurulum oturumu iptal edilemedi.');
             })
         );
     }

@@ -1,0 +1,334 @@
+<div class="card mt-4">
+    <p-toolbar styleClass="mb-4">
+        <ng-template pTemplate="left">
+            <button pButton pRipple label="Yeni Agent Kurulumu" icon="pi pi-plus" class="p-button-success mr-2" (click)="openWizard()"></button>
+            <button pButton pRipple label="Oturumları Yenile" icon="pi pi-refresh" class="p-button-secondary" [loading]="sessionsLoading()" (click)="loadInstallationSessions()"></button>
+        </ng-template>
+        <ng-template pTemplate="right">
+            <div class="text-color-secondary text-sm">
+                Kurulum kodu yalnız bir kez gösterilir ve tarayıcı depolamasına yazılmaz.
+            </div>
+        </ng-template>
+    </p-toolbar>
+
+    <p-table
+        [value]="installationSessions()"
+        [loading]="sessionsLoading()"
+        [paginator]="true"
+        [rows]="5"
+        [rowsPerPageOptions]="[5, 10]"
+        dataKey="id"
+        styleClass="p-datatable-gridlines"
+        [tableStyle]="{ 'min-width': '62rem' }">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Tesis</th>
+                <th>Agent</th>
+                <th>Platform</th>
+                <th>Durum</th>
+                <th>Oluşturulma</th>
+                <th>Son Geçerlilik</th>
+                <th style="width: 11rem">İşlem</th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-session>
+            <tr>
+                <td>
+                    <div class="font-semibold">{{ session.tesisAd ?? ('Tesis #' + session.tesisId) }}</div>
+                </td>
+                <td>{{ session.agentDisplayName }}</td>
+                <td>
+                    <div class="font-semibold">{{ getPlatformLabel(session.targetRid) }}</div>
+                    <small class="text-color-secondary">{{ session.targetRid }}</small>
+                </td>
+                <td>
+                    <p-tag [value]="getStatusLabel(session.status)" [severity]="getStatusSeverity(session.status)" />
+                </td>
+                <td>{{ session.createdAt | date:'short' }}</td>
+                <td>{{ session.expiresAt | date:'short' }}</td>
+                <td>
+                    <button pButton pRipple icon="pi pi-search" class="p-button-rounded p-button-info mr-1" (click)="selectSession(session)" pTooltip="İncele"></button>
+                    @if (!isTerminalStatus(session.status)) {
+                        <button pButton pRipple icon="pi pi-times" class="p-button-rounded p-button-danger" (click)="cancelSession(session)" pTooltip="İptal Et"></button>
+                    }
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<p-dialog
+    [visible]="wizardVisible()"
+    (onHide)="closeWizard()"
+    header="Yeni Agent Kurulumu"
+    [modal]="true"
+    [style]="{ width: '920px' }"
+    styleClass="p-fluid">
+    <ng-template pTemplate="content">
+        <p-stepper [value]="wizardStep()" [linear]="true" (valueChange)="wizardStep.set($event)">
+            <p-step-list>
+                <p-step [value]="1">Tesis</p-step>
+                <p-step [value]="2">Agent / Yetkiler</p-step>
+                <p-step [value]="3">Platform</p-step>
+                <p-step [value]="4">Kurulum Paketi</p-step>
+                <p-step [value]="5">Enrollment</p-step>
+                <p-step [value]="6">Canlı Durum</p-step>
+            </p-step-list>
+
+            <p-step-panels>
+                <p-step-panel [value]="1">
+                    <ng-template #content let-activateCallback="activateCallback">
+                        <div class="grid">
+                            <div class="col-12 md:col-8">
+                                <div class="field">
+                                    <label for="wizardTesis">Tesis</label>
+                                    <p-select
+                                        inputId="wizardTesis"
+                                        [options]="tesisler"
+                                        optionLabel="ad"
+                                        optionValue="id"
+                                        [ngModel]="wizardForm.tesisId || null"
+                                        (ngModelChange)="wizardForm.tesisId = $event ?? 0"
+                                        [filter]="true"
+                                        [showClear]="true"
+                                        appendTo="body"
+                                        placeholder="Aktif kurum kapsamındaki tesislerden birini seçin"
+                                        styleClass="w-full" />
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-4">
+                                <div class="surface-ground border-round p-3 h-full">
+                                    <div class="font-semibold mb-2">Not</div>
+                                    <div class="text-color-secondary">
+                                        Başka kurum tesisleri görünmez. Güvenlik sınırı backend tarafında da korunur.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-content-end gap-2 mt-3">
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.tesisId <= 0" (click)="activateCallback(2)"></button>
+                        </div>
+                    </ng-template>
+                </p-step-panel>
+
+                <p-step-panel [value]="2">
+                    <ng-template #content let-activateCallback="activateCallback">
+                        <div class="grid">
+                            <div class="col-12 md:col-8">
+                                <div class="field">
+                                    <label for="wizardAgentName">Agent Adı</label>
+                                    <input
+                                        pInputText
+                                        id="wizardAgentName"
+                                        [(ngModel)]="wizardForm.agentDisplayName"
+                                        placeholder="Örn. TRT Merkez Agent"
+                                        autocomplete="off" />
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-4">
+                                <div class="field-checkbox mt-4">
+                                    <p-checkbox inputId="wizardRequiresApproval" [binary]="true" [(ngModel)]="wizardForm.requiresApproval" />
+                                    <label for="wizardRequiresApproval">Kurulum sonrası onay gerektir</label>
+                                </div>
+                                <small class="text-color-secondary block mt-2">
+                                    Kurulum sonrası Agent ayrıca STYS üzerinden onay bekleyecektir.
+                                </small>
+                            </div>
+                            <div class="col-12">
+                                <div class="surface-ground border-round p-3">
+                                    <div class="font-semibold mb-2">Yetkiler</div>
+                                    <p-multiselect
+                                        [options]="scopeOptions"
+                                        optionLabel="description"
+                                        optionValue="value"
+                                        [filter]="false"
+                                        [showToggleAll]="false"
+                                        [maxSelectedLabels]="3"
+                                        appendTo="body"
+                                        [(ngModel)]="wizardForm.scopes"
+                                        styleClass="w-full"
+                                        placeholder="Agent yetkilerini seçin">
+                                        <ng-template pTemplate="item" let-option>
+                                            <div class="flex flex-column">
+                                                <div class="font-semibold">{{ option.description }}</div>
+                                                <small class="text-color-secondary">{{ option.label }}</small>
+                                            </div>
+                                        </ng-template>
+                                    </p-multiselect>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-content-between gap-2 mt-3">
+                            <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(1)"></button>
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.agentDisplayName.trim().length === 0 || wizardForm.scopes.length === 0" (click)="activateCallback(3)"></button>
+                        </div>
+                    </ng-template>
+                </p-step-panel>
+
+                <p-step-panel [value]="3">
+                    <ng-template #content let-activateCallback="activateCallback">
+                        <div class="grid">
+                            <div class="col-12 md:col-7">
+                                <div class="field">
+                                    <label for="wizardPlatform">Platform</label>
+                                    <p-select
+                                        inputId="wizardPlatform"
+                                        [options]="platformOptions"
+                                        optionLabel="label"
+                                        optionValue="rid"
+                                        [ngModel]="wizardForm.targetRid"
+                                        (ngModelChange)="wizardForm.targetRid = $event"
+                                        appendTo="body"
+                                        styleClass="w-full"
+                                        placeholder="Platform seçin" />
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-5">
+                                <div class="surface-ground border-round p-3 h-full">
+                                    <div class="font-semibold mb-2">{{ getPlatformLabel(wizardForm.targetRid) }}</div>
+                                    <div class="text-color-secondary">{{ getPlatformHint(wizardForm.targetRid) }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-content-between gap-2 mt-3">
+                            <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(2)"></button>
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="wizardForm.targetRid.length === 0" (click)="activateCallback(4)"></button>
+                        </div>
+                    </ng-template>
+                </p-step-panel>
+
+                <p-step-panel [value]="4">
+                    <ng-template #content let-activateCallback="activateCallback">
+                        <div class="surface-ground border-round p-4">
+                            <div class="font-semibold mb-2">Kurulum Paketi</div>
+                            <p class="m-0 text-color-secondary">
+                                Windows ve Linux kurulum paketi E2D3 fazında sunulacaktır. Bu fazda gerçek indirme veya sahte paket oluşturulmaz.
+                            </p>
+                            <div class="grid mt-3">
+                                <div class="col-12 md:col-6">
+                                    <div class="border-round border-1 surface-border p-3 h-full">
+                                        <div class="font-semibold mb-1">Windows</div>
+                                        <div class="text-color-secondary">Windows Agent paketi E2D3 installer fazında burada sunulacaktır.</div>
+                                    </div>
+                                </div>
+                                <div class="col-12 md:col-6">
+                                    <div class="border-round border-1 surface-border p-3 h-full">
+                                        <div class="font-semibold mb-1">Linux</div>
+                                        <div class="text-color-secondary">Linux Agent paketi E2D3 installer fazında burada sunulacaktır.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-content-between gap-2 mt-3">
+                            <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(3)"></button>
+                            <button pButton pRipple label="İleri" icon="pi pi-arrow-right" (click)="activateCallback(5)"></button>
+                        </div>
+                    </ng-template>
+                </p-step-panel>
+
+                <p-step-panel [value]="5">
+                    <ng-template #content let-activateCallback="activateCallback">
+                        <div class="grid">
+                            <div class="col-12 md:col-7">
+                                <div class="surface-ground border-round p-4 h-full">
+                                    <div class="font-semibold mb-2">Enrollment Code</div>
+                                    @if (generatedEnrollmentCode(); as code) {
+                                        <div class="flex align-items-center justify-content-between gap-2">
+                                            <code class="text-lg font-semibold break-all">{{ code }}</code>
+                                            <button pButton pRipple icon="pi pi-copy" class="p-button-outlined" (click)="copyEnrollmentCode()"></button>
+                                        </div>
+                                        <div class="text-color-secondary mt-3">
+                                            Bu kodu Agent kurulumu sırasında girmeniz gerekir. Güvenlik nedeniyle wizard kapatılırsa tekrar görüntülenemeyebilir.
+                                        </div>
+                                    } @else {
+                                        <div class="text-color-secondary">
+                                            Önce kurulumu oluşturun. Enrollment kodu burada tek seferlik gösterilecektir.
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-12 md:col-5">
+                                <div class="surface-ground border-round p-4 h-full">
+                                    <div class="font-semibold mb-2">Özet</div>
+                                    <div class="mb-2"><span class="text-color-secondary">Tesis:</span> {{ getSelectedTesisLabel() }}</div>
+                                    <div class="mb-2"><span class="text-color-secondary">Agent:</span> {{ wizardForm.agentDisplayName }}</div>
+                                    <div class="mb-2"><span class="text-color-secondary">Platform:</span> {{ getPlatformLabel(wizardForm.targetRid) }}</div>
+                                    <div class="mb-2"><span class="text-color-secondary">Onay:</span> {{ wizardForm.requiresApproval ? 'Gerekli' : 'Gerekmez' }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-content-between gap-2 mt-3">
+                            <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(4)"></button>
+                            <div class="flex gap-2">
+                                <button pButton pRipple label="Kurulum Oturumu Oluştur" icon="pi pi-key" class="p-button-success" [loading]="wizardLoading()" [disabled]="!canCreateSession()" (click)="createSession()"></button>
+                                <button pButton pRipple label="İleri" icon="pi pi-arrow-right" [disabled]="!generatedEnrollmentCode()" (click)="activateCallback(6)"></button>
+                            </div>
+                        </div>
+                    </ng-template>
+                </p-step-panel>
+
+                <p-step-panel [value]="6">
+                    <ng-template #content let-activateCallback="activateCallback">
+                        @if (selectedSession(); as session) {
+                            <div class="grid">
+                                <div class="col-12 md:col-8">
+                                    <div class="surface-ground border-round p-4 h-full">
+                                        <div class="font-semibold mb-3">Canlı Durum</div>
+                                        <div class="grid">
+                                            <div class="col-12 md:col-6"><span class="text-color-secondary">Tesis</span><div class="font-semibold">{{ session.tesisAd ?? ('Tesis #' + session.tesisId) }}</div></div>
+                                            <div class="col-12 md:col-6"><span class="text-color-secondary">Agent</span><div class="font-semibold">{{ session.agentDisplayName }}</div></div>
+                                            <div class="col-12 md:col-6"><span class="text-color-secondary">Platform</span><div class="font-semibold">{{ getPlatformLabel(session.targetRid) }}</div></div>
+                                            <div class="col-12 md:col-6"><span class="text-color-secondary">Status</span><div><p-tag [value]="getStatusLabel(session.status)" [severity]="getStatusSeverity(session.status)" /></div></div>
+                                            <div class="col-12 md:col-6"><span class="text-color-secondary">Expiration</span><div class="font-semibold">{{ session.expiresAt | date:'short' }}</div></div>
+                                            <div class="col-12 md:col-6"><span class="text-color-secondary">EnrolledAgentId</span><div class="font-semibold">{{ session.enrolledAgentId ?? '-' }}</div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 md:col-4">
+                                    <div class="surface-ground border-round p-4 h-full">
+                                        <div class="font-semibold mb-2">Durum Notu</div>
+                                        @if (session.status === 4) {
+                                            <div class="text-color-secondary">Agent enrollment sonrası onay bekliyor.</div>
+                                        } @else if (session.status === 8) {
+                                            <div class="text-color-secondary">Kurulum oturumunun süresi doldu.</div>
+                                        } @else if (session.status === 9) {
+                                            <div class="text-color-secondary">Kurulum oturumu iptal edildi.</div>
+                                        } @else {
+                                            <div class="text-color-secondary">Durumu yenileyerek kurulum sürecini takip edebilirsiniz.</div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-content-between gap-2 mt-3">
+                                <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(5)"></button>
+                                <div class="flex gap-2">
+                                    <button pButton pRipple label="Durumu Yenile" icon="pi pi-refresh" class="p-button-outlined" [loading]="sessionDetailLoading()" (click)="refreshSelectedSession()"></button>
+                                    @if (!isTerminalStatus(session.status)) {
+                                        <button pButton pRipple label="Kurulumu İptal Et" icon="pi pi-times" class="p-button-danger" (click)="cancelSession(session)"></button>
+                                    }
+                                </div>
+                            </div>
+                        } @else {
+                            <div class="surface-ground border-round p-4">
+                                <div class="text-color-secondary">Bir kurulum oturumu seçildiğinde detay burada görünecek.</div>
+                            </div>
+                            <div class="flex justify-content-between gap-2 mt-3">
+                                <button pButton pRipple label="Geri" icon="pi pi-arrow-left" class="p-button-text" (click)="activateCallback(5)"></button>
+                                <button pButton pRipple label="Kapat" icon="pi pi-times" class="p-button-outlined" (click)="closeWizard()"></button>
+                            </div>
+                        }
+                    </ng-template>
+                </p-step-panel>
+            </p-step-panels>
+        </p-stepper>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <button pButton pRipple label="Kapat" icon="pi pi-times" class="p-button-text" (click)="closeWizard()"></button>
+    </ng-template>
+</p-dialog>

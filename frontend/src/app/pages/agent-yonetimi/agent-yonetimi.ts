@@ -14,6 +14,7 @@ import { TabsModule } from 'primeng/tabs';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { CheckboxModule } from 'primeng/checkbox';
 import { AgentRealtimeService } from '../../core/agent/agent-realtime.service';
 import { AuthService } from '../auth/auth.service';
@@ -32,6 +33,7 @@ import { TesisYonetimiService } from '../tesis-yonetimi/tesis-yonetimi.service';
 import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { AgentInstallationWizardComponent } from './agent-installation-wizard.component';
 
 type AgentFormState = AgentKaydetRequest & { id?: number };
 
@@ -52,7 +54,9 @@ type AgentFormState = AgentKaydetRequest & { id?: number };
         ToastModule,
         ToolbarModule,
         CheckboxModule,
-        TabsModule
+        TooltipModule,
+        TabsModule,
+        AgentInstallationWizardComponent
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './agent-yonetimi.html'
@@ -280,7 +284,6 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
                     }
                 }
                 this.loadAgents();
-                this.loadEnrollmentCodes();
             },
             error: () => {
                 this.enrollmentTesisler = [];

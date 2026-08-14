@@ -2346,6 +2346,37 @@ Agent Regression:  0
   - Expired-session integration testi kalıcı `Expired` durumlarını doğruluyor.
   - Frontend wizard spec’i ikinci create denemesinin bloke edildiğini kontrol ediyor.
 
+### E2D3 Windows Installer Finalization — 2026-08-14
+
+- Windows-first deployment:
+  - Bu fazda acceptance scope yalnızca `win-x64` oldu.
+  - Linux installer scriptleri korunuyor fakat acceptance kapsamı dışında bırakıldı.
+- Agent + updater service start:
+  - Windows unified installer artık Agent ve Updater servislerini kurulumdan sonra başlatıyor.
+  - Kurulum akışı service start sonrası `Running` doğrulaması yapıyor ve ardından local UI bekliyor.
+- Service status validation:
+  - Installer, `STYS Agent` ve `STYS Agent Updater` servislerinin gerçekten `Running` olduğunu kontrol ediyor.
+  - Kullanıcıya servis durumları açık OK çıktılarıyla raporlanıyor.
+- Production artifact root:
+  - Backend paket üretimi explicit installer root desteği kazandı.
+  - `STYS_AGENT_INSTALLER_ROOT` set edildiğinde repository fallback yerine bu root öncelikli kullanılıyor.
+  - Yanlış root fail-fast davranışıyla reddediliyor.
+- RID-specific publish:
+  - Windows paketinin `win-x64` Agent ve Updater artifact’larını kullanması zorunlu hale getirildi.
+  - `bin/Release/net10.0` fallback’i bu akış için kullanılmıyor.
+- Enrollment secret separation:
+  - Installer envanteri ve package content secret taşımıyor.
+  - Enrollment code interactive giriliyor; paket, argüman ve log akışına yazılmıyor.
+- Package test correction:
+  - Secret leak testi gerçek enrollment code değerini kontrol edecek şekilde düzeltildi.
+  - Test ayrıca configured installer root seçiminin package’a yansıdığını doğruluyor.
+- Linux scope:
+  - Linux desteği bu fazda deferred kabul edildi.
+  - Linux-specific geliştirme, hardening ve doğrulama yapılmadı.
+- Verification:
+  - Windows installer akışı compile/test ile doğrulandı.
+  - Gerçek Windows host üzerinde manuel kurulum bu oturumda çalıştırılmadı.
+
 ### E2D3 Unified Agent Installer — 2026-08-14
 
 - Unified installer package:

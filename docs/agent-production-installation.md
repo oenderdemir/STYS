@@ -44,11 +44,35 @@ The recommended deployment path for initial installation is the unified installe
   - `updater/` publish output
   - `config/bootstrap.json`
   - `trust/release-public-key.pem`
-  - `scripts/agent/` helper scripts
+  - `scripts/` helper scripts
 
 The bootstrap config is written by STYS and contains only operational bootstrap values such as base URL, local UI port, target RID, and display name. It does not contain enrollment codes, client secrets, private signing keys, or JWTs.
 
 The Windows and Linux installers prompt for the enrollment code interactively at install time and keep it out of script arguments, logs, and package contents.
+
+## Production installer root
+
+Backend package generation prefers an explicit installer root when present.
+
+- `STYS_AGENT_INSTALLER_ROOT`
+
+Expected Windows-first package layout:
+
+```text
+<installer-root>/
+  scripts/
+    install-stys-agent.ps1
+    install-stys-agent.sh
+    install-agent.ps1
+    install-agent-updater.ps1
+  trust/
+    release-public-key.pem
+  win-x64/
+    agent/
+    updater/
+```
+
+If the explicit installer root is configured, it is used before repository fallbacks. A misconfigured root fails fast instead of silently selecting an arbitrary publish output.
 
 ## Trust boundary and release key provisioning
 
@@ -87,6 +111,8 @@ Use `scripts/agent/install-agent.ps1` to install the service as `STYS Agent`.
   - `STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH`
   - `STYS_AGENT_LOCAL_UI_PORT`
 - uninstall preserves data by default
+
+The Windows installer starts the agent service and verifies it is `Running` before waiting for the local UI.
 
 Use `scripts/agent/uninstall-agent.ps1` to remove the service. Add `-Purge` only when you also want to delete data and logs.
 
@@ -137,6 +163,8 @@ Windows:
 - updater private data directory: `%ProgramData%\STYS\AgentUpdater\private`
 - updater log directory: `%ProgramData%\STYS\AgentUpdater\logs`
 - release public key path: `%ProgramData%\STYS\AgentTrust\release-public-key.pem`
+
+The Windows updater installer also starts the updater service and verifies it is `Running`.
 
 Linux:
 

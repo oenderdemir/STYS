@@ -16,8 +16,9 @@ internal static class AgentInstallerPackageBuilder
     public static byte[] Build(AgentInstallationSession session, string baseUrl, string repoRoot)
     {
         var publishRid = NormalizeRid(session.TargetRid);
-        var agentPublishRoot = ResolvePackageSource(repoRoot, "agent", publishRid);
-        var updaterPublishRoot = ResolvePackageSource(repoRoot, "updater", publishRid);
+        var installerRoot = ResolveInstallerRoot(repoRoot);
+        var agentPublishRoot = ResolvePackageSource(installerRoot, repoRoot, "agent", publishRid);
+        var updaterPublishRoot = ResolvePackageSource(installerRoot, repoRoot, "updater", publishRid);
         var installVersion = ResolvePackageVersion();
         var bootstrap = new InstallerBootstrapConfiguration
         {
@@ -33,21 +34,25 @@ internal static class AgentInstallerPackageBuilder
         using var memoryStream = new MemoryStream();
         using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, leaveOpen: true, Encoding.UTF8))
         {
-            AddTextFile(archive, "install-stys-agent.ps1", ReadRequiredFile(repoRoot, Path.Combine("scripts", "agent", "install-stys-agent.ps1")));
-            AddTextFile(archive, "install-stys-agent.sh", ReadRequiredFile(repoRoot, Path.Combine("scripts", "agent", "install-stys-agent.sh")));
+            AddTextFile(archive, "install-stys-agent.ps1", ReadRequiredFile(installerRoot, repoRoot, Path.Combine("scripts", "install-stys-agent.ps1"), Path.Combine("scripts", "agent", "install-stys-agent.ps1")));
+            AddTextFile(archive, "install-stys-agent.sh", ReadRequiredFile(installerRoot, repoRoot, Path.Combine("scripts", "install-stys-agent.sh"), Path.Combine("scripts", "agent", "install-stys-agent.sh")));
+            AddTextFile(archive, "scripts/install-agent.ps1", ReadRequiredFile(installerRoot, repoRoot, Path.Combine("scripts", "install-agent.ps1"), Path.Combine("scripts", "agent", "install-agent.ps1")));
+            AddTextFile(archive, "scripts/install-agent-updater.ps1", ReadRequiredFile(installerRoot, repoRoot, Path.Combine("scripts", "install-agent-updater.ps1"), Path.Combine("scripts", "agent", "install-agent-updater.ps1")));
+            AddTextFile(archive, "scripts/install-agent.sh", ReadRequiredFile(installerRoot, repoRoot, Path.Combine("scripts", "install-agent.sh"), Path.Combine("scripts", "agent", "install-agent.sh")));
+            AddTextFile(archive, "scripts/install-agent-updater.sh", ReadRequiredFile(installerRoot, repoRoot, Path.Combine("scripts", "install-agent-updater.sh"), Path.Combine("scripts", "agent", "install-agent-updater.sh")));
 
             AddDirectory(archive, Path.Combine(repoRoot, "scripts", "agent"), "scripts/agent");
             AddDirectory(archive, agentPublishRoot, "agent");
             AddDirectory(archive, updaterPublishRoot, "updater");
             AddJsonFile(archive, "config/bootstrap.json", bootstrap);
             AddTextFile(archive, "README.txt", BuildReadme(session, bootstrap));
-            AddTrustAnchor(archive, repoRoot);
+            AddTrustAnchor(archive, installerRoot, repoRoot);
         }
 
         return memoryStream.ToArray();
     }
 
-    private static void AddTrustAnchor(ZipArchive archive, string repoRoot)
+    private static void AddTrustAnchor(ZipArchive archive, string installerRoot, string repoRoot)
     {
         var inlinePem = Environment.GetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM");
         if (!string.IsNullOrWhiteSpace(inlinePem))
@@ -65,6 +70,13 @@ internal static class AgentInstallerPackageBuilder
                 AddTextFile(archive, "trust/release-public-key.pem", File.ReadAllText(resolvedPath));
                 return;
             }
+        }
+
+        var rootTrustPath = Path.Combine(installerRoot, "trust", "release-public-key.pem");
+        if (File.Exists(rootTrustPath))
+        {
+            AddTextFile(archive, "trust/release-public-key.pem", File.ReadAllText(rootTrustPath));
+            return;
         }
 
         var repoTrustPath = Path.Combine(repoRoot, "trust", "release-public-key.pem");
@@ -98,19 +110,19 @@ internal static class AgentInstallerPackageBuilder
         }
     }
 
-    private static string ResolvePackageSource(string repoRoot, string kind, string runtimeIdentifier)
+    private static string ResolvePackageSource(string installerRoot, string repoRoot, string kind, string runtimeIdentifier)
     {
         var normalizedRid = NormalizeRid(runtimeIdentifier);
         var candidates = kind.Equals("agent", StringComparison.OrdinalIgnoreCase)
             ? new[]
             {
-                Path.Combine(repoRoot, "artifacts", "agent", normalizedRid),
-                Path.Combine(repoRoot, "agent", "STYS.Agent", "bin", "Release", "net10.0")
+                Path.Combine(installerRoot, normalizedRid, "agent"),
+                Path.Combine(repoRoot, "artifacts", "deploy", normalizedRid, "agent")
             }
             : new[]
             {
-                Path.Combine(repoRoot, "artifacts", "agent-updater", normalizedRid),
-                Path.Combine(repoRoot, "agent", "STYS.Agent.Updater", "bin", "Release", "net10.0")
+                Path.Combine(installerRoot, normalizedRid, "updater"),
+                Path.Combine(repoRoot, "artifacts", "deploy", normalizedRid, "updater")
             };
 
         foreach (var candidate in candidates)
@@ -122,6 +134,17 @@ internal static class AgentInstallerPackageBuilder
         }
 
         throw new DirectoryNotFoundException($"Uygun {kind} publish çıktısı bulunamadı. Beklenen RID: {normalizedRid}");
+    }
+
+    private static string ResolveInstallerRoot(string repoRoot)
+    {
+        var configuredRoot = Environment.GetEnvironmentVariable("STYS_AGENT_INSTALLER_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            return Path.GetFullPath(configuredRoot.Trim());
+        }
+
+        return Path.Combine(repoRoot, "artifacts", "deploy");
     }
 
     private static void AddJsonFile(ZipArchive archive, string entryPath, object value)
@@ -186,9 +209,15 @@ internal static class AgentInstallerPackageBuilder
     private static string CombineArchivePath(string left, string right) =>
         NormalizeArchivePath(Path.Combine(left, right));
 
-    private static string ReadRequiredFile(string repoRoot, string relativePath)
+    private static string ReadRequiredFile(string installerRoot, string repoRoot, string relativePath, string fallbackRelativePath)
     {
-        var filePath = Path.Combine(repoRoot, relativePath);
+        var configuredPath = Path.Combine(installerRoot, relativePath);
+        if (File.Exists(configuredPath))
+        {
+            return File.ReadAllText(configuredPath);
+        }
+
+        var filePath = Path.Combine(repoRoot, fallbackRelativePath);
         if (!File.Exists(filePath))
         {
             throw new FileNotFoundException($"Installer paketi için gerekli dosya bulunamadı: {filePath}", filePath);

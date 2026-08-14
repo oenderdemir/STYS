@@ -82,8 +82,7 @@ export class AgentInstallationWizardComponent implements OnInit {
     ];
 
     readonly platformOptions = [
-        { label: 'Windows 64-bit', rid: 'win-x64', hint: 'Windows üzerinde çalışan Agent paketi.' },
-        { label: 'Linux 64-bit', rid: 'linux-x64', hint: 'Linux üzerinde çalışan Agent paketi.' }
+        { label: 'Windows 64-bit', rid: 'win-x64', hint: 'Windows üzerinde çalışan Agent paketi.' }
     ];
 
     readonly statusLabels = AgentInstallationSessionStatusLabels;

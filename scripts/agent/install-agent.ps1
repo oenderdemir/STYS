@@ -30,6 +30,27 @@ function Grant-DirectoryAccess {
     & icacls $Path /grant "$Identity:($Rights)" /T /C | Out-Null
 }
 
+function Start-And-Wait-ServiceRunning {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    Start-Service -Name $Name -ErrorAction Stop
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $service = Get-Service -Name $Name -ErrorAction Stop
+        if ($service.Status -eq 'Running') {
+            Write-Host "[OK] $Name service running"
+            return
+        }
+
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+
+    throw "$Name service Running durumuna geçmedi."
+}
+
 $publishRoot = (Resolve-Path -LiteralPath $PublishDir).Path
 Ensure-Directory -Path $InstallDir
 Ensure-Directory -Path $SharedDataDir
@@ -79,6 +100,8 @@ if (Test-Path -LiteralPath $serviceKeyPath) {
         "STYS_AGENT_LOCAL_UI_PORT=$LocalUiPort"
     ) | Out-Null
 }
+
+Start-And-Wait-ServiceRunning -Name $ServiceName -TimeoutSeconds 30
 
 Write-Host "STYS Agent service installed."
 Write-Host "InstallDir: $InstallDir"

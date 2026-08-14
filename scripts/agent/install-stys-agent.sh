@@ -23,8 +23,16 @@ BOOTSTRAP_PATH="$PACKAGE_ROOT/config/bootstrap.json"
 PACKAGE_TRUST_KEY="$PACKAGE_ROOT/trust/release-public-key.pem"
 AGENT_PUBLISH_DIR="$PACKAGE_ROOT/agent"
 UPDATER_PUBLISH_DIR="$PACKAGE_ROOT/updater"
-INSTALL_AGENT_SCRIPT="$PACKAGE_ROOT/scripts/agent/install-agent.sh"
-INSTALL_UPDATER_SCRIPT="$PACKAGE_ROOT/scripts/agent/install-agent-updater.sh"
+INSTALL_AGENT_SCRIPT="$PACKAGE_ROOT/scripts/install-agent.sh"
+INSTALL_UPDATER_SCRIPT="$PACKAGE_ROOT/scripts/install-agent-updater.sh"
+
+if [[ ! -f "$INSTALL_AGENT_SCRIPT" ]]; then
+    INSTALL_AGENT_SCRIPT="$PACKAGE_ROOT/scripts/agent/install-agent.sh"
+fi
+
+if [[ ! -f "$INSTALL_UPDATER_SCRIPT" ]]; then
+    INSTALL_UPDATER_SCRIPT="$PACKAGE_ROOT/scripts/agent/install-agent-updater.sh"
+fi
 
 for required in "$BOOTSTRAP_PATH" "$PACKAGE_TRUST_KEY" "$AGENT_PUBLISH_DIR" "$UPDATER_PUBLISH_DIR" "$INSTALL_AGENT_SCRIPT" "$INSTALL_UPDATER_SCRIPT"; do
     [[ -e "$required" ]] || fail "Gerekli paket bileşeni bulunamadı: $required"

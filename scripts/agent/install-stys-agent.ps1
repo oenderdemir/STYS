@@ -87,8 +87,16 @@ $BootstrapPath = Join-Path $PackageRoot "config\bootstrap.json"
 $PackageTrustKey = Join-Path $PackageRoot "trust\release-public-key.pem"
 $AgentPublishDir = Join-Path $PackageRoot "agent"
 $UpdaterPublishDir = Join-Path $PackageRoot "updater"
-$InstallAgentScript = Join-Path $PackageRoot "scripts\agent\install-agent.ps1"
-$InstallUpdaterScript = Join-Path $PackageRoot "scripts\agent\install-agent-updater.ps1"
+$InstallAgentScript = Join-Path $PackageRoot "scripts\install-agent.ps1"
+$InstallUpdaterScript = Join-Path $PackageRoot "scripts\install-agent-updater.ps1"
+
+if (-not (Test-Path -LiteralPath $InstallAgentScript)) {
+    $InstallAgentScript = Join-Path $PackageRoot "scripts\agent\install-agent.ps1"
+}
+
+if (-not (Test-Path -LiteralPath $InstallUpdaterScript)) {
+    $InstallUpdaterScript = Join-Path $PackageRoot "scripts\agent\install-agent-updater.ps1"
+}
 
 foreach ($required in @($BootstrapPath, $PackageTrustKey, $AgentPublishDir, $UpdaterPublishDir, $InstallAgentScript, $InstallUpdaterScript)) {
     if (-not (Test-Path -LiteralPath $required)) {

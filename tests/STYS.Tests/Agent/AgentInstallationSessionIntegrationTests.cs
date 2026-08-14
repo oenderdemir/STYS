@@ -259,12 +259,30 @@ public sealed class AgentInstallationSessionIntegrationTests : IAsyncLifetime
 
         var previousPublicKeyPem = Environment.GetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM");
         var previousPublicKeyPath = Environment.GetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH");
+        var previousInstallerRoot = Environment.GetEnvironmentVariable("STYS_AGENT_INSTALLER_ROOT");
         using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var installerRoot = Path.Combine(Path.GetTempPath(), $"stys-installer-root-{Guid.NewGuid():N}");
 
         try
         {
             Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM", rsa.ExportSubjectPublicKeyInfoPem());
             Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH", null);
+            Environment.SetEnvironmentVariable("STYS_AGENT_INSTALLER_ROOT", installerRoot);
+
+            Directory.CreateDirectory(Path.Combine(installerRoot, "scripts"));
+            Directory.CreateDirectory(Path.Combine(installerRoot, "trust"));
+            Directory.CreateDirectory(Path.Combine(installerRoot, "win-x64", "agent"));
+            Directory.CreateDirectory(Path.Combine(installerRoot, "win-x64", "updater"));
+
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "scripts", "install-stys-agent.ps1"), "# ROOT-UNIFIED-PS1");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "scripts", "install-stys-agent.sh"), "# ROOT-UNIFIED-SH");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "scripts", "install-agent.ps1"), "# ROOT-AGENT-PS1");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "scripts", "install-agent-updater.ps1"), "# ROOT-UPDATER-PS1");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "scripts", "install-agent.sh"), "# ROOT-AGENT-SH");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "scripts", "install-agent-updater.sh"), "# ROOT-UPDATER-SH");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "trust", "release-public-key.pem"), rsa.ExportSubjectPublicKeyInfoPem());
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "win-x64", "agent", "win-marker-agent.txt"), "WIN-X64-AGENT");
+            await File.WriteAllTextAsync(Path.Combine(installerRoot, "win-x64", "updater", "win-marker-updater.txt"), "WIN-X64-UPDATER");
 
             var service = new AgentInstallationSessionService(NewFactory(), new FakeKurumTenantAccessor(_kurumAId));
             var create = await service.CreateAsync(new AgentInstallationSessionCreateRequest
@@ -283,8 +301,12 @@ public sealed class AgentInstallationSessionIntegrationTests : IAsyncLifetime
             using var archive = new ZipArchive(new MemoryStream(package.Content), ZipArchiveMode.Read, leaveOpen: false);
             Assert.NotNull(archive.GetEntry("install-stys-agent.ps1"));
             Assert.NotNull(archive.GetEntry("install-stys-agent.sh"));
+            Assert.NotNull(archive.GetEntry("scripts/install-agent.ps1"));
+            Assert.NotNull(archive.GetEntry("scripts/install-agent-updater.ps1"));
             Assert.NotNull(archive.GetEntry("config/bootstrap.json"));
             Assert.NotNull(archive.GetEntry("trust/release-public-key.pem"));
+            Assert.NotNull(archive.GetEntry("agent/win-marker-agent.txt"));
+            Assert.NotNull(archive.GetEntry("updater/win-marker-updater.txt"));
 
             var bootstrapEntry = archive.GetEntry("config/bootstrap.json");
             Assert.NotNull(bootstrapEntry);
@@ -311,7 +333,7 @@ public sealed class AgentInstallationSessionIntegrationTests : IAsyncLifetime
                 await using var stream = entry.Open();
                 using var reader = new StreamReader(stream);
                 var text = await reader.ReadToEndAsync();
-                Assert.DoesNotContain("EnrollmentCode", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(create.EnrollmentCode, text, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("ClientSecret", text, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("JWT", text, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("private key", text, StringComparison.OrdinalIgnoreCase);
@@ -326,6 +348,11 @@ public sealed class AgentInstallationSessionIntegrationTests : IAsyncLifetime
         {
             Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM", previousPublicKeyPem);
             Environment.SetEnvironmentVariable("STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH", previousPublicKeyPath);
+            Environment.SetEnvironmentVariable("STYS_AGENT_INSTALLER_ROOT", previousInstallerRoot);
+            if (Directory.Exists(installerRoot))
+            {
+                Directory.Delete(installerRoot, recursive: true);
+            }
         }
     }
 

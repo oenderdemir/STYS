@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
@@ -343,6 +344,68 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task SendAsync_ConcurrentSameIdempotencyKey_TekCommandOlusur_vePublicResponseRedacted()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var notifier = new CaptureNotifier();
+        var svc1 = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance, notifier);
+        var svc2 = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+        var key = Guid.NewGuid().ToString("N");
+
+        var firstTask = Task.Run(() => svc1.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest
+        {
+            AgentId = agentId,
+            CommandType = "Ping",
+            Priority = 1,
+            IdempotencyKey = key
+        }, "test", CancellationToken.None));
+
+        var secondTask = Task.Run(() => svc2.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest
+        {
+            AgentId = agentId,
+            CommandType = "Ping",
+            Priority = 1,
+            IdempotencyKey = key
+        }, "test", CancellationToken.None));
+
+        var results = await Task.WhenAll(firstTask, secondTask);
+        Assert.Equal(results[0].Id, results[1].Id);
+        Assert.All(results, x =>
+        {
+            Assert.Null(x.LeaseToken);
+            Assert.Null(x.LeaseExpiresAt);
+        });
+
+        var commands = await db.Set<AgentCommand>().Where(x => x.AgentId == agentId && x.IdempotencyKey == key && !x.IsDeleted).ToListAsync();
+        Assert.Single(commands);
+        Assert.NotEmpty(notifier.Events);
+        Assert.Null(notifier.Events.Single().LeaseToken);
+        Assert.Null(notifier.Events.Single().LeaseExpiresAt);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
+    public async Task GetPendingCommands_LeaseTokenPollKanalindaKalir()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+
+        await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
+        var pending = await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+
+        Assert.Single(pending);
+        Assert.NotNull(pending.Single().LeaseToken);
+        Assert.False(string.IsNullOrWhiteSpace(pending.Single().LeaseToken));
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
     public async Task Idempotent_SecondExecuteBlocked()
     {
         var db = await SetupAsync(); if (db is null) return;
@@ -387,5 +450,17 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
         db.Set<AgentCommand>().Add(command);
         await db.SaveChangesAsync();
         return command.Id;
+    }
+
+    private sealed class CaptureNotifier : IAgentCommandRealtimeNotifier
+    {
+        private readonly ConcurrentQueue<STYS.Agent.Contracts.Dtos.AgentCommandDto> _events = new();
+        public IReadOnlyCollection<STYS.Agent.Contracts.Dtos.AgentCommandDto> Events => _events.ToArray();
+
+        public Task CommandUpdatedAsync(STYS.Agent.Contracts.Dtos.AgentCommandDto command, CancellationToken cancellationToken)
+        {
+            _events.Enqueue(command);
+            return Task.CompletedTask;
+        }
     }
 }

@@ -2178,6 +2178,28 @@ Agent Regression:  0
   - Reconciliation command creation mevcut command expiry transaction/lock akışı içinde korunuyor.
   - Gerçek LAN cihazı ve uzun süreli lease expiry senaryoları sahada ayrıca doğrulanmalı.
 
+### E2C1 Final Lease Seal — 2026-08-14
+
+- Delivered StartPayment:
+  - Delivered lease timeout kararında original `Delivered` state baz alındı.
+  - Retry hakkı bitmiş olsa bile payment `Unknown` yapılmıyor ve `PavoGetPaymentResult` oluşturulmuyor.
+  - Sonuç: `Delivered -> Expired` ama fiziksel ödeme başlamamış kabul ediliyor.
+- Reconciliation race safety:
+  - `PavoGetPaymentResult` için tek aktif command garantisi güçlendirildi.
+  - Automatic expiry recovery ile manual `GetResult` çağrısı aynı anda geldiğinde DB unique guard tek command bırakıyor.
+  - `AgentId + IdempotencyKey` için unique index eklendi; duplicate race idempotent dönüyor.
+- LeaseToken visibility:
+  - Lease token artık UI/SignalR/history/stage/apply/send response’larında null/redacted.
+  - Sadece Agent poll kanalında `GetPendingCommandsAsync` ile görünüyor.
+- Tests:
+  - Delivered retry exhausted davranışı, manual/automatic reconciliation yarışı, aynı idempotency key duplicate race, poll kanal token visibility ve stage/apply redaction testleri eklendi.
+  - `dotnet test STYS.sln --configuration Release` geçti.
+- Real PAVO device test status:
+  - Bu turda gerçek PAVO cihazı ile manuel test yapılmadı.
+- Known limitations:
+  - Manual/automatic reconciliation yarışı DB unique guard ile güvenli; sahadaki yüksek eşzamanlılıkta ek telemetry faydalı olabilir.
+  - Lease token sadece agent execution path’inde taşınıyor; UI tarafında token gerektiren özel bir debug akışı yok.
+
 ### E2C1 Durable Command Lease & Crash Recovery — 2026-08-13
 
 - Command lease modeli:

@@ -2045,7 +2045,9 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.ResultPayload).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ErrorCode).HasMaxLength(128);
             entity.Property(x => x.Payload).HasColumnType("nvarchar(max)");
-            entity.HasIndex(x => new { x.AgentId, x.IdempotencyKey }).HasFilter("[IdempotencyKey] <> '' AND [IsDeleted] = 0");
+            entity.HasIndex(x => new { x.AgentId, x.IdempotencyKey })
+                .IsUnique()
+                .HasFilter("[IdempotencyKey] <> '' AND [IsDeleted] = 0");
             entity.HasIndex(x => new { x.AgentId, x.CommandType, x.ReleaseId })
                 .IsUnique()
                 .HasDatabaseName("IX_AgentCommands_AgentId_CommandType_ReleaseId_Apply")

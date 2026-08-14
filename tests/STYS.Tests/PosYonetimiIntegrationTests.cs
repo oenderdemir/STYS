@@ -1700,6 +1700,49 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
+    public async Task Payment_DeliveredRetryExhausted_ExpiredAmaUnknownDegil_veReconciliationOlusmaz()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-DELIVERED-EXHAUSTED"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var paymentKey = NewPaymentKey();
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = paymentKey
+        }, "test", CancellationToken.None);
+
+        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+        var deliveredCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        deliveredCommand.Status = STYS.Agent.Contracts.Enums.AgentCommandStatus.Delivered;
+        deliveredCommand.RetryCount = deliveredCommand.MaxRetryCount;
+        deliveredCommand.LeaseExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        await expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+
+        var after = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        Assert.NotEqual(PosOdemeDurumlari.Unknown, after.Durum);
+        Assert.Equal(STYS.Agent.Contracts.Enums.AgentCommandStatus.Expired, (await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value)).Status);
+        Assert.Equal(0, await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult" && !x.IsDeleted));
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
     public async Task Payment_RunningStartLeaseTimeout_UnknownOlur_veReconciliationCommandOlusur()
     {
         var cs = ConnectionString();
@@ -1811,6 +1854,59 @@ public sealed class PosYonetimiIntegrationTests
         var resultCommands = await db.Set<STYS.Agent.Entities.AgentCommand>()
             .CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult" && !x.IsDeleted);
         Assert.Equal(1, resultCommands);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Payment_ConcurrentAutoVeManualReconciliation_TekGetResultCommandOlusur()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminalService = CreateTerminalService(db, fixture.KurumId);
+        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-RACE-AUTO"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        var paymentKey = NewPaymentKey();
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = paymentKey
+        }, "test", CancellationToken.None);
+
+        await agentService.GetPendingCommandsAsync(fixture.MainAgentId, CancellationToken.None);
+        await agentService.AcceptAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, CancellationToken.None);
+        await agentService.SetRunningAsync(payment.AgentCommandId!.Value, fixture.MainAgentId, CancellationToken.None);
+
+        var startCommand = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId!.Value);
+        startCommand.LeaseExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+        await db.SaveChangesAsync();
+
+        var expiryService = CreateCommandExpiryService(cs);
+        var manualTask = Task.Run(async () =>
+        {
+            await using var manualDb = AgentTestSupport.CreateDbContext(cs);
+            var manualService = CreatePaymentService(manualDb, cs, fixture.KurumId);
+            return await manualService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        });
+        var autoTask = Task.Run(() => expiryService.ExpireTimedOutCommandsAsync(fixture.MainAgentId, CancellationToken.None));
+
+        await Task.WhenAll(manualTask, autoTask);
+
+        var commands = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .Where(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult" && !x.IsDeleted)
+            .ToListAsync();
+        Assert.Single(commands);
+        Assert.Equal(payment.Id, JsonSerializer.Deserialize<PavoGetPaymentResultRequest>(commands.Single().Payload!, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.PosOdemeIslemiId);
 
         await CleanupAsync(db, suffix);
     }

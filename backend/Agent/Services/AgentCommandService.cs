@@ -90,7 +90,7 @@ public sealed class AgentCommandService
                 .FirstOrDefaultAsync(x => x.AgentId == agent.Id && x.IdempotencyKey == normalizedIdempotencyKey && !x.IsDeleted, ct);
             if (existingByIdempotencyKey is not null)
             {
-                return MapToDto(existingByIdempotencyKey);
+                return RedactLeaseToken(MapToDto(existingByIdempotencyKey));
             }
         }
 
@@ -116,7 +116,7 @@ public sealed class AgentCommandService
                         await tx.CommitAsync(ct);
                     }
 
-                    return MapToDto(existingReleaseCommand);
+                    return RedactLeaseToken(MapToDto(existingReleaseCommand));
                 }
 
                 await ValidateScopeAsync(db, agent.Id, request.CommandType, ct);
@@ -132,7 +132,7 @@ public sealed class AgentCommandService
                         await tx.CommitAsync(ct);
                     }
 
-                    var releaseDto = MapToDto(releaseCommand);
+                    var releaseDto = RedactLeaseToken(MapToDto(releaseCommand));
                     NotifyIfNeeded(releaseDto);
                     return releaseDto;
                 }
@@ -146,7 +146,24 @@ public sealed class AgentCommandService
                     var existingAfterConflict = await FindActiveReleaseCommandAsync(db, agent.Id, request.CommandType, releaseIdentity, ct);
                     if (existingAfterConflict is not null)
                     {
-                        return MapToDto(existingAfterConflict);
+                        return RedactLeaseToken(MapToDto(existingAfterConflict));
+                    }
+
+                    throw;
+                }
+                catch (DbUpdateException ex) when (!string.IsNullOrWhiteSpace(normalizedIdempotencyKey) && IsIdempotencyUniqueConflict(ex))
+                {
+                    if (tx is not null)
+                    {
+                        await tx.RollbackAsync(ct);
+                    }
+
+                    var existingAfterConflict = await db.Set<AgentCommand>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.AgentId == agent.Id && x.IdempotencyKey == normalizedIdempotencyKey && !x.IsDeleted, ct);
+                    if (existingAfterConflict is not null)
+                    {
+                        return RedactLeaseToken(MapToDto(existingAfterConflict));
                     }
 
                     throw;
@@ -166,10 +183,25 @@ public sealed class AgentCommandService
 
         var cmd = CreateCommand(agent, request, requestedBy, null);
         db.Set<AgentCommand>().Add(cmd);
-        await db.SaveChangesAsync(ct);
-        var dto = MapToDto(cmd);
-        NotifyIfNeeded(dto);
-        return dto;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            var dto = RedactLeaseToken(MapToDto(cmd));
+            NotifyIfNeeded(dto);
+            return dto;
+        }
+        catch (DbUpdateException ex) when (!string.IsNullOrWhiteSpace(normalizedIdempotencyKey) && IsIdempotencyUniqueConflict(ex))
+        {
+            var existingAfterConflict = await db.Set<AgentCommand>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.AgentId == agent.Id && x.IdempotencyKey == normalizedIdempotencyKey && !x.IsDeleted, ct);
+            if (existingAfterConflict is not null)
+            {
+                return RedactLeaseToken(MapToDto(existingAfterConflict));
+            }
+
+            throw;
+        }
     }
 
     private void EnsurePaymentCommandAllowed(AgentEntity agent, string commandType)
@@ -1066,8 +1098,7 @@ public sealed class AgentCommandService
     private void NotifyIfNeeded(AgentCommandDto dto)
     {
         if (_notifier is null) return;
-        var publicDto = RedactLeaseToken(dto);
-        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(publicDto, CancellationToken.None); } catch { } });
+        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(dto, CancellationToken.None); } catch { } });
     }
 
     private static async Task AcquirePollLockAsync(StysAppDbContext db, int agentId, CancellationToken ct)
@@ -1455,4 +1486,10 @@ public sealed class AgentCommandService
         ResultPayload = dto.ResultPayload,
         CreatedAt = dto.CreatedAt
     };
+
+    private static bool IsIdempotencyUniqueConflict(DbUpdateException ex)
+    {
+        return ex.InnerException is Microsoft.Data.SqlClient.SqlException sqlEx
+            && (sqlEx.Number == 2601 || sqlEx.Number == 2627);
+    }
 }

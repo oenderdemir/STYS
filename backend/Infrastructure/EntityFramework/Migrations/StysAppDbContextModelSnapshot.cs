@@ -264,6 +264,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AgentId", "IdempotencyKey")
+                        .IsUnique()
                         .HasFilter("[IdempotencyKey] <> '' AND [IsDeleted] = 0");
 
                     b.HasIndex("AgentId", "Status");

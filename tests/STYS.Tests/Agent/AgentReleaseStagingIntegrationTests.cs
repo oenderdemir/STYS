@@ -100,6 +100,44 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task StageAndApply_PublicResponsesLeaseTokenTasimaz()
+    {
+        await using var db = await SetupAsync();
+        if (db is null) return;
+
+        var (agentKurumId, agentId, releaseId) = await SeedAsync(db, agentRuntimeIdentifier: "win-x64", releaseRuntimeIdentifier: "win-x64", releaseVersion: "1.2.0", contractVersion: "1.0.0");
+        var releaseService = CreateReleaseService(agentId, agentKurumId);
+        var commandService = CreateCommandService(agentKurumId);
+
+        var stageCommand = await releaseService.StageUpgradeAsync(agentId, "tester", CancellationToken.None);
+        Assert.Null(stageCommand.LeaseToken);
+
+        var pendingStage = (await commandService.GetPendingCommandsAsync(agentId, CancellationToken.None)).Single(x => x.CommandType == "AgentStageUpgrade");
+        var stageLeaseToken = pendingStage.LeaseToken!;
+        await commandService.AcceptAsync(pendingStage.Id, agentId, CancellationToken.None);
+        await commandService.SetRunningAsync(pendingStage.Id, agentId, CancellationToken.None);
+        await commandService.CompleteAsync(pendingStage.Id, agentId, new AgentCommandCompleteRequest
+        {
+            Id = pendingStage.Id,
+            Success = true,
+            LeaseToken = stageLeaseToken,
+            ResultPayload = System.Text.Json.JsonSerializer.Serialize(new AgentStageUpgradeResponse
+            {
+                ReleaseId = releaseId,
+                Version = "1.2.0",
+                RuntimeIdentifier = "win-x64",
+                StageStatus = STYS.Agent.Contracts.Enums.AgentReleaseStageStatus.Staged,
+                Message = "staged"
+            }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+        }, CancellationToken.None);
+
+        var applyCommand = await releaseService.ApplyUpgradeAsync(agentId, "tester", CancellationToken.None);
+        Assert.Null(applyCommand.LeaseToken);
+
+        await CleanupAsync(db);
+    }
+
+    [IntegrationFact]
     public async Task CrossTenantReleaseId_Rejects()
     {
         await using var db = await SetupAsync();
@@ -172,6 +210,13 @@ public sealed class AgentReleaseStagingIntegrationTests : IAsyncLifetime
                 NullLogger<AgentCommandService>.Instance,
                 compatibilityOptions: Options.Create(new AgentCompatibilityOptions { SupportedContractVersion = "1.0.0" })),
             Options.Create(new AgentCompatibilityOptions { SupportedContractVersion = "1.0.0" }));
+
+    private AgentCommandService CreateCommandService(int agentKurumId) =>
+        new(
+            new DbContextFactoryForTest<StysAppDbContext>(() => AgentTestSupport.CreateDbContext(_connectionString!)),
+            new FakeKurumTenantAccessor(agentKurumId),
+            NullLogger<AgentCommandService>.Instance,
+            compatibilityOptions: Options.Create(new AgentCompatibilityOptions { SupportedContractVersion = "1.0.0" }));
 
     private async Task<(int AgentKurumId, int AgentId, int ReleaseId)> SeedAsync(
         StysAppDbContext db,

@@ -245,8 +245,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         device.Ad = displayName;
         device.SeriNo = serialNumber;
         device.IpAdresi = host;
-        device.HttpPort = request.HttpPort > 0 ? request.HttpPort : null;
-        device.HttpsPort = request.HttpsPort > 0 ? request.HttpsPort : null;
+        (device.HttpPort, device.HttpsPort) = NormalizeAgentPorts(request.Protocol, request.HttpPort, request.HttpsPort);
         device.AktifMi = true;
         device.SonBaglantiTarihi = now;
         if (!string.IsNullOrWhiteSpace(request.Fingerprint))
@@ -308,8 +307,7 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
             conflict.AgentLocalDeviceId = NormalizeOptional(request.LocalDeviceId);
             conflict.Ad = displayName;
             conflict.IpAdresi = host;
-            conflict.HttpPort = request.HttpPort > 0 ? request.HttpPort : null;
-            conflict.HttpsPort = request.HttpsPort > 0 ? request.HttpsPort : null;
+            (conflict.HttpPort, conflict.HttpsPort) = NormalizeAgentPorts(request.Protocol, request.HttpPort, request.HttpsPort);
             conflict.AktifMi = true;
             conflict.SonBaglantiTarihi = now;
             if (!string.IsNullOrWhiteSpace(request.Fingerprint))
@@ -717,5 +715,18 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
     {
         var trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    // PosCihazi has no separate Protocol column; HttpsPort.HasValue is used everywhere as the
+    // "is HTTPS" signal (see BuildPairingRequest/BuildPingRequest/BuildGetDeviceInfoRequest below).
+    // Keep that signal single-valued by only ever persisting the port that matches the agent's
+    // reported protocol, so an HTTP device can never be accidentally treated as HTTPS just because
+    // an HttpsPort happened to be recorded.
+    private static (int? HttpPort, int? HttpsPort) NormalizeAgentPorts(string? protocol, int httpPort, int httpsPort)
+    {
+        var isHttps = string.Equals(protocol?.Trim(), "HTTPS", StringComparison.OrdinalIgnoreCase);
+        return isHttps
+            ? ((int?)null, httpsPort > 0 ? httpsPort : null)
+            : (httpPort > 0 ? httpPort : null, (int?)null);
     }
 }

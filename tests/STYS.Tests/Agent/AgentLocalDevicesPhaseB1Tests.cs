@@ -70,10 +70,13 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
         Assert.Equal(LocalDevicePairingStatus.NotPaired, updated.PairingStatus);
         Assert.NotNull(updated.LastDeviceInfoAt);
         Assert.NotNull(pairingState);
-        Assert.Equal("FP-123", pairingState!.Fingerprint);
+        // The client fingerprint sent/stored is always our own stable, configured value - never
+        // something learned from the device's (legacy/diagnostic-only) response.Fingerprint field.
+        Assert.Equal("STYS.Agent", pairingState!.Fingerprint);
         Assert.Equal("TFP-123", pairingState.TargetFingerprint);
         Assert.Equal(1, client.GetDeviceInfoCallCount);
         Assert.Equal(1, client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence);
+        Assert.Equal("STYS.Agent", client.LastGetDeviceInfoRequest?.TransactionHandle.Fingerprint);
         Assert.DoesNotContain("FP-123", rawJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TFP-123", rawJson, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Fingerprint", rawJson, StringComparison.OrdinalIgnoreCase);
@@ -102,61 +105,106 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     }
 
     [Fact]
-    public async Task Pairing_Success_SecureStateVePublicState_Gunceller()
+    public async Task PairAsync_GetDeviceInfoOlmadanCalisirVeIlkSequenceBirdir()
     {
+        // Reference flow: Local PAVO device -> SerialNumber mevcut -> Pairing -> GetDeviceInfo.
+        // GetDeviceInfo must NOT be a pairing prerequisite anymore.
         var client = new FakePavoRestClient
         {
-            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
-            {
-                DeviceName = "PAVO Model",
-                SerialNumber = "SN-PAIR",
-                Fingerprint = "FP-SEED",
-                TargetFingerprint = "TFP-SEED"
-            },
             PairingResponse = new PavoPairingResponse
             {
-                OnayliMi = true,
-                Fingerprint = "FP-PAIR",
-                TargetFingerprint = "TFP-PAIR",
-                TransactionHandle = new PavoTransactionHandle
-                {
-                    TransactionSequence = 0
-                }
+                HasError = false,
+                HasAbondon = false,
+                ErrorCode = null,
+                OnayliMi = false, // must be irrelevant to success now
+                TransactionHandle = new PavoTransactionHandle { TransactionSequence = 0 }
             }
         };
         var service = CreateService(client);
         var device = await CreateSavedDeviceAsync(service);
 
-        await service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
         var updated = await service.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
         var pairingState = await CreatePairingStore().GetAsync(device.Id, CancellationToken.None);
-        var rawJson = await File.ReadAllTextAsync(CreatePathResolver().LocalDevicesStorePath);
 
+        Assert.Equal(0, client.GetDeviceInfoCallCount);
+        Assert.Equal(1, client.PairingCallCount);
         Assert.Equal(LocalDevicePairingStatus.Paired, updated.PairingStatus);
-        Assert.NotNull(updated.LastPairingAt);
-        Assert.Null(updated.LastPairingError);
         Assert.NotNull(pairingState);
         Assert.Equal(LocalDevicePairingStatus.Paired, pairingState!.PairingStatus);
-        Assert.Equal("FP-PAIR", pairingState.Fingerprint);
-        Assert.Equal("TFP-PAIR", pairingState.TargetFingerprint);
-        Assert.Equal(1, client.GetDeviceInfoCallCount);
-        Assert.Equal(1, client.PairingCallCount);
-        Assert.Equal("FP-SEED", client.LastPairingRequest?.CurrentFingerprint);
-        Assert.Equal("FP-SEED", client.LastPairingRequest?.TransactionHandle.Fingerprint);
-        Assert.DoesNotContain("FP-PAIR", rawJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("TFP-PAIR", rawJson, StringComparison.OrdinalIgnoreCase);
+
+        // First-ever PAVO interaction for this device must be sequence 1.
+        Assert.Equal(1, client.LastPairingRequest?.TransactionHandle.TransactionSequence);
+        Assert.Equal(1, pairingState.TransactionSequence);
+
+        // Client fingerprint is our own stable, configured identity (not learned from the device).
+        Assert.Equal("STYS.Agent", client.LastPairingRequest?.TransactionHandle.Fingerprint);
+        Assert.Equal("STYS.Agent", client.LastPairingRequest?.CurrentFingerprint);
+        Assert.Equal("STYS.Agent", pairingState.Fingerprint);
     }
 
     [Fact]
-    public async Task Pairing_GetDeviceInfoOlmadan_Reddedilir()
+    public async Task PairAsync_OnayliMiFalseAmaBaseKriterUyuyorsaBasarilidir()
     {
-        var client = new FakePavoRestClient();
+        var client = new FakePavoRestClient
+        {
+            PairingResponse = new PavoPairingResponse
+            {
+                HasError = false,
+                HasAbondon = false,
+                ErrorCode = 0,
+                OnayliMi = false,
+                Message = "ok"
+            }
+        };
+        var service = CreateService(client);
+        var device = await CreateSavedDeviceAsync(service);
+
+        var updated = await service.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
+
+        Assert.Equal(LocalDevicePairingStatus.Paired, updated.PairingStatus);
+    }
+
+    [Fact]
+    public async Task PairAsync_ErrorCodeSifirDegilse_Basarisizdir()
+    {
+        var client = new FakePavoRestClient
+        {
+            PairingResponse = new PavoPairingResponse
+            {
+                HasError = false,
+                HasAbondon = false,
+                ErrorCode = 7,
+                OnayliMi = true,
+                Message = "PAVO hata 7"
+            }
+        };
         var service = CreateService(client);
         var device = await CreateSavedDeviceAsync(service);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PairAsync(device.Id, forceRePair: false, CancellationToken.None));
 
-        Assert.Contains("Önce Cihaz Bilgisini Getir", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PAVO hata 7", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PairAsync_SerialNumberYoksa_AcikHataVerir()
+    {
+        var client = new FakePavoRestClient();
+        var service = CreateService(client);
+        var device = await service.SaveAsync(new LocalDeviceUpsertRequest
+        {
+            DisplayName = "PAVO POS Seri Yok",
+            DeviceType = LocalDeviceType.Pos,
+            Provider = LocalDeviceProvider.Pavo,
+            Host = "192.168.1.51",
+            Protocol = LocalDeviceProtocol.Https,
+            HttpsPort = 4568,
+            HttpPort = 4567
+        }, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PairAsync(device.Id, forceRePair: false, CancellationToken.None));
+
+        Assert.Contains("seri numarası zorunludur", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, client.PairingCallCount);
     }
 
@@ -165,24 +213,15 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     {
         var client = new FakePavoRestClient
         {
-            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
-            {
-                DeviceName = "PAVO Seed",
-                SerialNumber = "SN-SEED",
-                Fingerprint = "FP-SEED",
-                TargetFingerprint = "TFP-SEED"
-            },
             PairingResponse = new PavoPairingResponse
             {
-                OnayliMi = true,
-                Fingerprint = "FP-PAIR",
-                TargetFingerprint = "TFP-PAIR"
+                HasError = false,
+                HasAbondon = false
             }
         };
         var service = CreateService(client);
         var device = await CreateSavedDeviceAsync(service);
 
-        await service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
         await service.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PairAsync(device.Id, forceRePair: false, CancellationToken.None));
@@ -200,29 +239,20 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     {
         var client = new FakePavoRestClient
         {
-            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
-            {
-                DeviceName = "PAVO Seed",
-                SerialNumber = "SN-SEED",
-                Fingerprint = "FP-SEED",
-                TargetFingerprint = "TFP-SEED"
-            },
             PairingResponse = new PavoPairingResponse
             {
-                OnayliMi = true,
-                Fingerprint = "FP-PAIR-OLD",
-                TargetFingerprint = "TFP-PAIR-OLD"
+                HasError = false,
+                HasAbondon = false
             }
         };
         var service = CreateService(client);
         var device = await CreateSavedDeviceAsync(service);
 
-        await service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
         await service.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
 
         client.PairingResponse = new PavoPairingResponse
         {
-            OnayliMi = false,
+            HasError = true,
             Message = "Yeniden eşleştirme başarısız."
         };
 
@@ -234,7 +264,7 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
 
         Assert.Equal(LocalDevicePairingStatus.Paired, loaded!.PairingStatus);
         Assert.Equal(LocalDevicePairingStatus.Paired, pairingState!.PairingStatus);
-        Assert.Equal("FP-PAIR-OLD", pairingState.Fingerprint);
+        Assert.Equal("STYS.Agent", pairingState.Fingerprint);
         Assert.Equal("Yeniden eşleştirme başarısız.", loaded.LastPairingError);
         Assert.Equal("Yeniden eşleştirme başarısız.", pairingState.LastPairingError);
     }
@@ -244,24 +274,15 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     {
         var client = new FakePavoRestClient
         {
-            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
-            {
-                DeviceName = "PAVO Seed",
-                SerialNumber = "SN-SEED",
-                Fingerprint = "FP-SEED",
-                TargetFingerprint = "TFP-SEED"
-            },
             PairingResponse = new PavoPairingResponse
             {
-                OnayliMi = true,
-                Fingerprint = "FP-PAIR",
-                TargetFingerprint = "TFP-PAIR"
+                HasError = false,
+                HasAbondon = false
             }
         };
         var service1 = CreateService(client);
         var device = await CreateSavedDeviceAsync(service1);
 
-        await service1.GetDeviceInfoAsync(device.Id, CancellationToken.None);
         await service1.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
 
         var service2 = CreateService(client);
@@ -270,8 +291,8 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
 
         Assert.Equal(LocalDevicePairingStatus.Paired, loaded!.PairingStatus);
         Assert.Equal(LocalDevicePairingStatus.Paired, pairingState!.PairingStatus);
-        Assert.Equal("FP-PAIR", pairingState.Fingerprint);
-        Assert.True(pairingState.TransactionSequence > 0);
+        Assert.Equal("STYS.Agent", pairingState.Fingerprint);
+        Assert.Equal(1, pairingState.TransactionSequence);
     }
 
     [Fact]
@@ -405,10 +426,7 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
                 throw PairingException;
             }
 
-            return Task.FromResult(PairingResponse ?? new PavoPairingResponse
-            {
-                OnayliMi = true
-            });
+            return Task.FromResult(PairingResponse ?? new PavoPairingResponse());
         }
 
         public Task<PavoPingResponse> PingAsync(PavoPingRequest request, CancellationToken cancellationToken) =>

@@ -75,15 +75,39 @@ public sealed class PavoGetDeviceInfoRequest : PavoDeviceRequestBase
 
 public sealed class PavoPaymentOperationData
 {
-    public string? SaleReference { get; set; }
+    // Reference (Pavo509.Client) wire fields.
+    public long? Id { get; set; }
+    public string? TransactionNo { get; set; }
+    public string? BatchNo { get; set; }
     public bool IsSuccessful { get; set; }
+    public string? StatusText { get; set; }
+    public string? SaleReference { get; set; }
+    public decimal? Amount { get; set; }
+    public string? CurrencyCode { get; set; }
+    // CardNo is intentionally NOT mapped: it is sensitive (PAN-adjacent) data and must never be
+    // logged, persisted, or forwarded to the frontend. Leaving it off this DTO means the
+    // deserializer silently drops it.
+    public string? CardReaderSlotText { get; set; }
+    public string? ResponseCode { get; set; }
+    public string? AcquirerName { get; set; }
+    public string? RetrievalReferenceNo { get; set; }
+    public string? AuthorizationCode { get; set; }
+    public string? FailMessage { get; set; }
+    public string? CevapAciklama { get; set; }
+    public string? ResultStatus { get; set; }
+    public DateTime? ResultDate { get; set; }
+    public string? Terminal { get; set; }
+    public string? CustomerReceiptImage { get; set; }
+    public string? MerchantReceiptImage { get; set; }
+
+    // Fields kept for backward compatibility with existing STYS payment reconciliation logic.
+    // These were speculative field names that predate the reference-client comparison and are
+    // typically absent from real PAVO responses; new code should prefer the fields above.
     public bool IsPending { get; set; }
     public bool IsUnknown { get; set; }
     public string? ResultCode { get; set; }
     public string? Message { get; set; }
-    public string? RetrievalReferenceNo { get; set; }
     public string? AcquirerReference { get; set; }
-    public string? AuthorizationCode { get; set; }
     public string? AcquirerId { get; set; }
     public string? TerminalId { get; set; }
     public string? MerchantId { get; set; }
@@ -147,14 +171,24 @@ public abstract class PavoBaseResponse
     public bool HasError { get; set; }
     [JsonPropertyName("HasAbondon")]
     public bool HasAbondon { get; set; }
-    public string? ErrorCode { get; set; }
+    public int? ErrorCode { get; set; }
     public string? Message { get; set; }
     public List<string> Errors { get; set; } = [];
+}
+
+public static class PavoResponseHelpers
+{
+    /// <summary>Reference (Pavo509.Client) success semantics: !HasError &amp;&amp; !HasAbondon &amp;&amp; (ErrorCode == null || ErrorCode == 0).</summary>
+    public static bool IsSuccessful(PavoBaseResponse response) =>
+        !response.HasError && !response.HasAbondon && (response.ErrorCode is null || response.ErrorCode == 0);
 }
 
 public sealed class PavoPairingResponse : PavoBaseResponse
 {
     public PavoTransactionHandle TransactionHandle { get; set; } = new();
+
+    // Legacy/diagnostic-only fields: not present in the reference protocol and MUST NOT be used
+    // to determine pairing success or to source the client fingerprint for later requests.
     public string? Fingerprint { get; set; }
     public string? TargetFingerprint { get; set; }
     public long? PairingId { get; set; }

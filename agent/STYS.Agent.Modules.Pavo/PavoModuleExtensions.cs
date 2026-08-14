@@ -1,4 +1,6 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Modules.Pavo.Commands;
 
@@ -6,16 +8,26 @@ namespace STYS.Agent.Modules.Pavo;
 
 public static class PavoModuleExtensions
 {
-    public static IServiceCollection AddPavoModule(this IServiceCollection services)
+    public static IServiceCollection AddPavoModule(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<PavoAgentOptions>(configuration.GetSection(PavoAgentOptions.SectionName));
+        services.PostConfigure<PavoAgentOptions>(options =>
+        {
+            options.Fingerprint = PavoAgentOptions.ResolveFingerprint(
+                options.Fingerprint,
+                Environment.GetEnvironmentVariable(PavoAgentOptions.FingerprintEnvironmentVariable));
+            options.TimeoutSeconds = PavoAgentOptions.ResolveTimeoutSeconds(options.TimeoutSeconds);
+        });
+
         services.AddScoped<PavoPairingCommandHandler>();
         services.AddScoped<PavoPingCommandHandler>();
         services.AddScoped<PavoGetDeviceInfoCommandHandler>();
         services.AddScoped<PavoStartPaymentCommandHandler>();
         services.AddScoped<PavoGetPaymentResultCommandHandler>();
-        services.AddHttpClient("PavoClient", client =>
+        services.AddHttpClient("PavoClient", (sp, client) =>
         {
-            client.Timeout = TimeSpan.FromSeconds(30);
+            var options = sp.GetRequiredService<IOptions<PavoAgentOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(PavoAgentOptions.ResolveTimeoutSeconds(options.TimeoutSeconds));
         });
         services.AddScoped<IPavoRestClient, PavoRestClient>();
         return services;

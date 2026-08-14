@@ -280,7 +280,7 @@ public sealed class CommandPollingWorker : BackgroundService
 
     private async Task<Modules.Pavo.Commands.PavoPairingCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoPairingCommand command, CancellationToken cancellationToken)
     {
-        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        command.TransactionHandle = await _sequenceReservationService.ReserveForPairingAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
     }
 

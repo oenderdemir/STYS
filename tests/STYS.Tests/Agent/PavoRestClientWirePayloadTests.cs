@@ -124,6 +124,115 @@ public sealed class PavoRestClientWirePayloadTests
         Assert.False(doc.RootElement.TryGetProperty("SaleReference", out _));
     }
 
+    [Fact]
+    public async Task BuildBaseUri_UseHttpsFalse_HttpsPortDoluOlsaBile_HttpKullanir()
+    {
+        var handler = new CapturingHandler();
+        var client = CreateClient(handler);
+
+        await client.PairingAsync(new PavoPairingRequest
+        {
+            PosCihaziId = 1,
+            IpAddress = "10.0.0.9",
+            HttpPort = 4567,
+            HttpsPort = 4568,
+            UseHttps = false,
+            TransactionHandle = CreateHandle()
+        }, CancellationToken.None);
+
+        Assert.NotNull(handler.LastRequestUri);
+        Assert.Equal("http", handler.LastRequestUri!.Scheme);
+        Assert.Equal(4567, handler.LastRequestUri.Port);
+        Assert.Equal("/Pairing", handler.LastRequestUri.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task Pairing_ReferenceResponse_HasErrorFalse_ErrorCodeSifir_BasariylaDeserializeOlurVeBasarilidir()
+    {
+        var handler = new CapturingHandler
+        {
+            // Sample shape from the working Pavo509.Client reference response.
+            ResponseBody = "{\"HasError\":false,\"HasAbondon\":false,\"ErrorCode\":0,\"Message\":\"ok\"}"
+        };
+        var client = CreateClient(handler);
+
+        var response = await client.PairingAsync(new PavoPairingRequest
+        {
+            PosCihaziId = 1,
+            IpAddress = "10.0.0.9",
+            HttpPort = 4567,
+            TransactionHandle = CreateHandle()
+        }, CancellationToken.None);
+
+        Assert.False(response.HasError);
+        Assert.False(response.HasAbondon);
+        Assert.Equal(0, response.ErrorCode);
+        Assert.True(PavoResponseHelpers.IsSuccessful(response));
+    }
+
+    [Fact]
+    public async Task Pairing_ErrorCodeNull_Basarilidir()
+    {
+        var handler = new CapturingHandler
+        {
+            ResponseBody = "{\"HasError\":false,\"HasAbondon\":false,\"ErrorCode\":null}"
+        };
+        var client = CreateClient(handler);
+
+        var response = await client.PairingAsync(new PavoPairingRequest
+        {
+            PosCihaziId = 1,
+            IpAddress = "10.0.0.9",
+            HttpPort = 4567,
+            TransactionHandle = CreateHandle()
+        }, CancellationToken.None);
+
+        Assert.True(PavoResponseHelpers.IsSuccessful(response));
+    }
+
+    [Fact]
+    public async Task Pairing_ErrorCodeSifirDegil_Basarisizdir()
+    {
+        var handler = new CapturingHandler
+        {
+            ResponseBody = "{\"HasError\":false,\"HasAbondon\":false,\"ErrorCode\":12}"
+        };
+        var client = CreateClient(handler);
+
+        var response = await client.PairingAsync(new PavoPairingRequest
+        {
+            PosCihaziId = 1,
+            IpAddress = "10.0.0.9",
+            HttpPort = 4567,
+            TransactionHandle = CreateHandle()
+        }, CancellationToken.None);
+
+        Assert.False(PavoResponseHelpers.IsSuccessful(response));
+    }
+
+    [Fact]
+    public async Task Pairing_OnayliMiOlmadanDaBasariliSayilir()
+    {
+        // OnayliMi does not exist in the reference protocol at all; the response below omits it
+        // entirely and pairing success must still be derivable.
+        var handler = new CapturingHandler
+        {
+            ResponseBody = "{\"HasError\":false,\"HasAbondon\":false,\"ErrorCode\":0}"
+        };
+        var client = CreateClient(handler);
+
+        var response = await client.PairingAsync(new PavoPairingRequest
+        {
+            PosCihaziId = 1,
+            IpAddress = "10.0.0.9",
+            HttpPort = 4567,
+            TransactionHandle = CreateHandle()
+        }, CancellationToken.None);
+
+        Assert.False(response.OnayliMi);
+        Assert.True(PavoResponseHelpers.IsSuccessful(response));
+    }
+
     private static PavoRestClient CreateClient(CapturingHandler handler)
     {
         var factory = new SingleClientFactory(new HttpClient(handler)
@@ -145,13 +254,16 @@ public sealed class PavoRestClientWirePayloadTests
     private sealed class CapturingHandler : HttpMessageHandler
     {
         public string? LastBody { get; private set; }
+        public Uri? LastRequestUri { get; private set; }
+        public string ResponseBody { get; set; } = string.Empty;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastRequestUri = request.RequestUri;
             LastBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = new StringContent(string.Empty, Encoding.UTF8, "application/json")
+                Content = new StringContent(ResponseBody, Encoding.UTF8, "application/json")
             };
         }
     }

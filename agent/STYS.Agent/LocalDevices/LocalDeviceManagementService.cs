@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Client;
 using STYS.Agent.Modules.Pavo;
@@ -12,6 +13,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     private readonly IPavoLocalPairingStore _pairingStore;
     private readonly IPavoRestClient _pavoRestClient;
     private readonly IStysAgentApiClient? _agentApiClient;
+    private readonly string _pavoFingerprint;
 
     public LocalDeviceManagementService(
         ILocalDeviceStore store,
@@ -19,7 +21,8 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         ILocalDeviceConnectionTesterRegistry testerRegistry,
         IPavoLocalPairingStore pairingStore,
         IPavoRestClient pavoRestClient,
-        IStysAgentApiClient? agentApiClient = null)
+        IStysAgentApiClient? agentApiClient = null,
+        IOptions<PavoAgentOptions>? pavoOptions = null)
     {
         _store = store;
         _terminalStore = terminalStore;
@@ -27,6 +30,9 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         _pairingStore = pairingStore;
         _pavoRestClient = pavoRestClient;
         _agentApiClient = agentApiClient;
+        _pavoFingerprint = PavoAgentOptions.ResolveFingerprint(
+            pavoOptions?.Value.Fingerprint,
+            Environment.GetEnvironmentVariable(PavoAgentOptions.FingerprintEnvironmentVariable));
     }
 
     public Task<IReadOnlyCollection<LocalDevice>> GetAllAsync(CancellationToken cancellationToken) =>
@@ -228,9 +234,9 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         {
             DeviceId = device.Id,
             Success = !response.HasError && !response.HasAbondon && response.Data?.IsSuccessful == true,
-            Status = response.Data?.TransactionStatus ?? (response.HasError ? "Failed" : response.HasAbondon ? "Abondoned" : "Unknown"),
-            Message = response.Message ?? response.Data?.Message ?? "Ödeme testi tamamlandı.",
-            ErrorCode = response.ErrorCode ?? response.Data?.ResultCode,
+            Status = response.Data?.StatusText ?? response.Data?.TransactionStatus ?? (response.HasError ? "Failed" : response.HasAbondon ? "Abondoned" : "Unknown"),
+            Message = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "Ödeme testi tamamlandı.",
+            ErrorCode = response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? response.Data?.ResultCode,
             SaleReference = saleReference,
             Amount = request.Amount,
             CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode) ? "TRY" : request.CurrencyCode.Trim(),
@@ -471,11 +477,11 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         }
 
         var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
-        var response = await _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, pairingState, reserved.TransactionSequence), cancellationToken);
+        var response = await _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, _pavoFingerprint, reserved.TransactionSequence), cancellationToken);
 
-        if (response.HasError || response.HasAbondon || !string.IsNullOrWhiteSpace(response.ErrorCode))
+        if (!PavoResponseHelpers.IsSuccessful(response))
         {
-            throw new InvalidOperationException(response.Message ?? response.ErrorCode ?? "Cihaz bilgisi alınamadı.");
+            throw new InvalidOperationException(response.Message ?? response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Cihaz bilgisi alınamadı.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -488,22 +494,22 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         await _store.UpdateAsync(updatedDevice, cancellationToken);
         await MarkSuccessfulInteractionAsync(updatedDevice, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(response.Fingerprint) || !string.IsNullOrWhiteSpace(response.TargetFingerprint) || pairingState is not null)
+        // response.Fingerprint/TargetFingerprint are diagnostic-only device echoes in the reference
+        // protocol; the client fingerprint we use on future requests is always our own stable,
+        // configured value (_pavoFingerprint), never something learned from the device.
+        await _pairingStore.UpsertAsync(new PavoLocalPairingState
         {
-            await _pairingStore.UpsertAsync(new PavoLocalPairingState
-            {
-                DeviceId = updatedDevice.Id,
-                Fingerprint = string.IsNullOrWhiteSpace(response.Fingerprint) ? pairingState?.Fingerprint : response.Fingerprint.Trim(),
-                TargetFingerprint = string.IsNullOrWhiteSpace(response.TargetFingerprint) ? pairingState?.TargetFingerprint : response.TargetFingerprint.Trim(),
-                TransactionSequence = response.TransactionHandle.TransactionSequence > 0 ? response.TransactionHandle.TransactionSequence : reserved.TransactionSequence,
-                PairingStatus = pairingState?.PairingStatus ?? LocalDevicePairingStatus.NotPaired,
-                PairingAt = pairingState?.PairingAt,
-                LastPairingAttemptAt = pairingState?.LastPairingAttemptAt,
-                LastPairingError = pairingState?.LastPairingError,
-                LastDeviceInfoAt = now,
-                UpdatedAt = now
-            }, cancellationToken);
-        }
+            DeviceId = updatedDevice.Id,
+            Fingerprint = _pavoFingerprint,
+            TargetFingerprint = string.IsNullOrWhiteSpace(response.TargetFingerprint) ? pairingState?.TargetFingerprint : response.TargetFingerprint.Trim(),
+            TransactionSequence = response.TransactionHandle.TransactionSequence > 0 ? response.TransactionHandle.TransactionSequence : reserved.TransactionSequence,
+            PairingStatus = pairingState?.PairingStatus ?? LocalDevicePairingStatus.NotPaired,
+            PairingAt = pairingState?.PairingAt,
+            LastPairingAttemptAt = pairingState?.LastPairingAttemptAt,
+            LastPairingError = pairingState?.LastPairingError,
+            LastDeviceInfoAt = now,
+            UpdatedAt = now
+        }, cancellationToken);
 
         return new DeviceInfoExecution(updatedDevice, response, pairingState, reserved.TransactionSequence);
     }
@@ -585,37 +591,45 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             throw new InvalidOperationException("Bu cihaz zaten eşleştirilmiş. Yeniden pairing mevcut pairing bilgisini değiştirebilir.");
         }
 
-        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
-        if (pairingState is null || string.IsNullOrWhiteSpace(pairingState.Fingerprint))
+        if (string.IsNullOrWhiteSpace(device.SerialNumber))
         {
-            throw new InvalidOperationException("Önce Cihaz Bilgisini Getir işlemi tamamlanmalıdır.");
+            throw new InvalidOperationException("PAVO pairing için seri numarası zorunludur.");
         }
 
+        // GetDeviceInfo is no longer a pairing prerequisite: the reference flow pairs first, using
+        // our own stable client fingerprint, then calls GetDeviceInfo. pairingState may legitimately
+        // be null/NotPaired here (e.g. the very first pairing attempt for a brand-new device), in
+        // which case the transaction sequence store naturally reserves sequence 1.
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
         var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var request = BuildPairingRequest(device, pairingState, reserved.TransactionSequence);
+        var request = BuildPairingRequest(device, _pavoFingerprint, reserved.TransactionSequence);
 
         try
         {
             var response = await _pavoRestClient.PairingAsync(request, cancellationToken);
             await MarkSuccessfulInteractionAsync(device, cancellationToken);
-            if (response.HasError || response.HasAbondon || !string.IsNullOrWhiteSpace(response.ErrorCode) || !response.OnayliMi)
+            if (!PavoResponseHelpers.IsSuccessful(response))
             {
-                await RecordPairingFailureAsync(device, pairingState, reserved.TransactionSequence, response.Message ?? response.ErrorCode ?? "Pairing başarısız.", now, cancellationToken);
-                throw new InvalidOperationException(response.Message ?? response.ErrorCode ?? "Pairing başarısız.");
+                var failureMessage = response.Message ?? response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Pairing başarısız.";
+                await RecordPairingFailureAsync(device, pairingState, reserved.TransactionSequence, failureMessage, now, cancellationToken);
+                throw new InvalidOperationException(failureMessage);
             }
 
             var successState = new PavoLocalPairingState
             {
                 DeviceId = device.Id,
-                Fingerprint = string.IsNullOrWhiteSpace(response.Fingerprint) ? pairingState.Fingerprint : response.Fingerprint.Trim(),
-                TargetFingerprint = string.IsNullOrWhiteSpace(response.TargetFingerprint) ? pairingState.TargetFingerprint : response.TargetFingerprint.Trim(),
+                // The client fingerprint is always our own stable, configured value - never
+                // something echoed back from the device response (see item 7 of the PAVO
+                // reference-compatibility fix).
+                Fingerprint = _pavoFingerprint,
+                TargetFingerprint = string.IsNullOrWhiteSpace(response.TargetFingerprint) ? pairingState?.TargetFingerprint : response.TargetFingerprint.Trim(),
                 TransactionSequence = response.TransactionHandle.TransactionSequence > 0 ? response.TransactionHandle.TransactionSequence : reserved.TransactionSequence,
                 PairingStatus = LocalDevicePairingStatus.Paired,
                 PairingAt = now,
                 LastPairingAttemptAt = now,
                 LastPairingError = null,
-                LastDeviceInfoAt = pairingState.LastDeviceInfoAt,
+                LastDeviceInfoAt = pairingState?.LastDeviceInfoAt,
                 UpdatedAt = now
             };
 
@@ -780,7 +794,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         };
     }
 
-    private static PavoGetDeviceInfoRequest BuildGetDeviceInfoRequest(LocalDevice device, PavoLocalPairingState? state, long transactionSequence) => new()
+    private static PavoGetDeviceInfoRequest BuildGetDeviceInfoRequest(LocalDevice device, string clientFingerprint, long transactionSequence) => new()
     {
         PosCihaziId = 0,
         IpAddress = device.Host,
@@ -790,24 +804,24 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         TransactionHandle = new PavoTransactionHandle
         {
             SerialNumber = device.SerialNumber ?? string.Empty,
-            Fingerprint = state?.Fingerprint ?? string.Empty,
+            Fingerprint = clientFingerprint,
             TransactionSequence = transactionSequence,
             TransactionDate = DateTime.Now
         }
     };
 
-    private static PavoPairingRequest BuildPairingRequest(LocalDevice device, PavoLocalPairingState pairingState, long transactionSequence) => new()
+    private static PavoPairingRequest BuildPairingRequest(LocalDevice device, string clientFingerprint, long transactionSequence) => new()
     {
         PosCihaziId = 0,
         IpAddress = device.Host,
         HttpPort = device.Protocol == LocalDeviceProtocol.Http ? device.HttpPort : null,
         HttpsPort = device.Protocol == LocalDeviceProtocol.Https ? device.HttpsPort : null,
         UseHttps = device.Protocol == LocalDeviceProtocol.Https,
-        CurrentFingerprint = pairingState.Fingerprint,
+        CurrentFingerprint = clientFingerprint,
         TransactionHandle = new PavoTransactionHandle
         {
             SerialNumber = device.SerialNumber ?? string.Empty,
-            Fingerprint = pairingState.Fingerprint ?? string.Empty,
+            Fingerprint = clientFingerprint,
             TransactionSequence = transactionSequence,
             TransactionDate = DateTime.Now
         }
@@ -815,24 +829,24 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
     private async Task RecordPairingFailureAsync(
         LocalDevice device,
-        PavoLocalPairingState pairingState,
+        PavoLocalPairingState? pairingState,
         long reservedSequence,
         string errorMessage,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken)
     {
-        var hadSuccessfulPairing = device.PairingStatus == LocalDevicePairingStatus.Paired || pairingState.PairingStatus == LocalDevicePairingStatus.Paired;
+        var hadSuccessfulPairing = device.PairingStatus == LocalDevicePairingStatus.Paired || pairingState?.PairingStatus == LocalDevicePairingStatus.Paired;
         var updatedState = new PavoLocalPairingState
         {
             DeviceId = device.Id,
-            Fingerprint = pairingState.Fingerprint,
-            TargetFingerprint = pairingState.TargetFingerprint,
-            TransactionSequence = Math.Max(pairingState.TransactionSequence, reservedSequence),
+            Fingerprint = pairingState?.Fingerprint ?? _pavoFingerprint,
+            TargetFingerprint = pairingState?.TargetFingerprint,
+            TransactionSequence = Math.Max(pairingState?.TransactionSequence ?? 0, reservedSequence),
             PairingStatus = hadSuccessfulPairing ? LocalDevicePairingStatus.Paired : LocalDevicePairingStatus.Failed,
-            PairingAt = pairingState.PairingAt,
+            PairingAt = pairingState?.PairingAt,
             LastPairingAttemptAt = timestamp,
             LastPairingError = errorMessage,
-            LastDeviceInfoAt = pairingState.LastDeviceInfoAt,
+            LastDeviceInfoAt = pairingState?.LastDeviceInfoAt,
             UpdatedAt = timestamp
         };
 
@@ -844,7 +858,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         updatedDevice.LastPairingError = errorMessage;
         if (hadSuccessfulPairing)
         {
-            updatedDevice.LastPairingAt = device.LastPairingAt ?? pairingState.PairingAt;
+            updatedDevice.LastPairingAt = device.LastPairingAt ?? pairingState?.PairingAt;
         }
 
         updatedDevice.UpdatedAt = timestamp;

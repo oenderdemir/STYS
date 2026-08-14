@@ -2413,4 +2413,43 @@ Agent Regression:  0
 - Configured root eksik veya hatalıysa repository fallback yapılmadan fail-fast çalışıyor.
 - Development repository fallback yalnız environment variable set edilmediğinde kullanılıyor.
 - Windows package output canonical `scripts/` yapısına sadeleştirildi.
+
+### PAVO Reference Compatibility Fix — 2026-08-14
+
+- Reference project comparison:
+  - Gerçek cihazla pairing ve ödeme yaptığı doğrulanmış `Pavo509.Client` referans implementasyonu ile protokol seviyesinde karşılaştırıldı; STYS'in speculative/varsayımsal alanları (`OnayliMi`, cihazdan öğrenilen `Fingerprint`, `GetDeviceInfo` ön koşulu) reference'ta karşılığı olmadığı için kaldırıldı.
+- ErrorCode int/null-or-zero semantics:
+  - `PavoBaseResponse.ErrorCode` `string?` yerine `int?` oldu; başarı kriteri `ErrorCode == null || ErrorCode == 0`.
+  - `AgentCommandResult.ErrorCode` gibi string sınırlarda `ErrorCode?.ToString(CultureInfo.InvariantCulture)` ile dönüştürülüyor.
+  - Ortak başarı kontrolü için `PavoResponseHelpers.IsSuccessful` eklendi (`!HasError && !HasAbondon && (ErrorCode == null || ErrorCode == 0)`).
+- OnayliMi dependency removed:
+  - `LocalDeviceManagementService.PairAsync` ve `PavoPairingCommandHandler` artık pairing başarısını `OnayliMi` alanına bakmadan belirliyor.
+  - `PavoPairingResponse` üzerindeki `OnayliMi`/`PairingId`/`PairingCode`/`Fingerprint`/`TargetFingerprint` alanları legacy/diagnostic olarak korunuyor, başarı kriterinde kullanılmıyor.
+- Stable client fingerprint:
+  - Agent artık PAVO cihazından öğrenilen bir fingerprint değil, kendi stabil client fingerprint'ini (`Pavo:Fingerprint`, varsayılan `STYS.Agent`) kullanıyor.
+  - `STYS_PAVO_FINGERPRINT` environment variable override'ı destekleniyor (örn. referans ile karşılaştırma için `Pavo509DotNetClient`).
+  - Pairing/GetDeviceInfo response'undaki fingerprint alanları yalnız diagnostic metadata; sonraki TransactionHandle.Fingerprint hep configured değeri taşıyor.
+- Pairing first / sequence 1:
+  - `GetDeviceInfo` artık pairing ön koşulu değil; ilk PAVO etkileşimi doğrudan Pairing olabiliyor ve `TransactionSequence == 1` ile gidiyor.
+  - Daha önce pairing yapılmış bir cihazda force-repair sequence'i asla 1'e resetlemiyor; store her zaman bir önceki değerden artırıyor.
+- GetDeviceInfo no longer pairing prerequisite:
+  - `LocalDeviceManagementService.PairAsync` artık `"Önce Cihaz Bilgisini Getir işlemi tamamlanmalıdır."` hatası üretmiyor; SerialNumber zorunlu ("PAVO pairing için seri numarası zorunludur.").
+  - Central `PavoPairing` komutu için ayrı `PavoCommandSequenceReservationService.ReserveForPairingAsync` eklendi; bu yol "already paired/provisioned" şartı aramıyor (initial pairing için circular dependency'yi kaldırır). Post-pair komutlar (`ReserveAsync`) eskisi gibi paired+provisioned şartını koruyor.
+- HTTP 4567 explicit protocol:
+  - `PavoRestClient.BuildBaseUri` artık yalnızca `UseHttps` bayrağına bakıyor; `HttpsPort` set edilmiş olması tek başına HTTPS'e çevirmiyor.
+  - Backend `PosCihaziService.RegisterFromAgentAsync` agent'tan gelen `Protocol` bilgisine göre `HttpPort`/`HttpsPort`'tan yalnızca ilgili olanı saklıyor (var olan modelde `HttpsPort.HasValue` invariant'ını tek anlamlı tutmak için; yeni kolon açılmadı).
+- 180 second PAVO timeout:
+  - `PavoRestClient`/`PavoModuleExtensions` default HTTP timeout'u 30 saniyeden 180 saniyeye çıkarıldı (`Pavo:TimeoutSeconds`, configurable).
+- Payment response contract alignment:
+  - `PavoPaymentOperationData` reference alanlarıyla (`StatusText`, `Amount`, `CurrencyCode`, `ResponseCode`, `AcquirerName`, `FailMessage`, `CevapAciklama`, `ResultStatus`, `ResultDate`, `Terminal`, receipt image alanları) genişletildi.
+  - `CardNo` bilerek DTO'ya eklenmedi (hassas veri; loglama/persist/frontend'e taşıma yapılmıyor).
+  - Mevcut backend reconciliation alanları (`AcquirerId`, `TerminalId`, `ResultCode`, `TransactionStatus` vb.) geriye uyumluluk için korundu.
+- Tests:
+  - `PavoRestClientWirePayloadTests`: reference örnek pairing response'un deserialize edilmesi, `ErrorCode` null/0/nonzero senaryoları, `OnayliMi` olmadan başarı, `UseHttps=false` + dolu `HttpsPort` ile HTTP URI kullanımı.
+  - `AgentLocalDevicesPhaseB1Tests`: `GetDeviceInfo` olmadan `PairAsync`, ilk pairing sequence=1, stable fingerprint kullanımı, seri numarası zorunluluğu, `OnayliMi=false` iken başarı, `ErrorCode!=0` iken başarısızlık; eski `Pairing_GetDeviceInfoOlmadan_Reddedilir` testi kaldırıldı.
+  - `AgentLocalDevicesPhaseB2Tests`: seeded pairing fingerprint'in gerçek bir PAVO etkileşiminden sonra stable client fingerprint'e döndüğünü doğrulayan assertion güncellendi.
+- Build/test/manual:
+  - `dotnet build STYS.sln --configuration Release`: başarılı.
+  - `dotnet test STYS.sln --configuration Release`: PAVO/Agent/POS testleri geçti; SQL Server gerektiren integration testler bu ortamda skip edildi (connection string yok).
+  - Gerçek PAVO cihazı/Windows ortamı: bu oturumda **not executed against real PAVO device**.
 - Linux halen acceptance scope dışında.

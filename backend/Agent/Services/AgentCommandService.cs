@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
@@ -664,11 +665,24 @@ public sealed class AgentCommandService
             return;
         }
 
-        device.Fingerprint = response.Fingerprint ?? device.Fingerprint;
+        // The client fingerprint is the agent's own stable, configured value; it must not drift
+        // on every re-pair based on whatever (legacy/diagnostic-only) Fingerprint field the device
+        // happens to echo back. Only fill it in the first time it's missing.
+        if (string.IsNullOrWhiteSpace(device.Fingerprint))
+        {
+            device.Fingerprint = !string.IsNullOrWhiteSpace(response.TransactionHandle.Fingerprint)
+                ? response.TransactionHandle.Fingerprint
+                : response.Fingerprint;
+        }
+
         device.TargetFingerprint = response.TargetFingerprint ?? device.TargetFingerprint;
         device.PairingId = response.PairingId ?? device.PairingId;
         device.PairingCode = response.PairingCode ?? device.PairingCode;
-        device.EslesmeOnayliMi = response.OnayliMi;
+        // This method only runs when the agent already reported command Success = true, which the
+        // agent determines via the reference success criteria (!HasError && !HasAbondon &&
+        // (ErrorCode == null || ErrorCode == 0)) - OnayliMi is not part of that and must not gate
+        // readiness here either.
+        device.EslesmeOnayliMi = true;
         device.SonBaglantiTarihi = DateTime.UtcNow;
     }
 
@@ -760,7 +774,7 @@ public sealed class AgentCommandService
         payment.AcquirerId = response?.Data?.AcquirerId ?? payment.AcquirerId;
         payment.TerminalId = response?.Data?.TerminalId ?? payment.TerminalId;
         payment.MerchantId = response?.Data?.MerchantId ?? payment.MerchantId;
-        payment.PavoResultCode = response?.Data?.ResultCode ?? request.ErrorCode ?? response?.ErrorCode;
+        payment.PavoResultCode = response?.Data?.ResponseCode ?? response?.Data?.ResultCode ?? request.ErrorCode ?? response?.ErrorCode?.ToString(CultureInfo.InvariantCulture);
         payment.PavoMessage = response?.Data?.Message ?? request.ErrorMessage ?? response?.Message;
         payment.RetrievalReferenceNo = response?.Data?.RetrievalReferenceNo ?? payment.RetrievalReferenceNo;
         payment.AcquirerReference = response?.Data?.AcquirerReference ?? payment.AcquirerReference;

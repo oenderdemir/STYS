@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.Sockets;
@@ -45,7 +46,7 @@ public sealed class PavoRestClient : IPavoRestClient
         ValidateRequest(request);
 
         var client = _httpClientFactory.CreateClient("PavoClient");
-        client.Timeout = client.Timeout == Timeout.InfiniteTimeSpan ? TimeSpan.FromSeconds(30) : client.Timeout;
+        client.Timeout = client.Timeout == Timeout.InfiniteTimeSpan ? TimeSpan.FromSeconds(180) : client.Timeout;
 
         var baseUri = BuildBaseUri(request);
         var uri = new Uri(baseUri, method);
@@ -94,8 +95,11 @@ public sealed class PavoRestClient : IPavoRestClient
 
     private static Uri BuildBaseUri(PavoDeviceRequestBase request)
     {
-        var scheme = request.UseHttps || request.HttpsPort.HasValue ? "https" : "http";
-        var port = request.UseHttps || request.HttpsPort.HasValue
+        // UseHttps is the sole source of truth for scheme selection. A device may have an
+        // HttpsPort on file without actually speaking HTTPS, so HttpsPort presence alone must
+        // never flip an HTTP device over to HTTPS.
+        var scheme = request.UseHttps ? "https" : "http";
+        var port = request.UseHttps
             ? request.HttpsPort ?? 4568
             : request.HttpPort ?? 4567;
 
@@ -233,13 +237,13 @@ public sealed class PavoRestClient : IPavoRestClient
     };
 
     private static bool IsBusinessResponse(PavoBaseResponse response) =>
-        response.HasError || response.HasAbondon || !string.IsNullOrWhiteSpace(response.ErrorCode);
+        response.HasError || response.HasAbondon || (response.ErrorCode is not null && response.ErrorCode != 0);
 
     private static string BuildHttpErrorMessage(HttpStatusCode statusCode, PavoBaseResponse response)
     {
         var parts = new List<string> { $"PAVO HTTP {(int)statusCode}" };
-        if (!string.IsNullOrWhiteSpace(response.ErrorCode))
-            parts.Add(response.ErrorCode!);
+        if (response.ErrorCode is not null)
+            parts.Add(response.ErrorCode.Value.ToString(CultureInfo.InvariantCulture));
         if (!string.IsNullOrWhiteSpace(response.Message))
             parts.Add(response.Message!);
         return string.Join(" - ", parts);

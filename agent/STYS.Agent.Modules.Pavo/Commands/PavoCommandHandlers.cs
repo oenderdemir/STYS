@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using STYS.Agent.Client.Commands;
@@ -24,13 +25,13 @@ public sealed class PavoPairingCommandHandler : IAgentCommandHandler<PavoPairing
             _logger.LogInformation("PAVO pairing başlatılıyor: {PosCihaziId}", command.PosCihaziId);
             var response = await _client.PairingAsync(ToRequest(command), cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (response.HasError || response.HasAbondon || !response.OnayliMi)
+            if (!PavoResponseHelpers.IsSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
-                    ErrorCode = response.ErrorCode ?? "PAVO_PAIRING_REJECTED",
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_PAIRING_REJECTED",
                     ErrorMessage = response.Message ?? "PAVO pairing reddedildi."
                 };
             }
@@ -56,7 +57,9 @@ public sealed class PavoPairingCommandHandler : IAgentCommandHandler<PavoPairing
         HttpPort = command.HttpPort,
         HttpsPort = command.HttpsPort,
         UseHttps = command.UseHttps,
-        CurrentFingerprint = command.CurrentFingerprint ?? command.Fingerprint,
+        // The stable client fingerprint always travels on TransactionHandle.Fingerprint (assigned
+        // during command sequence preparation); CurrentFingerprint just mirrors it for diagnostics.
+        CurrentFingerprint = command.TransactionHandle.Fingerprint,
         TransactionHandle = command.TransactionHandle
     };
 }
@@ -80,13 +83,13 @@ public sealed class PavoPingCommandHandler : IAgentCommandHandler<PavoPingComman
             _logger.LogInformation("PAVO ping gönderiliyor: {PosCihaziId}", command.PosCihaziId);
             var response = await _client.PingAsync(ToRequest(command), cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (response.HasError || response.HasAbondon)
+            if (!PavoResponseHelpers.IsSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
-                    ErrorCode = response.ErrorCode ?? "PAVO_PING_FAILED",
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_PING_FAILED",
                     ErrorMessage = response.Message ?? "PAVO ping başarısız."
                 };
             }
@@ -135,13 +138,13 @@ public sealed class PavoGetDeviceInfoCommandHandler : IAgentCommandHandler<PavoG
             _logger.LogInformation("PAVO device info alınuyor: {PosCihaziId}", command.PosCihaziId);
             var response = await _client.GetDeviceInfoAsync(ToRequest(command), cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (response.HasError || response.HasAbondon)
+            if (!PavoResponseHelpers.IsSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
-                    ErrorCode = response.ErrorCode ?? "PAVO_DEVICE_INFO_FAILED",
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_DEVICE_INFO_FAILED",
                     ErrorMessage = response.Message ?? "PAVO device info alınamadı."
                 };
             }
@@ -190,14 +193,14 @@ public sealed class PavoStartPaymentCommandHandler : IAgentCommandHandler<PavoSt
             _logger.LogInformation("PAVO ödeme başlatılıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
             var response = await _client.StartPaymentAsync(ToRequest(command), cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (response.HasAbondon || response.HasError)
+            if (!PavoResponseHelpers.IsSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
-                    ErrorCode = response.ErrorCode ?? response.Data?.ResultCode ?? "PAVO_START_PAYMENT_FAILED",
-                    ErrorMessage = response.Message ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı."
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? response.Data?.ResultCode ?? "PAVO_START_PAYMENT_FAILED",
+                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı."
                 };
             }
 
@@ -251,14 +254,14 @@ public sealed class PavoGetPaymentResultCommandHandler : IAgentCommandHandler<Pa
             _logger.LogInformation("PAVO ödeme sonucu sorgulanıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
             var response = await _client.GetPaymentResultAsync(ToRequest(command), cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (response.HasAbondon || response.HasError)
+            if (!PavoResponseHelpers.IsSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
-                    ErrorCode = response.ErrorCode ?? response.Data?.ResultCode ?? "PAVO_GET_PAYMENT_RESULT_FAILED",
-                    ErrorMessage = response.Message ?? response.Data?.Message ?? "PAVO ödeme sonucu alınamadı."
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? response.Data?.ResultCode ?? "PAVO_GET_PAYMENT_RESULT_FAILED",
+                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "PAVO ödeme sonucu alınamadı."
                 };
             }
 

@@ -124,7 +124,7 @@ builder.Services.AddScoped<HealthCheckCommandHandler>();
 builder.Services.AddScoped<RefreshConfigCommandHandler>();
 builder.Services.AddScoped<AgentStageUpgradeCommandHandler>();
 builder.Services.AddScoped<AgentApplyUpgradeCommandHandler>();
-builder.Services.AddPavoModule();
+builder.Services.AddPavoModule(builder.Configuration);
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()

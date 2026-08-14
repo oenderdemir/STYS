@@ -673,7 +673,10 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         Assert.NotNull(client.LastStartPaymentRequest);
         Assert.Equal(2, client.LastStartPaymentRequest!.TransactionHandle.TransactionSequence);
         Assert.Equal("SN-PAY", client.LastStartPaymentRequest.TransactionHandle.SerialNumber);
-        Assert.Equal("FP-SEED", client.LastStartPaymentRequest.TransactionHandle.Fingerprint);
+        // The seeded "FP-SEED" pairing fingerprint is superseded by the agent's stable, configured
+        // client fingerprint the moment any real PAVO interaction (here: DiscoverTerminalsAsync's
+        // GetDeviceInfo call) runs - fingerprints are never per-device learned values anymore.
+        Assert.Equal("STYS.Agent", client.LastStartPaymentRequest.TransactionHandle.Fingerprint);
         Assert.Equal(125.50m, client.LastStartPaymentRequest.Amount);
         Assert.Equal("TRY", client.LastStartPaymentRequest.CurrencyCode);
         Assert.Equal("TERM-PAY", client.LastStartPaymentRequest.SelectedTerminals?.Single());

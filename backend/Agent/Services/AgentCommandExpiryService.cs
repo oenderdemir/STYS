@@ -247,7 +247,7 @@ public sealed class AgentCommandExpiryService
             var payment = paymentId.HasValue
                 ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
                 : null;
-            if (!shouldRetry && cmd.Status != AgentCommandStatus.Delivered)
+            if (!shouldRetry && !isDelivered)
             {
                 ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
                 if (payment is not null)

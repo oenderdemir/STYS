@@ -1098,7 +1098,8 @@ public sealed class AgentCommandService
     private void NotifyIfNeeded(AgentCommandDto dto)
     {
         if (_notifier is null) return;
-        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(dto, CancellationToken.None); } catch { } });
+        var publicDto = RedactLeaseToken(dto);
+        _ = Task.Run(async () => { try { await _notifier.CommandUpdatedAsync(publicDto, CancellationToken.None); } catch { } });
     }
 
     private static async Task AcquirePollLockAsync(StysAppDbContext db, int agentId, CancellationToken ct)

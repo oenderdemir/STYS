@@ -2200,6 +2200,29 @@ Agent Regression:  0
   - Manual/automatic reconciliation yarışı DB unique guard ile güvenli; sahadaki yüksek eşzamanlılıkta ek telemetry faydalı olabilir.
   - Lease token sadece agent execution path’inde taşınıyor; UI tarafında token gerektiren özel bir debug akışı yok.
 
+### E2C1 Final Fix — 2026-08-14
+
+- Delivered StartPayment expiry:
+  - `AgentCommandExpiryService` artık original `Delivered` durumunu baz alıyor.
+  - Retry hakkı bitse bile Delivered StartPayment için payment state değiştirilmeden `Expired` bırakılıyor.
+  - Delivered timeout sonrası reconciliation command oluşturulmuyor.
+- SignalR lease redaction:
+  - `NotifyIfNeeded` üzerinden giden realtime notification payload'ları merkezi olarak `RedactLeaseToken` ile temizleniyor.
+  - `Accept / Running / Completed / Failed / Rejected` bildirimlerinde `LeaseToken` ve `LeaseExpiresAt` taşınmıyor.
+  - Agent poll kanalında lease token davranışı korunuyor.
+- Sidecar stability:
+  - Schematron sidecar büyük XML limitinde request body’yi bounded-read ile tüketip güvenli `413` dönüyor.
+  - Erken connection reset kaynaklı test flake’i kaldırıldı.
+- Tests:
+  - Delivered StartPayment retry exhausted davranışı, realtime notification redaction ve agent poll lease visibility testleri eklendi/güncellendi.
+  - `dotnet test STYS.sln --configuration Release` bu turda geçti.
+  - Gerçek SQL integration testi için `EBelgeSqlSidecarPreflightTests.SqlServerTestVeriTabaniErisilebilirdir` mevcut ortamda skip oldu; SQL Server test bağlantısı sağlanmadığı için bu doğrulama lokal makinede çalıştırılmadı.
+- Real SQL integration test status:
+  - Lokal ortamda gerçek SQL Server bağlantısı yoktu; ilgili preflight test skip edildi.
+  - Lease fix doğrulaması için full solution testi başarıyla tamamlandı.
+- Known limitations:
+  - SQL-backend entegrasyon doğrulaması için ayrı bir test ortamı gerektiğinde preflight testi tekrar çalıştırılmalı.
+
 ### E2C1 Durable Command Lease & Crash Recovery — 2026-08-13
 
 - Command lease modeli:

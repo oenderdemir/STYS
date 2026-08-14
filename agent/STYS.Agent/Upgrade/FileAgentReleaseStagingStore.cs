@@ -140,12 +140,18 @@ public sealed class FileAgentReleaseStagingStore : IAgentReleaseStagingStore
 
     private static void ReplaceAtomically(string tempPath, string targetPath)
     {
-        if (File.Exists(targetPath))
+        try
         {
-            File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            return;
+            File.Move(tempPath, targetPath, overwrite: true);
         }
+        catch (IOException)
+        {
+            if (File.Exists(targetPath))
+            {
+                try { File.Delete(targetPath); } catch { }
+            }
 
-        File.Move(tempPath, targetPath);
+            File.Move(tempPath, targetPath, overwrite: true);
+        }
     }
 }

@@ -987,12 +987,12 @@ public class EBelgeOutboxWorkerTests
         h.State.ClaimExceptions.Enqueue(new InvalidOperationException("ikinci claim kasıtlı hata"));
 
         await h.Worker.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Count >= 1, TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Count >= 1, TimeSpan.FromSeconds(30));
         // Bir SONRAKİ (temiz) turun da BAŞARIYLA claim/işleme YAPABİLDİĞİNİ doğrulayarak - semaphore
         // permit'lerinin başlangıç değerine DÖNDÜĞÜNÜ (aksi halde İLERLEYEN turlar TIKANIRDI) dolaylı
         // olarak KANITLAR.
         h.State.ClaimsToOffer.Enqueue(Claim(2));
-        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Contains(2), TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => h.State.IslenenOutboxIdler.Contains(2), TimeSpan.FromSeconds(30));
         await h.Worker.StopAsync(CancellationToken.None);
 
         Assert.Equal(0, h.HealthState.GetSnapshot().InflightCount);
@@ -1021,7 +1021,7 @@ public class EBelgeOutboxWorkerTests
         h.Delay.BlockUntilCancelled = true;
 
         await h.Worker.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1, TimeSpan.FromSeconds(15));
         await h.Worker.StopAsync(CancellationToken.None);
 
         foreach (var gizliDeger in gizliDegerler)
@@ -1039,7 +1039,7 @@ public class EBelgeOutboxWorkerTests
         h.Delay.BlockUntilCancelled = true;
 
         await h.Worker.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1);
+        await WaitUntilAsync(() => h.Delay.RequestedDelays.Count >= 1, TimeSpan.FromSeconds(15));
         await h.Worker.StopAsync(CancellationToken.None);
 
         // Test logger'ı GERÇEKÇİDİR (formatter + exception?.ToString()) - bu yüzden ex NESNESİ

@@ -339,34 +339,25 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
     {
         try
         {
-            if (File.Exists(targetPath))
-            {
-                File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                return;
-            }
-
-            File.Move(tempPath, targetPath);
-            return;
+            File.Move(tempPath, targetPath, overwrite: true);
         }
         catch (IOException) when (File.Exists(tempPath))
         {
             if (File.Exists(targetPath))
             {
-                File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                return;
+                try { File.Delete(targetPath); } catch { }
             }
 
-            File.Move(tempPath, targetPath);
+            File.Move(tempPath, targetPath, overwrite: true);
         }
         catch (UnauthorizedAccessException) when (File.Exists(tempPath))
         {
             if (File.Exists(targetPath))
             {
-                File.Replace(tempPath, targetPath, destinationBackupFileName: null, ignoreMetadataErrors: true);
-                return;
+                try { File.Delete(targetPath); } catch { }
             }
 
-            File.Move(tempPath, targetPath);
+            File.Move(tempPath, targetPath, overwrite: true);
         }
     }
 

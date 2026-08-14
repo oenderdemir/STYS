@@ -145,14 +145,6 @@ public final class SidecarMain {
                 return;
             }
 
-            long contentLength = exchange.getRequestHeaders().getFirst("Content-Length") == null
-                    ? -1
-                    : Long.parseLong(exchange.getRequestHeaders().getFirst("Content-Length"));
-            if (contentLength > MAX_BODY_BYTES) {
-                writeJson(exchange, 413, "{\"error\":\"PAYLOAD_TOO_LARGE\"}");
-                return;
-            }
-
             byte[] xmlBytes = readBounded(exchange.getRequestBody(), MAX_BODY_BYTES);
             if (xmlBytes == null) {
                 writeJson(exchange, 413, "{\"error\":\"PAYLOAD_TOO_LARGE\"}");

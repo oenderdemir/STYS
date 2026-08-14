@@ -406,6 +406,35 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task RealtimeNotifications_LeaseTokenVeLeaseExpiresAtTasimaz()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var notifier = new CaptureNotifier();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance, notifier);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+
+        var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "Ping", Priority = 1 }, "test", CancellationToken.None);
+        var leaseToken = (await svc.GetPendingCommandsAsync(agentId, CancellationToken.None)).Single().LeaseToken!;
+
+        await svc.AcceptAsync(cmd.Id, agentId, leaseToken, CancellationToken.None);
+        await svc.SetRunningAsync(cmd.Id, agentId, leaseToken, CancellationToken.None);
+        await svc.CompleteAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest { Id = cmd.Id, Success = true, LeaseToken = leaseToken }, CancellationToken.None);
+
+        Assert.NotEmpty(notifier.Events);
+        Assert.All(notifier.Events, x =>
+        {
+            Assert.Null(x.LeaseToken);
+            Assert.Null(x.LeaseExpiresAt);
+        });
+        Assert.Contains(notifier.Events, x => x.Status == (int)AgentCommandStatus.Accepted);
+        Assert.Contains(notifier.Events, x => x.Status == (int)AgentCommandStatus.Running);
+        Assert.Contains(notifier.Events, x => x.Status == (int)AgentCommandStatus.Completed);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
     public async Task Idempotent_SecondExecuteBlocked()
     {
         var db = await SetupAsync(); if (db is null) return;

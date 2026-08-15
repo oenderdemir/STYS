@@ -238,7 +238,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         return new LocalDevicePaymentTestResult
         {
             DeviceId = device.Id,
-            Success = PavoResponseHelpers.IsPaymentSuccessful(response),
+            Success = PavoResponseHelpers.IsPaymentOperationSuccessful(response),
             Status = response.Data?.StatusText ?? response.Data?.TransactionStatus ?? (response.HasError ? "Failed" : response.HasAbondon ? "Abondoned" : "Unknown"),
             Message = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "Ödeme testi tamamlandı.",
             ErrorCode = response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? response.Data?.ResultCode,
@@ -524,7 +524,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             ct => _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, _pavoFingerprint, sequence), ct),
             cancellationToken);
 
-        if (!PavoResponseHelpers.IsSuccessful(response))
+        if (!PavoResponseHelpers.IsOperationSuccessful(response))
         {
             throw new InvalidOperationException(response.Message ?? response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Cihaz bilgisi alınamadı.");
         }
@@ -665,7 +665,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
                 cancellationToken);
 
             await MarkSuccessfulInteractionAsync(device, cancellationToken);
-            if (!PavoResponseHelpers.IsSuccessful(response))
+            if (!PavoResponseHelpers.IsOperationSuccessful(response))
             {
                 var failureMessage = response.Message ?? response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Pairing başarısız.";
                 await RecordPairingFailureAsync(device, pairingState, failureMessage, now, cancellationToken);

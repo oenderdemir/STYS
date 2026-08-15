@@ -5,22 +5,6 @@ using STYS.Agent.Modules.Pavo;
 
 namespace STYS.Agent.Workers;
 
-public interface IPavoCommandSequenceReservationService
-{
-    /// <summary>Sequence preparation for post-pair commands (Ping/GetDeviceInfo/StartPayment/GetPaymentResult):
-    /// requires the device to already be centrally provisioned and paired.</summary>
-    Task<PavoTransactionHandle> ReserveAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken);
-
-    /// <summary>Sequence preparation for the central PavoPairing (re-pair) command. Deliberately does
-    /// NOT require "already paired"/"already provisioned" - requiring that would make the central
-    /// pairing command unable to ever perform an initial pairing.</summary>
-    Task<PavoTransactionHandle> ReserveForPairingAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken);
-
-    /// <summary>Advances the device's outgoing sequence. Call after a PAVO command whose request
-    /// actually reached the device and produced an HTTP response.</summary>
-    Task AdvanceAsync(int centralPosCihaziId, CancellationToken cancellationToken);
-}
-
 public sealed class PavoCommandSequenceReservationService : IPavoCommandSequenceReservationService
 {
     private readonly ILocalDeviceStore _localDeviceStore;
@@ -102,7 +86,7 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
     private async Task<PavoTransactionHandle> ReserveHandleAsync(LocalDevice device, DateTime? transactionDate, CancellationToken cancellationToken)
     {
         // Peek only. Reference semantics advance the outgoing sequence once the device has actually
-        // answered, so the caller advances via AdvanceAsync after the command completes.
+        // answered; callers advance via AdvanceAsync as soon as the HTTP response is received.
         var sequence = await _pairingStore.PeekOutgoingSequenceAsync(device.Id, cancellationToken);
         return new PavoTransactionHandle
         {

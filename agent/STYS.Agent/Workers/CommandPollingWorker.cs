@@ -154,36 +154,31 @@ public sealed class CommandPollingWorker : BackgroundService
                 case "PavoPairing":
                 {
                     var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), cancellationToken);
-                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
-                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 }
                 case "PavoPing":
                 {
                     var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), cancellationToken);
-                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
-                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 }
                 case "PavoGetDeviceInfo":
                 {
                     var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), cancellationToken);
-                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
-                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 }
                 case "PavoStartPayment":
                 {
                     var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), cancellationToken);
-                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
-                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 }
                 case "PavoGetPaymentResult":
                 {
                     var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken);
-                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
-                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 }
                 case "AgentStageUpgrade":
@@ -211,25 +206,6 @@ public sealed class CommandPollingWorker : BackgroundService
             catch
             {
             }
-        }
-    }
-
-    /// <summary>Applies the reference outgoing-sequence rule to the central command path: advance
-    /// once the device answered, leave the counter alone when the request never reached it.</summary>
-    private async Task AdvancePavoSequenceAsync(int posCihaziId, AgentCommandResult? result, CancellationToken cancellationToken)
-    {
-        if (result is null || PavoTransportErrorCodes.IsNoResponse(result.ErrorCode))
-        {
-            return;
-        }
-
-        try
-        {
-            await _sequenceReservationService.AdvanceAsync(posCihaziId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "PAVO transaction sequence ilerletilemedi: {PosCihaziId}", posCihaziId);
         }
     }
 

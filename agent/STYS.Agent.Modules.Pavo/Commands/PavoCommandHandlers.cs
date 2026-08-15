@@ -3,18 +3,36 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Modules.Pavo;
 
 namespace STYS.Agent.Modules.Pavo.Commands;
+
+internal static class PavoCommandSequenceAdvanceHelper
+{
+    public static Task AdvanceIfNeededAsync(
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        int posCihaziId,
+        bool shouldAdvance,
+        CancellationToken cancellationToken) =>
+        shouldAdvance
+            ? sequenceReservationService.AdvanceAsync(posCihaziId, cancellationToken)
+            : Task.CompletedTask;
+}
 
 public sealed class PavoPairingCommandHandler : IAgentCommandHandler<PavoPairingCommand>
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IPavoRestClient _client;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<PavoPairingCommandHandler> _logger;
 
-    public PavoPairingCommandHandler(IPavoRestClient client, ILogger<PavoPairingCommandHandler> logger)
+    public PavoPairingCommandHandler(
+        IPavoRestClient client,
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        ILogger<PavoPairingCommandHandler> logger)
     {
         _client = client;
+        _sequenceReservationService = sequenceReservationService;
         _logger = logger;
     }
 
@@ -24,28 +42,37 @@ public sealed class PavoPairingCommandHandler : IAgentCommandHandler<PavoPairing
         {
             _logger.LogInformation("PAVO pairing başlatılıyor: {PosCihaziId}", command.PosCihaziId);
             var response = await _client.PairingAsync(ToRequest(command), cancellationToken);
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, response.HttpResponseReceived, cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (!PavoResponseHelpers.IsSuccessful(response))
+            if (!PavoResponseHelpers.IsOperationSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
                     ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_PAIRING_REJECTED",
-                    ErrorMessage = response.Message ?? "PAVO pairing reddedildi."
+                    ErrorMessage = response.Message ?? response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO pairing reddedildi.",
+                    HttpResponseReceived = response.HttpResponseReceived
                 };
             }
 
-            return AgentCommandResult.Ok(payload);
+            return new AgentCommandResult
+            {
+                Success = true,
+                ResultPayload = payload,
+                HttpResponseReceived = response.HttpResponseReceived
+            };
         }
         catch (PavoRestClientException ex)
         {
             _logger.LogWarning(ex, "PAVO pairing transport error");
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, ex.HttpResponseReceived, cancellationToken);
             return new AgentCommandResult
             {
                 Success = false,
                 ErrorCode = ex.ErrorCode,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                HttpResponseReceived = ex.HttpResponseReceived
             };
         }
     }
@@ -68,11 +95,16 @@ public sealed class PavoPingCommandHandler : IAgentCommandHandler<PavoPingComman
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IPavoRestClient _client;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<PavoPingCommandHandler> _logger;
 
-    public PavoPingCommandHandler(IPavoRestClient client, ILogger<PavoPingCommandHandler> logger)
+    public PavoPingCommandHandler(
+        IPavoRestClient client,
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        ILogger<PavoPingCommandHandler> logger)
     {
         _client = client;
+        _sequenceReservationService = sequenceReservationService;
         _logger = logger;
     }
 
@@ -82,28 +114,37 @@ public sealed class PavoPingCommandHandler : IAgentCommandHandler<PavoPingComman
         {
             _logger.LogInformation("PAVO ping gönderiliyor: {PosCihaziId}", command.PosCihaziId);
             var response = await _client.PingAsync(ToRequest(command), cancellationToken);
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, response.HttpResponseReceived, cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (!PavoResponseHelpers.IsSuccessful(response))
+            if (!PavoResponseHelpers.IsOperationSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
                     ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_PING_FAILED",
-                    ErrorMessage = response.Message ?? "PAVO ping başarısız."
+                    ErrorMessage = response.Message ?? response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO ping başarısız.",
+                    HttpResponseReceived = response.HttpResponseReceived
                 };
             }
 
-            return AgentCommandResult.Ok(payload);
+            return new AgentCommandResult
+            {
+                Success = true,
+                ResultPayload = payload,
+                HttpResponseReceived = response.HttpResponseReceived
+            };
         }
         catch (PavoRestClientException ex)
         {
             _logger.LogWarning(ex, "PAVO ping transport error");
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, ex.HttpResponseReceived, cancellationToken);
             return new AgentCommandResult
             {
                 Success = false,
                 ErrorCode = ex.ErrorCode,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                HttpResponseReceived = ex.HttpResponseReceived
             };
         }
     }
@@ -123,11 +164,16 @@ public sealed class PavoGetDeviceInfoCommandHandler : IAgentCommandHandler<PavoG
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IPavoRestClient _client;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<PavoGetDeviceInfoCommandHandler> _logger;
 
-    public PavoGetDeviceInfoCommandHandler(IPavoRestClient client, ILogger<PavoGetDeviceInfoCommandHandler> logger)
+    public PavoGetDeviceInfoCommandHandler(
+        IPavoRestClient client,
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        ILogger<PavoGetDeviceInfoCommandHandler> logger)
     {
         _client = client;
+        _sequenceReservationService = sequenceReservationService;
         _logger = logger;
     }
 
@@ -137,28 +183,37 @@ public sealed class PavoGetDeviceInfoCommandHandler : IAgentCommandHandler<PavoG
         {
             _logger.LogInformation("PAVO device info alınuyor: {PosCihaziId}", command.PosCihaziId);
             var response = await _client.GetDeviceInfoAsync(ToRequest(command), cancellationToken);
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, response.HttpResponseReceived, cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (!PavoResponseHelpers.IsSuccessful(response))
+            if (!PavoResponseHelpers.IsOperationSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
                     ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_DEVICE_INFO_FAILED",
-                    ErrorMessage = response.Message ?? "PAVO device info alınamadı."
+                    ErrorMessage = response.Message ?? response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO device info alınamadı.",
+                    HttpResponseReceived = response.HttpResponseReceived
                 };
             }
 
-            return AgentCommandResult.Ok(payload);
+            return new AgentCommandResult
+            {
+                Success = true,
+                ResultPayload = payload,
+                HttpResponseReceived = response.HttpResponseReceived
+            };
         }
         catch (PavoRestClientException ex)
         {
             _logger.LogWarning(ex, "PAVO device info transport error");
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, ex.HttpResponseReceived, cancellationToken);
             return new AgentCommandResult
             {
                 Success = false,
                 ErrorCode = ex.ErrorCode,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                HttpResponseReceived = ex.HttpResponseReceived
             };
         }
     }
@@ -178,11 +233,16 @@ public sealed class PavoStartPaymentCommandHandler : IAgentCommandHandler<PavoSt
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IPavoRestClient _client;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<PavoStartPaymentCommandHandler> _logger;
 
-    public PavoStartPaymentCommandHandler(IPavoRestClient client, ILogger<PavoStartPaymentCommandHandler> logger)
+    public PavoStartPaymentCommandHandler(
+        IPavoRestClient client,
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        ILogger<PavoStartPaymentCommandHandler> logger)
     {
         _client = client;
+        _sequenceReservationService = sequenceReservationService;
         _logger = logger;
     }
 
@@ -192,31 +252,40 @@ public sealed class PavoStartPaymentCommandHandler : IAgentCommandHandler<PavoSt
         {
             _logger.LogInformation("PAVO ödeme başlatılıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
             var response = await _client.StartPaymentAsync(ToRequest(command), cancellationToken);
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, response.HttpResponseReceived, cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
             // Reference StartPayment success is stricter than the common envelope check: the payment
             // itself must report Data.IsSuccessful. A clean envelope with a declined payment is a
             // failed command.
-            if (!PavoResponseHelpers.IsPaymentSuccessful(response))
+            if (!PavoResponseHelpers.IsPaymentOperationSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
                     ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? response.Data?.ResponseCode ?? response.Data?.ResultCode ?? "PAVO_START_PAYMENT_FAILED",
-                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.CevapAciklama ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı."
+                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.CevapAciklama ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı.",
+                    HttpResponseReceived = response.HttpResponseReceived
                 };
             }
 
-            return AgentCommandResult.Ok(payload);
+            return new AgentCommandResult
+            {
+                Success = true,
+                ResultPayload = payload,
+                HttpResponseReceived = response.HttpResponseReceived
+            };
         }
         catch (PavoRestClientException ex)
         {
             _logger.LogWarning(ex, "PAVO start payment transport error");
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, ex.HttpResponseReceived, cancellationToken);
             return new AgentCommandResult
             {
                 Success = false,
                 ErrorCode = ex.ErrorCode,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                HttpResponseReceived = ex.HttpResponseReceived
             };
         }
     }
@@ -242,11 +311,16 @@ public sealed class PavoGetPaymentResultCommandHandler : IAgentCommandHandler<Pa
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IPavoRestClient _client;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
     private readonly ILogger<PavoGetPaymentResultCommandHandler> _logger;
 
-    public PavoGetPaymentResultCommandHandler(IPavoRestClient client, ILogger<PavoGetPaymentResultCommandHandler> logger)
+    public PavoGetPaymentResultCommandHandler(
+        IPavoRestClient client,
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        ILogger<PavoGetPaymentResultCommandHandler> logger)
     {
         _client = client;
+        _sequenceReservationService = sequenceReservationService;
         _logger = logger;
     }
 
@@ -256,28 +330,37 @@ public sealed class PavoGetPaymentResultCommandHandler : IAgentCommandHandler<Pa
         {
             _logger.LogInformation("PAVO ödeme sonucu sorgulanıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
             var response = await _client.GetPaymentResultAsync(ToRequest(command), cancellationToken);
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, response.HttpResponseReceived, cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (!PavoResponseHelpers.IsSuccessful(response))
+            if (!PavoResponseHelpers.IsOperationSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
                     ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? response.Data?.ResultCode ?? "PAVO_GET_PAYMENT_RESULT_FAILED",
-                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "PAVO ödeme sonucu alınamadı."
+                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "PAVO ödeme sonucu alınamadı.",
+                    HttpResponseReceived = response.HttpResponseReceived
                 };
             }
 
-            return AgentCommandResult.Ok(payload);
+            return new AgentCommandResult
+            {
+                Success = true,
+                ResultPayload = payload,
+                HttpResponseReceived = response.HttpResponseReceived
+            };
         }
         catch (PavoRestClientException ex)
         {
             _logger.LogWarning(ex, "PAVO get payment result transport error");
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, ex.HttpResponseReceived, cancellationToken);
             return new AgentCommandResult
             {
                 Success = false,
                 ErrorCode = ex.ErrorCode,
-                ErrorMessage = ex.Message
+                ErrorMessage = ex.Message,
+                HttpResponseReceived = ex.HttpResponseReceived
             };
         }
     }

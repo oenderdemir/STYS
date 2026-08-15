@@ -221,6 +221,16 @@ public abstract class PavoBaseResponse
     /// <summary>Nullable to preserve the reference distinction between "Errors was absent from the
     /// response" and "Errors was an empty array".</summary>
     public List<string>? Errors { get; set; }
+
+    /// <summary>Internal transport metadata. This is not serialized and does not belong to the
+    /// PAVO wire contract.</summary>
+    [JsonIgnore]
+    public bool HttpSuccess { get; set; } = true;
+
+    /// <summary>True when the HTTP response was actually received, even if the body later failed
+    /// to read or parse.</summary>
+    [JsonIgnore]
+    public bool HttpResponseReceived { get; set; } = true;
 }
 
 public static class PavoResponseHelpers
@@ -232,10 +242,19 @@ public static class PavoResponseHelpers
     public static bool IsSuccessful(PavoBaseResponse response) =>
         !response.HasError && !response.HasAbondon && (response.ErrorCode is null || response.ErrorCode == 0);
 
+    /// <summary>Transport-aware operation success: the PAVO envelope must be successful and the
+    /// HTTP status must be 2xx.</summary>
+    public static bool IsOperationSuccessful(PavoBaseResponse response) =>
+        response.HttpSuccess && IsSuccessful(response);
+
     /// <summary>Reference StartPayment success semantics: common success AND Data is present AND
     /// Data.IsSuccessful. A payment that merely returns a clean envelope is NOT a successful payment.</summary>
     public static bool IsPaymentSuccessful(PavoPaymentResponseBase response) =>
         IsSuccessful(response) && response.Data is not null && response.Data.IsSuccessful;
+
+    /// <summary>Transport-aware payment success.</summary>
+    public static bool IsPaymentOperationSuccessful(PavoPaymentResponseBase response) =>
+        IsOperationSuccessful(response) && response.Data is not null && response.Data.IsSuccessful;
 }
 
 public sealed class PavoPairingResponse : PavoBaseResponse

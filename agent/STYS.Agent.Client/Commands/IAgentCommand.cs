@@ -7,6 +7,7 @@ public sealed class AgentCommandResult
     public string? ErrorCode { get; set; }
     public string? ErrorMessage { get; set; }
     public bool DeferCompletion { get; set; }
+    public bool HttpResponseReceived { get; set; }
 
     public static AgentCommandResult Ok(string? resultPayload = null, bool deferCompletion = false) => new() { Success = true, ResultPayload = resultPayload, DeferCompletion = deferCompletion };
     public static AgentCommandResult Fail(string errorMessage, string? errorCode = null, bool deferCompletion = false) => new() { Success = false, ErrorMessage = errorMessage, ErrorCode = errorCode, DeferCompletion = deferCompletion };

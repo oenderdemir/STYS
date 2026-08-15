@@ -249,6 +249,46 @@ public sealed class PavoReferenceGoldenContractTests
         Assert.True(ex.HttpResponseReceived);
     }
 
+    [Fact]
+    public async Task G2_ResponseBodyOkumaHatasi_HttpResponseReceivedSayilir()
+    {
+        var handler = new BodyThrowingHandler();
+        var client = CreateClient(handler);
+
+        var ex = await Assert.ThrowsAsync<PavoRestClientException>(
+            () => client.PairingAsync(BuildPairingRequest(), CancellationToken.None));
+
+        Assert.Equal("BODY_READ_FAILED", ex.ErrorCode);
+        Assert.True(ex.HttpResponseReceived);
+    }
+
+    [Fact]
+    public async Task G3_Non2xx_ResponseBody_MutasyonaUgramaz_veOperationBasarisizdir()
+    {
+        const string body = """
+        {
+          "HasAbondon": false,
+          "HasError": false,
+          "ErrorCode": 0,
+          "Message": "DEVICE MESSAGE"
+        }
+        """;
+
+        var handler = new StatusCodeHandler(HttpStatusCode.InternalServerError, body);
+        var client = CreateClient(handler);
+
+        var response = await client.PairingAsync(BuildPairingRequest(), CancellationToken.None);
+
+        Assert.False(response.HasError);
+        Assert.False(response.HasAbondon);
+        Assert.Equal(0, response.ErrorCode);
+        Assert.Equal("DEVICE MESSAGE", response.Message);
+        Assert.False(response.HttpSuccess);
+        Assert.True(response.HttpResponseReceived);
+        Assert.False(PavoResponseHelpers.IsOperationSuccessful(response));
+        Assert.True(PavoResponseHelpers.IsSuccessful(response));
+    }
+
     // ------------------------------------- H. Response sequence never drives request sequence
 
     [Fact]
@@ -720,6 +760,57 @@ public sealed class PavoReferenceGoldenContractTests
                 Content = new StringContent(ResponseBody, Encoding.UTF8, "application/json")
             };
         }
+    }
+
+    private sealed class StatusCodeHandler : HttpMessageHandler
+    {
+        private readonly HttpStatusCode _statusCode;
+        private readonly string _responseBody;
+
+        public StatusCodeHandler(HttpStatusCode statusCode, string responseBody)
+        {
+            _statusCode = statusCode;
+            _responseBody = responseBody;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            _ = request;
+            await Task.CompletedTask;
+            return new HttpResponseMessage(_statusCode)
+            {
+                Content = new StringContent(_responseBody, Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    private sealed class BodyThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            _ = request;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new ThrowingReadStream())
+            });
+        }
+    }
+
+    private sealed class ThrowingReadStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count) => throw new IOException("Simulated read failure.");
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override int Read(Span<byte> buffer) => throw new IOException("Simulated read failure.");
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<int>(new IOException("Simulated read failure."));
     }
 
     private sealed class ThrowingHandler : HttpMessageHandler

@@ -121,7 +121,12 @@ public sealed class PavoRestClient : IPavoRestClient
         HttpResponseMessage response;
         try
         {
-            response = await client.PostAsync(uri, JsonContent.Create(wireRequest, wireRequest.GetType(), options: JsonOptions), cancellationToken);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri)
+            {
+                Content = JsonContent.Create(wireRequest, wireRequest.GetType(), options: JsonOptions)
+            };
+
+            response = await client.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -142,7 +147,27 @@ public sealed class PavoRestClient : IPavoRestClient
 
         using (response)
         {
-            var body = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync(cancellationToken);
+            string body;
+            try
+            {
+                body = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync(cancellationToken);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new PavoRestClientException(
+                    "BODY_READ_FAILED",
+                    $"PAVO yanıt gövdesi okunamadı (HTTP {(int)response.StatusCode}).",
+                    httpResponseReceived: true,
+                    ex);
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException)
+            {
+                throw new PavoRestClientException(
+                    "BODY_READ_FAILED",
+                    $"PAVO yanıt gövdesi okunamadı (HTTP {(int)response.StatusCode}).",
+                    httpResponseReceived: true,
+                    ex);
+            }
 
             _logger.LogDebug(
                 "PAVO yanıtı alındı. Endpoint={Endpoint}, HttpStatus={HttpStatus}, BodyLength={BodyLength}",
@@ -176,15 +201,8 @@ public sealed class PavoRestClient : IPavoRestClient
             }
 
             var result = MapToDomain<TResponse>(wireResponse);
-
-            // Reference: commonSuccess requires response.IsSuccessStatusCode. Surfacing the parsed
-            // detail while forcing HasError keeps the diagnostics without ever letting a non-2xx
-            // read as success.
-            if (!response.IsSuccessStatusCode)
-            {
-                result.HasError = true;
-                result.Message ??= response.ReasonPhrase;
-            }
+            result.HttpResponseReceived = true;
+            result.HttpSuccess = response.IsSuccessStatusCode;
 
             _logger.LogDebug(
                 "PAVO yanıtı ayrıştırıldı. Endpoint={Endpoint}, HasError={HasError}, HasAbondon={HasAbondon}, ErrorCode={ErrorCode}",

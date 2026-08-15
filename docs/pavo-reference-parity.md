@@ -33,7 +33,7 @@ layer by an explicit mapper in `PavoRestClient`. No STYS-specific field ever rea
 | `Errors` | `List<string>?` (nullable) | `List<string>?` (nullable — absent vs. empty preserved) | NONE |
 | Response `TransactionHandle` | `TransactionHandle?` (nullable) | nullable; treated as remote/device metadata only | NONE |
 | Response TransactionHandle semantics | never written back into request state | never written back; outgoing fingerprint and sequence are owned by the client | NONE |
-| Sequence increment semantics | `_transactionSequence++` after **any** HTTP response | advance after any HTTP response (`PavoRestClientException.HttpResponseReceived`) | NONE |
+| Sequence increment semantics | `_transactionSequence++` after **any** HTTP response | advance when an HTTP response is received, independent of backend command completion | NONE |
 | Pair retry after HTTP response (business error or non-2xx) | next attempt uses sequence + 1 | same | NONE |
 | Pair retry after network failure / timeout | next attempt reuses the same sequence | same | NONE |
 | StartPayment request | `{ "TransactionHandle": {...}, "Payment": {...} }` | identical shape, property set, casing and nesting | NONE |
@@ -48,7 +48,7 @@ layer by an explicit mapper in `PavoRestClient`. No STYS-specific field ever rea
 | Payment response types | `transactionNo`/`batchNo` `long?`, `resultStatus` `int?`, `resultDate` `string?` | identical types | NONE |
 | Payment success criteria | commonSuccess **and** `Data != null` **and** `Data.IsSuccessful` | `PavoResponseHelpers.IsPaymentSuccessful` enforces all three | NONE |
 | Empty / malformed / null-parsed body | not success | hard failure (`EMPTY_RESPONSE` / `INVALID_RESPONSE`) | NONE |
-| HTTP non-2xx | not success | forced `HasError = true`, so it can never read as success | NONE |
+| HTTP non-2xx | not success | transport failure at the operation level; the parsed device envelope is preserved unchanged | NONE |
 | PerformEOD | `POST /PerformEOD`, nested `PerformEOD.AdditionalInfo` | implemented, wire shape identical | NONE |
 | RebootDevice | `POST /RebootDevice`, handle only | implemented, wire shape identical | NONE |
 | EnterPinMode | `POST /EnterPinMode`, handle only | implemented, wire shape identical | NONE |
@@ -82,6 +82,7 @@ enforced for them:
 - They never alter pairing semantics.
 - They never overwrite the client fingerprint from a response.
 - They never write a response sequence into request state.
+- They treat HTTP transport success separately from device envelope success, so a non-2xx response does not mutate the parsed device body.
 - Before a device has ever been paired, `GetDeviceInfo` borrows the current sequence **without**
   advancing it, so a pre-pair diagnostic can never push the initial Pairing off sequence 1.
 

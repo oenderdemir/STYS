@@ -598,10 +598,12 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
 
         // GetDeviceInfo is no longer a pairing prerequisite: the reference flow pairs first, using
         // our own stable client fingerprint, then calls GetDeviceInfo. pairingState may legitimately
-        // be null/NotPaired here (e.g. the very first pairing attempt for a brand-new device), in
-        // which case the transaction sequence store naturally reserves sequence 1.
+        // be null/NotPaired here (e.g. the very first pairing attempt for a brand-new device).
+        // ReservePairingSequenceAsync (rather than the generic reservation) ensures that pre-pair
+        // diagnostic calls (GetDeviceInfo, etc.) never consume the initial pairing's sequence: it
+        // stays 1 until this device has actually been paired successfully.
         var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
-        var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
+        var reserved = await _pairingStore.ReservePairingSequenceAsync(device.Id, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var request = BuildPairingRequest(device, _pavoFingerprint, reserved.TransactionSequence);
 

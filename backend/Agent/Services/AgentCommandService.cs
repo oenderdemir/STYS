@@ -665,14 +665,13 @@ public sealed class AgentCommandService
             return;
         }
 
-        // The client fingerprint is the agent's own stable, configured value; it must not drift
-        // on every re-pair based on whatever (legacy/diagnostic-only) Fingerprint field the device
-        // happens to echo back. Only fill it in the first time it's missing.
-        if (string.IsNullOrWhiteSpace(device.Fingerprint))
+        // The client fingerprint is the agent's own stable, configured value; it must not drift on
+        // every re-pair based on whatever the device happens to echo back. TransactionHandle.Fingerprint
+        // is the source of truth (it's literally what the agent sent); the legacy top-level
+        // response.Fingerprint field is not used at all. Only fill it in the first time it's missing.
+        if (string.IsNullOrWhiteSpace(device.Fingerprint) && !string.IsNullOrWhiteSpace(response.TransactionHandle.Fingerprint))
         {
-            device.Fingerprint = !string.IsNullOrWhiteSpace(response.TransactionHandle.Fingerprint)
-                ? response.TransactionHandle.Fingerprint
-                : response.Fingerprint;
+            device.Fingerprint = response.TransactionHandle.Fingerprint;
         }
 
         device.TargetFingerprint = response.TargetFingerprint ?? device.TargetFingerprint;
@@ -717,7 +716,9 @@ public sealed class AgentCommandService
             return;
         }
 
-        device.Fingerprint = response.Fingerprint ?? device.Fingerprint;
+        // device.Fingerprint is the agent's stable client fingerprint (see ApplyPavoPairingResult);
+        // GetDeviceInfo's response.Fingerprint is a legacy/diagnostic device echo and must never
+        // overwrite it. TargetFingerprint has no such conflict and stays diagnostic metadata.
         device.TargetFingerprint = response.TargetFingerprint ?? device.TargetFingerprint;
         device.SonBaglantiTarihi = DateTime.UtcNow;
 

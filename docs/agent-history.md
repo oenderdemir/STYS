@@ -2453,3 +2453,25 @@ Agent Regression:  0
   - `dotnet test STYS.sln --configuration Release`: PAVO/Agent/POS testleri geçti; SQL Server gerektiren integration testler bu ortamda skip edildi (connection string yok).
   - Gerçek PAVO cihazı/Windows ortamı: bu oturumda **not executed against real PAVO device**.
 - Linux halen acceptance scope dışında.
+
+#### Final Follow-up — 2026-08-15
+
+- Pre-pair GetDeviceInfo no longer consumes initial pairing sequence:
+  - `IPavoLocalPairingStore.ReservePairingSequenceAsync` eklendi: cihaz henüz başarıyla pair edilmemişse (`PairingStatus != Paired`) TransactionSequence her zaman `1` olarak set edilir — daha önceki GetDeviceInfo/diagnostic çağrılarının store'da ilerlettiği sayaçtan bağımsız.
+  - `LocalDeviceManagementService.PairAsync` artık genel `ReserveNextTransactionSequenceAsync` yerine bu metodu kullanıyor.
+- Initial pairing remains sequence 1 until successfully paired:
+  - `Local device create → GetDeviceInfo (seq 1) → Pair` akışında Pair isteği artık `TransactionSequence == 1` ile gidiyor (önceden 2 oluyordu).
+  - Başarısız ilk pairing sonrası retry de aynı şekilde `TransactionSequence == 1` ile devam ediyor (aynı mekanizma, ekstra özel durum kodu gerekmedi).
+- Successful re-pair keeps monotonic sequence:
+  - `PairingStatus == Paired` olan bir cihazda (force re-pair) `ReservePairingSequenceAsync` normal monotonik rezervasyon gibi davranıyor; sequence asla 1'e resetlenmiyor.
+- Central GetDeviceInfo no longer overwrites client fingerprint:
+  - `AgentCommandService.ApplyPavoGetDeviceInfoResult` içindeki `device.Fingerprint = response.Fingerprint ?? device.Fingerprint;` satırı tamamen kaldırıldı; `TargetFingerprint` güncellemesi diagnostic metadata olarak korundu.
+  - `ApplyPavoPairingResult` sadeleştirildi: client fingerprint kaynağı yalnızca `response.TransactionHandle.Fingerprint` (agent'ın gönderdiği stabil değerin echo'su); legacy top-level `response.Fingerprint` fallback'i kaldırıldı.
+- Tests (minimum, 3 senaryo):
+  - `AgentLocalDevicesPhaseB1Tests.PairAsync_PrePairGetDeviceInfo_IlkPairingSequenceBirdirKalir`
+  - `AgentLocalDevicesPhaseB1Tests.PairAsync_BasariliPairingSonrasi_ForceRePairSequenceArtarVeResetlenmez`
+  - `PosYonetimiIntegrationTests.PavoGetDeviceInfoCompletion_TerminalDiscoveryYaparVeHesabiKorumayaDevamEder` güncellendi: initial `device.Fingerprint = "STYS.Agent"`, response `Fingerprint = "DEVICE-FP"` → sonuç `device.Fingerprint == "STYS.Agent"` (değişmedi).
+- Build/test:
+  - `dotnet build STYS.sln --configuration Release`: başarılı.
+  - `dotnet test STYS.sln --configuration Release`: tüm çalışan testler geçti; SQL Server gerektiren integration testler (yukarıdaki `PosYonetimiIntegrationTests` güncellemesi dahil) bu ortamda skip edildi (connection string yok) — açıkça raporlanıyor, fake başarı yazılmadı.
+  - Gerçek PAVO cihazı: bu oturumda **not executed against real PAVO device**.

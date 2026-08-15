@@ -419,7 +419,9 @@ public sealed class PosYonetimiIntegrationTests
         var device = await db.PosCihazlari.FirstAsync(x => x.Id == fixture.DeviceId);
         device.IpAdresi = "127.0.0.1";
         device.HttpPort = 4567;
-        device.Fingerprint = "FP-DEVICE";
+        // Simulates the agent's stable client fingerprint already recorded centrally (e.g. via
+        // RegisterFromAgentAsync). GetDeviceInfo must never overwrite it with the device's echo.
+        device.Fingerprint = "STYS.Agent";
         await db.SaveChangesAsync();
 
         var terminal = new PosTerminal
@@ -452,7 +454,7 @@ public sealed class PosYonetimiIntegrationTests
 
         var response = new PavoGetDeviceInfoResponse
         {
-            Fingerprint = "FP-NEW",
+            Fingerprint = "DEVICE-FP",
             TargetFingerprint = "TFP-NEW",
             Terminals =
             [
@@ -476,7 +478,9 @@ public sealed class PosYonetimiIntegrationTests
 
         await using var verifyDb = AgentTestSupport.CreateDbContext(cs);
         var updatedDevice = await verifyDb.PosCihazlari.AsNoTracking().SingleAsync(x => x.Id == fixture.DeviceId);
-        Assert.Equal("FP-NEW", updatedDevice.Fingerprint);
+        // GetDeviceInfo's response.Fingerprint is a legacy/diagnostic device echo, not the client
+        // identity - it must never overwrite the central, stable client fingerprint.
+        Assert.Equal("STYS.Agent", updatedDevice.Fingerprint);
         Assert.Equal("TFP-NEW", updatedDevice.TargetFingerprint);
         Assert.NotNull(updatedDevice.SonBaglantiTarihi);
 

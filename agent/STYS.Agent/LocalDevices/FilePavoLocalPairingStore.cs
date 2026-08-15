@@ -103,6 +103,41 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         }
     }
 
+    public async Task<PavoLocalPairingState> ReservePairingSequenceAsync(string deviceId, CancellationToken cancellationToken)
+    {
+        var normalizedId = NormalizeId(deviceId) ?? throw new InvalidOperationException("Cihaz ID zorunludur.");
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var items = await ReadAllCoreAsync(cancellationToken);
+            if (!items.TryGetValue(normalizedId, out var state))
+            {
+                state = new PavoLocalPairingState
+                {
+                    DeviceId = normalizedId,
+                    PairingStatus = LocalDevicePairingStatus.NotPaired
+                };
+            }
+
+            // Pre-pair diagnostic calls (GetDeviceInfo, etc.) may have already advanced the stored
+            // counter; a device that has never been successfully paired must still see sequence 1
+            // on every Pairing attempt (including retries after a failed pairing). Only once paired
+            // does Pairing behave like a normal monotonic reservation (force re-pair).
+            state.TransactionSequence = state.PairingStatus == LocalDevicePairingStatus.Paired
+                ? Math.Max(0, state.TransactionSequence) + 1
+                : 1;
+            state.UpdatedAt = DateTimeOffset.UtcNow;
+            items[normalizedId] = state;
+            await WriteAllCoreAsync(items, cancellationToken);
+            return Clone(state);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task DeleteAsync(string deviceId, CancellationToken cancellationToken)
     {
         var normalized = NormalizeId(deviceId) ?? throw new InvalidOperationException("Cihaz ID zorunludur.");

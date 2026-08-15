@@ -143,6 +143,68 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     }
 
     [Fact]
+    public async Task PairAsync_PrePairGetDeviceInfo_IlkPairingSequenceBirdirKalir()
+    {
+        // GetDeviceInfo before the device has ever been paired must not consume the sequence
+        // number that the initial Pairing request needs (reference protocol requires 1).
+        var client = new FakePavoRestClient
+        {
+            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
+            {
+                DeviceName = "PAVO Seed",
+                SerialNumber = "SN-LOCAL"
+            },
+            PairingResponse = new PavoPairingResponse
+            {
+                HasError = false,
+                HasAbondon = false
+            }
+        };
+        var service = CreateService(client);
+        var device = await CreateSavedDeviceAsync(service);
+
+        await service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
+        Assert.Equal(1, client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence);
+
+        var updated = await service.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
+
+        Assert.Equal(LocalDevicePairingStatus.Paired, updated.PairingStatus);
+        Assert.Equal(1, client.LastPairingRequest?.TransactionHandle.TransactionSequence);
+    }
+
+    [Fact]
+    public async Task PairAsync_BasariliPairingSonrasi_ForceRePairSequenceArtarVeResetlenmez()
+    {
+        var client = new FakePavoRestClient
+        {
+            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
+            {
+                DeviceName = "PAVO Seed",
+                SerialNumber = "SN-LOCAL"
+            },
+            PairingResponse = new PavoPairingResponse
+            {
+                HasError = false,
+                HasAbondon = false
+            }
+        };
+        var service = CreateService(client);
+        var device = await CreateSavedDeviceAsync(service);
+
+        await service.PairAsync(device.Id, forceRePair: false, CancellationToken.None);
+        Assert.Equal(1, client.LastPairingRequest?.TransactionHandle.TransactionSequence);
+
+        await service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
+        Assert.Equal(2, client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence);
+
+        var repaired = await service.PairAsync(device.Id, forceRePair: true, CancellationToken.None);
+
+        Assert.Equal(LocalDevicePairingStatus.Paired, repaired.PairingStatus);
+        // A device that was already successfully paired must never see its sequence reset back to 1.
+        Assert.Equal(3, client.LastPairingRequest?.TransactionHandle.TransactionSequence);
+    }
+
+    [Fact]
     public async Task PairAsync_OnayliMiFalseAmaBaseKriterUyuyorsaBasarilidir()
     {
         var client = new FakePavoRestClient

@@ -15,6 +15,10 @@ public interface IPavoCommandSequenceReservationService
     /// NOT require "already paired"/"already provisioned" - requiring that would make the central
     /// pairing command unable to ever perform an initial pairing.</summary>
     Task<PavoTransactionHandle> ReserveForPairingAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken);
+
+    /// <summary>Advances the device's outgoing sequence. Call after a PAVO command whose request
+    /// actually reached the device and produced an HTTP response.</summary>
+    Task AdvanceAsync(int centralPosCihaziId, CancellationToken cancellationToken);
 }
 
 public sealed class PavoCommandSequenceReservationService : IPavoCommandSequenceReservationService
@@ -84,14 +88,27 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
         return device;
     }
 
+    public async Task AdvanceAsync(int centralPosCihaziId, CancellationToken cancellationToken)
+    {
+        var device = await _localDeviceStore.GetByCentralPosCihaziIdAsync(centralPosCihaziId, cancellationToken);
+        if (device is null)
+        {
+            return;
+        }
+
+        await _pairingStore.AdvanceOutgoingSequenceAsync(device.Id, cancellationToken);
+    }
+
     private async Task<PavoTransactionHandle> ReserveHandleAsync(LocalDevice device, DateTime? transactionDate, CancellationToken cancellationToken)
     {
-        var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
+        // Peek only. Reference semantics advance the outgoing sequence once the device has actually
+        // answered, so the caller advances via AdvanceAsync after the command completes.
+        var sequence = await _pairingStore.PeekOutgoingSequenceAsync(device.Id, cancellationToken);
         return new PavoTransactionHandle
         {
             SerialNumber = device.SerialNumber ?? string.Empty,
             Fingerprint = _pavoFingerprint,
-            TransactionSequence = reserved.TransactionSequence,
+            TransactionSequence = sequence,
             TransactionDate = transactionDate ?? DateTime.Now
         };
     }

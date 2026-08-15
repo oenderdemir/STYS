@@ -2475,3 +2475,35 @@ Agent Regression:  0
   - `dotnet build STYS.sln --configuration Release`: başarılı.
   - `dotnet test STYS.sln --configuration Release`: tüm çalışan testler geçti; SQL Server gerektiren integration testler (yukarıdaki `PosYonetimiIntegrationTests` güncellemesi dahil) bu ortamda skip edildi (connection string yok) — açıkça raporlanıyor, fake başarı yazılmadı.
   - Gerçek PAVO cihazı: bu oturumda **not executed against real PAVO device**.
+
+### PAVO 509 Exact Reference Parity — 2026-08-15
+
+`pavo.rar` içindeki çalışan `Pavo509.Client` projesi extract edilip source of truth kabul edildi; wire contract ve runtime semantics birebir hizalandı. Ayrıntılı parity tablosu: `docs/pavo-reference-parity.md`.
+
+- Wire/domain ayrımı:
+  - `PavoWireDtos.cs` artık referans `Models/*.cs` ile 1:1 (property, JSON adı, nesting, tip, nullability, default). STYS domain DTO'ları ayrı; aralarındaki geçiş `PavoRestClient` içindeki explicit mapper.
+  - Wire modele STYS'e özgü hiçbir alan eklenmiyor; `PosCihaziId`/`IpAddress`/`UseHttps`/`CurrentFingerprint` wire'a çıkmıyor.
+- TransactionHandle: wire'da `TransactionSequence = int`, `TransactionDate = string` (`yyyy-MM-dd'T'HH:mm:ss.ffffff`, InvariantCulture). Domain `long`/`DateTime` kalıyor, sınırda checked dönüşüm yapılıyor.
+- Response modeli: referans `PavoResponse` ile aynı 7 alan; `TransactionHandle?` ve `Errors` nullable (yokluk bilgisi korunuyor). Speculative `Fingerprint`/`TargetFingerprint`/`PairingId`/`PairingCode`/`OnayliMi` alanları wire modelden ve `PavoPairingResponse`'tan tamamen kaldırıldı.
+- Payment response tipleri referansla birebir: `transactionNo`/`batchNo` `long?`, `resultStatus` `int?`, `resultDate` `string?`; `gunSonu`/`eodData`/`eodJson`/`eodText`/`eodImage`/`reboot`/`enterPinModeMessage`/`exitPinModeMessage` eklendi.
+- `cardNo`: wire modelde var (exact parity), wire→domain sınırında düşürülüyor; loglanmıyor, persist edilmiyor, backend/frontend'e taşınmıyor.
+- Sequence semantiği referans `PavoApiClient` ile aynı:
+  - HTTP cevabı alındıysa (2xx, non-2xx, business error, bozuk JSON dahil) sequence ilerler.
+  - Connection error / timeout durumunda ilerlemez; retry aynı sequence ile gider.
+  - Response `TransactionHandle.TransactionSequence` artık request state'ine yazılmıyor (device 50 dönse bile sonraki request 2).
+  - Store API'si `PeekOutgoingSequenceAsync` / `AdvanceOutgoingSequenceAsync` olarak sadeleşti; eski `ReserveNextTransactionSequenceAsync`/`ReservePairingSequenceAsync` kaldırıldı.
+- Pre-pair `GetDeviceInfo` (STYS extension) hâlâ initial pairing sequence'ini tüketmiyor; ancak referans pairing retry davranışı bozulmuyor.
+- StartPayment:
+  - Validation referansla aynı (`amount <= 0`, `installment == 1 || < 0`, boş `saleReference` reddedilir; silent correction yok).
+  - Success kriteri `commonSuccess && Data != null && Data.IsSuccessful`.
+  - `AdditionalInfo.Header` artık `ReceiptHeader` (description değil); receipt list tam 3 satır (4. "Açıklama:" satırı kaldırıldı).
+  - Default'lar referans `PavoOptions` ile hizalandı (PrintReceipt/ReceiptImage/receipt json+text flag'leri true, HeadUnmaskLength 4, header/footer metinleri, 5 slot).
+- Empty body / bozuk JSON / null parse artık başarı sayılmıyor; HTTP 200 tek başına yeterli değil.
+- Eksik referans operasyonları eklendi: `PerformEOD`, `RebootDevice`, `EnterPinMode`, `ExitPinMode`.
+- `PavoClient` named HttpClient'a `Accept: application/json` header'ı eklendi; timeout 180s.
+- STYS-only extension'lar (`Ping`, `GetDeviceInfo`, `GetPaymentResult`) korunuyor ama kod içinde açıkça extension olarak işaretlendi.
+- Testler: `PavoReferenceGoldenContractTests` (23 test) referans fixture'larıyla structural JSON karşılaştırması yapıyor; tip uyuşmazlığı (123 vs "123") failure.
+- Build/test:
+  - `dotnet build STYS.sln --configuration Release`: başarılı (warning 31 → 6).
+  - `dotnet test STYS.sln --configuration Release`: PAVO/agent testleri geçti; SQL Server gerektiren integration testler bu ortamda skip.
+  - Gerçek PAVO cihazı: **NOT EXECUTED AGAINST REAL PAVO DEVICE**.

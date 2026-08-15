@@ -74,7 +74,7 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         }
     }
 
-    public async Task<PavoLocalPairingState> ReserveNextTransactionSequenceAsync(string deviceId, CancellationToken cancellationToken)
+    public async Task<long> PeekOutgoingSequenceAsync(string deviceId, CancellationToken cancellationToken)
     {
         var normalizedId = NormalizeId(deviceId) ?? throw new InvalidOperationException("Cihaz ID zorunludur.");
 
@@ -82,20 +82,9 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         try
         {
             var items = await ReadAllCoreAsync(cancellationToken);
-            if (!items.TryGetValue(normalizedId, out var state))
-            {
-                state = new PavoLocalPairingState
-                {
-                    DeviceId = normalizedId,
-                    PairingStatus = LocalDevicePairingStatus.NotPaired
-                };
-            }
-
-            state.TransactionSequence = Math.Max(0, state.TransactionSequence) + 1;
-            state.UpdatedAt = DateTimeOffset.UtcNow;
-            items[normalizedId] = state;
-            await WriteAllCoreAsync(items, cancellationToken);
-            return Clone(state);
+            return items.TryGetValue(normalizedId, out var state)
+                ? Math.Max(1, state.TransactionSequence)
+                : 1;
         }
         finally
         {
@@ -103,7 +92,7 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
         }
     }
 
-    public async Task<PavoLocalPairingState> ReservePairingSequenceAsync(string deviceId, CancellationToken cancellationToken)
+    public async Task<PavoLocalPairingState> AdvanceOutgoingSequenceAsync(string deviceId, CancellationToken cancellationToken)
     {
         var normalizedId = NormalizeId(deviceId) ?? throw new InvalidOperationException("Cihaz ID zorunludur.");
 
@@ -120,13 +109,7 @@ public sealed class FilePavoLocalPairingStore : IPavoLocalPairingStore
                 };
             }
 
-            // Pre-pair diagnostic calls (GetDeviceInfo, etc.) may have already advanced the stored
-            // counter; a device that has never been successfully paired must still see sequence 1
-            // on every Pairing attempt (including retries after a failed pairing). Only once paired
-            // does Pairing behave like a normal monotonic reservation (force re-pair).
-            state.TransactionSequence = state.PairingStatus == LocalDevicePairingStatus.Paired
-                ? Math.Max(0, state.TransactionSequence) + 1
-                : 1;
+            state.TransactionSequence = Math.Max(1, state.TransactionSequence) + 1;
             state.UpdatedAt = DateTimeOffset.UtcNow;
             items[normalizedId] = state;
             await WriteAllCoreAsync(items, cancellationToken);

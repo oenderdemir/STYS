@@ -666,21 +666,19 @@ public sealed class AgentCommandService
         }
 
         // The client fingerprint is the agent's own stable, configured value; it must not drift on
-        // every re-pair based on whatever the device happens to echo back. TransactionHandle.Fingerprint
-        // is the source of truth (it's literally what the agent sent); the legacy top-level
-        // response.Fingerprint field is not used at all. Only fill it in the first time it's missing.
-        if (string.IsNullOrWhiteSpace(device.Fingerprint) && !string.IsNullOrWhiteSpace(response.TransactionHandle.Fingerprint))
+        // every re-pair based on whatever the device echoes back. The response TransactionHandle is
+        // remote/device metadata, so it is only used to seed the central mirror the first time we
+        // have nothing at all - never to overwrite an existing value.
+        if (string.IsNullOrWhiteSpace(device.Fingerprint) && !string.IsNullOrWhiteSpace(response.TransactionHandle?.Fingerprint))
         {
             device.Fingerprint = response.TransactionHandle.Fingerprint;
         }
 
-        device.TargetFingerprint = response.TargetFingerprint ?? device.TargetFingerprint;
-        device.PairingId = response.PairingId ?? device.PairingId;
-        device.PairingCode = response.PairingCode ?? device.PairingCode;
+        // TargetFingerprint/PairingId/PairingCode do not exist in the verified reference contract,
+        // so nothing is written to them from a pairing response any more.
         // This method only runs when the agent already reported command Success = true, which the
         // agent determines via the reference success criteria (!HasError && !HasAbondon &&
-        // (ErrorCode == null || ErrorCode == 0)) - OnayliMi is not part of that and must not gate
-        // readiness here either.
+        // (ErrorCode == null || ErrorCode == 0)).
         device.EslesmeOnayliMi = true;
         device.SonBaglantiTarihi = DateTime.UtcNow;
     }

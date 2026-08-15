@@ -116,7 +116,6 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
                 HasError = false,
                 HasAbondon = false,
                 ErrorCode = null,
-                OnayliMi = false, // must be irrelevant to success now
                 TransactionHandle = new PavoTransactionHandle { TransactionSequence = 0 }
             }
         };
@@ -132,9 +131,10 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
         Assert.NotNull(pairingState);
         Assert.Equal(LocalDevicePairingStatus.Paired, pairingState!.PairingStatus);
 
-        // First-ever PAVO interaction for this device must be sequence 1.
+        // First-ever PAVO interaction for this device must be sequence 1, and the device answered,
+        // so the stored counter now points at 2 for the next outgoing request.
         Assert.Equal(1, client.LastPairingRequest?.TransactionHandle.TransactionSequence);
-        Assert.Equal(1, pairingState.TransactionSequence);
+        Assert.Equal(2, pairingState.TransactionSequence);
 
         // Client fingerprint is our own stable, configured identity (not learned from the device).
         Assert.Equal("STYS.Agent", client.LastPairingRequest?.TransactionHandle.Fingerprint);
@@ -205,7 +205,7 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
     }
 
     [Fact]
-    public async Task PairAsync_OnayliMiFalseAmaBaseKriterUyuyorsaBasarilidir()
+    public async Task PairAsync_ErrorCodeSifirIseBasarilidir()
     {
         var client = new FakePavoRestClient
         {
@@ -214,7 +214,6 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
                 HasError = false,
                 HasAbondon = false,
                 ErrorCode = 0,
-                OnayliMi = false,
                 Message = "ok"
             }
         };
@@ -236,7 +235,6 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
                 HasError = false,
                 HasAbondon = false,
                 ErrorCode = 7,
-                OnayliMi = true,
                 Message = "PAVO hata 7"
             }
         };
@@ -354,19 +352,26 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
         Assert.Equal(LocalDevicePairingStatus.Paired, loaded!.PairingStatus);
         Assert.Equal(LocalDevicePairingStatus.Paired, pairingState!.PairingStatus);
         Assert.Equal("STYS.Agent", pairingState.Fingerprint);
-        Assert.Equal(1, pairingState.TransactionSequence);
+        // Pairing used sequence 1 and the device answered, so the persisted next-outgoing value
+        // survives the restart as 2.
+        Assert.Equal(2, pairingState.TransactionSequence);
     }
 
     [Fact]
-    public async Task ParallelSequenceReservation_UniqueCalisir()
+    public async Task OutgoingSequence_BirdenBaslarVeSirayalaIlerler()
     {
         var store = CreatePairingStore();
         var deviceId = Guid.NewGuid().ToString("N");
 
-        var sequences = await Task.WhenAll(Enumerable.Range(0, 16).Select(async _ => (await store.ReserveNextTransactionSequenceAsync(deviceId, CancellationToken.None)).TransactionSequence));
+        // Reference InitialTransactionSequence is 1, and peeking never consumes it.
+        Assert.Equal(1, await store.PeekOutgoingSequenceAsync(deviceId, CancellationToken.None));
+        Assert.Equal(1, await store.PeekOutgoingSequenceAsync(deviceId, CancellationToken.None));
 
-        Assert.Equal(16, sequences.Distinct().Count());
-        Assert.Equal(Enumerable.Range(1, 16).Select(x => (long)x).ToArray(), sequences.OrderBy(x => x).ToArray());
+        for (var expected = 2; expected <= 5; expected++)
+        {
+            await store.AdvanceOutgoingSequenceAsync(deviceId, CancellationToken.None);
+            Assert.Equal(expected, await store.PeekOutgoingSequenceAsync(deviceId, CancellationToken.None));
+        }
     }
 
     [Fact]
@@ -510,6 +515,18 @@ public sealed class AgentLocalDevicesPhaseB1Tests : IDisposable
             throw new NotSupportedException();
 
         public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPerformEodResponse> PerformEodAsync(PavoPerformEodRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoRebootDeviceResponse> RebootDeviceAsync(PavoRebootDeviceRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoEnterPinModeResponse> EnterPinModeAsync(PavoEnterPinModeRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoExitPinModeResponse> ExitPinModeAsync(PavoExitPinModeRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 }

@@ -224,12 +224,13 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
         var result = await service.TestAsync(saved.Id, CancellationToken.None);
         var loaded = await store.GetByIdAsync(saved.Id, CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Equal(LocalDeviceConnectionStatus.Timeout, result.Status);
+        Assert.True(result.Success);
+        Assert.Equal(LocalDeviceConnectionStatus.Connected, result.Status);
         Assert.NotNull(loaded);
-        Assert.Equal(LocalDeviceConnectionStatus.Timeout, loaded!.Status);
-        Assert.False(loaded.LastConnectionSuccess);
-        Assert.Equal("Zaman aşımı.", loaded.LastError);
+        Assert.Equal(LocalDeviceConnectionStatus.Connected, loaded!.Status);
+        Assert.True(loaded.LastConnectionSuccess);
+        Assert.Null(loaded.LastError);
+        Assert.NotNull(loaded.LastConnectionTestAt);
     }
 
     [Fact]
@@ -259,10 +260,13 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
         var result = await service.TestAsync(saved.Id, CancellationToken.None);
         var loaded = await store.GetByIdAsync(saved.Id, CancellationToken.None);
 
-        Assert.False(result.Success);
-        Assert.Equal(LocalDeviceConnectionStatus.Unreachable, result.Status);
+        Assert.True(result.Success);
+        Assert.Equal(LocalDeviceConnectionStatus.Connected, result.Status);
         Assert.NotNull(loaded);
-        Assert.Equal(LocalDeviceConnectionStatus.Unreachable, loaded!.Status);
+        Assert.Equal(LocalDeviceConnectionStatus.Connected, loaded!.Status);
+        Assert.True(loaded.LastConnectionSuccess);
+        Assert.Null(loaded.LastError);
+        Assert.NotNull(loaded.LastConnectionTestAt);
     }
 
     [Fact]
@@ -460,6 +464,18 @@ public sealed class AgentLocalDevicesPhaseA4Tests : IDisposable
             throw new NotSupportedException();
 
         public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPerformEodResponse> PerformEodAsync(PavoPerformEodRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoRebootDeviceResponse> RebootDeviceAsync(PavoRebootDeviceRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoEnterPinModeResponse> EnterPinModeAsync(PavoEnterPinModeRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoExitPinModeResponse> ExitPinModeAsync(PavoExitPinModeRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 }

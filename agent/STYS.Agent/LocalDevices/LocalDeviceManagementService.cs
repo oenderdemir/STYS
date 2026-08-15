@@ -171,7 +171,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             selectedTerminal = activeTerminals[0];
         }
 
-        var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
+        var sequence = await _pairingStore.PeekOutgoingSequenceAsync(device.Id, cancellationToken);
         var saleReference = string.IsNullOrWhiteSpace(request.SaleReference)
             ? GenerateSaleReference(device.Id, selectedTerminal.SourceReference, DateTime.Now)
             : request.SaleReference.Trim();
@@ -222,18 +222,23 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             TransactionHandle = new PavoTransactionHandle
             {
                 SerialNumber = device.SerialNumber ?? string.Empty,
-                Fingerprint = pairingState.Fingerprint,
-                TransactionSequence = reserved.TransactionSequence,
+                Fingerprint = _pavoFingerprint,
+                TransactionSequence = sequence,
                 TransactionDate = DateTime.Now
             }
         };
 
-        var response = await _pavoRestClient.StartPaymentAsync(pavoRequest, cancellationToken);
+        var response = await SendPavoRequestAsync(
+            device.Id,
+            advanceSequence: true,
+            ct => _pavoRestClient.StartPaymentAsync(pavoRequest, ct),
+            cancellationToken);
+
         await MarkSuccessfulInteractionAsync(device, cancellationToken);
         return new LocalDevicePaymentTestResult
         {
             DeviceId = device.Id,
-            Success = !response.HasError && !response.HasAbondon && response.Data?.IsSuccessful == true,
+            Success = PavoResponseHelpers.IsPaymentSuccessful(response),
             Status = response.Data?.StatusText ?? response.Data?.TransactionStatus ?? (response.HasError ? "Failed" : response.HasAbondon ? "Abondoned" : "Unknown"),
             Message = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "Ödeme testi tamamlandı.",
             ErrorCode = response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? response.Data?.ResultCode,
@@ -468,6 +473,37 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         };
     }
 
+    /// <summary>Runs a PAVO request and applies the reference client's outgoing-sequence rule: the
+    /// counter advances exactly when the device returned an HTTP response - any status, business
+    /// error, or unparseable body - and stays put on connection errors and timeouts, so those get
+    /// retried on the same sequence number.</summary>
+    private async Task<TResponse> SendPavoRequestAsync<TResponse>(
+        string deviceId,
+        bool advanceSequence,
+        Func<CancellationToken, Task<TResponse>> send,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await send(cancellationToken);
+            if (advanceSequence)
+            {
+                await _pairingStore.AdvanceOutgoingSequenceAsync(deviceId, cancellationToken);
+            }
+
+            return response;
+        }
+        catch (PavoRestClientException ex)
+        {
+            if (advanceSequence && ex.HttpResponseReceived)
+            {
+                await _pairingStore.AdvanceOutgoingSequenceAsync(deviceId, cancellationToken);
+            }
+
+            throw;
+        }
+    }
+
     private async Task<DeviceInfoExecution> ExecuteDeviceInfoAsync(LocalDevice device, bool requirePairing, CancellationToken cancellationToken)
     {
         var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
@@ -476,8 +512,17 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             EnsurePaired(pairingState);
         }
 
-        var reserved = await _pairingStore.ReserveNextTransactionSequenceAsync(device.Id, cancellationToken);
-        var response = await _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, _pavoFingerprint, reserved.TransactionSequence), cancellationToken);
+        // GetDeviceInfo is a STYS extension with no reference counterpart. Before the device has
+        // ever been paired it must stay outside the reference outgoing-sequence namespace, so it
+        // borrows the current sequence without advancing it - otherwise a pre-pair diagnostic would
+        // push the initial Pairing off sequence 1.
+        var advanceSequence = pairingState?.PairingStatus == LocalDevicePairingStatus.Paired;
+        var sequence = await _pairingStore.PeekOutgoingSequenceAsync(device.Id, cancellationToken);
+        var response = await SendPavoRequestAsync(
+            device.Id,
+            advanceSequence,
+            ct => _pavoRestClient.GetDeviceInfoAsync(BuildGetDeviceInfoRequest(device, _pavoFingerprint, sequence), ct),
+            cancellationToken);
 
         if (!PavoResponseHelpers.IsSuccessful(response))
         {
@@ -497,12 +542,16 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         // response.Fingerprint/TargetFingerprint are diagnostic-only device echoes in the reference
         // protocol; the client fingerprint we use on future requests is always our own stable,
         // configured value (_pavoFingerprint), never something learned from the device.
+        // The outgoing sequence is owned solely by SendPavoRequestAsync above. The device's
+        // response handle carries the POS-side sequence and must never be written back into our
+        // request state, so TransactionSequence is deliberately absent from this upsert.
+        var currentState = await _pairingStore.GetAsync(updatedDevice.Id, cancellationToken);
         await _pairingStore.UpsertAsync(new PavoLocalPairingState
         {
             DeviceId = updatedDevice.Id,
             Fingerprint = _pavoFingerprint,
             TargetFingerprint = string.IsNullOrWhiteSpace(response.TargetFingerprint) ? pairingState?.TargetFingerprint : response.TargetFingerprint.Trim(),
-            TransactionSequence = response.TransactionHandle.TransactionSequence > 0 ? response.TransactionHandle.TransactionSequence : reserved.TransactionSequence,
+            TransactionSequence = currentState?.TransactionSequence ?? sequence,
             PairingStatus = pairingState?.PairingStatus ?? LocalDevicePairingStatus.NotPaired,
             PairingAt = pairingState?.PairingAt,
             LastPairingAttemptAt = pairingState?.LastPairingAttemptAt,
@@ -511,7 +560,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             UpdatedAt = now
         }, cancellationToken);
 
-        return new DeviceInfoExecution(updatedDevice, response, pairingState, reserved.TransactionSequence);
+        return new DeviceInfoExecution(updatedDevice, response, pairingState, sequence);
     }
 
     private static IReadOnlyCollection<LocalDeviceTerminal> MapDiscoveredTerminals(string localDeviceId, IReadOnlyCollection<PavoDeviceTerminalInfo>? terminals)
@@ -596,37 +645,44 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             throw new InvalidOperationException("PAVO pairing için seri numarası zorunludur.");
         }
 
-        // GetDeviceInfo is no longer a pairing prerequisite: the reference flow pairs first, using
-        // our own stable client fingerprint, then calls GetDeviceInfo. pairingState may legitimately
-        // be null/NotPaired here (e.g. the very first pairing attempt for a brand-new device).
-        // ReservePairingSequenceAsync (rather than the generic reservation) ensures that pre-pair
-        // diagnostic calls (GetDeviceInfo, etc.) never consume the initial pairing's sequence: it
-        // stays 1 until this device has actually been paired successfully.
+        // Reference flow: Pairing is the first PAVO request, carrying our own stable client
+        // fingerprint. pairingState may legitimately be null/NotPaired here (the very first pairing
+        // attempt for a brand-new device), in which case the peeked sequence is 1.
         var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
-        var reserved = await _pairingStore.ReservePairingSequenceAsync(device.Id, cancellationToken);
+        var sequence = await _pairingStore.PeekOutgoingSequenceAsync(device.Id, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var request = BuildPairingRequest(device, _pavoFingerprint, reserved.TransactionSequence);
+        var request = BuildPairingRequest(device, _pavoFingerprint, sequence);
 
         try
         {
-            var response = await _pavoRestClient.PairingAsync(request, cancellationToken);
+            // Pairing is a reference operation, so it always participates in the outgoing-sequence
+            // rule: a device that answers (even with a business error) pushes the next attempt to
+            // the following sequence number, while a connection failure retries on the same one.
+            var response = await SendPavoRequestAsync(
+                device.Id,
+                advanceSequence: true,
+                ct => _pavoRestClient.PairingAsync(request, ct),
+                cancellationToken);
+
             await MarkSuccessfulInteractionAsync(device, cancellationToken);
             if (!PavoResponseHelpers.IsSuccessful(response))
             {
                 var failureMessage = response.Message ?? response.ErrorCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Pairing başarısız.";
-                await RecordPairingFailureAsync(device, pairingState, reserved.TransactionSequence, failureMessage, now, cancellationToken);
+                await RecordPairingFailureAsync(device, pairingState, failureMessage, now, cancellationToken);
                 throw new InvalidOperationException(failureMessage);
             }
 
+            var advancedState = await _pairingStore.GetAsync(device.Id, cancellationToken);
             var successState = new PavoLocalPairingState
             {
                 DeviceId = device.Id,
                 // The client fingerprint is always our own stable, configured value - never
-                // something echoed back from the device response (see item 7 of the PAVO
-                // reference-compatibility fix).
+                // something echoed back from the device response.
                 Fingerprint = _pavoFingerprint,
-                TargetFingerprint = string.IsNullOrWhiteSpace(response.TargetFingerprint) ? pairingState?.TargetFingerprint : response.TargetFingerprint.Trim(),
-                TransactionSequence = response.TransactionHandle.TransactionSequence > 0 ? response.TransactionHandle.TransactionSequence : reserved.TransactionSequence,
+                TargetFingerprint = pairingState?.TargetFingerprint,
+                // Sequence state belongs to SendPavoRequestAsync; the device's response handle is
+                // remote metadata and never feeds our outgoing counter.
+                TransactionSequence = advancedState?.TransactionSequence ?? sequence,
                 PairingStatus = LocalDevicePairingStatus.Paired,
                 PairingAt = now,
                 LastPairingAttemptAt = now,
@@ -659,7 +715,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         }
         catch (Exception ex)
         {
-            await RecordPairingFailureAsync(device, pairingState, reserved.TransactionSequence, ex.Message, now, cancellationToken);
+            await RecordPairingFailureAsync(device, pairingState, ex.Message, now, cancellationToken);
             throw;
         }
     }
@@ -832,18 +888,21 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     private async Task RecordPairingFailureAsync(
         LocalDevice device,
         PavoLocalPairingState? pairingState,
-        long reservedSequence,
         string errorMessage,
         DateTimeOffset timestamp,
         CancellationToken cancellationToken)
     {
         var hadSuccessfulPairing = device.PairingStatus == LocalDevicePairingStatus.Paired || pairingState?.PairingStatus == LocalDevicePairingStatus.Paired;
+        // Sequence state is owned by SendPavoRequestAsync (reference rule: advance only when the
+        // device answered), so failure bookkeeping must carry whatever it left behind rather than
+        // recomputing it.
+        var currentState = await _pairingStore.GetAsync(device.Id, cancellationToken);
         var updatedState = new PavoLocalPairingState
         {
             DeviceId = device.Id,
             Fingerprint = pairingState?.Fingerprint ?? _pavoFingerprint,
             TargetFingerprint = pairingState?.TargetFingerprint,
-            TransactionSequence = Math.Max(pairingState?.TransactionSequence ?? 0, reservedSequence),
+            TransactionSequence = currentState?.TransactionSequence ?? pairingState?.TransactionSequence ?? 1,
             PairingStatus = hadSuccessfulPairing ? LocalDevicePairingStatus.Paired : LocalDevicePairingStatus.Failed,
             PairingAt = pairingState?.PairingAt,
             LastPairingAttemptAt = timestamp,

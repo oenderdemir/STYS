@@ -1,44 +1,60 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using STYS.Agent.Contracts.Dtos;
 
 namespace STYS.Agent.Modules.Pavo;
 
-internal abstract class PavoWireRequestBase
+// =====================================================================================
+// EXACT PAVO 509 WIRE CONTRACT.
+//
+// These types mirror the verified-working Pavo509.Client reference project 1:1 —
+// property set, JSON names, nesting, CLR types, nullability and defaults. They are the
+// only shapes ever serialized to / deserialized from the device.
+//
+// Rules for this file:
+//   * Never add a STYS-specific field here. STYS domain concepts live in
+//     STYS.Agent.Contracts.Dtos and are joined to these via an explicit mapper.
+//   * Never "improve" a type (e.g. string -> DateTime). If the reference sends a
+//     pre-formatted string, so do we.
+//   * Every property carries an explicit [JsonPropertyName]; nothing relies on a
+//     naming policy.
+//
+// Reference: Pavo509.Client/Models/*.cs
+// =====================================================================================
+
+internal sealed class PavoWireTransactionHandle
 {
-    [JsonIgnore]
-    public int PosCihaziId { get; init; }
+    [JsonPropertyName("SerialNumber")]
+    public string SerialNumber { get; init; } = string.Empty;
 
-    [JsonIgnore]
-    public string IpAddress { get; init; } = string.Empty;
+    [JsonPropertyName("Fingerprint")]
+    public string Fingerprint { get; init; } = string.Empty;
 
-    [JsonIgnore]
-    public int? HttpPort { get; init; }
+    [JsonPropertyName("TransactionSequence")]
+    public int TransactionSequence { get; init; }
 
-    [JsonIgnore]
-    public int? HttpsPort { get; init; }
+    [JsonPropertyName("TransactionDate")]
+    public string TransactionDate { get; init; } = string.Empty;
+}
 
-    [JsonIgnore]
-    public bool UseHttps { get; init; }
-
+internal sealed class PavoWirePairingRequest
+{
     [JsonPropertyName("TransactionHandle")]
-    public PavoTransactionHandle TransactionHandle { get; init; } = new();
+    public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
 }
 
-internal sealed class PavoWirePairingRequest : PavoWireRequestBase
+/// <summary>Shape used by /RebootDevice, /EnterPinMode and /ExitPinMode — all three send
+/// nothing but the transaction handle.</summary>
+internal sealed class PavoWireDeviceCommandRequest
 {
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
 }
 
-internal sealed class PavoWireDeviceCommandRequest : PavoWireRequestBase
+internal sealed class PavoWireStartPaymentRequest
 {
-}
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
 
-internal sealed class PavoWireGetPaymentResultRequest : PavoWireRequestBase
-{
-}
-
-internal sealed class PavoWireStartPaymentRequest : PavoWireRequestBase
-{
     [JsonPropertyName("Payment")]
     public PavoWirePaymentRequest Payment { get; init; } = new();
 }
@@ -182,4 +198,168 @@ internal sealed class PavoWireReceiptListItemRequest
 
     [JsonPropertyName("value")]
     public string Value { get; init; } = string.Empty;
+}
+
+internal sealed class PavoWirePerformEodRequest
+{
+    [JsonPropertyName("PerformEOD")]
+    public PavoWirePerformEodOperation PerformEod { get; init; } = new();
+
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
+}
+
+internal sealed class PavoWirePerformEodOperation
+{
+    [JsonPropertyName("AdditionalInfo")]
+    public PavoWirePerformEodAdditionalInfo AdditionalInfo { get; init; } = new();
+}
+
+internal sealed class PavoWirePerformEodAdditionalInfo
+{
+    [JsonPropertyName("print")]
+    public bool Print { get; init; }
+
+    [JsonPropertyName("receiptImage")]
+    public bool ReceiptImage { get; init; }
+
+    [JsonPropertyName("useSummary")]
+    public bool UseSummary { get; init; } = true;
+
+    [JsonPropertyName("receiptWidth")]
+    public string ReceiptWidth { get; init; } = "58mm";
+
+    [JsonPropertyName("printData")]
+    public PavoWirePerformEodPrintData PrintData { get; init; } = new();
+}
+
+internal sealed class PavoWirePerformEodPrintData
+{
+    [JsonPropertyName("receiptJsonEnabled")]
+    public bool ReceiptJsonEnabled { get; init; } = true;
+
+    [JsonPropertyName("receiptTextEnabled")]
+    public bool ReceiptTextEnabled { get; init; } = true;
+
+    [JsonPropertyName("receiptTextWidth")]
+    public string ReceiptTextWidth { get; init; } = "40";
+}
+
+// ------------------------------------- responses -------------------------------------
+
+internal sealed class PavoWireResponse
+{
+    [JsonPropertyName("HasAbondon")]
+    public bool HasAbondon { get; set; }
+
+    [JsonPropertyName("HasError")]
+    public bool HasError { get; set; }
+
+    [JsonPropertyName("ErrorCode")]
+    public int? ErrorCode { get; set; }
+
+    [JsonPropertyName("Message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle? TransactionHandle { get; set; }
+
+    [JsonPropertyName("Errors")]
+    public List<string>? Errors { get; set; }
+
+    [JsonPropertyName("Data")]
+    public PavoWirePaymentResponseData? Data { get; set; }
+}
+
+internal sealed class PavoWirePaymentResponseData
+{
+    [JsonPropertyName("id")]
+    public long? Id { get; set; }
+
+    [JsonPropertyName("transactionNo")]
+    public long? TransactionNo { get; set; }
+
+    [JsonPropertyName("batchNo")]
+    public long? BatchNo { get; set; }
+
+    [JsonPropertyName("isSuccessful")]
+    public bool IsSuccessful { get; set; }
+
+    [JsonPropertyName("statusText")]
+    public string? StatusText { get; set; }
+
+    [JsonPropertyName("saleReference")]
+    public string? SaleReference { get; set; }
+
+    [JsonPropertyName("amount")]
+    public decimal? Amount { get; set; }
+
+    [JsonPropertyName("currencyCode")]
+    public string? CurrencyCode { get; set; }
+
+    /// <summary>Present in the reference wire contract, so it is parsed here for exact parity.
+    /// It is deliberately dropped at the wire-to-domain mapping boundary and must never be
+    /// logged, persisted, or forwarded to the backend/frontend.</summary>
+    [JsonPropertyName("cardNo")]
+    public string? CardNo { get; set; }
+
+    [JsonPropertyName("cardReaderSlotText")]
+    public string? CardReaderSlotText { get; set; }
+
+    [JsonPropertyName("responseCode")]
+    public string? ResponseCode { get; set; }
+
+    [JsonPropertyName("acquirerName")]
+    public string? AcquirerName { get; set; }
+
+    [JsonPropertyName("retrievalReferenceNo")]
+    public string? RetrievalReferenceNo { get; set; }
+
+    [JsonPropertyName("authorizationCode")]
+    public string? AuthorizationCode { get; set; }
+
+    [JsonPropertyName("failMessage")]
+    public string? FailMessage { get; set; }
+
+    [JsonPropertyName("cevapAciklama")]
+    public string? CevapAciklama { get; set; }
+
+    [JsonPropertyName("resultStatus")]
+    public int? ResultStatus { get; set; }
+
+    [JsonPropertyName("resultDate")]
+    public string? ResultDate { get; set; }
+
+    [JsonPropertyName("terminal")]
+    public string? Terminal { get; set; }
+
+    [JsonPropertyName("customerReceiptImage")]
+    public string? CustomerReceiptImage { get; set; }
+
+    [JsonPropertyName("merchantReceiptImage")]
+    public string? MerchantReceiptImage { get; set; }
+
+    [JsonPropertyName("gunSonu")]
+    public string? GunSonu { get; set; }
+
+    [JsonPropertyName("eodData")]
+    public JsonElement? EodData { get; set; }
+
+    [JsonPropertyName("eodJson")]
+    public JsonElement? EodJson { get; set; }
+
+    [JsonPropertyName("eodText")]
+    public JsonElement? EodText { get; set; }
+
+    [JsonPropertyName("eodImage")]
+    public string? EodImage { get; set; }
+
+    [JsonPropertyName("reboot")]
+    public string? Reboot { get; set; }
+
+    [JsonPropertyName("enterPinModeMessage")]
+    public string? EnterPinModeMessage { get; set; }
+
+    [JsonPropertyName("exitPinModeMessage")]
+    public string? ExitPinModeMessage { get; set; }
 }

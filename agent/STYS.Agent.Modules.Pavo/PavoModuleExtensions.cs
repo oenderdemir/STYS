@@ -28,6 +28,7 @@ public static class PavoModuleExtensions
         {
             var options = sp.GetRequiredService<IOptions<PavoAgentOptions>>().Value;
             client.Timeout = TimeSpan.FromSeconds(PavoAgentOptions.ResolveTimeoutSeconds(options.TimeoutSeconds));
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         });
         services.AddScoped<IPavoRestClient, PavoRestClient>();
         return services;

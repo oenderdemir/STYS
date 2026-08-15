@@ -483,7 +483,9 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         await service.DiscoverTerminalsAsync(device.Id, CancellationToken.None);
         var state = await pairingStore.GetAsync(device.Id, CancellationToken.None);
 
-        Assert.Equal(8, client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence);
+        // The stored value is the next outgoing sequence, so the request goes out on 7 and the
+        // counter lands on 8 once the device has answered.
+        Assert.Equal(7, client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence);
         Assert.Equal(8, state!.TransactionSequence);
     }
 
@@ -562,19 +564,22 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
 
         var reservationService = new PavoCommandSequenceReservationService(store, pairingStore);
 
-        var localTask = service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
-        var centralTask = reservationService.ReserveAsync(7001, null, CancellationToken.None);
-        await Task.WhenAll(localTask, centralTask);
-
+        // Local and central paths share one outgoing counter. Reference semantics are read-then-
+        // advance-on-answer rather than atomic pre-reservation, so a request that has gone out but
+        // not yet been answered does not move the counter.
+        await service.GetDeviceInfoAsync(device.Id, CancellationToken.None);
         var localSequence = client.LastGetDeviceInfoRequest?.TransactionHandle.TransactionSequence ?? 0;
-        var centralSequence = (await centralTask).TransactionSequence;
-
-        Assert.NotEqual(localSequence, centralSequence);
-        Assert.Contains(localSequence, new[] { 1L, 2L });
-        Assert.Contains(centralSequence, new[] { 1L, 2L });
+        Assert.Equal(1, localSequence);
 
         var state = await pairingStore.GetAsync(device.Id, CancellationToken.None);
         Assert.Equal(2, state!.TransactionSequence);
+
+        // The central path peeks the same shared counter and only advances once its command
+        // actually completed against the device.
+        var centralHandle = await reservationService.ReserveAsync(7001, null, CancellationToken.None);
+        Assert.Equal(2, centralHandle.TransactionSequence);
+
+        await reservationService.AdvanceAsync(7001, CancellationToken.None);
 
         var restartReservationService = new PavoCommandSequenceReservationService(store, pairingStore);
         var restartHandle = await restartReservationService.ReserveAsync(7001, null, CancellationToken.None);
@@ -681,8 +686,11 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         Assert.Equal("TRY", client.LastStartPaymentRequest.CurrencyCode);
         Assert.Equal("TERM-PAY", client.LastStartPaymentRequest.SelectedTerminals?.Single());
         Assert.Equal(0, client.LastStartPaymentRequest.InstallmentCount);
-        Assert.False(client.LastStartPaymentRequest.PrintReceipt);
+        // Reference PavoOptions defaults.
+        Assert.True(client.LastStartPaymentRequest.PrintReceipt);
         Assert.True(client.LastStartPaymentRequest.ReceiptTextEnabled);
+        Assert.Equal("ÖDEME BİLGİSİ", client.LastStartPaymentRequest.ReceiptHeader);
+        Assert.Equal("İyi günler dileriz.", client.LastStartPaymentRequest.ReceiptFooter);
     }
 
     [Fact]
@@ -692,9 +700,6 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         {
             PairingResponse = new PavoPairingResponse
             {
-                OnayliMi = true,
-                Fingerprint = "FP-NEW",
-                TargetFingerprint = "TFP-NEW",
                 TransactionHandle = new PavoTransactionHandle
                 {
                     TransactionSequence = 4
@@ -1008,9 +1013,6 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
             LastPairingRequest = request;
             return Task.FromResult(PairingResponse ?? new PavoPairingResponse
             {
-                OnayliMi = true,
-                Fingerprint = request.TransactionHandle.Fingerprint,
-                TargetFingerprint = request.CurrentFingerprint,
                 TransactionHandle = new PavoTransactionHandle
                 {
                     TransactionSequence = request.TransactionHandle.TransactionSequence
@@ -1044,6 +1046,18 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         }
 
         public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPerformEodResponse> PerformEodAsync(PavoPerformEodRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoRebootDeviceResponse> RebootDeviceAsync(PavoRebootDeviceRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoEnterPinModeResponse> EnterPinModeAsync(PavoEnterPinModeRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoExitPinModeResponse> ExitPinModeAsync(PavoExitPinModeRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 

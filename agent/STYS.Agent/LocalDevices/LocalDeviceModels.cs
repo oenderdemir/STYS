@@ -143,7 +143,7 @@ public sealed class LocalDevicePaymentTestRequest
     public int? MaxInstallmentCount { get; set; }
     public bool IsPfInstallmentEnabled { get; set; }
     public decimal Puan { get; set; }
-    public IReadOnlyList<string>? SelectedSlots { get; set; }
+    public IReadOnlyList<string>? SelectedSlots { get; set; } = PavoPaymentDefaults.SelectedSlots;
     public int CardReadTimeout { get; set; } = 60;
     public bool AllowDismissCardRead { get; set; } = true;
     public int PinEntryTimeout { get; set; } = 30;
@@ -151,21 +151,22 @@ public sealed class LocalDevicePaymentTestRequest
     public string? CustomApp { get; set; }
     public string? CustomLogin { get; set; }
     public decimal? CustomCommission { get; set; }
-    public bool PrintReceipt { get; set; }
+    // Defaults mirror the reference PavoOptions defaults.
+    public bool PrintReceipt { get; set; } = true;
     public bool ResponseBeforePrintEnabled { get; set; }
     public bool CustomerReceiptPrintEnabled { get; set; } = true;
     public bool MerchantReceiptPrintEnabled { get; set; } = true;
-    public bool ReceiptImage { get; set; }
-    public bool CustomerReceiptImageEnabled { get; set; }
-    public bool MerchantReceiptImageEnabled { get; set; }
+    public bool ReceiptImage { get; set; } = true;
+    public bool CustomerReceiptImageEnabled { get; set; } = true;
+    public bool MerchantReceiptImageEnabled { get; set; } = true;
     public string ReceiptWidth { get; set; } = "58mm";
-    public int HeadUnmaskLength { get; set; }
+    public int HeadUnmaskLength { get; set; } = 4;
     public int TailUnmaskLength { get; set; } = 4;
-    public string? ReceiptHeader { get; set; }
-    public string? ReceiptFooter { get; set; }
-    public bool ReceiptJsonEnabled { get; set; }
-    public bool CustomerReceiptJsonEnabled { get; set; }
-    public bool MerchantReceiptJsonEnabled { get; set; }
+    public string? ReceiptHeader { get; set; } = "ÖDEME BİLGİSİ";
+    public string? ReceiptFooter { get; set; } = "İyi günler dileriz.";
+    public bool ReceiptJsonEnabled { get; set; } = true;
+    public bool CustomerReceiptJsonEnabled { get; set; } = true;
+    public bool MerchantReceiptJsonEnabled { get; set; } = true;
     public bool ReceiptTextEnabled { get; set; } = true;
     public string ReceiptTextWidth { get; set; } = "40";
     public bool CustomerReceiptTextEnabled { get; set; } = true;

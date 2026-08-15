@@ -193,14 +193,17 @@ public sealed class PavoStartPaymentCommandHandler : IAgentCommandHandler<PavoSt
             _logger.LogInformation("PAVO ödeme başlatılıyor: {PosOdemeIslemiId} / {SaleReference}", command.PosOdemeIslemiId, command.SaleReference);
             var response = await _client.StartPaymentAsync(ToRequest(command), cancellationToken);
             var payload = JsonSerializer.Serialize(response, JsonOptions);
-            if (!PavoResponseHelpers.IsSuccessful(response))
+            // Reference StartPayment success is stricter than the common envelope check: the payment
+            // itself must report Data.IsSuccessful. A clean envelope with a declined payment is a
+            // failed command.
+            if (!PavoResponseHelpers.IsPaymentSuccessful(response))
             {
                 return new AgentCommandResult
                 {
                     Success = false,
                     ResultPayload = payload,
-                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? response.Data?.ResultCode ?? "PAVO_START_PAYMENT_FAILED",
-                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı."
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? response.Data?.ResponseCode ?? response.Data?.ResultCode ?? "PAVO_START_PAYMENT_FAILED",
+                    ErrorMessage = response.Message ?? response.Data?.FailMessage ?? response.Data?.CevapAciklama ?? response.Data?.Message ?? "PAVO ödeme başlatılamadı."
                 };
             }
 

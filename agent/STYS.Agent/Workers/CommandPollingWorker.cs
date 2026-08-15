@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
 using STYS.Agent.Upgrade;
 
@@ -151,20 +152,40 @@ public sealed class CommandPollingWorker : BackgroundService
                     await ExecuteTypedCommandAsync(dto, new RefreshConfigurationCommand(), _handlerRegistry.Resolve<RefreshConfigurationCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 case "PavoPairing":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                {
+                    var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPairingCommand>(dto.Payload), cancellationToken);
+                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPairingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
                     break;
+                }
                 case "PavoPing":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                {
+                    var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPingCommand>(dto.Payload), cancellationToken);
+                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPingCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
                     break;
+                }
                 case "PavoGetDeviceInfo":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                {
+                    var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.Payload), cancellationToken);
+                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetDeviceInfoCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
                     break;
+                }
                 case "PavoStartPayment":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                {
+                    var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.Payload), cancellationToken);
+                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoStartPaymentCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
                     break;
+                }
                 case "PavoGetPaymentResult":
-                    await ExecuteTypedCommandAsync(dto, await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken), _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                {
+                    var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.Payload), cancellationToken);
+                    var result = await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                    await AdvancePavoSequenceAsync(command.PosCihaziId, result, cancellationToken);
                     break;
+                }
                 case "AgentStageUpgrade":
                     await ExecuteTypedCommandAsync(dto, DeserializeCommand<AgentStageUpgradeCommand>(dto.Payload), _handlerRegistry.Resolve<AgentStageUpgradeCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
@@ -193,7 +214,26 @@ public sealed class CommandPollingWorker : BackgroundService
         }
     }
 
-    private async Task ExecuteTypedCommandAsync<TCommand>(
+    /// <summary>Applies the reference outgoing-sequence rule to the central command path: advance
+    /// once the device answered, leave the counter alone when the request never reached it.</summary>
+    private async Task AdvancePavoSequenceAsync(int posCihaziId, AgentCommandResult? result, CancellationToken cancellationToken)
+    {
+        if (result is null || PavoTransportErrorCodes.IsNoResponse(result.ErrorCode))
+        {
+            return;
+        }
+
+        try
+        {
+            await _sequenceReservationService.AdvanceAsync(posCihaziId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "PAVO transaction sequence ilerletilemedi: {PosCihaziId}", posCihaziId);
+        }
+    }
+
+    private async Task<AgentCommandResult?> ExecuteTypedCommandAsync<TCommand>(
         AgentCommandDto dto,
         TCommand command,
         IAgentCommandHandler<TCommand>? handler,
@@ -230,7 +270,7 @@ public sealed class CommandPollingWorker : BackgroundService
             if (result.DeferCompletion)
             {
                 _logger.LogInformation("Komut tamamlanması ertelendi: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
-                return;
+                return result;
             }
 
             if (result.Success)
@@ -251,6 +291,8 @@ public sealed class CommandPollingWorker : BackgroundService
                 }, cancellationToken);
                 _logger.LogWarning("Komut başarısız: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
             }
+
+            return result;
         }
         finally
         {

@@ -11,10 +11,27 @@ namespace STYS.Agent.Modules.Pavo;
 
 public sealed class PavoRestClient : IPavoRestClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    // Mirrors the reference client's serializer configuration exactly.
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        WriteIndented = true,
         PropertyNameCaseInsensitive = true
     };
+
+    private const string TransactionDateFormat = "yyyy-MM-dd'T'HH:mm:ss.ffffff";
+
+    // Reference PavoOptions paths.
+    private const string PairingPath = "/Pairing";
+    private const string StartPaymentPath = "/StartPayment";
+    private const string PerformEodPath = "/PerformEOD";
+    private const string RebootDevicePath = "/RebootDevice";
+    private const string EnterPinModePath = "/EnterPinMode";
+    private const string ExitPinModePath = "/ExitPinMode";
+
+    // STYS extensions - no reference counterpart.
+    private const string PingPath = "/Ping";
+    private const string GetDeviceInfoPath = "/GetDeviceInfo";
+    private const string GetPaymentResultPath = "/GetPaymentResult";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<PavoRestClient> _logger;
@@ -26,21 +43,62 @@ public sealed class PavoRestClient : IPavoRestClient
     }
 
     public Task<PavoPairingResponse> PairingAsync(PavoPairingRequest request, CancellationToken cancellationToken) =>
-        SendAsync<PavoPairingResponse>("Pairing", request, BuildPairingWireRequest(request), cancellationToken);
+        SendAsync<PavoPairingResponse>(PairingPath, request, new PavoWirePairingRequest
+        {
+            TransactionHandle = BuildWireHandle(request.TransactionHandle)
+        }, cancellationToken);
+
+    public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken)
+    {
+        ValidatePaymentRequest(request);
+        return SendAsync<PavoStartPaymentResponse>(StartPaymentPath, request, BuildStartPaymentWireRequest(request), cancellationToken);
+    }
+
+    public Task<PavoPerformEodResponse> PerformEodAsync(PavoPerformEodRequest request, CancellationToken cancellationToken) =>
+        SendAsync<PavoPerformEodResponse>(PerformEodPath, request, new PavoWirePerformEodRequest
+        {
+            TransactionHandle = BuildWireHandle(request.TransactionHandle),
+            PerformEod = new PavoWirePerformEodOperation
+            {
+                AdditionalInfo = new PavoWirePerformEodAdditionalInfo
+                {
+                    UseSummary = request.UseSummary,
+                    Print = request.Print,
+                    ReceiptImage = request.ReceiptImage,
+                    ReceiptWidth = "58mm",
+                    PrintData = new PavoWirePerformEodPrintData
+                    {
+                        ReceiptJsonEnabled = true,
+                        ReceiptTextEnabled = true,
+                        ReceiptTextWidth = "40"
+                    }
+                }
+            }
+        }, cancellationToken);
+
+    public Task<PavoRebootDeviceResponse> RebootDeviceAsync(PavoRebootDeviceRequest request, CancellationToken cancellationToken) =>
+        SendAsync<PavoRebootDeviceResponse>(RebootDevicePath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
+
+    public Task<PavoEnterPinModeResponse> EnterPinModeAsync(PavoEnterPinModeRequest request, CancellationToken cancellationToken) =>
+        SendAsync<PavoEnterPinModeResponse>(EnterPinModePath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
+
+    public Task<PavoExitPinModeResponse> ExitPinModeAsync(PavoExitPinModeRequest request, CancellationToken cancellationToken) =>
+        SendAsync<PavoExitPinModeResponse>(ExitPinModePath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
 
     public Task<PavoPingResponse> PingAsync(PavoPingRequest request, CancellationToken cancellationToken) =>
-        SendAsync<PavoPingResponse>("Ping", request, BuildPingWireRequest(request), cancellationToken);
+        SendAsync<PavoPingResponse>(PingPath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
 
     public Task<PavoGetDeviceInfoResponse> GetDeviceInfoAsync(PavoGetDeviceInfoRequest request, CancellationToken cancellationToken) =>
-        SendAsync<PavoGetDeviceInfoResponse>("GetDeviceInfo", request, BuildGetDeviceInfoWireRequest(request), cancellationToken);
-
-    public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken) =>
-        SendAsync<PavoStartPaymentResponse>("StartPayment", request, BuildStartPaymentWireRequest(request), cancellationToken);
+        SendAsync<PavoGetDeviceInfoResponse>(GetDeviceInfoPath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
 
     public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
-        SendAsync<PavoGetPaymentResultResponse>("GetPaymentResult", request, BuildGetPaymentResultWireRequest(request), cancellationToken);
+        SendAsync<PavoGetPaymentResultResponse>(GetPaymentResultPath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
 
-    private async Task<TResponse> SendAsync<TResponse>(string method, PavoDeviceRequestBase request, object wireRequest, CancellationToken cancellationToken)
+    private async Task<TResponse> SendAsync<TResponse>(
+        string path,
+        PavoDeviceRequestBase request,
+        object wireRequest,
+        CancellationToken cancellationToken)
         where TResponse : PavoBaseResponse, new()
     {
         ValidateRequest(request);
@@ -49,55 +107,219 @@ public sealed class PavoRestClient : IPavoRestClient
         client.Timeout = client.Timeout == Timeout.InfiniteTimeSpan ? TimeSpan.FromSeconds(180) : client.Timeout;
 
         var baseUri = BuildBaseUri(request);
-        var uri = new Uri(baseUri, method);
+        var uri = new Uri(baseUri, path);
 
+        _logger.LogDebug(
+            "PAVO isteği gönderiliyor. Endpoint={Endpoint}, Scheme={Scheme}, Port={Port}, SerialNumber={SerialNumber}, Sequence={Sequence}, TransactionDate={TransactionDate}",
+            path,
+            uri.Scheme,
+            uri.Port,
+            request.TransactionHandle.SerialNumber,
+            request.TransactionHandle.TransactionSequence,
+            FormatTransactionDate(request.TransactionHandle.TransactionDate));
+
+        HttpResponseMessage response;
         try
         {
-            using var response = await client.PostAsync(uri, JsonContent.Create(wireRequest, wireRequest.GetType(), options: JsonOptions), cancellationToken);
-            var result = await ReadResponseAsync<TResponse>(response, cancellationToken);
-            if (response.IsSuccessStatusCode)
-            {
-                return result;
-            }
-
-            if (IsBusinessResponse(result))
-            {
-                return result;
-            }
-
-            throw new PavoRestClientException(
-                $"HTTP_{(int)response.StatusCode}",
-                BuildHttpErrorMessage(response.StatusCode, result));
+            response = await client.PostAsync(uri, JsonContent.Create(wireRequest, wireRequest.GetType(), options: JsonOptions), cancellationToken);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PavoRestClientException("TIMEOUT", $"PAVO isteği zaman aşımına uğradı ({client.Timeout.TotalSeconds:0}s).", ex);
+            throw new PavoRestClientException("TIMEOUT", $"PAVO isteği zaman aşımına uğradı ({client.Timeout.TotalSeconds:0}s).", httpResponseReceived: false, ex);
         }
         catch (HttpRequestException ex) when (ex.InnerException is AuthenticationException or IOException)
         {
-            throw new PavoRestClientException("TLS_CERTIFICATE", $"PAVO TLS/sertifika hatası: {ex.Message}", ex);
+            throw new PavoRestClientException("TLS_CERTIFICATE", $"PAVO TLS/sertifika hatası: {ex.Message}", httpResponseReceived: false, ex);
         }
         catch (HttpRequestException ex) when (ex.InnerException is SocketException socketEx)
         {
-            throw new PavoRestClientException(MapSocketError(socketEx), MapSocketErrorMessage(socketEx), ex);
+            throw new PavoRestClientException(MapSocketError(socketEx), MapSocketErrorMessage(socketEx), httpResponseReceived: false, ex);
         }
         catch (HttpRequestException ex)
         {
-            throw new PavoRestClientException("NETWORK", $"PAVO bağlantı hatası: {ex.Message}", ex);
+            throw new PavoRestClientException("NETWORK", $"PAVO bağlantı hatası: {ex.Message}", httpResponseReceived: false, ex);
+        }
+
+        using (response)
+        {
+            var body = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync(cancellationToken);
+
+            _logger.LogDebug(
+                "PAVO yanıtı alındı. Endpoint={Endpoint}, HttpStatus={HttpStatus}, BodyLength={BodyLength}",
+                path,
+                (int)response.StatusCode,
+                body.Length);
+
+            // Reference semantics: an HTTP 2xx alone is NOT success. A valid, non-null device
+            // response must have been parsed, so empty and malformed bodies are hard failures.
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                throw new PavoRestClientException(
+                    response.IsSuccessStatusCode ? "EMPTY_RESPONSE" : $"HTTP_{(int)response.StatusCode}",
+                    $"PAVO boş yanıt döndürdü (HTTP {(int)response.StatusCode}).",
+                    httpResponseReceived: true);
+            }
+
+            PavoWireResponse? wireResponse;
+            try
+            {
+                wireResponse = JsonSerializer.Deserialize<PavoWireResponse>(body, JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                throw new PavoRestClientException("INVALID_RESPONSE", $"PAVO yanıtı ayrıştırılamadı: {ex.Message}", httpResponseReceived: true, ex);
+            }
+
+            if (wireResponse is null)
+            {
+                throw new PavoRestClientException("INVALID_RESPONSE", "PAVO yanıtı boş bir nesneye ayrıştırıldı.", httpResponseReceived: true);
+            }
+
+            var result = MapToDomain<TResponse>(wireResponse);
+
+            // Reference: commonSuccess requires response.IsSuccessStatusCode. Surfacing the parsed
+            // detail while forcing HasError keeps the diagnostics without ever letting a non-2xx
+            // read as success.
+            if (!response.IsSuccessStatusCode)
+            {
+                result.HasError = true;
+                result.Message ??= response.ReasonPhrase;
+            }
+
+            _logger.LogDebug(
+                "PAVO yanıtı ayrıştırıldı. Endpoint={Endpoint}, HasError={HasError}, HasAbondon={HasAbondon}, ErrorCode={ErrorCode}",
+                path,
+                result.HasError,
+                result.HasAbondon,
+                result.ErrorCode);
+
+            return result;
+        }
+    }
+
+    private static TResponse MapToDomain<TResponse>(PavoWireResponse wire)
+        where TResponse : PavoBaseResponse, new()
+    {
+        var result = new TResponse
+        {
+            HasError = wire.HasError,
+            HasAbondon = wire.HasAbondon,
+            ErrorCode = wire.ErrorCode,
+            Message = wire.Message,
+            Errors = wire.Errors
+        };
+
+        var handle = MapHandleToDomain(wire.TransactionHandle);
+        switch (result)
+        {
+            case PavoPairingResponse pairing:
+                pairing.TransactionHandle = handle;
+                break;
+            case PavoPingResponse ping:
+                ping.TransactionHandle = handle;
+                break;
+            case PavoGetDeviceInfoResponse deviceInfo:
+                deviceInfo.TransactionHandle = handle;
+                break;
+        }
+
+        if (result is PavoPaymentResponseBase payment)
+        {
+            payment.Data = MapPaymentDataToDomain(wire.Data);
+        }
+
+        return result;
+    }
+
+    private static PavoTransactionHandle? MapHandleToDomain(PavoWireTransactionHandle? handle)
+    {
+        if (handle is null)
+        {
+            return null;
+        }
+
+        return new PavoTransactionHandle
+        {
+            SerialNumber = handle.SerialNumber,
+            Fingerprint = handle.Fingerprint,
+            TransactionSequence = handle.TransactionSequence,
+            TransactionDate = ParseTransactionDate(handle.TransactionDate)
+        };
+    }
+
+    /// <summary>Wire-to-domain projection. <c>cardNo</c> is intentionally dropped here: it is
+    /// sensitive card data that must not leave this boundary.</summary>
+    private static PavoPaymentOperationData? MapPaymentDataToDomain(PavoWirePaymentResponseData? data)
+    {
+        if (data is null)
+        {
+            return null;
+        }
+
+        return new PavoPaymentOperationData
+        {
+            Id = data.Id,
+            TransactionNo = data.TransactionNo,
+            BatchNo = data.BatchNo,
+            IsSuccessful = data.IsSuccessful,
+            StatusText = data.StatusText,
+            SaleReference = data.SaleReference,
+            Amount = data.Amount,
+            CurrencyCode = data.CurrencyCode,
+            CardReaderSlotText = data.CardReaderSlotText,
+            ResponseCode = data.ResponseCode,
+            AcquirerName = data.AcquirerName,
+            RetrievalReferenceNo = data.RetrievalReferenceNo,
+            AuthorizationCode = data.AuthorizationCode,
+            FailMessage = data.FailMessage,
+            CevapAciklama = data.CevapAciklama,
+            ResultStatus = data.ResultStatus,
+            ResultDate = data.ResultDate,
+            Terminal = data.Terminal,
+            CustomerReceiptImage = data.CustomerReceiptImage,
+            MerchantReceiptImage = data.MerchantReceiptImage,
+            GunSonu = data.GunSonu,
+            EodData = data.EodData,
+            EodJson = data.EodJson,
+            EodText = data.EodText,
+            EodImage = data.EodImage,
+            Reboot = data.Reboot,
+            EnterPinModeMessage = data.EnterPinModeMessage,
+            ExitPinModeMessage = data.ExitPinModeMessage
+        };
+    }
+
+    /// <summary>Reference StartPayment validation. Invalid input is rejected outright rather than
+    /// silently corrected, so STYS can never send a payment the reference client would refuse.</summary>
+    private static void ValidatePaymentRequest(PavoStartPaymentRequest request)
+    {
+        if (request.Amount <= 0)
+        {
+            throw new PavoRestClientException("INVALID_REQUEST", "Ödeme tutarı sıfırdan büyük olmalıdır.", httpResponseReceived: false);
+        }
+
+        if (request.InstallmentCount == 1 || request.InstallmentCount < 0)
+        {
+            throw new PavoRestClientException("INVALID_REQUEST", "Taksit sayısı peşin için 0, taksitli işlem için en az 2 olmalıdır.", httpResponseReceived: false);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.SaleReference))
+        {
+            throw new PavoRestClientException("INVALID_REQUEST", "Satış referansı boş olamaz.", httpResponseReceived: false);
         }
     }
 
     private static void ValidateRequest(PavoDeviceRequestBase request)
     {
         if (string.IsNullOrWhiteSpace(request.IpAddress))
-            throw new PavoRestClientException("INVALID_REQUEST", "PAVO cihaz IP adresi boş olamaz.");
+            throw new PavoRestClientException("INVALID_REQUEST", "PAVO cihaz IP adresi boş olamaz.", httpResponseReceived: false);
     }
 
     private static Uri BuildBaseUri(PavoDeviceRequestBase request)
     {
         // UseHttps is the sole source of truth for scheme selection. A device may have an
         // HttpsPort on file without actually speaking HTTPS, so HttpsPort presence alone must
-        // never flip an HTTP device over to HTTPS.
+        // never flip an HTTP device over to HTTPS. Reference default is http on 4567.
         var scheme = request.UseHttps ? "https" : "http";
         var port = request.UseHttps
             ? request.HttpsPort ?? 4568
@@ -107,76 +329,81 @@ public sealed class PavoRestClient : IPavoRestClient
         return builder.Uri;
     }
 
-    private static async Task<TResponse> ReadResponseAsync<TResponse>(HttpResponseMessage response, CancellationToken cancellationToken)
-        where TResponse : PavoBaseResponse, new()
+    private static PavoWireTransactionHandle BuildWireHandle(PavoTransactionHandle handle) => new()
     {
-        if (response.Content is null)
+        SerialNumber = handle.SerialNumber,
+        Fingerprint = handle.Fingerprint,
+        TransactionSequence = ToWireSequence(handle.TransactionSequence),
+        TransactionDate = FormatTransactionDate(handle.TransactionDate)
+    };
+
+    /// <summary>The wire contract is int; the STYS domain carries long for persistence headroom.</summary>
+    private static int ToWireSequence(long sequence)
+    {
+        if (sequence is < int.MinValue or > int.MaxValue)
         {
-            return new TResponse { HasError = !response.IsSuccessStatusCode, Message = response.ReasonPhrase };
+            throw new PavoRestClientException(
+                "INVALID_REQUEST",
+                $"PAVO transaction sequence değeri wire contract sınırlarının dışında: {sequence}.",
+                httpResponseReceived: false);
         }
 
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return new TResponse { HasError = !response.IsSuccessStatusCode, Message = response.ReasonPhrase };
-        }
-
-        try
-        {
-            var result = JsonSerializer.Deserialize<TResponse>(content, JsonOptions) ?? new TResponse();
-            if (!response.IsSuccessStatusCode)
-            {
-                result.HasError = true;
-                result.Message ??= response.ReasonPhrase;
-            }
-
-            return result;
-        }
-        catch (JsonException ex)
-        {
-            throw new PavoRestClientException("INVALID_RESPONSE", $"PAVO yanıtı ayrıştırılamadı: {ex.Message}", ex);
-        }
+        return (int)sequence;
     }
 
-    private static PavoWirePairingRequest BuildPairingWireRequest(PavoPairingRequest request) => new()
+    private static string FormatTransactionDate(DateTime value)
     {
-        TransactionHandle = request.TransactionHandle
-    };
+        var local = value.Kind == DateTimeKind.Utc ? value.ToLocalTime() : value;
+        return local.ToString(TransactionDateFormat, CultureInfo.InvariantCulture);
+    }
 
-    private static PavoWireDeviceCommandRequest BuildPingWireRequest(PavoPingRequest request) => new()
+    private static DateTime ParseTransactionDate(string? value)
     {
-        TransactionHandle = request.TransactionHandle
-    };
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return default;
+        }
 
-    private static PavoWireDeviceCommandRequest BuildGetDeviceInfoWireRequest(PavoGetDeviceInfoRequest request) => new()
+        if (DateTime.TryParseExact(value, TransactionDateFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var parsed)
+            || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out parsed))
+        {
+            return DateTime.SpecifyKind(parsed, DateTimeKind.Local);
+        }
+
+        return default;
+    }
+
+    private static PavoWireDeviceCommandRequest BuildDeviceCommandWireRequest(PavoDeviceRequestBase request) => new()
     {
-        TransactionHandle = request.TransactionHandle
+        TransactionHandle = BuildWireHandle(request.TransactionHandle)
     };
 
     private static PavoWireStartPaymentRequest BuildStartPaymentWireRequest(PavoStartPaymentRequest request)
     {
-        var saleReference = request.SaleReference?.Trim() ?? string.Empty;
+        var saleReference = request.SaleReference.Trim();
         var amount = request.Amount;
         var selectedSlots = request.SelectedSlots?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
         var selectedTerminals = request.SelectedTerminals?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray();
-        var description = request.Description?.Trim();
+
         return new PavoWireStartPaymentRequest
         {
-            TransactionHandle = request.TransactionHandle,
+            TransactionHandle = BuildWireHandle(request.TransactionHandle),
             Payment = new PavoWirePaymentRequest
             {
+                // Reference: Amount is sent in the major currency unit; never converted to minor units.
                 Amount = amount,
-                InstallmentCount = Math.Max(0, request.InstallmentCount),
+                InstallmentCount = request.InstallmentCount,
                 MinInstallmentCount = request.MinInstallmentCount,
                 MaxInstallmentCount = request.MaxInstallmentCount,
                 IsPfInstallmentEnabled = request.IsPfInstallmentEnabled,
                 Puan = request.Puan,
                 CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode) ? "TRY" : request.CurrencyCode.Trim(),
                 SaleReference = saleReference,
-                SelectedSlots = selectedSlots is { Length: > 0 } ? selectedSlots : ["rf", "icc", "magneticStripe", "qr", "manual"],
-                CardReadTimeout = request.CardReadTimeout > 0 ? request.CardReadTimeout : 60,
+                // Reference sends null (not an empty array) when no slots/terminals are selected.
+                SelectedSlots = selectedSlots is { Length: > 0 } ? selectedSlots : null,
+                CardReadTimeout = request.CardReadTimeout,
                 AllowDismissCardRead = request.AllowDismissCardRead,
-                PinEntryTimeout = request.PinEntryTimeout > 0 ? request.PinEntryTimeout : 30,
+                PinEntryTimeout = request.PinEntryTimeout,
                 SelectedTerminals = selectedTerminals is { Length: > 0 } ? selectedTerminals : null,
                 CustomApp = request.CustomApp,
                 CustomLogin = request.CustomLogin,
@@ -190,7 +417,7 @@ public sealed class PavoRestClient : IPavoRestClient
                     ReceiptImage = request.ReceiptImage,
                     CustomerReceiptImageEnabled = request.CustomerReceiptImageEnabled,
                     MerchantReceiptImageEnabled = request.MerchantReceiptImageEnabled,
-                    ReceiptWidth = string.IsNullOrWhiteSpace(request.ReceiptWidth) ? "58mm" : request.ReceiptWidth.Trim(),
+                    ReceiptWidth = request.ReceiptWidth,
                     HeadUnmaskLength = request.HeadUnmaskLength,
                     TailUnmaskLength = request.TailUnmaskLength,
                     PrintData = new PavoWirePrintDataRequest
@@ -199,55 +426,28 @@ public sealed class PavoRestClient : IPavoRestClient
                         CustomerReceiptJsonEnabled = request.CustomerReceiptJsonEnabled,
                         MerchantReceiptJsonEnabled = request.MerchantReceiptJsonEnabled,
                         ReceiptTextEnabled = request.ReceiptTextEnabled,
-                        ReceiptTextWidth = string.IsNullOrWhiteSpace(request.ReceiptTextWidth) ? "40" : request.ReceiptTextWidth.Trim(),
+                        ReceiptTextWidth = request.ReceiptTextWidth,
                         CustomerReceiptTextEnabled = request.CustomerReceiptTextEnabled,
-                        CustomerReceiptTextWidth = string.IsNullOrWhiteSpace(request.CustomerReceiptTextWidth) ? "40" : request.CustomerReceiptTextWidth.Trim(),
+                        CustomerReceiptTextWidth = request.CustomerReceiptTextWidth,
                         MerchantReceiptTextEnabled = request.MerchantReceiptTextEnabled,
-                        MerchantReceiptTextWidth = string.IsNullOrWhiteSpace(request.MerchantReceiptTextWidth) ? "40" : request.MerchantReceiptTextWidth.Trim()
+                        MerchantReceiptTextWidth = request.MerchantReceiptTextWidth
                     },
-                    Header = description,
+                    Header = request.ReceiptHeader,
                     Footer = request.ReceiptFooter,
                     QrCodeText = saleReference,
-                    List = BuildReceiptList(saleReference, amount, description)
+                    List = BuildReceiptList(saleReference, amount)
                 }
             }
         };
     }
 
-    private static IReadOnlyList<PavoWireReceiptListItemRequest> BuildReceiptList(string saleReference, decimal amount, string? description)
-    {
-        var items = new List<PavoWireReceiptListItemRequest>
-        {
-            new() { Name = "İşlem referansı:", Value = saleReference },
-            new() { Name = "Ödeme tutarı:", Value = $"{amount:N2} TL" },
-            new() { Name = "İşlem tarihi:", Value = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) }
-        };
-
-        if (!string.IsNullOrWhiteSpace(description))
-        {
-            items.Add(new PavoWireReceiptListItemRequest { Name = "Açıklama:", Value = description });
-        }
-
-        return items;
-    }
-
-    private static PavoWireGetPaymentResultRequest BuildGetPaymentResultWireRequest(PavoGetPaymentResultRequest request) => new()
-    {
-        TransactionHandle = request.TransactionHandle
-    };
-
-    private static bool IsBusinessResponse(PavoBaseResponse response) =>
-        response.HasError || response.HasAbondon || (response.ErrorCode is not null && response.ErrorCode != 0);
-
-    private static string BuildHttpErrorMessage(HttpStatusCode statusCode, PavoBaseResponse response)
-    {
-        var parts = new List<string> { $"PAVO HTTP {(int)statusCode}" };
-        if (response.ErrorCode is not null)
-            parts.Add(response.ErrorCode.Value.ToString(CultureInfo.InvariantCulture));
-        if (!string.IsNullOrWhiteSpace(response.Message))
-            parts.Add(response.Message!);
-        return string.Join(" - ", parts);
-    }
+    /// <summary>Reference receipt list: exactly these three rows, in this order.</summary>
+    private static IReadOnlyList<PavoWireReceiptListItemRequest> BuildReceiptList(string saleReference, decimal amount) =>
+    [
+        new() { Name = "İşlem referansı:", Value = saleReference },
+        new() { Name = "Ödeme tutarı:", Value = $"{amount:N2} TL" },
+        new() { Name = "İşlem tarihi:", Value = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss") }
+    ];
 
     private static string MapSocketError(SocketException ex) => ex.SocketErrorCode switch
     {

@@ -211,10 +211,10 @@ public sealed class PavoRestClientWirePayloadTests
     }
 
     [Fact]
-    public async Task Pairing_OnayliMiOlmadanDaBasariliSayilir()
+    public async Task Pairing_ReferansGovdesindeOlmayanAlanlarBasariyiEtkilemez()
     {
-        // OnayliMi does not exist in the reference protocol at all; the response below omits it
-        // entirely and pairing success must still be derivable.
+        // The reference PavoResponse has no OnayliMi/PairingId/PairingCode/Fingerprint fields at
+        // all. A minimal reference-shaped body must still deserialize and read as success.
         var handler = new CapturingHandler
         {
             ResponseBody = "{\"HasError\":false,\"HasAbondon\":false,\"ErrorCode\":0}"
@@ -229,7 +229,6 @@ public sealed class PavoRestClientWirePayloadTests
             TransactionHandle = CreateHandle()
         }, CancellationToken.None);
 
-        Assert.False(response.OnayliMi);
         Assert.True(PavoResponseHelpers.IsSuccessful(response));
     }
 
@@ -255,7 +254,10 @@ public sealed class PavoRestClientWirePayloadTests
     {
         public string? LastBody { get; private set; }
         public Uri? LastRequestUri { get; private set; }
-        public string ResponseBody { get; set; } = string.Empty;
+
+        /// <summary>Minimal valid reference-shaped success envelope. An empty body is a hard failure
+        /// under reference semantics, so request-shape tests need a real body here.</summary>
+        public string ResponseBody { get; set; } = "{\"HasError\":false,\"HasAbondon\":false,\"ErrorCode\":0}";
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {

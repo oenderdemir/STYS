@@ -452,6 +452,55 @@ public sealed class AgentEnrollmentRecoveryAndAuditTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task KurumPolitikasiKapali_PolicyEndpointFalseDonerVeAgentAktifOlur()
+    {
+        var db = await SetupAsync(kurumRequiresApproval: false); if (db is null) return;
+
+        // The read-only endpoint must reflect what is actually stored, not a hardcoded default.
+        var svc = new AgentService(NewFactory(), new FakeKurumTenantAccessor(_kurumId));
+        var policy = await svc.GetEnrollmentPolicyAsync(CancellationToken.None);
+        Assert.Equal(_kurumId, policy.KurumId);
+        Assert.False(policy.RequiresApproval);
+
+        // Kurum false + code false is the only combination that activates immediately.
+        var code = await NewCodeAsync(requiresApproval: false);
+        var result = await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+        {
+            EnrollmentCode = code.Code!,
+            AgentKey = $"AGNT-{_suffix}",
+            CihazKimligi = Guid.NewGuid().ToString("N")
+        }, CancellationToken.None);
+
+        Assert.Equal((int)AgentDurum.Active, result.Durum);
+
+        // And an Active agent can immediately obtain a token.
+        var token = await NewTokenService().IssueTokenAsync(new AgentTokenRequest
+        {
+            ClientId = result.ClientId,
+            ClientSecret = result.ClientSecret,
+            AgentInstanceId = "x"
+        }, CancellationToken.None);
+        Assert.NotNull(token);
+
+        await using var verify = AgentTestSupport.CreateDbContext(_cs);
+        await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    [IntegrationFact]
+    public async Task KurumZorunluOnay_PolicyEndpointTrueDoner()
+    {
+        var db = await SetupAsync(kurumRequiresApproval: true); if (db is null) return;
+
+        var svc = new AgentService(NewFactory(), new FakeKurumTenantAccessor(_kurumId));
+        var policy = await svc.GetEnrollmentPolicyAsync(CancellationToken.None);
+
+        Assert.True(policy.RequiresApproval);
+
+        await using var verify = AgentTestSupport.CreateDbContext(_cs);
+        await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    [IntegrationFact]
     public async Task KurumPolitikasiKapali_RequestTrueIsePendingApproval()
     {
         var db = await SetupAsync(kurumRequiresApproval: false); if (db is null) return;

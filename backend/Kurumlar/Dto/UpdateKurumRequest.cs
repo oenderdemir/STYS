@@ -22,6 +22,11 @@ public class UpdateKurumRequest
 
     public bool AktifMi { get; set; } = true;
 
+    /// <summary>Kurum-wide agent enrollment policy. Update builds a fresh KurumDto from this
+    /// request, so the value must travel here or the stored policy would be overwritten with
+    /// KurumDto's `= true` default on every unrelated edit.</summary>
+    public bool AgentEnrollmentRequiresApproval { get; set; } = true;
+
     public string? TenantKey { get; set; }
 
     public string? LoginHost { get; set; }

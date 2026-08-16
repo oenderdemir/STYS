@@ -13,6 +13,7 @@ public interface IAgentService
     Task RejectAsync(int id, string rejectedBy, CancellationToken cancellationToken);
     Task DisableAsync(int id, CancellationToken cancellationToken);
     Task RevokeAsync(int id, CancellationToken cancellationToken);
+    Task<AgentEnrollmentPolicyDto> GetEnrollmentPolicyAsync(CancellationToken cancellationToken);
     Task<AgentEnrollmentCodeDto> GenerateEnrollmentCodeAsync(AgentEnrollmentCodeRequest request, string createdBy, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<AgentEnrollmentCodeDto>> GetEnrollmentCodesAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken);
     Task RevokeEnrollmentCodeAsync(int enrollmentId, CancellationToken cancellationToken);

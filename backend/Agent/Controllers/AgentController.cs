@@ -84,6 +84,14 @@ public sealed class AgentController : ControllerBase
         return Ok();
     }
 
+    /// <summary>Read-only view of the kurum enrollment policy so the enrollment dialog can render
+    /// the approval choice correctly before any code has been generated. Enforcement stays in
+    /// AgentTokenService; this is presentation only.</summary>
+    [HttpGet("enrollment-policy")]
+    [Permission(StructurePermissions.AgentYonetimi.View)]
+    public async Task<ActionResult<AgentEnrollmentPolicyDto>> GetEnrollmentPolicy(CancellationToken cancellationToken) =>
+        Ok(await _agentService.GetEnrollmentPolicyAsync(cancellationToken));
+
     [HttpPost("enrollment-codes")]
     [Permission(StructurePermissions.AgentYonetimi.Manage)]
     public async Task<ActionResult<AgentEnrollmentCodeDto>> GenerateEnrollmentCode(

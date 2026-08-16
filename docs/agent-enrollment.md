@@ -59,6 +59,10 @@ RequiresApproval?
   çağrıları her zaman `Code = null` döndürür; UI listede sadece prefix gösterir.
 - Kod kurum (ve varsa installation session) ile bağlıdır; başka kurum için kullanılamaz.
 - Kullanıldığında `KullanimSayisi` artar ve limit dolunca `Durum = Used` olur.
+- **Tek kullanımlık server-side invariant'tır.** `MaxKullanimSayisi` her zaman `1`'e normalize
+  edilir; caller `>1` göndererek multi-use kod üretemez (istek property'si geriye uyumluluk için
+  duruyor ama yok sayılır). Multi-use provisioning gerekirse ayrı bir feature olacaktır. Recovery,
+  ikinci bir kullanım sayılmaz.
 
 ### Response-loss recovery (registration idempotency)
 
@@ -70,9 +74,15 @@ olur ama kod tükenmiştir. Bu durumu kapatmak için:
   sayılmaz (`ClientId`/`ClientSecret` boştur).
 - Bu nonce her enroll denemesinde gönderilir. Server yalnızca **hash**'ini
   (`AgentEnrollment.RegistrationNonceHash`) saklar.
-- Tükenmiş bir kodla gelen istek, ancak şu üçü birden sağlanırsa recovery kabul edilir:
-  kayıtlı nonce hash'i var, sunulan nonce sabit-zamanlı karşılaştırmayla eşleşiyor ve
-  `CihazKimligi` ilk kayıttaki makine kimliğiyle aynı.
+- Recovery path'e girebilmek için **tüm** şu koşullar gerekir: enrollment `Durum = Used`
+  (gerçekten tüketilmiş), `KullanimSayisi >= MaxKullanimSayisi`, `AgentId` dolu,
+  `RegistrationNonceHash` mevcut, kod henüz expire olmamış, sunulan nonce sabit-zamanlı
+  karşılaştırmayla eşleşiyor ve `CihazKimligi` ilk kayıttaki makine kimliğiyle birebir aynı.
+  Active/kullanılmamış, revoke edilmiş veya süresi dolmuş bir enrollment recovery path'e **girmez**.
+- Makine bağı **fail-closed**'dur: ilk kayıt bir `CihazKimligi` kaydetmemişse recovery reddedilir;
+  nonce tek başına yeterli sayılmaz.
+- Paralel iki recovery denemesi `AgentEnrollment.ConcurrencyToken` üzerinde serialize edilir:
+  yalnızca biri commit eder, diğeri generic hata alır. Sonuçta **tek bir aktif credential** kalır.
 - Recovery'de: **yeni Agent oluşturulmaz** (mevcut `enrollment.AgentId` kullanılır), agent'a hiç
   ulaşmamış eski credential revoke edilir, yeni credential üretilir ve plaintext secret sadece bu
   response'ta döner.
@@ -138,8 +148,13 @@ bile agent `PendingApproval` olur — **caller kurum politikasını bypass edeme
 kapalıyken operatör yine de tek bir kurulum için onay isteyebilir. Kurum kaydı bulunamazsa onay
 zorunlu varsayılır.
 
-Wizard, kurum politikası zorunluysa "Onay gerektirsin" kutusunu disabled gösterir ve bunun
-kapatılamayacağını belirtir.
+Politika `GET /api/ui/agent/enrollment-policy` ile okunur (read-only, sadece sunum içindir;
+enforcement `AgentTokenService`'tedir). Enrollment dialog'u açılırken bu çağrı yapılır, böylece ilk
+kod üretilmeden önce de doğru render edilir: kurum zorunlu onay istiyorsa "Onay gerektirsin" kutusu
+işaretli ve disabled gelir, yanında açıklama gösterilir.
+
+Kurum yönetimi ekranındaki Kurum düzenleme formunda **"Agent kayıtları merkez onayı gerektirsin"**
+checkbox'ı ile politika değiştirilebilir.
 
 ## Approval
 

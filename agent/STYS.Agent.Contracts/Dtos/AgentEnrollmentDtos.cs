@@ -48,10 +48,22 @@ public sealed class AgentEnrollmentStatusResponse
     public string? Message { get; set; }
 }
 
+/// <summary>Kurum-level enrollment policy, exposed read-only so the UI can render the approval
+/// choice before any enrollment code exists.</summary>
+public sealed class AgentEnrollmentPolicyDto
+{
+    public int KurumId { get; set; }
+    /// <summary>When true, approval is mandatory for this kurum and cannot be switched off per code.</summary>
+    public bool RequiresApproval { get; set; }
+}
+
 public sealed class AgentEnrollmentCodeRequest
 {
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];
     public IReadOnlyCollection<string> AllowedScopes { get; set; } = [];
+    /// <summary>Retained for backward compatibility only. Enrollment codes are single-use and the
+    /// server normalizes this to 1 regardless of what is sent.</summary>
+    [Obsolete("Enrollment codes are always single-use; this value is ignored by the server.")]
     public int? MaxKullanimSayisi { get; set; }
     public int? ExpirationHours { get; set; }
     public bool RequiresApproval { get; set; }

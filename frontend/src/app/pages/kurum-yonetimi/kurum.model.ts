@@ -10,6 +10,8 @@ export interface KurumModel {
     telefon?: string | null;
     eposta?: string | null;
     aktifMi: boolean;
+    /** When true, agents enrolling into this kurum always require central approval. */
+    agentEnrollmentRequiresApproval?: boolean;
     logoDosyaAdi?: string | null;
     logoOrijinalDosyaAdi?: string | null;
     logoContentType?: string | null;

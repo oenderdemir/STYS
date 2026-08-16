@@ -267,12 +267,30 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     openEnrollmentDialog(): void {
         this.enrollmentForm = this.createDefaultEnrollmentForm();
         this.enrollmentDialogVisible.set(true);
+        // Learn the kurum policy up front rather than assuming "not required" until the first code
+        // is generated, so the checkbox renders correctly on first paint.
+        this.loadEnrollmentPolicy();
         if (this.enrollmentTesisler.length === 0) {
             this.loadEnrollmentTesisler();
             return;
         }
 
         this.loadEnrollmentCodes();
+    }
+
+    loadEnrollmentPolicy(): void {
+        this.service.getEnrollmentPolicy().subscribe({
+            next: (policy) => {
+                this.kurumRequiresApproval.set(policy.requiresApproval);
+                if (policy.requiresApproval) {
+                    // Reflect the effective outcome: approval will be required no matter what the
+                    // per-code flag says.
+                    this.enrollmentForm = { ...this.enrollmentForm, requiresApproval: true };
+                }
+            },
+            // The backend enforces the policy regardless; a failed read only affects the hint.
+            error: () => this.kurumRequiresApproval.set(false)
+        });
     }
 
     loadEnrollmentCodes(): void {

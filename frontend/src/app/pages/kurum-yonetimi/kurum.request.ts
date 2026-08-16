@@ -9,6 +9,8 @@ export interface CreateKurumRequest {
     telefon?: string | null;
     eposta?: string | null;
     aktifMi: boolean;
+    /** When true, agents enrolling into this kurum always require central approval. */
+    agentEnrollmentRequiresApproval: boolean;
     tenantKey?: string | null;
     loginHost?: string | null;
 }

@@ -249,7 +249,20 @@ public sealed class AgentTokenService : IAgentTokenService
     /// same installation identity as the agent that was created. Anything less is not a recovery.</summary>
     private static bool IsRecoveryAttempt(AgentEnrollment enrollment, AgentEnrollmentRequest request)
     {
+        // Recovery only ever applies to an enrollment that genuinely completed once: it must be
+        // consumed, still be the code that produced the agent, and carry the nonce hash recorded at
+        // that moment. An Active/unused code never reaches this path.
+        if (enrollment.Durum != AgentEnrollmentDurum.Used)
+            return false;
+
+        if (enrollment.KullanimSayisi < enrollment.MaxKullanimSayisi)
+            return false;
+
         if (enrollment.AgentId is null || string.IsNullOrWhiteSpace(enrollment.RegistrationNonceHash))
+            return false;
+
+        // A code that was revoked or has since expired is finished; recovery must not resurrect it.
+        if (DateTime.UtcNow > enrollment.ExpiresAt)
             return false;
 
         if (string.IsNullOrWhiteSpace(request.RegistrationNonce))
@@ -276,12 +289,22 @@ public sealed class AgentTokenService : IAgentTokenService
             ?? throw new BaseException(InvalidEnrollmentMessage, 400);
 
         // Second binding: the nonce alone is not enough, the retry must come from the same machine
-        // identity that the original registration recorded.
-        if (!string.IsNullOrWhiteSpace(agent.CihazKimligi)
-            && !string.Equals(agent.CihazKimligi, request.CihazKimligi, StringComparison.OrdinalIgnoreCase))
+        // identity that the original registration recorded. Fail closed - if the original
+        // registration never recorded an identity there is nothing to bind against, so recovery is
+        // refused rather than accepted on the nonce alone.
+        if (string.IsNullOrWhiteSpace(agent.CihazKimligi)
+            || string.IsNullOrWhiteSpace(request.CihazKimligi)
+            || !string.Equals(agent.CihazKimligi, request.CihazKimligi, StringComparison.OrdinalIgnoreCase))
         {
             throw new BaseException(InvalidEnrollmentMessage, 400);
         }
+
+        // Serialize concurrent recoveries on the same row the initial registration uses. Two
+        // parallel retries both read the same original token, so only the first SaveChanges
+        // matches; the loser hits the concurrency check and is rejected, leaving exactly one fresh
+        // credential instead of two.
+        enrollment.ConcurrencyToken = Guid.NewGuid();
+        enrollment.UpdatedAt = DateTime.UtcNow;
 
         // The previously issued credential either never arrived or is unusable; retire it so a
         // recovered registration never leaves two live credentials behind.

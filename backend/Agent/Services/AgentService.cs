@@ -226,6 +226,26 @@ public sealed class AgentService : IAgentService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<AgentEnrollmentPolicyDto> GetEnrollmentPolicyAsync(CancellationToken cancellationToken)
+    {
+        var kurumId = _tenantAccessor.GetCurrentKurumId();
+        if (!kurumId.HasValue) throw new BaseException("Aktif kurum seçilmedi.", 400);
+        EnforceKurumAccess(kurumId.Value);
+
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var requiresApproval = await db.Set<STYS.Kurumlar.Entities.Kurum>()
+            .Where(x => x.Id == kurumId.Value && !x.IsDeleted)
+            .Select(x => (bool?)x.AgentEnrollmentRequiresApproval)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new AgentEnrollmentPolicyDto
+        {
+            KurumId = kurumId.Value,
+            // Same fail-safe default the enrollment path uses for a missing kurum row.
+            RequiresApproval = requiresApproval ?? true
+        };
+    }
+
     public async Task<AgentEnrollmentCodeDto> GenerateEnrollmentCodeAsync(AgentEnrollmentCodeRequest request, string createdBy, CancellationToken cancellationToken)
     {
         var kurumId = _tenantAccessor.GetCurrentKurumId();
@@ -250,7 +270,10 @@ public sealed class AgentService : IAgentService
             KurumId = kurumId.Value,
             TesisIds = System.Text.Json.JsonSerializer.Serialize(request.TesisIds),
             AllowedScopes = System.Text.Json.JsonSerializer.Serialize(request.AllowedScopes),
-            MaxKullanimSayisi = request.MaxKullanimSayisi ?? 1,
+            // Enrollment codes are single-use by contract. The request property is kept for
+            // backward compatibility but is normalized here, so a caller cannot mint a multi-use
+            // code. Multi-use provisioning, if ever needed, is a separate feature.
+            MaxKullanimSayisi = SingleUseEnrollment,
             RequiresApproval = request.RequiresApproval,
             ExpiresAt = DateTime.UtcNow.AddHours(request.ExpirationHours ?? 24),
             Durum = AgentEnrollmentDurum.Active, CreatedBy = createdBy, CreatedAt = DateTime.UtcNow
@@ -426,6 +449,9 @@ public sealed class AgentService : IAgentService
         foreach (var cred in agent.Credentialler?.Where(x => x.AktifMi) ?? [])
             cred.CredentialVersion++;
     }
+
+    /// <summary>Enrollment codes are single-use; this is a server-side invariant, not a caller choice.</summary>
+    private const int SingleUseEnrollment = 1;
 
     /// <summary>Matches the CreatedBy/UpdatedBy convention used elsewhere in the agent services,
     /// where the controller supplies User?.Identity?.Name and unauthenticated paths fall back to

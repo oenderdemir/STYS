@@ -73,6 +73,15 @@ export class AgentYonetimiService {
         );
     }
 
+    getEnrollmentPolicy(): Observable<{ kurumId: number; requiresApproval: boolean }> {
+        return this.http.get<ApiResponse<{ kurumId: number; requiresApproval: boolean }>>(`${this.apiBaseUrl}/ui/agent/enrollment-policy`).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Kurum enrollment politikası alınamadı.');
+            })
+        );
+    }
+
     rejectAgent(id: number): Observable<void> {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent/${id}/reject`, {}).pipe(
             map((r) => {

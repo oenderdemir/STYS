@@ -24,6 +24,10 @@ public class KurumDto : BaseRdbmsDto<int>
 
     public bool AktifMi { get; set; }
 
+    /// <summary>When true, every agent enrolling into this kurum lands in PendingApproval and the
+    /// per-enrollment-code flag cannot switch it off. Backend remains the enforcement point.</summary>
+    public bool AgentEnrollmentRequiresApproval { get; set; } = true;
+
     public string? LogoDosyaAdi { get; set; }
 
     public string? LogoOrijinalDosyaAdi { get; set; }

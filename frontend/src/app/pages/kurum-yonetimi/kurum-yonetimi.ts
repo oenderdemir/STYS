@@ -202,7 +202,10 @@ export class KurumYonetimi implements OnInit {
                     this.selectedKurumIsNew = false;
                     this.selectedKurum = {
                         ...saved,
-                        id: saved.id ?? this.selectedKurum.id ?? null
+                        id: saved.id ?? this.selectedKurum.id ?? null,
+                        // Server model has this optional; the form state requires a concrete value
+                        // and falls back to the same fail-safe default as the backend.
+                        agentEnrollmentRequiresApproval: saved.agentEnrollmentRequiresApproval ?? true
                     };
                     this.kurumDialogVisible = true;
                     this.loadPageData(false, this.selectedKurum.id ?? null);
@@ -658,6 +661,7 @@ export class KurumYonetimi implements OnInit {
             il: kurum.il ?? null,
             telefon: kurum.telefon ?? null,
             eposta: kurum.eposta ?? null,
+            agentEnrollmentRequiresApproval: kurum.agentEnrollmentRequiresApproval ?? true,
             aktifMi: kurum.aktifMi,
             logoDosyaAdi: kurum.logoDosyaAdi ?? null,
             logoUrl: kurum.logoUrl ?? null,
@@ -679,6 +683,8 @@ export class KurumYonetimi implements OnInit {
             telefon: null,
             eposta: null,
             aktifMi: true,
+            // Fail-safe default, matching the backend.
+            agentEnrollmentRequiresApproval: true,
             tenantKey: null,
             loginHost: null
         };
@@ -696,6 +702,7 @@ export class KurumYonetimi implements OnInit {
             telefon: this.normalizeOptionalText(form.telefon),
             eposta: this.normalizeOptionalText(form.eposta),
             aktifMi: form.aktifMi === true,
+            agentEnrollmentRequiresApproval: form.agentEnrollmentRequiresApproval === true,
             tenantKey: this.normalizeOptionalText(form.tenantKey),
             loginHost: this.normalizeOptionalText(form.loginHost)
         };

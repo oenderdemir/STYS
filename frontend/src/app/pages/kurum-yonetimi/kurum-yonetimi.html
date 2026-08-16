@@ -143,6 +143,12 @@
                                 <label for="kurumActive">Aktif kurum</label>
                             </div>
 
+                            <div class="field field-full toggle-field">
+                                <p-checkbox inputId="kurumAgentApproval" [binary]="true" [(ngModel)]="selectedKurum.agentEnrollmentRequiresApproval"></p-checkbox>
+                                <label for="kurumAgentApproval">Agent kayıtları merkez onayı gerektirsin</label>
+                                <small class="help-text">Açıkken bu kuruma kaydolan her agent onay bekler; enrollment kodu bunu kapatamaz.</small>
+                            </div>
+
                             <div class="field field-full form-subsection-title">
                                 <h4>Mali / E-Belge Bilgileri</h4>
                                 <small class="help-text">Bu alanlar, e-belge UBL üretimi için kurumun "satıcı" bilgilerini oluşturur - hangi alanların zorunlu olduğu, kurumun e-belge politikası/entegrasyon yöntemine göre <a routerLink="/muhasebe/e-belge-yonetimi">E-Belge Yönetimi</a> ekranındaki hazırlık durumunda gösterilir.</small>

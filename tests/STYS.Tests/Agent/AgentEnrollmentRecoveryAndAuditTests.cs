@@ -67,7 +67,6 @@ public sealed class AgentEnrollmentRecoveryAndAuditTests : IAsyncLifetime
         {
             TesisIds = [_tesisId],
             AllowedScopes = ["agent.heartbeat"],
-            MaxKullanimSayisi = 1,
             ExpirationHours = 1,
             RequiresApproval = requiresApproval
         }, "test", CancellationToken.None);
@@ -122,6 +121,245 @@ public sealed class AgentEnrollmentRecoveryAndAuditTests : IAsyncLifetime
             .FirstAsync(x => x.ClientId == lost.ClientId);
         Assert.False(orphan.AktifMi);
         Assert.NotNull(orphan.RevokedAt);
+
+        await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    // ---------------------------------------------------------------- A2. parallel recovery
+
+    [IntegrationFact]
+    public async Task ParalelRecovery_TekBirAktifCredentialBirakir()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var code = await NewCodeAsync();
+        const string nonce = "recovery-nonce-parallel-cccccccccccccccc";
+        var instanceId = Guid.NewGuid().ToString("N");
+        var agentKey = $"AGNT-{_suffix}";
+
+        var lost = await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+        {
+            EnrollmentCode = code.Code!,
+            AgentKey = agentKey,
+            CihazKimligi = instanceId,
+            RegistrationNonce = nonce
+        }, CancellationToken.None);
+
+        // Two recovery retries race with identical code + nonce + machine identity.
+        int success = 0, rejected = 0, unexpected = 0;
+        var results = new AgentEnrollmentResponse?[2];
+        var tasks = new Task[2];
+        for (var i = 0; i < 2; i++)
+        {
+            var idx = i;
+            tasks[i] = Task.Run(async () =>
+            {
+                try
+                {
+                    results[idx] = await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+                    {
+                        EnrollmentCode = code.Code!,
+                        AgentKey = agentKey,
+                        CihazKimligi = instanceId,
+                        RegistrationNonce = nonce
+                    }, CancellationToken.None);
+                    Interlocked.Increment(ref success);
+                }
+                catch (TOD.Platform.SharedKernel.Exceptions.BaseException)
+                {
+                    Interlocked.Increment(ref rejected);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    Interlocked.Increment(ref rejected);
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Increment(ref unexpected);
+                    Console.WriteLine($"Unexpected: {ex.GetType().Name}: {ex.Message}");
+                }
+            });
+        }
+        await Task.WhenAll(tasks);
+
+        Assert.Equal(0, unexpected);
+        Assert.Equal(1, success);
+        Assert.Equal(1, rejected);
+
+        await using var verify = AgentTestSupport.CreateDbContext(_cs);
+
+        // Still exactly one Agent.
+        Assert.Equal(1, await verify.Set<AgentEntity>().CountAsync(x => x.AgentKey == agentKey && !x.IsDeleted));
+
+        // And exactly one active credential: the orphan plus the losing attempt must not survive.
+        var active = await verify.Set<AgentCredential>().AsNoTracking()
+            .Where(x => x.AgentId == lost.AgentId && x.AktifMi && !x.IsDeleted)
+            .ToListAsync();
+        Assert.Single(active);
+
+        // The surviving credential is the one the winning caller was handed, and it works.
+        var winner = results.Single(x => x is not null)!;
+        Assert.Equal(winner.ClientId, active[0].ClientId);
+        var token = await NewTokenService().IssueTokenAsync(new AgentTokenRequest
+        {
+            ClientId = winner.ClientId,
+            ClientSecret = winner.ClientSecret,
+            AgentInstanceId = instanceId
+        }, CancellationToken.None);
+        Assert.NotNull(token);
+
+        // The original orphan is revoked.
+        var orphan = await verify.Set<AgentCredential>().AsNoTracking().FirstAsync(x => x.ClientId == lost.ClientId);
+        Assert.False(orphan.AktifMi);
+
+        await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    // ---------------------------------------------------------------- B2. single-use invariant
+
+    [IntegrationFact]
+    public async Task EnrollmentCode_MaxKullanimSayisiBirdenBuyukOlamaz()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+
+        var svc = new AgentService(NewFactory(), new FakeKurumTenantAccessor(_kurumId));
+        var code = await svc.GenerateEnrollmentCodeAsync(new AgentEnrollmentCodeRequest
+        {
+            TesisIds = [_tesisId],
+            AllowedScopes = ["agent.heartbeat"],
+#pragma warning disable CS0618 // deliberately exercising the legacy property
+            MaxKullanimSayisi = 5,
+#pragma warning restore CS0618
+            ExpirationHours = 1
+        }, "test", CancellationToken.None);
+
+        // Server normalizes the caller's request: the code is single-use.
+        Assert.Equal(1, code.MaxKullanimSayisi);
+        await using var stored = AgentTestSupport.CreateDbContext(_cs);
+        Assert.Equal(1, (await stored.Set<AgentEnrollment>().AsNoTracking().FirstAsync(x => x.Id == code.Id)).MaxKullanimSayisi);
+
+        // First registration consumes it...
+        await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+        {
+            EnrollmentCode = code.Code!,
+            AgentKey = $"AGNT-{_suffix}-1",
+            CihazKimligi = Guid.NewGuid().ToString("N"),
+            RegistrationNonce = "nonce-one-dddddddddddddddddddddddddd"
+        }, CancellationToken.None);
+
+        // ...and a second, genuinely different installation is refused.
+        var ex = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(
+            () => NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+            {
+                EnrollmentCode = code.Code!,
+                AgentKey = $"AGNT-{_suffix}-2",
+                CihazKimligi = Guid.NewGuid().ToString("N"),
+                RegistrationNonce = "nonce-two-eeeeeeeeeeeeeeeeeeeeeeeeee"
+            }, CancellationToken.None));
+        Assert.Equal(PublicInvalidMessage, ex.Message);
+
+        await using var verify = AgentTestSupport.CreateDbContext(_cs);
+        Assert.Equal(0, await verify.Set<AgentEntity>().CountAsync(x => x.AgentKey == $"AGNT-{_suffix}-2" && !x.IsDeleted));
+        await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    // ---------------------------------------------------------------- C/D. recovery state guards
+
+    [IntegrationFact]
+    public async Task Recovery_OrijinalCihazKimligiYoksaFailClosed()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var code = await NewCodeAsync();
+        const string nonce = "recovery-nonce-nomachine-ffffffffffffffff";
+
+        // Original registration recorded no machine identity, so there is nothing to bind to.
+        await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+        {
+            EnrollmentCode = code.Code!,
+            AgentKey = $"AGNT-{_suffix}",
+            CihazKimligi = null,
+            RegistrationNonce = nonce
+        }, CancellationToken.None);
+
+        // Even holding the correct nonce, recovery is refused rather than accepted on nonce alone.
+        var ex = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(
+            () => NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+            {
+                EnrollmentCode = code.Code!,
+                AgentKey = $"AGNT-{_suffix}",
+                CihazKimligi = Guid.NewGuid().ToString("N"),
+                RegistrationNonce = nonce
+            }, CancellationToken.None));
+        Assert.Equal(PublicInvalidMessage, ex.Message);
+
+        await using var verify = AgentTestSupport.CreateDbContext(_cs);
+        await AgentTestSupport.CleanupAsync(verify, _suffix);
+    }
+
+    [IntegrationFact]
+    public async Task Recovery_RevokeVeyaExpiredEnrollmentIcinCalismaz()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var svc = new AgentService(NewFactory(), new FakeKurumTenantAccessor(_kurumId));
+
+        // --- revoked after a successful registration ---
+        var revokedCode = await NewCodeAsync();
+        const string revokedNonce = "recovery-nonce-revoked-gggggggggggggggg";
+        var revokedInstance = Guid.NewGuid().ToString("N");
+        await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+        {
+            EnrollmentCode = revokedCode.Code!,
+            AgentKey = $"AGNT-{_suffix}-rev",
+            CihazKimligi = revokedInstance,
+            RegistrationNonce = revokedNonce
+        }, CancellationToken.None);
+        await svc.RevokeEnrollmentCodeAsync(revokedCode.Id, CancellationToken.None);
+
+        var revokedEx = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(
+            () => NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+            {
+                EnrollmentCode = revokedCode.Code!,
+                AgentKey = $"AGNT-{_suffix}-rev",
+                CihazKimligi = revokedInstance,
+                RegistrationNonce = revokedNonce
+            }, CancellationToken.None));
+        Assert.Equal(PublicInvalidMessage, revokedEx.Message);
+
+        // --- expired after a successful registration ---
+        var expiredCode = await NewCodeAsync();
+        const string expiredNonce = "recovery-nonce-expired-hhhhhhhhhhhhhhhh";
+        var expiredInstance = Guid.NewGuid().ToString("N");
+        await NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+        {
+            EnrollmentCode = expiredCode.Code!,
+            AgentKey = $"AGNT-{_suffix}-exp",
+            CihazKimligi = expiredInstance,
+            RegistrationNonce = expiredNonce
+        }, CancellationToken.None);
+
+        await using (var mutate = AgentTestSupport.CreateDbContext(_cs))
+        {
+            var row = await mutate.Set<AgentEnrollment>().FirstAsync(x => x.Id == expiredCode.Id);
+            row.ExpiresAt = DateTime.UtcNow.AddHours(-1);
+            await mutate.SaveChangesAsync();
+        }
+
+        var expiredEx = await Assert.ThrowsAsync<TOD.Platform.SharedKernel.Exceptions.BaseException>(
+            () => NewTokenService().EnrollAsync(new AgentEnrollmentRequest
+            {
+                EnrollmentCode = expiredCode.Code!,
+                AgentKey = $"AGNT-{_suffix}-exp",
+                CihazKimligi = expiredInstance,
+                RegistrationNonce = expiredNonce
+            }, CancellationToken.None));
+        Assert.Equal(PublicInvalidMessage, expiredEx.Message);
+
+        // No extra credentials were minted by either refused recovery.
+        await using var verify = AgentTestSupport.CreateDbContext(_cs);
+        foreach (var key in new[] { $"AGNT-{_suffix}-rev", $"AGNT-{_suffix}-exp" })
+        {
+            var agent = await verify.Set<AgentEntity>().AsNoTracking().FirstAsync(x => x.AgentKey == key && !x.IsDeleted);
+            Assert.Equal(1, await verify.Set<AgentCredential>().CountAsync(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted));
+        }
 
         await AgentTestSupport.CleanupAsync(verify, _suffix);
     }

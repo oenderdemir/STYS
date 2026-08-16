@@ -1,16 +1,16 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Services;
 using TOD.Platform.AspNetCore.Authorization;
+using TOD.Platform.AspNetCore.Controllers;
 
 namespace STYS.Agent.Controllers;
 
-[Route("api/ui/agent-installations")]
-[ApiController]
-[Authorize(Policy = TOD.Platform.AspNetCore.Authorization.TodPlatformAuthorizationConstants.UiPolicy)]
-public sealed class AgentInstallationSessionsController : ControllerBase
+// Overrides UIController's default "ui/[controller]" (which would resolve to ui/AgentInstallationSessions).
+// No "api/" segment: the reverse proxy — and proxy.conf.json's pathRewrite in dev — strips one leading
+// /api before the request reaches MVC, so the browser-facing URL is /api/ui/agent-installations.
+[Route("ui/agent-installations")]
+public sealed class AgentInstallationSessionsController : UIController
 {
     private readonly IAgentInstallationSessionService _service;
 

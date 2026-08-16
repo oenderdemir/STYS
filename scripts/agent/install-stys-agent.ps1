@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$PackageRoot = $PSScriptRoot,
     [string]$AgentInstallDir = (Join-Path $env:ProgramFiles "STYS\Agent"),

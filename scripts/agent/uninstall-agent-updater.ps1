@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ServiceName = "STYS Agent Updater",
     [string]$InstallDir = (Join-Path $env:ProgramFiles "STYS\Agent Updater"),

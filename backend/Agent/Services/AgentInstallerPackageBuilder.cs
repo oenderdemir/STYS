@@ -197,11 +197,24 @@ internal static class AgentInstallerPackageBuilder
 
     private static void AddTextFile(ZipArchive archive, string entryPath, string content)
     {
-        var entry = archive.CreateEntry(NormalizeArchivePath(entryPath), CompressionLevel.Optimal);
+        var normalizedPath = NormalizeArchivePath(entryPath);
+        var entry = archive.CreateEntry(normalizedPath, CompressionLevel.Optimal);
         using var stream = entry.Open();
-        using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        using var writer = new StreamWriter(stream, ResolveTextEncoding(normalizedPath));
         writer.Write(content);
     }
+
+    /// <summary>
+    /// Windows PowerShell 5.1 assumes the active ANSI codepage for scripts with no byte order mark,
+    /// so UTF-8 Turkish literals render as mojibake ("başlıyor" becomes "baÅŸlÄ±yor"). Scripts are
+    /// therefore emitted with a BOM. File.ReadAllText strips the BOM off the repository copies, so
+    /// this is what puts it back on the packaged ones. JSON and PEM entries must stay BOM-free:
+    /// System.Text.Json rejects a leading BOM and PEM import expects the header first.
+    /// </summary>
+    private static Encoding ResolveTextEncoding(string normalizedEntryPath) =>
+        normalizedEntryPath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase)
+            ? new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
+            : new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     private static void AddBinaryFile(ZipArchive archive, string entryPath, byte[] content)
     {

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$PublishDir = (Join-Path $PSScriptRoot "..\..\artifacts\agent\win-x64"),
     [string]$InstallDir = (Join-Path $env:ProgramFiles "STYS\Agent"),
@@ -27,7 +27,9 @@ function Grant-DirectoryAccess {
         [Parameter(Mandatory = $true)][string]$Identity,
         [Parameter(Mandatory = $true)][string]$Rights
     )
-    & icacls $Path /grant "$Identity:($Rights)" /T /C | Out-Null
+    # ${} delimits the name: "$Identity:(...)" makes the parser read $Identity: as a scope-qualified
+    # variable reference, which is a hard parse error before the script can run at all.
+    & icacls $Path /grant "${Identity}:($Rights)" /T /C | Out-Null
 }
 
 function Start-And-Wait-ServiceRunning {
@@ -71,8 +73,11 @@ Grant-DirectoryAccess -Path $UpdaterPrivateDataDir -Identity 'SYSTEM' -Rights 'M
 Grant-DirectoryAccess -Path $LogDir -Identity $ServiceAccount -Rights 'M'
 
 & icacls $UpdaterPrivateDataDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" /C | Out-Null
-& icacls $releaseTrustDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" "$ServiceAccount:(OI)(CI)(RX)" /C | Out-Null
-& icacls $ReleasePublicKeyPath /inheritance:r /grant:r "SYSTEM:F" "BUILTIN\Administrators:F" "$ServiceAccount:R" /C | Out-Null
+& icacls $releaseTrustDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" "${ServiceAccount}:(OI)(CI)(RX)" /C | Out-Null
+# "$ServiceAccount:R" parses cleanly as scope "ServiceAccount" / variable "R" and expands to an
+# empty string, so icacls silently received no ACE and the service account never got read access
+# to the trust anchor. ${} is required here for correctness, not just to satisfy the parser.
+& icacls $ReleasePublicKeyPath /inheritance:r /grant:r "SYSTEM:F" "BUILTIN\Administrators:F" "${ServiceAccount}:R" /C | Out-Null
 
 $serviceExe = Join-Path $InstallDir "STYS.Agent.exe"
 $quotedServiceExe = '"' + $serviceExe + '"'

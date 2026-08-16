@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$PublishDir = (Join-Path $PSScriptRoot "..\..\artifacts\agent-updater\win-x64"),
     [string]$UpdaterInstallDir = (Join-Path $env:ProgramFiles "STYS\Agent Updater"),
@@ -28,7 +28,9 @@ function Grant-DirectoryAccess {
         [Parameter(Mandatory = $true)][string]$Identity,
         [Parameter(Mandatory = $true)][string]$Rights
     )
-    & icacls $Path /grant "$Identity:($Rights)" /T /C | Out-Null
+    # ${} delimits the name: "$Identity:(...)" makes the parser read $Identity: as a scope-qualified
+    # variable reference, which is a hard parse error before the script can run at all.
+    & icacls $Path /grant "${Identity}:($Rights)" /T /C | Out-Null
 }
 
 function Start-And-Wait-ServiceRunning {
@@ -75,8 +77,11 @@ Grant-DirectoryAccess -Path $UpdaterPrivateDataDir -Identity 'SYSTEM' -Rights 'F
 Grant-DirectoryAccess -Path $LogDir -Identity 'SYSTEM' -Rights 'F'
 
 & icacls $UpdaterPrivateDataDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" /C | Out-Null
-& icacls $releaseTrustDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" "$ServiceAccount:(OI)(CI)(R)" /C | Out-Null
-& icacls $ReleasePublicKeyPath /inheritance:r /grant:r "SYSTEM:F" "BUILTIN\Administrators:F" "$ServiceAccount:R" /C | Out-Null
+& icacls $releaseTrustDir /inheritance:r /grant:r "SYSTEM:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" "${ServiceAccount}:(OI)(CI)(R)" /C | Out-Null
+# "$ServiceAccount:R" parses cleanly as scope "ServiceAccount" / variable "R" and expands to an
+# empty string, so icacls silently received no ACE and the service account never got read access
+# to the trust anchor. ${} is required here for correctness, not just to satisfy the parser.
+& icacls $ReleasePublicKeyPath /inheritance:r /grant:r "SYSTEM:F" "BUILTIN\Administrators:F" "${ServiceAccount}:R" /C | Out-Null
 
 $serviceExe = Join-Path $UpdaterInstallDir "STYS.Agent.Updater.exe"
 $quotedServiceExe = '"' + $serviceExe + '"'

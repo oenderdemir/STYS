@@ -165,6 +165,39 @@ public sealed class AgentService : IAgentService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task RejectAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var agent = await db.Set<AgentEntity>()
+            .Include(x => x.Credentialler)
+            .Include(x => x.Enrollments)
+            .ThenInclude(x => x.InstallationSession)
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+        if (agent is null) throw new BaseException("Agent bulunamadı.", 404);
+        EnforceKurumAccess(agent);
+        if (agent.Durum != AgentDurum.PendingApproval) throw new BaseException("Sadece onay bekleyen agent reddedilebilir.", 400);
+
+        agent.Durum = AgentDurum.Rejected;
+        // The credential the agent already stored locally must stop working immediately; it can
+        // never be exchanged for a token again.
+        foreach (var cred in agent.Credentialler.Where(x => x.AktifMi))
+        {
+            cred.AktifMi = false;
+            cred.CredentialVersion++;
+            cred.RevokedAt = DateTime.UtcNow;
+        }
+
+        foreach (var session in agent.Enrollments
+                     .Where(x => !x.IsDeleted && x.InstallationSession is not null && x.InstallationSession.Status == AgentInstallationSessionStatus.PendingApproval)
+                     .Select(x => x.InstallationSession!))
+        {
+            session.Status = AgentInstallationSessionStatus.Failed;
+            session.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task DisableAsync(int id, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -200,7 +233,10 @@ public sealed class AgentService : IAgentService
         var code = GenerateSecureCode();
         var enrollment = new AgentEnrollment
         {
-            Code = code, KurumId = kurumId.Value,
+            // Only the hash is persisted; `code` below is the sole time the plaintext leaves here.
+            CodeHash = AgentEnrollmentCodeHasher.Hash(code),
+            CodePrefix = AgentEnrollmentCodeHasher.BuildPrefix(code),
+            KurumId = kurumId.Value,
             TesisIds = System.Text.Json.JsonSerializer.Serialize(request.TesisIds),
             AllowedScopes = System.Text.Json.JsonSerializer.Serialize(request.AllowedScopes),
             MaxKullanimSayisi = request.MaxKullanimSayisi ?? 1,
@@ -211,7 +247,8 @@ public sealed class AgentService : IAgentService
         db.Set<AgentEnrollment>().Add(enrollment);
         await db.SaveChangesAsync(cancellationToken);
 
-        return new AgentEnrollmentCodeDto { Id = enrollment.Id, Code = enrollment.Code, KurumId = enrollment.KurumId, TesisIds = request.TesisIds, AllowedScopes = request.AllowedScopes, RequiresApproval = request.RequiresApproval, MaxKullanimSayisi = enrollment.MaxKullanimSayisi, ExpiresAt = enrollment.ExpiresAt, Durum = (int)enrollment.Durum, CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow };
+        // This is the only response that ever carries the plaintext code.
+        return new AgentEnrollmentCodeDto { Id = enrollment.Id, Code = code, CodePrefix = enrollment.CodePrefix, KurumId = enrollment.KurumId, TesisIds = request.TesisIds, AllowedScopes = request.AllowedScopes, RequiresApproval = request.RequiresApproval, MaxKullanimSayisi = enrollment.MaxKullanimSayisi, ExpiresAt = enrollment.ExpiresAt, Durum = (int)enrollment.Durum, CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow };
     }
 
     public async Task<IReadOnlyCollection<AgentEnrollmentCodeDto>> GetEnrollmentCodesAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken)
@@ -334,7 +371,8 @@ public sealed class AgentService : IAgentService
 
     private static AgentEnrollmentCodeDto MapEnrollmentToDto(AgentEnrollment x)
     {
-        return new AgentEnrollmentCodeDto { Id = x.Id, Code = x.Code, KurumId = x.KurumId, TesisIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(x.TesisIds) ?? [], AllowedScopes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(x.AllowedScopes) ?? [], RequiresApproval = x.RequiresApproval, KullanimSayisi = x.KullanimSayisi, MaxKullanimSayisi = x.MaxKullanimSayisi, ExpiresAt = x.ExpiresAt, Durum = (int)x.Durum, AgentId = x.AgentId, CreatedAt = x.CreatedAt ?? DateTime.MinValue };
+        // Code stays null here on purpose: the plaintext is unrecoverable after generation.
+        return new AgentEnrollmentCodeDto { Id = x.Id, Code = null, CodePrefix = x.CodePrefix, KurumId = x.KurumId, TesisIds = System.Text.Json.JsonSerializer.Deserialize<List<int>>(x.TesisIds) ?? [], AllowedScopes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(x.AllowedScopes) ?? [], RequiresApproval = x.RequiresApproval, KullanimSayisi = x.KullanimSayisi, MaxKullanimSayisi = x.MaxKullanimSayisi, ExpiresAt = x.ExpiresAt, Durum = (int)x.Durum, AgentId = x.AgentId, CreatedAt = x.CreatedAt ?? DateTime.MinValue };
     }
 
     private static readonly TimeSpan OnlineHeartbeatTolerance = TimeSpan.FromSeconds(90);

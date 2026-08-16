@@ -245,6 +245,9 @@ public sealed class AgentLocalManagementPhaseA3Tests : IDisposable
     private sealed class DummyClient : IStysAgentApiClient
     {
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken) => Task.FromResult<AgentConfigDto?>(null);
@@ -261,6 +264,9 @@ public sealed class AgentLocalManagementPhaseA3Tests : IDisposable
     {
         public int TokenCallCount { get; private set; }
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken)
         {
             TokenCallCount++;

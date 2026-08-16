@@ -306,6 +306,9 @@ public sealed class AgentLocalManagementPhaseATests : IDisposable
                 AgentKey = request.AgentKey
             });
 
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new AgentTokenResponse { AccessToken = "jwt", ExpiresAt = DateTime.UtcNow.AddMinutes(30) });
 

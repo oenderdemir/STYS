@@ -96,7 +96,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
         Assert.Equal(1, await verify.Set<AgentScope>().CountAsync(x => x.AgentId == agent.Id));
         Assert.Equal(1, await verify.Set<AgentTesis>().CountAsync(x => x.AgentId == agent.Id));
 
-        var enr = await verify.Set<AgentEnrollment>().FirstAsync(x => x.Code == enrollment.Code);
+        var enr = await verify.Set<AgentEnrollment>().FirstAsync(x => x.Id == enrollment.Id);
         Assert.Equal(1, enr.KullanimSayisi);
         Assert.Equal(AgentEnrollmentDurum.Used, enr.Durum);
         Assert.Equal(agent.Id, enr.AgentId);
@@ -180,7 +180,7 @@ public sealed class AgentPhase1FinalTests : IAsyncLifetime
         Assert.Equal(0, await verify.Set<AgentScope>().CountAsync(x => verify.Set<AgentEntity>().Any(a => a.AgentKey.Contains(_uniqueSuffix) && a.Id == x.AgentId)));
         Assert.Equal(0, await verify.Set<AgentTesis>().CountAsync(x => verify.Set<AgentEntity>().Any(a => a.AgentKey.Contains(_uniqueSuffix) && a.Id == x.AgentId)));
 
-        var enr = await verify.Set<AgentEnrollment>().FirstAsync(x => x.Code == enrollment.Code);
+        var enr = await verify.Set<AgentEnrollment>().FirstAsync(x => x.Id == enrollment.Id);
         Assert.Equal(0, enr.KullanimSayisi);
         Assert.Equal(AgentEnrollmentDurum.Active, enr.Durum);
         Assert.Null(enr.AgentId);

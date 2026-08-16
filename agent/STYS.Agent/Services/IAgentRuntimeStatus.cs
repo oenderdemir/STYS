@@ -17,6 +17,9 @@ public interface IAgentRuntimeStatus
     bool AuthenticationReady { get; }
     bool RequiresReEnrollment { get; }
     string? RequiresReEnrollmentReason { get; }
+    /// <summary>Registered with a stored credential but still awaiting operator approval. Workers
+    /// stay gated in this state.</summary>
+    bool PendingApproval { get; }
 
     void MarkSuccessfulConnection();
     void MarkFailedConnection(string message);
@@ -28,6 +31,7 @@ public interface IAgentRuntimeStatus
     void MarkStartupHealthy();
     void MarkStartupUnhealthy(string message);
     void MarkAuthenticated();
+    void MarkPendingApproval();
     void ResetAuthentication();
     void MarkReEnrollmentRequired(string reason);
     void ClearReEnrollmentRequired();

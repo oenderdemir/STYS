@@ -55,6 +55,15 @@ public sealed class AgentAuthController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _tokenService.EnrollAsync(request, cancellationToken));
 
+    /// <summary>Approval-status probe for agents that registered but are not yet approved. Requires
+    /// the registration credential and returns nothing but the agent's own lifecycle status.</summary>
+    [HttpPost("enrollment/status")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AgentEnrollmentStatusResponse>> GetEnrollmentStatus(
+        [FromBody] AgentEnrollmentStatusRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await _tokenService.GetEnrollmentStatusAsync(request, cancellationToken));
+
     [HttpPost("auth/token")]
     [AllowAnonymous]
     public async Task<ActionResult<AgentTokenResponse>> GetToken(

@@ -10,6 +10,7 @@ public interface IAgentService
     Task<AgentDto> UpdateAsync(int id, AgentKaydetRequest request, CancellationToken cancellationToken);
     Task UpdateScopesAsync(int id, IReadOnlyCollection<string> scopes, CancellationToken cancellationToken);
     Task ApproveAsync(int id, CancellationToken cancellationToken);
+    Task RejectAsync(int id, CancellationToken cancellationToken);
     Task DisableAsync(int id, CancellationToken cancellationToken);
     Task RevokeAsync(int id, CancellationToken cancellationToken);
     Task<AgentEnrollmentCodeDto> GenerateEnrollmentCodeAsync(AgentEnrollmentCodeRequest request, string createdBy, CancellationToken cancellationToken);

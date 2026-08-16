@@ -66,6 +66,7 @@
                     <button pButton pRipple icon="pi pi-pencil" class="p-button-rounded p-button-success mr-1" (click)="editAgent(agent)" pTooltip="Düzenle"></button>
                     @if (agent.durum === 0) {
                         <button pButton pRipple icon="pi pi-check" class="p-button-rounded p-button-info mr-1" (click)="approveAgent(agent)" pTooltip="Onayla"></button>
+                        <button pButton pRipple icon="pi pi-times" class="p-button-rounded p-button-danger mr-1" (click)="rejectAgent(agent)" pTooltip="Reddet"></button>
                     }
                     @if (agent.durum === 1) {
                         <button pButton pRipple icon="pi pi-ban" class="p-button-rounded p-button-warning mr-1" (click)="deleteAgent(agent)" pTooltip="Devre Dışı Bırak"></button>
@@ -284,7 +285,9 @@
             </ng-template>
             <ng-template pTemplate="body" let-code>
                 <tr>
-                    <td><code>{{ code.code }}</code></td>
+                    <!-- The plaintext code is shown only once, in the generation toast. Listings
+                         can only ever show the non-secret prefix. -->
+                    <td><code>{{ code.codePrefix }}&hellip;</code></td>
                     <td>{{ code.kurumId }}</td>
                     <td><p-tag [value]="code.durum === 0 ? 'Aktif' : 'Kullanılmış/İptal'" [severity]="code.durum === 0 ? 'success' : 'danger'" /></td>
                     <td>{{ code.kullanimSayisi }}/{{ code.maxKullanimSayisi }}</td>

@@ -1068,6 +1068,9 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

@@ -15,6 +15,7 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
     private string? _startupHealthError;
     private bool _credentialPresent;
     private bool _authenticationReady;
+    private bool _pendingApproval;
     private bool _requiresReEnrollment;
     private string? _requiresReEnrollmentReason;
 
@@ -78,6 +79,11 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
     public bool AuthenticationReady
     {
         get { lock (_gate) return _authenticationReady; }
+    }
+
+    public bool PendingApproval
+    {
+        get { lock (_gate) return _pendingApproval; }
     }
 
     public bool RequiresReEnrollment
@@ -174,6 +180,20 @@ public sealed class AgentRuntimeStatus : IAgentRuntimeStatus
         lock (_gate)
         {
             _authenticationReady = true;
+            _pendingApproval = false;
+            _requiresReEnrollment = false;
+            _requiresReEnrollmentReason = null;
+        }
+    }
+
+    public void MarkPendingApproval()
+    {
+        lock (_gate)
+        {
+            // Registered and holding a credential, but not authorized yet: not an error state and
+            // not a re-enrollment trigger.
+            _pendingApproval = true;
+            _authenticationReady = false;
             _requiresReEnrollment = false;
             _requiresReEnrollmentReason = null;
         }

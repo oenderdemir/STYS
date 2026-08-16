@@ -105,7 +105,9 @@ public sealed class AgentInstallationSessionService : IAgentInstallationSessionS
         var enrollmentCode = GenerateSecureCode();
         var enrollment = new AgentEnrollment
         {
-            Code = enrollmentCode,
+            // Hash only: the plaintext is returned once below, in the create response.
+            CodeHash = AgentEnrollmentCodeHasher.Hash(enrollmentCode),
+            CodePrefix = AgentEnrollmentCodeHasher.BuildPrefix(enrollmentCode),
             KurumId = kurumId,
             TesisIds = JsonSerializer.Serialize(new[] { request.TesisId }),
             AllowedScopes = JsonSerializer.Serialize(normalizedScopes),

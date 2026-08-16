@@ -14,6 +14,10 @@ namespace STYS.Agent.Services;
 
 public sealed class AgentTokenService : IAgentTokenService
 {
+    /// <summary>Single generic rejection reason for the anonymous enrollment endpoint, so probing
+    /// cannot distinguish unknown / expired / already-used / revoked codes.</summary>
+    private const string InvalidEnrollmentMessage = "Enrollment kodu geçersiz veya kullanılamaz durumda.";
+
     private readonly IDbContextFactory<StysAppDbContext> _dbContextFactory;
     private readonly IAgentJwtTokenService _jwtTokenService;
     private readonly IAgentEnrollmentExecutionHook? _hook;
@@ -40,19 +44,24 @@ public sealed class AgentTokenService : IAgentTokenService
 
         try
         {
+            // Lookup is by hash; the plaintext code is never stored, so it cannot be read back out
+            // of the database even by an operator with full table access.
+            var codeHash = AgentEnrollmentCodeHasher.Hash(request.EnrollmentCode ?? string.Empty);
             var enrollment = await db.Set<AgentEnrollment>()
                 .IgnoreQueryFilters()
                 .Include(x => x.InstallationSession)
-                .FirstOrDefaultAsync(x => x.Code == request.EnrollmentCode && !x.IsDeleted, cancellationToken);
+                .FirstOrDefaultAsync(x => x.CodeHash == codeHash && !x.IsDeleted, cancellationToken);
 
-            if (enrollment is null)
-                throw new BaseException("Geçersiz enrollment kodu.", 400);
-            if (enrollment.Durum != AgentEnrollmentDurum.Active)
-                throw new BaseException("Enrollment kodu artık geçerli değil.", 400);
-            if (DateTime.UtcNow > enrollment.ExpiresAt)
-                throw new BaseException("Enrollment kodunun süresi dolmuş.", 400);
-            if (enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
-                throw new BaseException("Enrollment kodu maksimum kullanım sayısına ulaştı.", 400);
+            // This endpoint is anonymous, so every rejection below returns the same generic message.
+            // Distinguishing "unknown" from "expired" from "already used" would tell an attacker
+            // probing codes which guesses were real.
+            if (enrollment is null
+                || enrollment.Durum != AgentEnrollmentDurum.Active
+                || DateTime.UtcNow > enrollment.ExpiresAt
+                || enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
+            {
+                throw new BaseException(InvalidEnrollmentMessage, 400);
+            }
 
             if (enrollment.InstallationSession is not null)
             {
@@ -158,6 +167,9 @@ public sealed class AgentTokenService : IAgentTokenService
 
             enrollment.KullanimSayisi++;
             enrollment.AgentId = agent.Id;
+            // Rotating the concurrency token makes the enrollment row the serialization point: two
+            // parallel registrations with the same code both read the same original token, so only
+            // the first SaveChanges matches and the loser fails the concurrency check below.
             enrollment.ConcurrencyToken = Guid.NewGuid();
             if (enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
                 enrollment.Durum = AgentEnrollmentDurum.Used;
@@ -179,6 +191,14 @@ public sealed class AgentTokenService : IAgentTokenService
                 await _realtimeNotifier.AgentChangedAsync(cancellationToken);
 
             return new AgentEnrollmentResponse { AgentId = agent.Id, ClientId = clientId, ClientSecret = clientSecret, AgentKey = agent.AgentKey, Durum = (int)agent.Durum, Message = agent.Durum == AgentDurum.Active ? "Agent başarıyla kaydedildi." : "Agent kaydedildi, onay bekleniyor." };
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another registration consumed this enrollment code first. Reject with the same
+            // generic message so a losing race is indistinguishable from any other invalid code.
+            if (!transactionCompleted)
+                await transaction.RollbackAsync(cancellationToken);
+            throw new BaseException(InvalidEnrollmentMessage, 400);
         }
         catch
         {
@@ -246,6 +266,48 @@ public sealed class AgentTokenService : IAgentTokenService
             await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Lets a registered-but-not-yet-approved agent discover its lifecycle status without
+    /// granting it any operational API access. Authentication is by credential because a
+    /// PendingApproval agent cannot obtain an access token.</summary>
+    public async Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var credential = await db.Set<AgentCredential>()
+            .IgnoreQueryFilters()
+            .Include(x => x.Agent)
+            .FirstOrDefaultAsync(x => x.ClientId == request.ClientId && !x.IsDeleted, cancellationToken);
+
+        // Credential validation mirrors IssueTokenAsync, except a revoked/inactive credential is
+        // still allowed to read back a terminal status so the agent can stop retrying and report
+        // why. It never yields a token or any other agent data.
+        if (credential is null)
+            throw new BaseException("Geçersiz client kimliği.", 401);
+
+        var expectedHash = ComputeSha256Hash(request.ClientSecret ?? string.Empty);
+        if (!string.Equals(credential.ClientSecretHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+            throw new BaseException("Geçersiz client secret.", 401);
+
+        var agent = credential.Agent ?? throw new BaseException("Agent bulunamadı.", 404);
+
+        return new AgentEnrollmentStatusResponse
+        {
+            AgentId = agent.Id,
+            Durum = (int)agent.Durum,
+            Approved = agent.Durum == AgentDurum.Active,
+            PendingApproval = agent.Durum == AgentDurum.PendingApproval,
+            Message = agent.Durum switch
+            {
+                AgentDurum.Active => "Agent onaylandı.",
+                AgentDurum.PendingApproval => "Agent onay bekliyor.",
+                AgentDurum.Rejected => "Agent kaydı reddedildi.",
+                AgentDurum.Disabled => "Agent devre dışı bırakıldı.",
+                AgentDurum.Revoked => "Agent iptal edildi.",
+                _ => null
+            }
+        };
+    }
+
     public async Task<AgentTokenResponse> IssueTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -267,6 +329,7 @@ public sealed class AgentTokenService : IAgentTokenService
         var agent = credential.Agent!;
         if (agent.Durum == AgentDurum.Disabled) throw new BaseException("Agent devre dışı bırakılmış.", 403);
         if (agent.Durum == AgentDurum.Revoked) throw new BaseException("Agent iptal edilmiş.", 403);
+        if (agent.Durum == AgentDurum.Rejected) throw new BaseException("Agent kaydı reddedilmiş.", 403);
         if (agent.Durum == AgentDurum.PendingApproval) throw new BaseException("Agent henüz onaylanmamış.", 403);
 
         var tesisIds = await db.Set<AgentTesis>()

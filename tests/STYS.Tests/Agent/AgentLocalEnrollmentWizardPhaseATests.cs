@@ -57,7 +57,8 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
                 ClientId = "client-42",
                 ClientSecret = "super-secret",
                 AgentKey = Environment.MachineName,
-                Message = "✓ STYS'e kayıt başarılı"
+                Message = "✓ STYS'e kayıt başarılı",
+                Durum = (int)STYS.Agent.Contracts.Enums.AgentDurum.Active
             },
             TokenResponse = new AgentTokenResponse
             {
@@ -173,7 +174,8 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
                 ClientId = "client-100",
                 ClientSecret = "secret-100",
                 AgentKey = Environment.MachineName,
-                Message = "ok"
+                Message = "ok",
+                Durum = (int)STYS.Agent.Contracts.Enums.AgentDurum.Active
             },
             TokenResponse = new AgentTokenResponse
             {
@@ -357,9 +359,15 @@ public sealed class AgentLocalEnrollmentWizardPhaseATests : IDisposable
                 AgentId = 1,
                 ClientId = "client",
                 ClientSecret = "secret",
-                AgentKey = request.AgentKey
+                AgentKey = request.AgentKey,
+                // Must be explicit: Durum defaults to 0, which is PendingApproval, and these tests
+                // exercise the no-approval-required path where the agent authenticates immediately.
+                Durum = (int)STYS.Agent.Contracts.Enums.AgentDurum.Active
             });
         }
+
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken)
         {

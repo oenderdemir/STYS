@@ -60,6 +60,14 @@ public sealed class AgentController : ControllerBase
         return Ok();
     }
 
+    [HttpPost("{id:int}/reject")]
+    [Permission(StructurePermissions.AgentYonetimi.Manage)]
+    public async Task<ActionResult> Reject(int id, CancellationToken cancellationToken)
+    {
+        await _agentService.RejectAsync(id, cancellationToken);
+        return Ok();
+    }
+
     [HttpPost("{id:int}/disable")]
     [Permission(StructurePermissions.AgentYonetimi.Manage)]
     public async Task<ActionResult> Disable(int id, CancellationToken cancellationToken)

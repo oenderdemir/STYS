@@ -21,6 +21,26 @@ public sealed class AgentEnrollmentResponse
     public string? Message { get; set; }
 }
 
+/// <summary>Credential-authenticated approval-status probe. A PendingApproval agent has no access
+/// token, so it authenticates with the credential it received at registration and learns nothing
+/// beyond its own lifecycle status.</summary>
+public sealed class AgentEnrollmentStatusRequest
+{
+    public string ClientId { get; set; } = string.Empty;
+    public string ClientSecret { get; set; } = string.Empty;
+}
+
+public sealed class AgentEnrollmentStatusResponse
+{
+    public int AgentId { get; set; }
+    public int Durum { get; set; }
+    /// <summary>True only when the agent may proceed to acquire an access token.</summary>
+    public bool Approved { get; set; }
+    /// <summary>True while the operator has neither approved nor refused the agent.</summary>
+    public bool PendingApproval { get; set; }
+    public string? Message { get; set; }
+}
+
 public sealed class AgentEnrollmentCodeRequest
 {
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];
@@ -33,7 +53,14 @@ public sealed class AgentEnrollmentCodeRequest
 public sealed class AgentEnrollmentCodeDto
 {
     public int Id { get; set; }
-    public string Code { get; set; } = string.Empty;
+
+    /// <summary>Plaintext enrollment code. Populated ONLY in the response that creates the code;
+    /// it is never persisted and every later read returns null.</summary>
+    public string? Code { get; set; }
+
+    /// <summary>Non-secret prefix so operators can identify a code in listings.</summary>
+    public string CodePrefix { get; set; } = string.Empty;
+
     public int KurumId { get; set; }
     public string? KurumAd { get; set; }
     public IReadOnlyCollection<int> TesisIds { get; set; } = [];

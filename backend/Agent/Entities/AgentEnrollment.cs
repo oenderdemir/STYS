@@ -5,7 +5,14 @@ namespace STYS.Agent.Entities;
 
 public sealed class AgentEnrollment : BaseEntity<int>, ITenantEntity
 {
-    public string Code { get; set; } = string.Empty;
+    /// <summary>SHA-256 of the enrollment code. The plaintext code is returned to the operator
+    /// exactly once, at generation time, and is never persisted or recoverable afterwards.</summary>
+    public string CodeHash { get; set; } = string.Empty;
+
+    /// <summary>First few characters of the code, stored so operators can tell codes apart in the
+    /// UI. Not a secret on its own and never sufficient to enroll.</summary>
+    public string CodePrefix { get; set; } = string.Empty;
+
     public int KurumId { get; set; }
     public string TesisIds { get; set; } = "[]";
     public string AllowedScopes { get; set; } = "[]";

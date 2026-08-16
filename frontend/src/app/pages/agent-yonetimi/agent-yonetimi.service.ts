@@ -73,6 +73,14 @@ export class AgentYonetimiService {
         );
     }
 
+    rejectAgent(id: number): Observable<void> {
+        return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent/${id}/reject`, {}).pipe(
+            map((r) => {
+                if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Agent reddedilemedi.');
+            })
+        );
+    }
+
     disableAgent(id: number): Observable<void> {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent/${id}/disable`, {}).pipe(
             map((r) => {

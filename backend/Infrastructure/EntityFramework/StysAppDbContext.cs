@@ -2014,11 +2014,14 @@ public class StysAppDbContext : DbContext
         modelBuilder.Entity<AgentEnrollment>(entity =>
         {
             entity.ToTable("AgentEnrollments", entegrasyonSchema);
-            entity.Property(x => x.Code).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.CodePrefix).HasMaxLength(16).IsRequired();
             entity.Property(x => x.TesisIds).HasColumnType("nvarchar(max)");
             entity.Property(x => x.AllowedScopes).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();
-            entity.HasIndex(x => x.Code).IsUnique().HasFilter("[IsDeleted] = 0");
+            // Unique so a code can never be registered twice, and indexed because enrollment
+            // lookup is by hash.
+            entity.HasIndex(x => x.CodeHash).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.AgentInstallationSessionId).IsUnique().HasFilter("[IsDeleted] = 0 AND [AgentInstallationSessionId] IS NOT NULL");
             entity.HasOne(x => x.Agent).WithMany(x => x.Enrollments).HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.InstallationSession).WithOne(x => x.Enrollment).HasForeignKey<AgentEnrollment>(x => x.AgentInstallationSessionId).OnDelete(DeleteBehavior.SetNull);

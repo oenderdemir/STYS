@@ -227,6 +227,23 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         });
     }
 
+    rejectAgent(agent: AgentListDto): void {
+        this.confirmationService.confirm({
+            message: `${agent.ad} agent'ının kaydını reddetmek istediğinize emin misiniz? Agent'ın credential'ı iptal edilecek.`,
+            header: 'Red Onayı',
+            icon: 'pi pi-exclamation-triangle',
+            accept: () => {
+                this.service.rejectAgent(agent.id).subscribe({
+                    next: () => {
+                        this.messageService.add({ severity: 'success', summary: 'Başarılı', detail: 'Agent kaydı reddedildi.' });
+                        this.loadAgents();
+                    },
+                    error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+                });
+            }
+        });
+    }
+
     revokeAgent(agent: AgentListDto): void {
         this.confirmationService.confirm({
             message: `${agent.ad} agent'ını iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
@@ -306,7 +323,14 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     generateEnrollmentCode(): void {
         this.service.generateEnrollmentCode(this.enrollmentForm).subscribe({
             next: (code) => {
-                this.messageService.add({ severity: 'success', summary: 'Kod Oluşturuldu', detail: code.code });
+                // This is the only moment the plaintext code exists client-side; it is not
+                // recoverable from the listing afterwards, so keep the toast up until dismissed.
+                this.messageService.add({
+                    severity: 'success',
+                    summary: 'Kod Oluşturuldu (yalnızca bir kez gösterilir)',
+                    detail: code.code ?? '',
+                    sticky: true
+                });
                 this.loadEnrollmentCodes();
                 this.enrollmentForm = this.createDefaultEnrollmentForm();
             },

@@ -4,6 +4,7 @@ using STYS.Agent.Client;
 using STYS.Agent.Client.Authentication;
 using STYS.Agent.Client.Infrastructure;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Configuration;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -135,6 +136,31 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
             _clientOptions.AgentInstanceId = credential.AgentInstanceId;
             _runtimeStatus.MarkCredentialPresent(true);
 
+            // A registered agent may still be waiting for operator approval. Ask the lifecycle
+            // endpoint first: it costs one call, needs no token, and lets us stay quiet while
+            // pending instead of hammering the token endpoint for guaranteed 403s.
+            var status = await _client.GetEnrollmentStatusAsync(new AgentEnrollmentStatusRequest
+            {
+                ClientId = credential.ClientId,
+                ClientSecret = credential.ClientSecret
+            }, cancellationToken);
+
+            if (!status.Approved)
+            {
+                if (status.PendingApproval)
+                {
+                    _runtimeStatus.MarkPendingApproval();
+                }
+                else
+                {
+                    // Rejected / Disabled / Revoked are terminal for this credential; surface the
+                    // reason instead of retrying silently forever.
+                    _runtimeStatus.MarkReEnrollmentRequired(status.Message ?? "Agent erişimi STYS tarafından kapatıldı.");
+                }
+
+                return false;
+            }
+
             var token = await _client.GetTokenAsync(new AgentTokenRequest
             {
                 ClientId = credential.ClientId,
@@ -208,13 +234,29 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
         _clientOptions.ClientId = credential.ClientId;
         _clientOptions.ClientSecret = credential.ClientSecret;
         _clientOptions.AgentInstanceId = credential.AgentInstanceId;
+        _runtimeStatus.MarkCredentialPresent(true);
 
-        try
+        // Registration succeeded, so the one-time enrollment code has been consumed server-side and
+        // must not linger on this machine.
+        ClearEnrollmentCodeFromProcess();
+
+        // When the kurum policy requires approval the agent is registered but not yet authorized.
+        // Asking for a token here would fail with 403; instead we keep the credential, stay in the
+        // pending state, and let the approval poller pick it up. Workers remain gated because
+        // AgentAuthenticationState is never marked ready.
+        if (enrollmentResponse.Durum == (int)AgentDurum.PendingApproval)
         {
-            Environment.SetEnvironmentVariable("STYS_ENROLLMENT_CODE", null, EnvironmentVariableTarget.Process);
-        }
-        catch
-        {
+            _runtimeStatus.MarkPendingApproval();
+            return new AgentBootstrapEnrollmentResult
+            {
+                Success = true,
+                Message = enrollmentResponse.Message ?? "Agent kaydedildi, STYS onayı bekleniyor.",
+                AgentId = enrollmentResponse.AgentId,
+                AgentDisplayName = agentDisplayName,
+                CredentialSaved = true,
+                TokenAcquired = false,
+                RestartRequired = false
+            };
         }
 
         var token = await _client.GetTokenAsync(new AgentTokenRequest
@@ -227,7 +269,6 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
         _tokenStore.SetToken(token);
         _authenticationState.MarkAuthenticated();
-        _runtimeStatus.MarkCredentialPresent(true);
         _runtimeStatus.MarkAuthenticated();
 
         return new AgentBootstrapEnrollmentResult
@@ -240,6 +281,17 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
             TokenAcquired = true,
             RestartRequired = false
         };
+    }
+
+    private static void ClearEnrollmentCodeFromProcess()
+    {
+        try
+        {
+            Environment.SetEnvironmentVariable("STYS_ENROLLMENT_CODE", null, EnvironmentVariableTarget.Process);
+        }
+        catch
+        {
+        }
     }
 
     private async Task<bool> HasUsableCredentialAsync(CancellationToken cancellationToken)

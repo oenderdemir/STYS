@@ -207,7 +207,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
         Assert.True(agentCount <= 1);
         Assert.True(scopesCount <= 1);
 
-        var updatedEnrollment = await verifyDb.Set<AgentEnrollment>().FirstAsync(x => x.Code == enrollment.Code);
+        var updatedEnrollment = await verifyDb.Set<AgentEnrollment>().FirstAsync(x => x.Id == enrollment.Id);
         Assert.True(updatedEnrollment.KullanimSayisi <= 1);
 
         await AgentTestSupport.CleanupAsync(verifyDb, _uniqueSuffix);

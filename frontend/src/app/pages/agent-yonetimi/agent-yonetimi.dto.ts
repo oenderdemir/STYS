@@ -31,7 +31,10 @@ export interface AgentKaydetRequest {
 
 export interface AgentEnrollmentCodeDto {
     id: number;
-    code: string;
+    /** Plaintext code. Present only in the response that creates it; null on every later read. */
+    code: string | null;
+    /** Non-secret prefix used to identify a code in listings. */
+    codePrefix: string;
     kurumId: number;
     kurumAd?: string;
     tesisIds: number[];
@@ -88,7 +91,8 @@ export const AgentDurumLabels: Record<number, string> = {
     0: 'Onay Bekliyor',
     1: 'Aktif',
     2: 'Devre Dışı',
-    3: 'İptal Edildi'
+    3: 'İptal Edildi',
+    4: 'Reddedildi'
 };
 
 export const AgentCompatibilityStatusLabels: Record<number, string> = {

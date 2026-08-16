@@ -609,6 +609,9 @@ public sealed class AgentReleaseStagingTests : IDisposable
             Task.FromResult(_bytes);
 
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken) => Task.FromResult<AgentConfigDto?>(null);
@@ -630,6 +633,9 @@ public sealed class AgentReleaseStagingTests : IDisposable
         public ThrowingDownloadClient(Exception exception) => _exception = exception;
         public Task<byte[]> DownloadReleasePackageAsync(int releaseId, CancellationToken cancellationToken) => throw _exception;
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken) => Task.FromResult<AgentConfigDto?>(null);

@@ -33,6 +33,9 @@ public sealed class StysAgentApiClient : IStysAgentApiClient
     public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken) =>
         SendForDataAsync<AgentEnrollmentResponse>(HttpMethod.Post, "api/agent/enroll", request, cancellationToken);
 
+    public Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken) =>
+        SendForDataAsync<AgentEnrollmentStatusResponse>(HttpMethod.Post, "api/agent/enrollment/status", request, cancellationToken);
+
     public Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken) =>
         SendForDataAsync<AgentTokenResponse>(HttpMethod.Post, "api/agent/auth/token", request, cancellationToken);
 

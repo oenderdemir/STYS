@@ -5,6 +5,8 @@ namespace STYS.Agent.Client;
 public interface IStysAgentApiClient
 {
     Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken);
+    /// <summary>Credential-authenticated approval-status probe used while the agent is PendingApproval.</summary>
+    Task<AgentEnrollmentStatusResponse> GetEnrollmentStatusAsync(AgentEnrollmentStatusRequest request, CancellationToken cancellationToken);
     Task<AgentTokenResponse> GetTokenAsync(AgentTokenRequest request, CancellationToken cancellationToken);
     Task SendHeartbeatAsync(AgentHeartbeatRequest request, CancellationToken cancellationToken);
     Task<AgentConfigDto?> GetConfigurationAsync(long currentVersion, CancellationToken cancellationToken);

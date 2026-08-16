@@ -233,7 +233,7 @@ public sealed class AgentPhase1VerificationTests : IAsyncLifetime
             tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = result.ClientId, ClientSecret = result.ClientSecret, AgentInstanceId = "test" }, CancellationToken.None));
         Assert.Equal(403, ex.ErrorCode);
 
-        await service.ApproveAsync(result.AgentId, CancellationToken.None);
+        await service.ApproveAsync(result.AgentId, "test-operator", CancellationToken.None);
         var token = await tokenService.IssueTokenAsync(new STYS.Agent.Contracts.Dtos.AgentTokenRequest { ClientId = result.ClientId, ClientSecret = result.ClientSecret, AgentInstanceId = "test" }, CancellationToken.None);
         Assert.NotNull(token);
 

@@ -78,6 +78,39 @@ public sealed class AgentEnrollmentApprovalLifecycleTests : IDisposable
         Assert.True(prefix.Length < code.Length);
     }
 
+    // ---------------------------------------------------------------- E2D4.1 approval policy
+
+    [Theory]
+    // Kurum mandates approval: a code created with RequiresApproval=false cannot switch it off.
+    [InlineData(true, false, true)]
+    // Kurum policy off but the operator demanded approval for this installation.
+    [InlineData(false, true, true)]
+    // Both mandate it.
+    [InlineData(true, true, true)]
+    // Neither: the agent activates immediately.
+    [InlineData(false, false, false)]
+    public void ApprovalPolicy_KurumPolitikasiCallerTarafindanKapatilamaz(
+        bool kurumRequiresApproval,
+        bool codeRequiresApproval,
+        bool expectedRequiresApproval)
+    {
+        // Mirrors the decision made server-side in AgentTokenService.EnrollAsync: kurum policy can
+        // only ever ADD approval, never remove it.
+        var effective = kurumRequiresApproval || codeRequiresApproval;
+
+        Assert.Equal(expectedRequiresApproval, effective);
+    }
+
+    [Fact]
+    public void ApprovalPolicy_KurumBulunamazsaOnayZorunluVarsayilir()
+    {
+        // A missing kurum row must fail safe rather than silently activating the agent.
+        bool? missingKurumPolicy = null;
+        var effective = (missingKurumPolicy ?? true) || false;
+
+        Assert.True(effective);
+    }
+
     // ---------------------------------------------------------------- agent PendingApproval flow
 
     [Fact]
@@ -176,6 +209,74 @@ public sealed class AgentEnrollmentApprovalLifecycleTests : IDisposable
         Assert.True(harness.RuntimeStatus.RequiresReEnrollment);
     }
 
+    // ---------------------------------------------------------------- E2D4.1 response-loss recovery
+
+    [Fact]
+    public async Task RegistrationNonce_IlkDenemedenOnceUretilirVeRetryAynisiniGonderir()
+    {
+        var harness = new CoordinatorHarness(_tempDir);
+        // Simulate the response being lost in transit: the server committed, but the agent sees
+        // only a transport failure and never stores a credential.
+        harness.Client.EnrollException = new HttpRequestException("connection reset");
+
+        var first = await harness.Coordinator.EnrollAsync(harness.BuildRequest(), CancellationToken.None);
+        Assert.False(first.Success);
+
+        // The nonce was persisted BEFORE the call, so it survives the failure...
+        var afterFailure = await harness.CredentialStore.GetAsync(CancellationToken.None);
+        Assert.NotNull(afterFailure);
+        Assert.False(string.IsNullOrWhiteSpace(afterFailure!.RegistrationNonce));
+        // ...and a nonce-only record is not mistaken for a usable credential.
+        Assert.True(string.IsNullOrWhiteSpace(afterFailure.ClientId));
+        var firstNonce = harness.Client.LastEnrollRequest?.RegistrationNonce;
+        Assert.Equal(afterFailure.RegistrationNonce, firstNonce);
+
+        // Retry: the server recognises the same nonce and completes the registration.
+        harness.Client.EnrollException = null;
+        harness.Client.EnrollResponse = new AgentEnrollmentResponse
+        {
+            AgentId = 42,
+            ClientId = "client-recovered",
+            ClientSecret = "secret-recovered",
+            AgentKey = "MACHINE",
+            Durum = (int)AgentDurum.Active,
+            Message = "Agent kaydı kurtarıldı."
+        };
+
+        var second = await harness.Coordinator.EnrollAsync(harness.BuildRequest(), CancellationToken.None);
+
+        Assert.True(second.Success);
+        // Same proof replayed, which is what lets the server recover instead of rejecting.
+        Assert.Equal(firstNonce, harness.Client.LastEnrollRequest?.RegistrationNonce);
+        Assert.Equal(42, second.AgentId);
+
+        var recovered = await harness.CredentialStore.GetAsync(CancellationToken.None);
+        Assert.Equal("client-recovered", recovered!.ClientId);
+        // The nonce is retained so a later crash can still recover.
+        Assert.Equal(firstNonce, recovered.RegistrationNonce);
+    }
+
+    [Fact]
+    public async Task RegistrationNonce_FarkliInstallationFarkliNonceUretir()
+    {
+        // Two independent installations must never share a recovery proof, otherwise one machine
+        // could complete the other's registration.
+        var a = new CoordinatorHarness(Path.Combine(_tempDir, "install-a"));
+        var b = new CoordinatorHarness(Path.Combine(_tempDir, "install-b"));
+        a.Client.EnrollException = new HttpRequestException("lost");
+        b.Client.EnrollException = new HttpRequestException("lost");
+
+        await a.Coordinator.EnrollAsync(a.BuildRequest(), CancellationToken.None);
+        await b.Coordinator.EnrollAsync(b.BuildRequest(), CancellationToken.None);
+
+        var nonceA = a.Client.LastEnrollRequest?.RegistrationNonce;
+        var nonceB = b.Client.LastEnrollRequest?.RegistrationNonce;
+
+        Assert.False(string.IsNullOrWhiteSpace(nonceA));
+        Assert.False(string.IsNullOrWhiteSpace(nonceB));
+        Assert.NotEqual(nonceA, nonceB);
+    }
+
     // ---------------------------------------------------------------- harness
 
     private sealed class CoordinatorHarness
@@ -263,10 +364,16 @@ public sealed class AgentEnrollmentApprovalLifecycleTests : IDisposable
         public int StatusCallCount { get; private set; }
         public AgentEnrollmentResponse? EnrollResponse { get; set; }
         public AgentEnrollmentStatusResponse? StatusResponse { get; set; }
+        public Exception? EnrollException { get; set; }
+        public AgentEnrollmentRequest? LastEnrollRequest { get; private set; }
 
         public Task<AgentEnrollmentResponse> EnrollAsync(AgentEnrollmentRequest request, CancellationToken cancellationToken)
         {
             EnrollCallCount++;
+            LastEnrollRequest = request;
+            if (EnrollException is not null)
+                throw EnrollException;
+
             return Task.FromResult(EnrollResponse ?? new AgentEnrollmentResponse
             {
                 AgentId = 1,

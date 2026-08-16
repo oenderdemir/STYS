@@ -56,7 +56,7 @@ public sealed class AgentController : ControllerBase
     [Permission(StructurePermissions.AgentYonetimi.Manage)]
     public async Task<ActionResult> Approve(int id, CancellationToken cancellationToken)
     {
-        await _agentService.ApproveAsync(id, cancellationToken);
+        await _agentService.ApproveAsync(id, User?.Identity?.Name ?? "system", cancellationToken);
         return Ok();
     }
 
@@ -64,7 +64,7 @@ public sealed class AgentController : ControllerBase
     [Permission(StructurePermissions.AgentYonetimi.Manage)]
     public async Task<ActionResult> Reject(int id, CancellationToken cancellationToken)
     {
-        await _agentService.RejectAsync(id, cancellationToken);
+        await _agentService.RejectAsync(id, User?.Identity?.Name ?? "system", cancellationToken);
         return Ok();
     }
 

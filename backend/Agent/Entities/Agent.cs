@@ -18,6 +18,14 @@ public sealed class Agent : BaseEntity<int>, ITenantEntity
     public string? PublicKey { get; set; }
     public Guid? UserId { get; set; }
 
+    /// <summary>Lifecycle decision audit. Set when an operator approves the pending enrollment.</summary>
+    public DateTime? ApprovedAt { get; set; }
+    public string? ApprovedBy { get; set; }
+
+    /// <summary>Lifecycle decision audit. Set when an operator refuses the pending enrollment.</summary>
+    public DateTime? RejectedAt { get; set; }
+    public string? RejectedBy { get; set; }
+
     public ICollection<AgentCredential> Credentialler { get; set; } = [];
     public ICollection<AgentTesis> Tesisler { get; set; } = [];
     public ICollection<AgentEnrollment> Enrollments { get; set; } = [];

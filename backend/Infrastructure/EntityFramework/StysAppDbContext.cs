@@ -260,6 +260,10 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("Kurumlar", "dbo");
 
+            // Fail-safe agent enrollment policy: a kurum requires approval unless explicitly
+            // switched off, including rows created outside the application.
+            entity.Property(x => x.AgentEnrollmentRequiresApproval).HasDefaultValue(true);
+
             entity.Property(x => x.Kod)
                 .HasMaxLength(64)
                 .IsRequired();
@@ -1991,6 +1995,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.RuntimeIdentifier).HasMaxLength(64);
             entity.Property(x => x.CihazKimligi).HasMaxLength(500);
             entity.Property(x => x.PublicKey).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.ApprovedBy).HasMaxLength(256);
+            entity.Property(x => x.RejectedBy).HasMaxLength(256);
             entity.HasIndex(x => new { x.KurumId, x.AgentKey }).IsUnique().HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.UserId).HasFilter("[UserId] IS NOT NULL");
         });
@@ -2016,6 +2022,7 @@ public class StysAppDbContext : DbContext
             entity.ToTable("AgentEnrollments", entegrasyonSchema);
             entity.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
             entity.Property(x => x.CodePrefix).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.RegistrationNonceHash).HasMaxLength(128);
             entity.Property(x => x.TesisIds).HasColumnType("nvarchar(max)");
             entity.Property(x => x.AllowedScopes).HasColumnType("nvarchar(max)");
             entity.Property(x => x.ConcurrencyToken).IsConcurrencyToken();

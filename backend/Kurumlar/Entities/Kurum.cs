@@ -39,6 +39,11 @@ public class Kurum : BaseEntity<int>
 
     public bool AktifMi { get; set; } = true;
 
+    /// <summary>Kurum-wide agent enrollment policy. When true, every agent enrolling into this
+    /// kurum lands in PendingApproval regardless of what the enrollment request asks for; a caller
+    /// cannot switch mandatory approval off. Defaults to true (fail-safe).</summary>
+    public bool AgentEnrollmentRequiresApproval { get; set; } = true;
+
     [MaxLength(260)]
     public string? LogoDosyaAdi { get; set; }
 

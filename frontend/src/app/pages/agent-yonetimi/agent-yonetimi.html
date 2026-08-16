@@ -264,8 +264,11 @@
         <div class="field grid mt-3">
             <div class="col-6 flex align-items-end">
                 <div class="field-checkbox">
-                    <p-checkbox inputId="requiresApproval" [binary]="true" [(ngModel)]="enrollmentForm.requiresApproval" />
+                    <p-checkbox inputId="requiresApproval" [binary]="true" [(ngModel)]="enrollmentForm.requiresApproval" [disabled]="kurumRequiresApproval()" />
                     <label for="requiresApproval">Onay gerektirsin</label>
+                    @if (kurumRequiresApproval()) {
+                        <small class="ml-2 text-color-secondary">Kurum politikası gereği onay zorunlu; kapatılamaz.</small>
+                    }
                 </div>
             </div>
             <div class="col-6 flex align-items-end justify-content-end">

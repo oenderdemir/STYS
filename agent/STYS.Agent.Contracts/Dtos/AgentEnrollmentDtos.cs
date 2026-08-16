@@ -9,6 +9,13 @@ public sealed class AgentEnrollmentRequest
     public string? AgentVersion { get; set; }
     public string? PublicKey { get; set; }
     public IReadOnlyCollection<string> Capabilities { get; set; } = [];
+
+    /// <summary>Client-generated, high-entropy proof of possession minted once per installation
+    /// BEFORE the first enrollment attempt and replayed on every retry of the same enrollment.
+    /// Only its hash is stored server-side. It is what lets an installation whose registration
+    /// response was lost in transit finish registering, without reopening the consumed enrollment
+    /// code to anyone else.</summary>
+    public string? RegistrationNonce { get; set; }
 }
 
 public sealed class AgentEnrollmentResponse
@@ -69,6 +76,14 @@ public sealed class AgentEnrollmentCodeDto
     public int MaxKullanimSayisi { get; set; }
     public DateTime ExpiresAt { get; set; }
     public bool RequiresApproval { get; set; }
+
+    /// <summary>Kurum-wide policy in force when this code was generated. When true, approval is
+    /// mandatory and the per-code flag cannot switch it off.</summary>
+    public bool KurumRequiresApproval { get; set; }
+
+    /// <summary>What will actually happen at registration: kurum policy OR the per-code flag.</summary>
+    public bool EffectiveRequiresApproval => KurumRequiresApproval || RequiresApproval;
+
     public int Durum { get; set; }
     public int? AgentId { get; set; }
     public DateTime CreatedAt { get; set; }

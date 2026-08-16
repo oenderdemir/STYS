@@ -77,6 +77,9 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
     dialogVisible = signal(false);
     enrollmentDialogVisible = signal(false);
     enrollmentCodes = signal<AgentEnrollmentCodeDto[]>([]);
+    /** Kurum-wide mandatory approval policy, learned from the codes the backend returns. The
+     *  backend is the source of truth; this only drives the hint and the disabled checkbox. */
+    kurumRequiresApproval = signal(false);
     submitted = signal(false);
     commands = signal<AgentCommandDto[]>([]);
     commandsLoading = signal(false);
@@ -325,9 +328,12 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
             next: (code) => {
                 // This is the only moment the plaintext code exists client-side; it is not
                 // recoverable from the listing afterwards, so keep the toast up until dismissed.
+                this.kurumRequiresApproval.set(code.kurumRequiresApproval === true);
                 this.messageService.add({
                     severity: 'success',
-                    summary: 'Kod Oluşturuldu (yalnızca bir kez gösterilir)',
+                    summary: code.effectiveRequiresApproval
+                        ? 'Kod Oluşturuldu — onay gerekecek (yalnızca bir kez gösterilir)'
+                        : 'Kod Oluşturuldu (yalnızca bir kez gösterilir)',
                     detail: code.code ?? '',
                     sticky: true
                 });

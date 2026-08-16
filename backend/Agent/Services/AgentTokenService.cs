@@ -6,6 +6,7 @@ using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Contracts.Enums;
 using STYS.Agent.Entities;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Kurumlar.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.SharedKernel.Exceptions;
 using AgentEntity = STYS.Agent.Entities.Agent;
@@ -52,11 +53,26 @@ public sealed class AgentTokenService : IAgentTokenService
                 .Include(x => x.InstallationSession)
                 .FirstOrDefaultAsync(x => x.CodeHash == codeHash && !x.IsDeleted, cancellationToken);
 
+            if (enrollment is null)
+                throw new BaseException(InvalidEnrollmentMessage, 400);
+
+            // The code is spent. Before rejecting, check whether this is the very installation that
+            // consumed it retrying because the original response never arrived. Proving possession
+            // of the registration nonce AND matching the recorded installation identity is the only
+            // way through; for everyone else a used code stays a flat rejection.
+            if (IsRecoveryAttempt(enrollment, request))
+            {
+                var recovered = await RecoverRegistrationAsync(db, enrollment, request, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                transactionCompleted = true;
+                return recovered;
+            }
+
             // This endpoint is anonymous, so every rejection below returns the same generic message.
             // Distinguishing "unknown" from "expired" from "already used" would tell an attacker
             // probing codes which guesses were real.
-            if (enrollment is null
-                || enrollment.Durum != AgentEnrollmentDurum.Active
+            if (enrollment.Durum != AgentEnrollmentDurum.Active
                 || DateTime.UtcNow > enrollment.ExpiresAt
                 || enrollment.KullanimSayisi >= enrollment.MaxKullanimSayisi)
             {
@@ -66,15 +82,18 @@ public sealed class AgentTokenService : IAgentTokenService
             if (enrollment.InstallationSession is not null)
             {
                 var session = enrollment.InstallationSession;
+
+                // A kurum mismatch is a server-side integrity problem, not something a caller should
+                // be able to distinguish by probing, so it collapses into the same generic answer.
                 if (session.KurumId != enrollment.KurumId)
-                    throw new BaseException("Kurulum oturumu ile enrollment kurum bilgisi uyuşmuyor.", 400);
+                    throw new BaseException(InvalidEnrollmentMessage, 400);
 
                 if (DateTime.UtcNow > session.ExpiresAt)
                 {
                     await transaction.CommitAsync(cancellationToken);
                     transactionCompleted = true;
                     await PersistExpiredInstallationSessionAsync(session.Id, enrollment.Id, cancellationToken);
-                    throw new BaseException("Kurulum oturumu süresi dolmuş.", 400);
+                    throw new BaseException(InvalidEnrollmentMessage, 400);
                 }
 
                 if (session.Status is AgentInstallationSessionStatus.Cancelled
@@ -85,7 +104,7 @@ public sealed class AgentTokenService : IAgentTokenService
                     or AgentInstallationSessionStatus.Enrolled
                     or AgentInstallationSessionStatus.Online)
                 {
-                    throw new BaseException("Kurulum oturumu artık enroll edilmeye uygun değil.", 400);
+                    throw new BaseException(InvalidEnrollmentMessage, 400);
                 }
             }
 
@@ -94,7 +113,19 @@ public sealed class AgentTokenService : IAgentTokenService
 
             await ValidateTesisIdsAsync(db, enrollment.KurumId, allowedTesisIds, cancellationToken);
 
-            var agentDurum = enrollment.RequiresApproval ? AgentDurum.PendingApproval : AgentDurum.Active;
+            // Kurum policy is the source of truth and can only ever ADD approval, never remove it.
+            // An enrollment code created with RequiresApproval=false cannot bypass a kurum that
+            // mandates approval; conversely an operator may still demand approval for one specific
+            // installation even when the kurum does not require it.
+            var kurumRequiresApproval = await db.Set<Kurum>()
+                .IgnoreQueryFilters()
+                .Where(x => x.Id == enrollment.KurumId && !x.IsDeleted)
+                .Select(x => (bool?)x.AgentEnrollmentRequiresApproval)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            // A missing kurum row is treated as "approval required" rather than silently activating.
+            var requiresApproval = (kurumRequiresApproval ?? true) || enrollment.RequiresApproval;
+            var agentDurum = requiresApproval ? AgentDurum.PendingApproval : AgentDurum.Active;
             var agent = await db.Set<AgentEntity>()
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(x => x.KurumId == enrollment.KurumId && x.AgentKey == request.AgentKey && !x.IsDeleted, cancellationToken);
@@ -167,6 +198,10 @@ public sealed class AgentTokenService : IAgentTokenService
 
             enrollment.KullanimSayisi++;
             enrollment.AgentId = agent.Id;
+            // Only the hash is kept, so the recovery proof cannot be lifted from the database.
+            enrollment.RegistrationNonceHash = string.IsNullOrWhiteSpace(request.RegistrationNonce)
+                ? null
+                : ComputeSha256Hash(request.RegistrationNonce);
             // Rotating the concurrency token makes the enrollment row the serialization point: two
             // parallel registrations with the same code both read the same original token, so only
             // the first SaveChanges matches and the loser fails the concurrency check below.
@@ -177,7 +212,8 @@ public sealed class AgentTokenService : IAgentTokenService
             if (enrollment.InstallationSession is not null)
             {
                 enrollment.InstallationSession.EnrolledAgentId = agent.Id;
-                enrollment.InstallationSession.Status = enrollment.RequiresApproval
+                // Must mirror the effective decision (kurum policy included), not just the code's flag.
+                enrollment.InstallationSession.Status = requiresApproval
                     ? AgentInstallationSessionStatus.PendingApproval
                     : AgentInstallationSessionStatus.Enrolled;
                 enrollment.InstallationSession.UpdatedAt = DateTime.UtcNow;
@@ -206,6 +242,86 @@ public sealed class AgentTokenService : IAgentTokenService
                 await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    /// <summary>True when a consumed enrollment is being retried by the exact installation that
+    /// consumed it. Requires all three of: a stored nonce hash, a matching presented nonce, and the
+    /// same installation identity as the agent that was created. Anything less is not a recovery.</summary>
+    private static bool IsRecoveryAttempt(AgentEnrollment enrollment, AgentEnrollmentRequest request)
+    {
+        if (enrollment.AgentId is null || string.IsNullOrWhiteSpace(enrollment.RegistrationNonceHash))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(request.RegistrationNonce))
+            return false;
+
+        var presented = ComputeSha256Hash(request.RegistrationNonce);
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(enrollment.RegistrationNonceHash),
+            Encoding.UTF8.GetBytes(presented));
+    }
+
+    /// <summary>Completes a registration whose response was lost. Reuses the agent that already
+    /// exists (never creates a second one), revokes the orphaned credential the agent never
+    /// received, and issues a fresh one. The new plaintext secret exists only in this response.</summary>
+    private static async Task<AgentEnrollmentResponse> RecoverRegistrationAsync(
+        StysAppDbContext db,
+        AgentEnrollment enrollment,
+        AgentEnrollmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var agent = await db.Set<AgentEntity>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == enrollment.AgentId!.Value && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException(InvalidEnrollmentMessage, 400);
+
+        // Second binding: the nonce alone is not enough, the retry must come from the same machine
+        // identity that the original registration recorded.
+        if (!string.IsNullOrWhiteSpace(agent.CihazKimligi)
+            && !string.Equals(agent.CihazKimligi, request.CihazKimligi, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BaseException(InvalidEnrollmentMessage, 400);
+        }
+
+        // The previously issued credential either never arrived or is unusable; retire it so a
+        // recovered registration never leaves two live credentials behind.
+        var orphaned = await db.Set<AgentCredential>()
+            .IgnoreQueryFilters()
+            .Where(x => x.AgentId == agent.Id && x.AktifMi && !x.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        foreach (var credential in orphaned)
+        {
+            credential.AktifMi = false;
+            credential.CredentialVersion++;
+            credential.RevokedAt = DateTime.UtcNow;
+        }
+
+        var clientId = $"agent-{agent.Id}-{Guid.NewGuid():N}"[..24];
+        var clientSecret = GenerateClientSecret();
+        db.Set<AgentCredential>().Add(new AgentCredential
+        {
+            AgentId = agent.Id,
+            KurumId = enrollment.KurumId,
+            ClientId = clientId,
+            ClientSecretHash = ComputeSha256Hash(clientSecret),
+            AktifMi = true,
+            CredentialVersion = 1,
+            CreatedBy = "agent-enrollment-recovery",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        return new AgentEnrollmentResponse
+        {
+            AgentId = agent.Id,
+            ClientId = clientId,
+            ClientSecret = clientSecret,
+            AgentKey = agent.AgentKey,
+            Durum = (int)agent.Durum,
+            Message = agent.Durum == AgentDurum.Active
+                ? "Agent kaydı kurtarıldı."
+                : "Agent kaydı kurtarıldı, onay bekleniyor."
+        };
     }
 
     private async Task PersistExpiredInstallationSessionAsync(int sessionId, int enrollmentId, CancellationToken cancellationToken)

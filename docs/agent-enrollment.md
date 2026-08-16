@@ -60,6 +60,27 @@ RequiresApproval?
 - Kod kurum (ve varsa installation session) ile bağlıdır; başka kurum için kullanılamaz.
 - Kullanıldığında `KullanimSayisi` artar ve limit dolunca `Durum = Used` olur.
 
+### Response-loss recovery (registration idempotency)
+
+Register commit edildikten **sonra** response agent'a ulaşmazsa, agent credential'ı hiç almamış
+olur ama kod tükenmiştir. Bu durumu kapatmak için:
+
+- Agent, **ilk enroll denemesinden önce** yüksek entropili bir `RegistrationNonce` üretir ve DPAPI
+  korumalı credential dosyasına yazar. Yalnızca nonce içeren kayıt, kullanılabilir credential
+  sayılmaz (`ClientId`/`ClientSecret` boştur).
+- Bu nonce her enroll denemesinde gönderilir. Server yalnızca **hash**'ini
+  (`AgentEnrollment.RegistrationNonceHash`) saklar.
+- Tükenmiş bir kodla gelen istek, ancak şu üçü birden sağlanırsa recovery kabul edilir:
+  kayıtlı nonce hash'i var, sunulan nonce sabit-zamanlı karşılaştırmayla eşleşiyor ve
+  `CihazKimligi` ilk kayıttaki makine kimliğiyle aynı.
+- Recovery'de: **yeni Agent oluşturulmaz** (mevcut `enrollment.AgentId` kullanılır), agent'a hiç
+  ulaşmamış eski credential revoke edilir, yeni credential üretilir ve plaintext secret sadece bu
+  response'ta döner.
+- Diğer tüm durumlarda (nonce yok, yanlış nonce, farklı makine) yanıt her zaman aynı generic
+  hatadır; tükenmiş kod kimseye yeniden açılmaz.
+
+Backend'de plaintext nonce saklanmaz; hash'ten secret türetilmez.
+
 ### Replay ve concurrency
 
 - Register tek transaction'dır: Agent + credential oluşturma ve kodun consume edilmesi atomiktir.
@@ -71,9 +92,17 @@ RequiresApproval?
 
 ### Bilgi sızdırmama
 
-`POST /api/agent/enroll` anonim bir endpoint olduğu için geçersiz/expired/kullanılmış/revoke edilmiş
-kodların hepsi **aynı** generic mesajı döndürür. "Kod var ama süresi dolmuş" gibi ayrımlar saldırgana
-yardımcı olacağı için verilmez.
+`POST /api/agent/enroll` anonim bir endpoint olduğu için caller'ın kayıt olamayacağı **tüm**
+durumlar aynı generic mesajı döndürür:
+
+    Enrollment kodu geçersiz veya kullanılamaz durumda.
+
+Bu kapsama girenler: bilinmeyen kod, süresi dolmuş kod, kullanılmış kod, revoke edilmiş kod,
+süresi dolmuş kurulum oturumu, terminal (cancelled/failed/completed/enrolled/online) kurulum
+oturumu, kurum-oturum tutarsızlığı ve başarısız recovery denemesi. "Kod var ama süresi dolmuş" gibi
+ayrımlar saldırgana yardımcı olacağı için verilmez; sunucu tarafı bütünlük hataları da public probe
+bilgisine dönüştürülmez. Ayrıntı yalnızca internal log/audit'e yazılır ve plaintext enrollment code
+asla loglanmaz.
 
 ### Loglama
 
@@ -97,6 +126,21 @@ değildir, Agent yalnızca kalıcı credential kullanır.
   (`AktifMi = false`, `RevokedAt` set edilir, `CredentialVersion` artar). Daha önce alınmış bir
   access token, TTL'i dolana kadar geçerli kalır; bu fazda token blacklist kurulmamıştır.
 
+## Approval politikası
+
+`Kurum.AgentEnrollmentRequiresApproval` kurum seviyesindeki **source of truth**'tur ve default
+`true`'dur (fail-safe). Kayıt anındaki karar:
+
+    requiresApproval = kurum.AgentEnrollmentRequiresApproval || enrollment.RequiresApproval
+
+Yani kurum zorunlu onay istiyorsa, enrollment code'u `RequiresApproval=false` ile üretilmiş olsa
+bile agent `PendingApproval` olur — **caller kurum politikasını bypass edemez**. Kurum politikası
+kapalıyken operatör yine de tek bir kurulum için onay isteyebilir. Kurum kaydı bulunamazsa onay
+zorunlu varsayılır.
+
+Wizard, kurum politikası zorunluysa "Onay gerektirsin" kutusunu disabled gösterir ve bunun
+kapatılamayacağını belirtir.
+
 ## Approval
 
 Yetkili STYS kullanıcısı (`StructurePermissions.AgentYonetimi.Manage`):
@@ -110,6 +154,9 @@ Yetkili STYS kullanıcısı (`StructurePermissions.AgentYonetimi.Manage`):
 
 Tenant izolasyonu `EnforceKurumAccess` ile sağlanır: Kurum A yöneticisi Kurum B agent'ını
 onaylayamaz/reddedemez.
+
+Lifecycle kararları audit'lenir (`User?.Identity?.Name` konvansiyonu ile):
+`Agent.ApprovedAt` / `ApprovedBy`, `Agent.RejectedAt` / `RejectedBy`.
 
 `AgentDurum`: `PendingApproval = 0`, `Active = 1`, `Disabled = 2`, `Revoked = 3`, `Rejected = 4`.
 `Rejected`, hiç onaylanmamış bir kaydın reddedilmesidir; `Revoked` ise daha önce onaylanmış bir
@@ -146,12 +193,21 @@ Polling: kimlik doğrulama denemeleri 5 saniyede bir; agent'ın `PendingApproval
 | Agent reddedildi | Credential iptal edilmiştir. Agent yeniden kaydolmalıdır: yeni enrollment code üretip kurulumu tekrarlayın. |
 | Kod listede görünüyor ama okunamıyor | Beklenen davranış. Plaintext kod yalnızca üretim anında gösterilir; listede sadece prefix vardır. Kod kaybolduysa yenisini üretin. |
 | Backend erişilemiyor | Agent enrollment code'u tüketmez ve retry eder. STYS adresi/TLS/ağ erişimini kontrol edin. |
+| Register sırasında bağlantı koptu, kod "kullanılmış" göründü | Aynı makineden retry edin: agent sakladığı `RegistrationNonce` ile kaydı kurtarır, yeni Agent oluşmaz. Farklı bir makineden denemek generic hata verir. |
+| Onay kutusu kapatılamıyor | Kurum politikası (`AgentEnrollmentRequiresApproval`) zorunlu onay istiyor. |
 | Agent farklı bir STYS adresine taşındı | Mevcut local credential geçersiz sayılır ve re-enrollment istenir. |
 
-## Migration notu
+## Migration notları
 
 `E2D4EnrollmentCodeHashing` migration'ı `Code` kolonunu `CodeHash` olarak yeniden adlandırır,
 `CodePrefix` ekler ve **mevcut satırlardaki plaintext kodları SHA-256 hash'lerine dönüştürür**
 (idempotent; zaten hash'lenmiş satırlar atlanır). Hash tek yönlü olduğu için rollback plaintext'i
 geri getirmez: rollback sonrası eski kodlar kullanılamaz, yeni kod üretilmelidir. Mevcut Agent
 kayıtlarının `Durum` değeri değişmez — çalışan agent'lar `PendingApproval`'a düşmez.
+
+`E2D41EnrollmentLifecycleClosure` migration'ı `AgentEnrollments.RegistrationNonceHash`,
+`Agentler.ApprovedAt/ApprovedBy/RejectedAt/RejectedBy` ve
+`Kurumlar.AgentEnrollmentRequiresApproval` kolonlarını ekler. Kurum politikası kolonu **mevcut
+satırlar dahil `true`** default'u ile eklenir: yükseltme sonrasında hiçbir kurum sessizce
+otomatik-aktivasyona düşmez. Bu yalnızca **bundan sonraki** kayıtları etkiler; hâlihazırda `Active`
+olan agent'ların durumu değişmez.

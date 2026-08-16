@@ -13,6 +13,11 @@ public sealed class AgentEnrollment : BaseEntity<int>, ITenantEntity
     /// UI. Not a secret on its own and never sufficient to enroll.</summary>
     public string CodePrefix { get; set; } = string.Empty;
 
+    /// <summary>SHA-256 of the RegistrationNonce presented by the installation that consumed this
+    /// code. Lets exactly that installation recover if the registration response never reached it;
+    /// nobody else can, because the nonce never leaves that machine in plaintext.</summary>
+    public string? RegistrationNonceHash { get; set; }
+
     public int KurumId { get; set; }
     public string TesisIds { get; set; } = "[]";
     public string AllowedScopes { get; set; } = "[]";

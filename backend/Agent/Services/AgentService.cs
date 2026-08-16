@@ -142,7 +142,7 @@ public sealed class AgentService : IAgentService
         }
     }
 
-    public async Task ApproveAsync(int id, CancellationToken cancellationToken)
+    public async Task ApproveAsync(int id, string approvedBy, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Set<AgentEntity>()
@@ -153,6 +153,8 @@ public sealed class AgentService : IAgentService
         EnforceKurumAccess(agent);
         if (agent.Durum != AgentDurum.PendingApproval) throw new BaseException("Sadece onay bekleyen agent onaylanabilir.", 400);
         agent.Durum = AgentDurum.Active;
+        agent.ApprovedAt = DateTime.UtcNow;
+        agent.ApprovedBy = NormalizeActor(approvedBy);
 
         foreach (var session in agent.Enrollments
                      .Where(x => !x.IsDeleted && x.InstallationSession is not null && x.InstallationSession.Status == AgentInstallationSessionStatus.PendingApproval)
@@ -165,7 +167,7 @@ public sealed class AgentService : IAgentService
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task RejectAsync(int id, CancellationToken cancellationToken)
+    public async Task RejectAsync(int id, string rejectedBy, CancellationToken cancellationToken)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var agent = await db.Set<AgentEntity>()
@@ -178,6 +180,8 @@ public sealed class AgentService : IAgentService
         if (agent.Durum != AgentDurum.PendingApproval) throw new BaseException("Sadece onay bekleyen agent reddedilebilir.", 400);
 
         agent.Durum = AgentDurum.Rejected;
+        agent.RejectedAt = DateTime.UtcNow;
+        agent.RejectedBy = NormalizeActor(rejectedBy);
         // The credential the agent already stored locally must stop working immediately; it can
         // never be exchanged for a token again.
         foreach (var cred in agent.Credentialler.Where(x => x.AktifMi))
@@ -230,6 +234,13 @@ public sealed class AgentService : IAgentService
         await ValidateTesislerAsync(kurumId.Value, request.TesisIds, cancellationToken);
 
         await using var db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        // Surfaced so the wizard can tell the operator that approval is mandatory for this kurum
+        // and that unticking the per-code flag will not change it.
+        var kurumRequiresApproval = await db.Set<STYS.Kurumlar.Entities.Kurum>()
+            .Where(x => x.Id == kurumId.Value && !x.IsDeleted)
+            .Select(x => (bool?)x.AgentEnrollmentRequiresApproval)
+            .FirstOrDefaultAsync(cancellationToken) ?? true;
+
         var code = GenerateSecureCode();
         var enrollment = new AgentEnrollment
         {
@@ -248,7 +259,7 @@ public sealed class AgentService : IAgentService
         await db.SaveChangesAsync(cancellationToken);
 
         // This is the only response that ever carries the plaintext code.
-        return new AgentEnrollmentCodeDto { Id = enrollment.Id, Code = code, CodePrefix = enrollment.CodePrefix, KurumId = enrollment.KurumId, TesisIds = request.TesisIds, AllowedScopes = request.AllowedScopes, RequiresApproval = request.RequiresApproval, MaxKullanimSayisi = enrollment.MaxKullanimSayisi, ExpiresAt = enrollment.ExpiresAt, Durum = (int)enrollment.Durum, CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow };
+        return new AgentEnrollmentCodeDto { Id = enrollment.Id, Code = code, CodePrefix = enrollment.CodePrefix, KurumId = enrollment.KurumId, TesisIds = request.TesisIds, AllowedScopes = request.AllowedScopes, RequiresApproval = request.RequiresApproval, KurumRequiresApproval = kurumRequiresApproval, MaxKullanimSayisi = enrollment.MaxKullanimSayisi, ExpiresAt = enrollment.ExpiresAt, Durum = (int)enrollment.Durum, CreatedAt = enrollment.CreatedAt ?? DateTime.UtcNow };
     }
 
     public async Task<IReadOnlyCollection<AgentEnrollmentCodeDto>> GetEnrollmentCodesAsync(int? kurumId, int? tesisId, CancellationToken cancellationToken)
@@ -415,6 +426,12 @@ public sealed class AgentService : IAgentService
         foreach (var cred in agent.Credentialler?.Where(x => x.AktifMi) ?? [])
             cred.CredentialVersion++;
     }
+
+    /// <summary>Matches the CreatedBy/UpdatedBy convention used elsewhere in the agent services,
+    /// where the controller supplies User?.Identity?.Name and unauthenticated paths fall back to
+    /// "system".</summary>
+    private static string NormalizeActor(string? actor) =>
+        string.IsNullOrWhiteSpace(actor) ? "system" : actor.Trim();
 
     private static string GenerateSecureCode()
     {

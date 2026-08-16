@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using STYS.Agent.Client;
@@ -101,7 +102,13 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
             var credential = await _credentialStore.GetAsync(cancellationToken);
             var config = await _bootstrapStore.GetAsync(cancellationToken);
-            if (credential is null)
+
+            // A stored record that only carries the registration nonce is NOT a credential: the
+            // enrollment never completed. Treat it as "not enrolled yet" so the enroll/recover path
+            // runs instead of trying to authenticate with an empty ClientId.
+            if (credential is null
+                || string.IsNullOrWhiteSpace(credential.ClientId)
+                || string.IsNullOrWhiteSpace(credential.ClientSecret))
             {
                 var enrollmentCode = ResolveEnrollmentCode();
                 if (string.IsNullOrWhiteSpace(enrollmentCode))
@@ -208,6 +215,13 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
 
         var agentInstanceId = GetOrCreateInstanceId();
         var agentDisplayName = NormalizeDisplayName(request.AgentDisplayName);
+
+        // Mint (or reuse) the recovery proof BEFORE contacting the server and persist it first.
+        // If the server commits the registration but the response never gets back to us, the retry
+        // presents this same nonce and finishes the registration instead of being rejected as a
+        // spent code.
+        var registrationNonce = await GetOrCreateRegistrationNonceAsync(cancellationToken);
+
         var enrollmentRequest = new AgentEnrollmentRequest
         {
             EnrollmentCode = request.EnrollmentCode.Trim(),
@@ -215,7 +229,8 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
             AgentDisplayName = agentDisplayName,
             CihazKimligi = agentInstanceId,
             AgentVersion = _clientOptions.AgentVersion,
-            Capabilities = request.Capabilities ?? []
+            Capabilities = request.Capabilities ?? [],
+            RegistrationNonce = registrationNonce
         };
 
         var enrollmentResponse = await _client.EnrollAsync(enrollmentRequest, cancellationToken);
@@ -227,7 +242,9 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
             AgentKey = enrollmentResponse.AgentKey,
             EnrollmentBaseUrl = storedConfig.StysBaseUrl,
             AgentId = enrollmentResponse.AgentId,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            // Kept so a later crash before the credential is usable can still recover.
+            RegistrationNonce = registrationNonce
         };
 
         await _credentialStore.SaveAsync(credential, cancellationToken);
@@ -281,6 +298,26 @@ public sealed class AgentEnrollmentCoordinator : IAgentEnrollmentCoordinator
             TokenAcquired = true,
             RestartRequired = false
         };
+    }
+
+    /// <summary>Returns this installation's registration nonce, creating and persisting one on
+    /// first use. Persisting before the enrollment call is what makes recovery possible: a retry
+    /// after a lost response must present the identical value.</summary>
+    private async Task<string> GetOrCreateRegistrationNonceAsync(CancellationToken cancellationToken)
+    {
+        var existing = await _credentialStore.GetAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(existing?.RegistrationNonce))
+            return existing!.RegistrationNonce!;
+
+        var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+
+        // A nonce-only record is deliberately not a usable credential (ClientId/ClientSecret stay
+        // empty), so HasUsableCredentialAsync will not mistake it for a completed enrollment.
+        var record = existing ?? new AgentLocalCredential();
+        record.RegistrationNonce = nonce;
+        await _credentialStore.SaveAsync(record, cancellationToken);
+        return nonce;
     }
 
     private static void ClearEnrollmentCodeFromProcess()

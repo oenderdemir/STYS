@@ -45,6 +45,10 @@ export interface AgentEnrollmentCodeDto {
     durum: number;
     agentId?: number;
     createdAt: string;
+    /** Kurum-wide mandatory approval policy; when true the per-code flag cannot switch it off. */
+    kurumRequiresApproval?: boolean;
+    /** What will actually happen at registration: kurum policy OR the per-code flag. */
+    effectiveRequiresApproval?: boolean;
 }
 
 export interface AgentEnrollmentCodeRequest {

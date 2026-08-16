@@ -83,7 +83,26 @@ internal static class AgentInstallerPackageBuilder
             }
         }
 
-        throw new InvalidOperationException("Release public key bulunamadı. Installer paketi trust anchor olmadan üretilemez.");
+        // Fail closed, but tell the operator which locations were tried and in what order. Without
+        // this the only signal is "not found", which does not say what to provision or where.
+        var searched = new List<string>
+        {
+            "STYS_AGENT_RELEASE_PUBLIC_KEY_PEM (inline PEM ortam değişkeni)",
+            "STYS_AGENT_RELEASE_PUBLIC_KEY_PEM_PATH" + (string.IsNullOrWhiteSpace(configuredPath)
+                ? " (tanımlı değil)"
+                : $" -> {Path.GetFullPath(configuredPath.Trim())} (dosya yok)"),
+            rootTrustPath
+        };
+
+        if (!source.IsConfiguredRoot)
+        {
+            searched.Add(Path.Combine(source.RepositoryRoot, "trust", "release-public-key.pem"));
+        }
+
+        throw new InvalidOperationException(
+            "Release public key bulunamadı. Installer paketi trust anchor olmadan üretilemez. " +
+            $"Aranan konumlar: {string.Join(" | ", searched)}. " +
+            "Provisioning için bkz. docs/agent-production-installation.md (\"Trust boundary and release key provisioning\").");
     }
 
     private static void AddDirectory(ZipArchive archive, string sourceDirectory, string archiveDirectory)

@@ -65,4 +65,18 @@ describe('AgentInstallationWizardComponent', () => {
         expect(storageSpy).not.toHaveBeenCalled();
         expect(component.isCreationLocked()).toBeTrue();
     });
+
+    it('kurulum oturumu paket adimindan once olusur', () => {
+        // The package step can only download once a session exists, so session creation has to
+        // happen on the step before it. Previously the create button lived on the step AFTER the
+        // package step, which left the download button permanently disabled on first pass and
+        // forced the operator to navigate backwards.
+        expect(component.selectedSession()).toBeNull();
+
+        component.createSession();
+
+        expect(component.selectedSession()).not.toBeNull();
+        expect(component.wizardStep()).toBe(5);
+        expect(component.generatedEnrollmentCode()).toBe('ABCD-EFGH');
+    });
 });

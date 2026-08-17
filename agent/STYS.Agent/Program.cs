@@ -123,6 +123,7 @@ builder.Services.AddScoped<PingCommandHandler>();
 builder.Services.AddScoped<HealthCheckCommandHandler>();
 builder.Services.AddScoped<RefreshConfigCommandHandler>();
 builder.Services.AddScoped<AgentStageUpgradeCommandHandler>();
+builder.Services.AddSingleton<IUpdaterServicePresenceProbe, WindowsUpdaterServicePresenceProbe>();
 builder.Services.AddScoped<AgentApplyUpgradeCommandHandler>();
 builder.Services.AddPavoModule(builder.Configuration);
 

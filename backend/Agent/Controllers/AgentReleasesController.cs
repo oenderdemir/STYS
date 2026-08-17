@@ -12,6 +12,9 @@ namespace STYS.Agent.Controllers;
 [Route("ui/agent-releases")]
 public sealed class AgentReleasesController : UIController
 {
+    /// <summary>Transport ceiling for a release upload, shared by both request limits.</summary>
+    public const long MaxUploadBytes = 512L * 1024 * 1024;
+
     private readonly IAgentReleasePublishingService _service;
 
     public AgentReleasesController(IAgentReleasePublishingService service)
@@ -33,9 +36,18 @@ public sealed class AgentReleasesController : UIController
     /// Publishes a new release. Sha256 and PackageSize are computed from the uploaded bytes; any
     /// values a client might send for them are ignored by design.
     /// </summary>
+    /// <remarks>
+    /// Both limits are needed and are scoped to this action so the rest of the application keeps
+    /// framework defaults. RequestSizeLimit caps the raw body; MultipartBodyLengthLimit caps
+    /// multipart parsing, and its 128 MB default would otherwise reject a large package during form
+    /// binding — before the service ever applies MaxPackageSizeBytes. These are the transport
+    /// ceiling only: AgentReleasePublishing.MaxPackageSizeBytes remains authoritative and is
+    /// expected to be less than or equal to this.
+    /// </remarks>
     [HttpPost]
     [Permission(StructurePermissions.AgentYonetimi.Manage)]
-    [RequestSizeLimit(512L * 1024 * 1024)]
+    [RequestSizeLimit(MaxUploadBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadBytes)]
     public async Task<ActionResult<AgentReleaseDto>> Publish(
         [FromForm] AgentReleasePublishRequest request,
         IFormFile package,

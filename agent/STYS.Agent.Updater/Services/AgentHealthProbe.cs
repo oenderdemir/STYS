@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using STYS.Agent.Contracts.Versioning;
 
 namespace STYS.Agent.Updater.Services;
 
@@ -56,7 +57,11 @@ public sealed class AgentHealthProbe : IAgentHealthProbe
             if (TryGetPropertyIgnoreCase(doc.RootElement, "agentVersion", out var versionElement))
             {
                 var reportedVersion = versionElement.GetString();
-                if (!string.IsNullOrWhiteSpace(reportedVersion) && !string.Equals(reportedVersion.Trim(), targetVersion.Trim(), StringComparison.OrdinalIgnoreCase))
+
+                // Compare release identity, not the raw string: the SDK appends "+<commit-sha>" to
+                // the informational version in a git build, which would otherwise make a healthy
+                // upgrade look like the wrong binary and trigger a rollback.
+                if (!string.IsNullOrWhiteSpace(reportedVersion) && !AgentVersionComparison.SameRelease(reportedVersion, targetVersion))
                 {
                     _logger.LogWarning("Agent version mismatch after upgrade. Expected={Expected}, Actual={Actual}", targetVersion, reportedVersion);
                     return false;

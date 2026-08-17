@@ -18,6 +18,7 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
     private readonly IAgentReleaseStagingStore _stagingStore;
     private readonly IAgentPathResolver _paths;
     private readonly AgentUpgradeOptions _options;
+    private readonly IUpdaterServicePresenceProbe _updaterProbe;
     private readonly ILogger<AgentApplyUpgradeCommandHandler> _logger;
 
     public AgentApplyUpgradeCommandHandler(
@@ -25,12 +26,14 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
         IAgentReleaseStagingStore stagingStore,
         IAgentPathResolver paths,
         Microsoft.Extensions.Options.IOptions<AgentUpgradeOptions> options,
+        IUpdaterServicePresenceProbe updaterProbe,
         ILogger<AgentApplyUpgradeCommandHandler> logger)
     {
         _requestStore = requestStore;
         _stagingStore = stagingStore;
         _paths = paths;
         _options = options.Value;
+        _updaterProbe = updaterProbe;
         _logger = logger;
     }
 
@@ -63,7 +66,13 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
             throw new InvalidOperationException("Sahnelenmiş paket bulunamadı.");
         }
 
-        EnsureUpdaterAvailable();
+        // Checked before anything is written: the updater is what actually performs the upgrade, so
+        // without it the request file would sit unread and this command would defer forever.
+        var updaterAvailability = CheckUpdaterAvailability();
+        if (updaterAvailability is not null)
+        {
+            return updaterAvailability;
+        }
 
         var request = new ClientApplyUpgradeRequest
         {
@@ -113,46 +122,36 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
     }
 
     public const string UpdaterNotAvailableCode = "AGENT_UPDATER_NOT_AVAILABLE";
+    public const string UpdaterStatusUnknownCode = "AGENT_UPDATER_STATUS_UNKNOWN";
 
     /// <summary>
-    /// The apply command completes asynchronously: this handler only records the request and the
-    /// updater service carries it out. If that service is not installed nothing would ever pick the
-    /// request up and the command would hang until it expired, so refuse up front instead.
-    /// Detection failures are treated as "present" so a working install is never blocked by a
-    /// permissions quirk in the service query.
+    /// Verifies that the updater service exists. Returns a failed result to report on, or null when
+    /// the apply may proceed.
+    ///
+    /// Returning a result rather than throwing matters: an exception is reported to the backend as
+    /// a generic HANDLER_EXCEPTION, which hides the real reason from command history and the UI.
+    ///
+    /// Fail closed when the service cannot be queried. Deferring on an unverified assumption means
+    /// that if the updater really is absent the command waits until it expires, with no signal of
+    /// why; a clear refusal is recoverable, a silent hang is not.
     /// </summary>
-    private void EnsureUpdaterAvailable()
+    private AgentCommandResult? CheckUpdaterAvailability()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         var serviceName = _options.UpdaterServiceName?.Trim();
         if (string.IsNullOrWhiteSpace(serviceName))
         {
-            return;
+            return null;
         }
 
-        bool installed;
-        try
+        return _updaterProbe.Check(serviceName) switch
         {
-            installed = System.ServiceProcess.ServiceController
-                .GetServices()
-                .Any(x => string.Equals(x.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(x.DisplayName, serviceName, StringComparison.OrdinalIgnoreCase));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Updater servis durumu sorgulanamadı; apply isteği yine de yazılacak.");
-            return;
-        }
-
-        if (!installed)
-        {
-            _logger.LogError("Updater servisi bulunamadı: {ServiceName}", serviceName);
-            throw new InvalidOperationException(
-                $"{UpdaterNotAvailableCode}: '{serviceName}' servisi kurulu değil, güncelleme uygulanamaz.");
-        }
+            UpdaterPresence.Present => null,
+            UpdaterPresence.Missing => AgentCommandResult.Fail(
+                $"'{serviceName}' servisi kurulu değil, güncelleme uygulanamaz.",
+                UpdaterNotAvailableCode),
+            _ => AgentCommandResult.Fail(
+                $"Updater servis durumu doğrulanamadı ('{serviceName}'), güncelleme uygulanmadı.",
+                UpdaterStatusUnknownCode)
+        };
     }
 }

@@ -42,6 +42,15 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 # Matches the deployment model already used for the unified installer artifacts:
 # self-contained single file, so the target machine needs no shared runtime.
+#
+# IncludeSourceRevisionInInformationalVersion=false is load bearing: inside a git repository the SDK
+# otherwise appends "+<commit-sha>" to AssemblyInformationalVersion, which is what AgentVersionInfo
+# reports at runtime. The updater's health probe compares that against the release version, so an
+# appended SHA made a healthy upgrade look like the wrong build and rolled it back.
+# AssemblyVersion/FileVersion stay numeric-only because Windows requires it; prerelease labels
+# survive on Version/InformationalVersion.
+$numericVersion = ($Version -split '-')[0] + '.0'
+
 Write-Host "[Release build] dotnet publish calisiyor..."
 & dotnet publish $projectPath `
     -c Release `
@@ -49,8 +58,10 @@ Write-Host "[Release build] dotnet publish calisiyor..."
     --self-contained true `
     /p:PublishSingleFile=true `
     /p:Version=$Version `
-    /p:AssemblyVersion=$(($Version -split '-')[0]).0 `
-    /p:FileVersion=$(($Version -split '-')[0]).0 `
+    /p:InformationalVersion=$Version `
+    /p:IncludeSourceRevisionInInformationalVersion=false `
+    /p:AssemblyVersion=$numericVersion `
+    /p:FileVersion=$numericVersion `
     -o $publishDir
 
 if ($LASTEXITCODE -ne 0) {
@@ -76,6 +87,15 @@ $agentExe = Join-Path $publishDir "STYS.Agent.exe"
 if (-not (Test-Path -LiteralPath $agentExe)) {
     throw "Publish ciktisinda STYS.Agent.exe bulunamadi: $agentExe"
 }
+
+# The binary reports this value to the updater's health probe, so a mismatch here would surface much
+# later as a rolled-back upgrade. Fail at build time instead.
+$productVersion = (Get-Item -LiteralPath $agentExe).VersionInfo.ProductVersion
+if ($productVersion -ne $Version) {
+    throw "Publish edilen product version istenen surumle eslesmiyor. Istenen: '$Version', uretilen: '$productVersion'. IncludeSourceRevisionInInformationalVersion ayarini kontrol edin."
+}
+
+Write-Host "[Release build] product version dogrulandi: $productVersion"
 
 if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force

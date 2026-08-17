@@ -643,14 +643,36 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
 
         // The central path peeks the same shared counter and only advances once its command
         // actually completed against the device.
-        var centralHandle = await reservationService.ReserveAsync(7001, null, CancellationToken.None);
+        var centralHandle = await reservationService.ReserveAsync(7001, "SN-900", null, CancellationToken.None);
         Assert.Equal(2, centralHandle.TransactionSequence);
 
-        await reservationService.AdvanceAsync(7001, CancellationToken.None);
+        await reservationService.AdvanceAsync(7001, "SN-900", CancellationToken.None);
 
         var restartReservationService = new PavoCommandSequenceReservationService(store, pairingStore);
-        var restartHandle = await restartReservationService.ReserveAsync(7001, null, CancellationToken.None);
+        var restartHandle = await restartReservationService.ReserveAsync(7001, "SN-900", null, CancellationToken.None);
         Assert.Equal(3, restartHandle.TransactionSequence);
+    }
+
+    [Fact]
+    public async Task MerkeziBaglantiBilgisiYoksa_SerialIleRezervasyonYapar()
+    {
+        var store = CreateStore();
+        var terminalStore = CreateTerminalStore();
+        var pairingStore = CreatePairingStore();
+        var service = CreateService(new FakePavoRestClient(), store, terminalStore, pairingStore);
+        var device = await CreatePairedDeviceAsync(service, store, pairingStore, transactionSequence: 4);
+        device.SerialNumber = "SN-SERIAL-FALLBACK";
+        device.CentralPosCihaziId = null;
+        device.ProvisioningStatus = LocalDeviceProvisioningStatus.Provisioned;
+        device.UpdatedAt = DateTimeOffset.UtcNow;
+        await store.UpdateAsync(device, CancellationToken.None);
+
+        var reservationService = new PavoCommandSequenceReservationService(store, pairingStore);
+
+        var handle = await reservationService.ReserveAsync(7001, "SN-SERIAL-FALLBACK", null, CancellationToken.None);
+
+        Assert.Equal(5, handle.TransactionSequence);
+        Assert.Equal("SN-SERIAL-FALLBACK", handle.SerialNumber);
     }
 
     [Fact]
@@ -805,7 +827,7 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
 
         var reservationService = new PavoCommandSequenceReservationService(store, pairingStore);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => reservationService.ReserveAsync(8001, null, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => reservationService.ReserveAsync(8001, "SN-800", null, CancellationToken.None));
 
         Assert.Contains("uygun değil", ex.Message, StringComparison.OrdinalIgnoreCase);
         var state = await pairingStore.GetAsync(device.Id, CancellationToken.None);
@@ -936,7 +958,7 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
 
         var reservationService = new PavoCommandSequenceReservationService(store, pairingStore);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => reservationService.ReserveAsync(9010, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => reservationService.ReserveAsync(9010, "SN-9010", null, CancellationToken.None));
         var state = await pairingStore.GetAsync(device.Id, CancellationToken.None);
         Assert.Equal(11, state!.TransactionSequence);
     }

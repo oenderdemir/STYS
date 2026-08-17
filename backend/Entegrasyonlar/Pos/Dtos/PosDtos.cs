@@ -103,7 +103,7 @@ public sealed class PosOperationalReadinessDto
 public sealed class PosTerminalKaydetRequest
 {
     public int? PosCihaziId { get; set; }
-    public int TesisId { get; set; }
+    public int? TesisId { get; set; }
     public int? KasaBankaHesapId { get; set; }
     public string SaglayiciKodu { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;

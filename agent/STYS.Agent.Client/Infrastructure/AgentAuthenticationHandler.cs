@@ -12,6 +12,7 @@ namespace STYS.Agent.Client.Infrastructure;
 public sealed class AgentAuthenticationHandler : DelegatingHandler
 {
     private readonly AgentTokenStore _tokenStore;
+    private readonly IAgentUnauthorizedRecoverySink _unauthorizedRecoverySink;
     private readonly StysAgentClientOptions _options;
     private readonly ILogger<AgentAuthenticationHandler> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -25,10 +26,12 @@ public sealed class AgentAuthenticationHandler : DelegatingHandler
 
     public AgentAuthenticationHandler(
         AgentTokenStore tokenStore,
+        IAgentUnauthorizedRecoverySink unauthorizedRecoverySink,
         IOptions<StysAgentClientOptions> options,
         ILogger<AgentAuthenticationHandler> logger)
     {
         _tokenStore = tokenStore;
+        _unauthorizedRecoverySink = unauthorizedRecoverySink;
         _options = options.Value;
         _logger = logger;
     }
@@ -46,8 +49,6 @@ public sealed class AgentAuthenticationHandler : DelegatingHandler
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            _tokenStore.ClearToken();
-
             token = await RefreshTokenAsync(cancellationToken);
             if (!string.IsNullOrWhiteSpace(token))
             {
@@ -56,6 +57,10 @@ public sealed class AgentAuthenticationHandler : DelegatingHandler
                 response.Dispose();
                 return await base.SendAsync(retryRequest, cancellationToken);
             }
+
+            _tokenStore.ClearToken();
+            _unauthorizedRecoverySink.HandleAuthenticationLost();
+            _logger.LogWarning("STYS yetkilendirmesi kaybedildi. Agent yeniden kimlik doğrulama bekliyor.");
         }
 
         return response;

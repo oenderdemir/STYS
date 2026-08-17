@@ -43,7 +43,7 @@ public sealed class HeartbeatWorker : BackgroundService
                         ContractVersion = AgentContractVersion.Current,
                         RuntimeIdentifier = RuntimeInformation.RuntimeIdentifier,
                         SupportedApiVersions = ["v1"],
-                        SupportedCapabilities = ["heartbeat", "config-read"],
+                        SupportedCapabilities = ["heartbeat", "config-read", "pavo"],
                         InstalledModules =
                         [
                             new AgentModuleInfo { ModuleName = "Core", ModuleVersion = AgentVersionInfo.Current }

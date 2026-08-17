@@ -35,8 +35,22 @@ public sealed class AgentHostedService : BackgroundService
         _logger.LogInformation("STYS Agent başlatılıyor...");
         var pendingApprovalLogged = false;
 
-        while (!stoppingToken.IsCancellationRequested && !_authenticationState.IsReady)
+        while (!stoppingToken.IsCancellationRequested)
         {
+            if (_authenticationState.IsReady)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
             var delay = ActivationRetryInterval;
 
             try
@@ -44,7 +58,8 @@ public sealed class AgentHostedService : BackgroundService
                 if (await _enrollmentCoordinator.TryActivateAsync(stoppingToken))
                 {
                     _logger.LogInformation("Agent başarıyla kimlik doğruladı.");
-                    break;
+                    pendingApprovalLogged = false;
+                    continue;
                 }
 
                 if (_runtimeStatus.PendingApproval)

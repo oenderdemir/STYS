@@ -448,7 +448,6 @@ export class PosYonetimiComponent implements OnInit {
             terminalId: this.terminalForm.terminalId.trim(),
             merchantId: this.terminalForm.merchantId?.trim() || null,
             serialNumber: this.terminalForm.terminalId.trim(),
-            sourceFingerprint: this.terminalForm.sourceFingerprint?.trim() || null,
             sourceTerminalReference: this.terminalForm.merchantId?.trim() || this.terminalForm.sourceTerminalReference?.trim() || null,
             aktifMi: this.terminalForm.aktifMi
         };
@@ -652,27 +651,6 @@ export class PosYonetimiComponent implements OnInit {
         const cihaz = this.selectedCihaz();
         if (!cihaz?.id) {
             return 'Ödeme başlatmak için önce bir cihaz seçin.';
-        }
-
-        const readiness = this.selectedReadiness();
-        if (readiness && !readiness.ready) {
-            return readiness.lastError ?? 'PAVO cihazı ödeme için hazır değil.';
-        }
-
-        if (!cihaz.aktifMi) {
-            return 'Pasif cihazda ödeme başlatılamaz.';
-        }
-
-        if (!cihaz.agentId) {
-            return 'Bu cihaza atanmış agent yok.';
-        }
-
-        if (!cihaz.eslesmeOnayliMi) {
-            return 'Cihaz agent ile eşleşmemiş.';
-        }
-
-        if (this.isAgentLikelyOffline(cihaz.sonBaglantiTarihi)) {
-            return 'Agent çevrimdışı görünüyor. Son bağlantıyı kontrol edin.';
         }
 
         const terminal = this.terminals().find((item) => item.id === this.paymentForm.posTerminalId);

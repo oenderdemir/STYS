@@ -59,8 +59,6 @@ public sealed class PosTerminalService
             throw new BaseException("TerminalId gereklidir.", 400);
         }
 
-        var merchantId = Normalize(request.MerchantId ?? request.SourceTerminalReference);
-        var sourceFingerprint = Normalize(request.SourceFingerprint);
         var saglayiciKodu = request.SaglayiciKodu.Trim().ToUpperInvariant();
         var saglayici = GetSaglayici(saglayiciKodu);
 
@@ -84,6 +82,15 @@ public sealed class PosTerminalService
             _dbContext.PosTerminaller.Add(terminal);
         }
 
+        var sourceFingerprintProvided = request.SourceFingerprint is not null;
+        var sourceTerminalReferenceProvided = request.SourceTerminalReference is not null || request.MerchantId is not null;
+        var sourceFingerprint = sourceFingerprintProvided ? Normalize(request.SourceFingerprint) : terminal.SourceFingerprint;
+        var merchantId = request.MerchantId is not null
+            ? Normalize(request.MerchantId)
+            : request.SourceTerminalReference is not null
+                ? Normalize(request.SourceTerminalReference)
+                : terminal.SourceTerminalReference;
+
         var canonicalAcquirerId = NormalizeCanonicalValue(hesap?.Kod);
         var duplicate = await _dbContext.PosTerminaller.AnyAsync(x =>
             x.PosCihaziId == cihaz.Id
@@ -100,8 +107,8 @@ public sealed class PosTerminalService
             || terminal.SerialNumber != terminalId
             || terminal.CanonicalAcquirerId != canonicalAcquirerId
             || terminal.CanonicalTerminalId != terminalId
-            || terminal.SourceFingerprint != sourceFingerprint
-            || terminal.SourceTerminalReference != merchantId;
+            || (sourceFingerprintProvided && terminal.SourceFingerprint != sourceFingerprint)
+            || (sourceTerminalReferenceProvided && terminal.SourceTerminalReference != merchantId);
 
         terminal.KurumId = cihaz.KurumId;
         terminal.TesisId = cihaz.TesisId;
@@ -117,8 +124,6 @@ public sealed class PosTerminalService
         terminal.SourceFingerprint = sourceFingerprint;
         terminal.SourceTerminalReference = merchantId;
         terminal.AktifMi = request.AktifMi;
-
-        saglayici.TerminalBilgileriniDogrula(terminal);
 
         if (pairingIdentityChanged)
         {

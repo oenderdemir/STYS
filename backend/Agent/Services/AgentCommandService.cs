@@ -887,10 +887,16 @@ public sealed class AgentCommandService
             var canonicalAcquirerId = NormalizeCanonicalValue(terminalInfo.AcquirerId);
             var canonicalKey = BuildCanonicalTerminalKey(device.Id, canonicalAcquirerId, terminalId);
             discoveredIds.Add(canonicalKey);
-            PosTerminal? terminal;
-            terminal = existing.FirstOrDefault(x =>
+            var terminal = existing.FirstOrDefault(x =>
                 string.Equals(x.CanonicalAcquirerId, canonicalAcquirerId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(x.CanonicalTerminalId, terminalId, StringComparison.OrdinalIgnoreCase));
+
+            if (terminal is null)
+            {
+                terminal = existing.FirstOrDefault(x =>
+                    string.Equals(x.SerialNumber, terminalId, StringComparison.OrdinalIgnoreCase));
+            }
+
             if (terminal is null)
             {
                 terminal = new PosTerminal

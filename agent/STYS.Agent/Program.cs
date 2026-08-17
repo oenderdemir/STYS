@@ -90,6 +90,7 @@ builder.Services.AddScoped<IAgentReleaseStagingService, AgentReleaseStagingServi
 
 builder.Services.AddSingleton<AgentTokenStore>();
 builder.Services.AddSingleton<IAgentAuthenticationState, AgentAuthenticationState>();
+builder.Services.AddSingleton<IAgentUnauthorizedRecoverySink, AgentUnauthorizedRecoverySink>();
 builder.Services.AddSingleton<IAgentCredentialStore, FileAgentCredentialStore>();
 builder.Services.AddTransient<AgentAuthenticationHandler>();
 builder.Services.AddSingleton<IPavoClient, PavoHttpClient>();

@@ -205,6 +205,7 @@ builder.Services.AddScoped<IMuhasebeHesapBakiyeGuncellemeService, MuhasebeHesapB
 builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedService>();
 builder.Services.AddScoped<AgentCommandExpiryService>();
 builder.Services.AddScoped<AgentCommandService>();
+builder.Services.AddScoped<IAgentCapabilitySyncService, AgentCapabilitySyncService>();
 builder.Services.AddScoped<IAgentReleaseService, AgentReleaseService>();
 builder.Services.AddScoped<IAgentReleasePublishingService, AgentReleasePublishingService>();
 builder.Services.AddSingleton<IAgentReleaseSigner, AgentReleaseSigner>();

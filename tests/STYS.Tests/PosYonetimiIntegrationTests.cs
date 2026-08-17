@@ -1134,7 +1134,7 @@ public sealed class PosYonetimiIntegrationTests
     }
 
     [IntegrationFact]
-    public async Task Payment_NotReady_ByHealth_DoesNotCreateCommandOrReserveSequence()
+    public async Task Payment_StaleHealth_StartPaymentCommandOlusturur()
     {
         var cs = ConnectionString();
         if (cs is null) return;
@@ -1153,64 +1153,22 @@ public sealed class PosYonetimiIntegrationTests
         var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-HEALTH"), CancellationToken.None);
         var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
 
-        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
         {
             PosTerminalId = terminal.Id,
             Tutar = 1.00m,
             ParaBirimi = "TRY",
             Aciklama = "integration",
             IdempotencyKey = NewPaymentKey()
-        }, "test", CancellationToken.None));
+        }, "test", CancellationToken.None);
 
         var commandCount = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
         var reloadedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
 
-        Assert.Equal(0, commandCount);
-        Assert.Equal(7, reloadedDevice.TransactionSequence);
-
-        await CleanupAsync(db, suffix);
-    }
-
-    [IntegrationFact]
-    public async Task Payment_NotReady_StartPaymentDoesNotCreateCommandOrReserveSequence()
-    {
-        var cs = ConnectionString();
-        if (cs is null) return;
-
-        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
-        await using var db = AgentTestSupport.CreateDbContext(cs);
-        await db.Database.MigrateAsync();
-        var fixture = await SeedAsync(db, suffix);
-
-        var device = await db.Set<PosCihazi>().FirstAsync(x => x.Id == fixture.DeviceId);
-        device.TransactionSequence = 7;
-        device.SonBaglantiTarihi = DateTime.UtcNow;
-        device.AgentLocalDeviceId = $"LOCAL-{suffix}";
-        device.Fingerprint = $"FP-{suffix}";
-        device.TargetFingerprint = $"FP-{suffix}";
-        device.EslesmeOnayliMi = true;
-        await db.SaveChangesAsync();
-
-        var terminalService = CreateTerminalService(db, fixture.KurumId);
-        var terminal = await terminalService.KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, null, suffix, "PAY-NOT-READY"), CancellationToken.None);
-        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
-
-        await Assert.ThrowsAsync<BaseException>(() => paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
-        {
-            PosTerminalId = terminal.Id,
-            Tutar = 1.00m,
-            ParaBirimi = "TRY",
-            Aciklama = "integration",
-            IdempotencyKey = NewPaymentKey()
-        }, "test", CancellationToken.None));
-
-        var commandCount = await db.Set<STYS.Agent.Entities.AgentCommand>().CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
-        var paymentCount = await db.PosOdemeIslemleri.CountAsync(x => x.PosCihaziId == fixture.DeviceId);
-        var reloadedDevice = await db.Set<PosCihazi>().AsNoTracking().FirstAsync(x => x.Id == fixture.DeviceId);
-
-        Assert.Equal(0, commandCount);
-        Assert.Equal(0, paymentCount);
-        Assert.Equal(7, reloadedDevice.TransactionSequence);
+        Assert.NotNull(payment.AgentCommandId);
+        Assert.Equal(PosOdemeDurumlari.SentToAgent, payment.Durum);
+        Assert.Equal(1, commandCount);
+        Assert.Equal(8, reloadedDevice.TransactionSequence);
 
         await CleanupAsync(db, suffix);
     }
@@ -1241,6 +1199,7 @@ public sealed class PosYonetimiIntegrationTests
 
         Assert.NotNull(payment.AgentCommandId);
         Assert.NotNull(payment.SaleReference);
+        Assert.False(string.IsNullOrWhiteSpace(payment.IslemReferansi));
         Assert.Equal(PosOdemeDurumlari.SentToAgent, payment.Durum);
 
         var command = await db.Set<STYS.Agent.Entities.AgentCommand>().FirstAsync(x => x.Id == payment.AgentCommandId);

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using STYS.Agent.Client;
 using STYS.Agent.Client.Commands;
 using STYS.Agent.Contracts.Dtos;
+using STYS.Agent.LocalDevices;
 using STYS.Agent.Modules.Pavo;
 using STYS.Agent.Services;
 using STYS.Agent.Upgrade;
@@ -21,6 +22,7 @@ public sealed class CommandPollingWorker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IAgentCommandExecutionStore _executionStore;
     private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
+    private readonly ILocalDeviceStore _localDeviceStore;
     private readonly ILogger<CommandPollingWorker> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -32,6 +34,7 @@ public sealed class CommandPollingWorker : BackgroundService
         IServiceScopeFactory scopeFactory,
         IAgentCommandExecutionStore executionStore,
         IPavoCommandSequenceReservationService sequenceReservationService,
+        ILocalDeviceStore localDeviceStore,
         ILogger<CommandPollingWorker> logger)
     {
         _client = client;
@@ -41,6 +44,7 @@ public sealed class CommandPollingWorker : BackgroundService
         _scopeFactory = scopeFactory;
         _executionStore = executionStore;
         _sequenceReservationService = sequenceReservationService;
+        _localDeviceStore = localDeviceStore;
         _logger = logger;
     }
 
@@ -92,22 +96,6 @@ public sealed class CommandPollingWorker : BackgroundService
             if (dto.ExpiresAt.HasValue && DateTime.UtcNow > dto.ExpiresAt.Value)
             {
                 _logger.LogWarning("Komut süresi dolmuş: {CommandType} ({CommandId})", dto.CommandType, dto.Id);
-                return;
-            }
-
-            if (IsPaymentCommand(dto.CommandType) && !_runtimeStatus.StartupHealthy)
-            {
-                _logger.LogWarning(
-                    "Ödeme komutu başlangıç kontrolü nedeniyle reddedildi: {CommandType} ({CommandId})",
-                    dto.CommandType,
-                    dto.Id);
-                await _client.FailCommandAsync(dto.Id, new AgentCommandCompleteRequest
-                {
-                    Id = dto.Id,
-                    Success = false,
-                    ErrorCode = "AGENT_STARTUP_UNHEALTHY",
-                    ErrorMessage = _runtimeStatus.StartupHealthError ?? "Agent startup validation failed."
-                }, cancellationToken);
                 return;
             }
 
@@ -298,32 +286,80 @@ public sealed class CommandPollingWorker : BackgroundService
 
     private async Task<Modules.Pavo.Commands.PavoPairingCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoPairingCommand command, CancellationToken cancellationToken)
     {
-        command.TransactionHandle = await _sequenceReservationService.ReserveForPairingAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        var localDevice = await ResolveLocalDeviceAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, cancellationToken);
+        ApplyLocalConnectionDetails(command, localDevice);
+        command.TransactionHandle = await _sequenceReservationService.ReserveForPairingAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
     }
 
     private async Task<Modules.Pavo.Commands.PavoPingCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoPingCommand command, CancellationToken cancellationToken)
     {
-        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        var localDevice = await ResolveLocalDeviceAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, cancellationToken);
+        ApplyLocalConnectionDetails(command, localDevice);
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
     }
 
     private async Task<Modules.Pavo.Commands.PavoGetDeviceInfoCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoGetDeviceInfoCommand command, CancellationToken cancellationToken)
     {
-        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        var localDevice = await ResolveLocalDeviceAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, cancellationToken);
+        ApplyLocalConnectionDetails(command, localDevice);
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
     }
 
     private async Task<Modules.Pavo.Commands.PavoStartPaymentCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoStartPaymentCommand command, CancellationToken cancellationToken)
     {
-        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        var localDevice = await ResolveLocalDeviceAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, cancellationToken);
+        ApplyLocalConnectionDetails(command, localDevice);
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
     }
 
     private async Task<Modules.Pavo.Commands.PavoGetPaymentResultCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoGetPaymentResultCommand command, CancellationToken cancellationToken)
     {
-        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.TransactionDate, cancellationToken);
+        var localDevice = await ResolveLocalDeviceAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, cancellationToken);
+        ApplyLocalConnectionDetails(command, localDevice);
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, command.TransactionHandle.TransactionDate, cancellationToken);
         return command;
+    }
+
+    private async Task<LocalDevice?> ResolveLocalDeviceAsync(int centralPosCihaziId, string? serialNumber, CancellationToken cancellationToken)
+    {
+        var devices = await _localDeviceStore.GetAllAsync(cancellationToken);
+        return devices
+            .Where(x => x.Provider == LocalDeviceProvider.Pavo && x.DeviceType == LocalDeviceType.Pos)
+            .OrderByDescending(x => x.CentralPosCihaziId == centralPosCihaziId)
+            .ThenByDescending(x => string.Equals(x.SerialNumber, serialNumber, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(x =>
+                x.CentralPosCihaziId == centralPosCihaziId
+                || (!string.IsNullOrWhiteSpace(serialNumber) && string.Equals(x.SerialNumber, serialNumber.Trim(), StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static void ApplyLocalConnectionDetails(STYS.Agent.Modules.Pavo.Commands.PavoDeviceCommandBase command, LocalDevice? localDevice)
+    {
+        if (localDevice is null)
+        {
+            return;
+        }
+
+        command.IpAddress = localDevice.Host;
+        command.HttpPort = localDevice.Protocol == LocalDeviceProtocol.Http ? localDevice.HttpPort : null;
+        command.HttpsPort = localDevice.Protocol == LocalDeviceProtocol.Https ? localDevice.HttpsPort : null;
+        command.UseHttps = localDevice.Protocol == LocalDeviceProtocol.Https;
+    }
+
+    private static void ApplyLocalConnectionDetails(PavoPaymentRequestBase command, LocalDevice? localDevice)
+    {
+        if (localDevice is null)
+        {
+            return;
+        }
+
+        command.IpAddress = localDevice.Host;
+        command.HttpPort = localDevice.Protocol == LocalDeviceProtocol.Http ? localDevice.HttpPort : null;
+        command.HttpsPort = localDevice.Protocol == LocalDeviceProtocol.Https ? localDevice.HttpsPort : null;
+        command.UseHttps = localDevice.Protocol == LocalDeviceProtocol.Https;
     }
 
     private async Task RenewLeaseLoopAsync(AgentCommandDto dto, CancellationToken cancellationToken)
@@ -371,9 +407,6 @@ public sealed class CommandPollingWorker : BackgroundService
         return JsonSerializer.Deserialize<TCommand>(payload, JsonOptions) ?? new TCommand();
     }
 
-    private static bool IsPaymentCommand(string commandType) =>
-        string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class UnknownCommand : IAgentCommand { public string CommandType => "Unknown"; }

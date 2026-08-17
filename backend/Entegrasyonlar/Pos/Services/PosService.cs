@@ -95,7 +95,13 @@ public sealed class PosService : IPosService
             throw new BaseException("Aktif kredi karti/POS hesabi bulunamadi.", 404);
         }
 
-        if (hesap.TesisId.HasValue && hesap.TesisId.Value != request.TesisId)
+        var tesisId = request.TesisId ?? hesap.TesisId;
+        if (!tesisId.HasValue || tesisId.Value <= 0)
+        {
+            throw new BaseException("POS terminali için tesis bilgisi gereklidir.", 400);
+        }
+
+        if (hesap.TesisId.HasValue && hesap.TesisId.Value != tesisId.Value)
         {
             throw new BaseException("POS terminali ile kredi karti hesabi ayni tesise ait olmalidir.", 400);
         }
@@ -128,7 +134,7 @@ public sealed class PosService : IPosService
             || terminal.SerialNumber != serial
             || terminal.SourceFingerprint != sourceFingerprint;
 
-        terminal.TesisId = request.TesisId;
+        terminal.TesisId = tesisId.Value;
         terminal.KasaBankaHesapId = request.KasaBankaHesapId;
         terminal.SaglayiciKodu = saglayiciKodu;
         terminal.Ad = request.Ad.Trim();
@@ -186,12 +192,6 @@ public sealed class PosService : IPosService
         if (!terminal.AktifMi || !terminal.EslesmeOnayliMi)
         {
             throw new BaseException("POS terminali aktif ve kullanima hazir olmalidir.", 409);
-        }
-
-        var readiness = await GetReadinessAsync(terminal, cancellationToken);
-        if (!readiness.Ready)
-        {
-            throw new BaseException($"PAVO cihazı ödeme için hazır değil: {readiness.LastError ?? "hazırlık doğrulanamadı."}", 409);
         }
 
         var rezervasyon = await _dbContext.Rezervasyonlar

@@ -125,6 +125,44 @@ public sealed class PavoRestClientWirePayloadTests
     }
 
     [Fact]
+    public async Task GetDeviceInfo_Body_MatchesObservedSampleShape()
+    {
+        var handler = new CapturingHandler();
+        var client = CreateClient(handler);
+
+        await client.GetDeviceInfoAsync(new PavoGetDeviceInfoRequest
+        {
+            PosCihaziId = 12,
+            IpAddress = "10.0.0.5",
+            HttpPort = 4567,
+            TransactionHandle = CreateHandle(),
+            DeviceInfo = new PavoGetDeviceInfoRequestDeviceInfo
+            {
+                AdditionalInfo = new PavoGetDeviceInfoRequestAdditionalInfo
+                {
+                    SerialNumber = true,
+                    FingerPrint = true,
+                    AppVersion = true,
+                    ListTerminals = true
+                }
+            }
+        }, CancellationToken.None);
+
+        var json = handler.LastBody ?? throw new Xunit.Sdk.XunitException("Request body missing.");
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.True(doc.RootElement.TryGetProperty("TransactionHandle", out _));
+        Assert.True(doc.RootElement.TryGetProperty("DeviceInfo", out var deviceInfo));
+        Assert.True(deviceInfo.TryGetProperty("AdditionalInfo", out var additionalInfo));
+        Assert.True(additionalInfo.GetProperty("serialNumber").GetBoolean());
+        Assert.True(additionalInfo.GetProperty("fingerPrint").GetBoolean());
+        Assert.True(additionalInfo.GetProperty("appVersion").GetBoolean());
+        Assert.True(additionalInfo.GetProperty("listTerminals").GetBoolean());
+        Assert.False(doc.RootElement.TryGetProperty("PosCihaziId", out _));
+        Assert.False(doc.RootElement.TryGetProperty("IpAddress", out _));
+    }
+
+    [Fact]
     public async Task BuildBaseUri_UseHttpsFalse_HttpsPortDoluOlsaBile_HttpKullanir()
     {
         var handler = new CapturingHandler();

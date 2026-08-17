@@ -215,6 +215,10 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             PosCihaziId = 0,
             PosOdemeIslemiId = 0,
             PosTerminalId = 0,
+            IpAddress = device.Host,
+            HttpPort = device.Protocol == LocalDeviceProtocol.Http ? device.HttpPort : null,
+            HttpsPort = device.Protocol == LocalDeviceProtocol.Https ? device.HttpsPort : null,
+            UseHttps = device.Protocol == LocalDeviceProtocol.Https,
             SaleReference = saleReference,
             Amount = request.Amount,
             CurrencyCode = string.IsNullOrWhiteSpace(request.CurrencyCode) ? "TRY" : request.CurrencyCode.Trim(),
@@ -893,6 +897,16 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         HttpPort = device.Protocol == LocalDeviceProtocol.Http ? device.HttpPort : null,
         HttpsPort = device.Protocol == LocalDeviceProtocol.Https ? device.HttpsPort : null,
         UseHttps = device.Protocol == LocalDeviceProtocol.Https,
+        DeviceInfo = new PavoGetDeviceInfoRequestDeviceInfo
+        {
+            AdditionalInfo = new PavoGetDeviceInfoRequestAdditionalInfo
+            {
+                SerialNumber = true,
+                FingerPrint = true,
+                AppVersion = true,
+                ListTerminals = true
+            }
+        },
         TransactionHandle = new PavoTransactionHandle
         {
             SerialNumber = device.SerialNumber ?? string.Empty,

@@ -42,6 +42,36 @@ internal sealed class PavoWirePairingRequest
     public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
 }
 
+internal sealed class PavoWireGetDeviceInfoRequest
+{
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
+
+    [JsonPropertyName("DeviceInfo")]
+    public PavoWireGetDeviceInfoRequestDeviceInfo DeviceInfo { get; init; } = new();
+}
+
+internal sealed class PavoWireGetDeviceInfoRequestDeviceInfo
+{
+    [JsonPropertyName("AdditionalInfo")]
+    public PavoWireGetDeviceInfoRequestAdditionalInfo AdditionalInfo { get; init; } = new();
+}
+
+internal sealed class PavoWireGetDeviceInfoRequestAdditionalInfo
+{
+    [JsonPropertyName("serialNumber")]
+    public bool SerialNumber { get; init; } = true;
+
+    [JsonPropertyName("fingerPrint")]
+    public bool FingerPrint { get; init; } = true;
+
+    [JsonPropertyName("appVersion")]
+    public bool AppVersion { get; init; } = true;
+
+    [JsonPropertyName("listTerminals")]
+    public bool ListTerminals { get; init; } = true;
+}
+
 /// <summary>Shape used by /RebootDevice, /EnterPinMode and /ExitPinMode — all three send
 /// nothing but the transaction handle.</summary>
 internal sealed class PavoWireDeviceCommandRequest
@@ -269,6 +299,78 @@ internal sealed class PavoWireResponse
 
     [JsonPropertyName("Data")]
     public PavoWirePaymentResponseData? Data { get; set; }
+}
+
+internal sealed class PavoWireGetDeviceInfoResponse
+{
+    [JsonPropertyName("HasAbondon")]
+    public bool HasAbondon { get; set; }
+
+    [JsonPropertyName("HasError")]
+    public bool HasError { get; set; }
+
+    [JsonPropertyName("ErrorCode")]
+    public int? ErrorCode { get; set; }
+
+    [JsonPropertyName("Message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle? TransactionHandle { get; set; }
+
+    [JsonPropertyName("Errors")]
+    public List<string>? Errors { get; set; }
+
+    [JsonPropertyName("Data")]
+    public PavoWireGetDeviceInfoResponseData? Data { get; set; }
+}
+
+internal sealed class PavoWireGetDeviceInfoResponseData
+{
+    [JsonPropertyName("serialNumber")]
+    public string? SerialNumber { get; set; }
+
+    [JsonPropertyName("fingerPrint")]
+    public string? FingerPrint { get; set; }
+
+    [JsonPropertyName("appVersion")]
+    public string? AppVersion { get; set; }
+
+    [JsonPropertyName("defaultAcquirerId")]
+    public int? DefaultAcquirerId { get; set; }
+
+    [JsonPropertyName("listTerminals")]
+    public List<PavoWireGetDeviceInfoTerminalInfo>? ListTerminals { get; set; }
+}
+
+internal sealed class PavoWireGetDeviceInfoTerminalInfo
+{
+    [JsonPropertyName("acquirerId")]
+    public int? AcquirerId { get; set; }
+
+    [JsonPropertyName("acquirerName")]
+    public string? AcquirerName { get; set; }
+
+    [JsonPropertyName("terminalLabel")]
+    public string? TerminalLabel { get; set; }
+
+    [JsonPropertyName("terminalId")]
+    public string? TerminalId { get; set; }
+
+    [JsonPropertyName("merchantId")]
+    public string? MerchantId { get; set; }
+
+    [JsonPropertyName("isyeriSlipIsim")]
+    public string? IsyeriSlipIsim { get; set; }
+
+    [JsonPropertyName("isyeriSlipAdres")]
+    public string? IsyeriSlipAdres { get; set; }
+
+    [JsonPropertyName("loyaltyIndex")]
+    public int? LoyaltyIndex { get; set; }
+
+    [JsonPropertyName("availableCurrencyList")]
+    public List<string>? AvailableCurrencyList { get; set; }
 }
 
 internal sealed class PavoWirePaymentResponseData

@@ -527,8 +527,7 @@
             <div class="field"><label for="terminalId">Terminal ID *</label><input pInputText id="terminalId" [(ngModel)]="terminalForm.terminalId" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.terminalId.trim()" /></div>
             <div class="field"><label for="merchantId">Merchant ID</label><input pInputText id="merchantId" [(ngModel)]="terminalForm.merchantId" /></div>
             <div class="field"><label for="terminalAdi">Terminal Adı *</label><input pInputText id="terminalAdi" [(ngModel)]="terminalForm.ad" required [class.ng-invalid]="terminalSubmitted()&&!terminalForm.ad.trim()" /></div>
-            <div class="field"><label for="sourceFingerprint">Bağlantı Fingerprint</label><input pInputText id="sourceFingerprint" [(ngModel)]="terminalForm.sourceFingerprint" /></div>
-            <div class="field-full"><small>Terminal düzenleme, cihaz ile aynı kurum ve tesis kapsamındaki kredi kartı hesabına bağlanır. Keşif sırasında bu eşleşme korunur.</small></div>
+            <div class="field-full"><small>Terminal düzenleme, cihaz ile aynı kurum ve tesis kapsamındaki kredi kartı hesabına bağlanır. Fingerprint bağlantı detayları keşif eşleşmesinde yönetilir.</small></div>
             <div class="field-full flex align-items-center"><p-checkbox inputId="terminalAktifMi" [binary]="true" [(ngModel)]="terminalForm.aktifMi" /><label for="terminalAktifMi" class="ml-2">Aktif</label></div>
         </div>
     </ng-template>

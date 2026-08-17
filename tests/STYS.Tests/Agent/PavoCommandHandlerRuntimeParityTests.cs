@@ -52,6 +52,7 @@ public sealed class PavoCommandHandlerRuntimeParityTests
         Assert.False(result.Success);
         Assert.True(result.HttpResponseReceived);
         Assert.Equal(1, sequenceService.AdvanceCount);
+        Assert.Equal("SN-1", sequenceService.LastSerialNumber);
     }
 
     [Fact]
@@ -81,21 +82,24 @@ public sealed class PavoCommandHandlerRuntimeParityTests
         Assert.False(result.Success);
         Assert.True(result.HttpResponseReceived);
         Assert.Equal(1, sequenceService.AdvanceCount);
+        Assert.Equal("SN-2", sequenceService.LastSerialNumber);
     }
 
     private sealed class FakeSequenceReservationService : IPavoCommandSequenceReservationService
     {
         public int AdvanceCount { get; private set; }
+        public string? LastSerialNumber { get; private set; }
 
-        public Task AdvanceAsync(int centralPosCihaziId, CancellationToken cancellationToken)
+        public Task AdvanceAsync(int centralPosCihaziId, string? serialNumber, CancellationToken cancellationToken)
         {
             _ = centralPosCihaziId;
+            LastSerialNumber = serialNumber;
             _ = cancellationToken;
             AdvanceCount++;
             return Task.CompletedTask;
         }
 
-        public Task<PavoTransactionHandle> ReserveAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken) =>
+        public Task<PavoTransactionHandle> ReserveAsync(int centralPosCihaziId, string? serialNumber, DateTime? transactionDate, CancellationToken cancellationToken) =>
             Task.FromResult(new PavoTransactionHandle
             {
                 SerialNumber = "SN",
@@ -104,8 +108,8 @@ public sealed class PavoCommandHandlerRuntimeParityTests
                 TransactionDate = transactionDate ?? DateTime.Now
             });
 
-        public Task<PavoTransactionHandle> ReserveForPairingAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken) =>
-            ReserveAsync(centralPosCihaziId, transactionDate, cancellationToken);
+        public Task<PavoTransactionHandle> ReserveForPairingAsync(int centralPosCihaziId, string? serialNumber, DateTime? transactionDate, CancellationToken cancellationToken) =>
+            ReserveAsync(centralPosCihaziId, serialNumber, transactionDate, cancellationToken);
     }
 
     private sealed class FakePavoRestClient : IPavoRestClient

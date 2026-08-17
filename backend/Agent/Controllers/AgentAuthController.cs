@@ -25,6 +25,7 @@ public sealed class AgentAuthController : ControllerBase
     private readonly IAgentReleaseService _releaseService;
     private readonly IPosCihaziService _posCihaziService;
     private readonly IAgentRealtimeNotifier _realtimeNotifier;
+    private readonly IAgentCapabilitySyncService _capabilitySyncService;
     private readonly AgentCompatibilityOptions _compatibilityOptions;
     private readonly IAgentInstallationSessionService _installationSessionService;
 
@@ -35,6 +36,7 @@ public sealed class AgentAuthController : ControllerBase
         IAgentReleaseService releaseService,
         IPosCihaziService posCihaziService,
         IAgentRealtimeNotifier realtimeNotifier,
+        IAgentCapabilitySyncService capabilitySyncService,
         IAgentInstallationSessionService installationSessionService,
         IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
     {
@@ -44,6 +46,7 @@ public sealed class AgentAuthController : ControllerBase
         _releaseService = releaseService;
         _posCihaziService = posCihaziService;
         _realtimeNotifier = realtimeNotifier;
+        _capabilitySyncService = capabilitySyncService;
         _installationSessionService = installationSessionService;
         _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
     }
@@ -93,6 +96,7 @@ public sealed class AgentAuthController : ControllerBase
             agent.ContractVersion = NormalizeNullable(request.ContractVersion);
             agent.RuntimeIdentifier = NormalizeNullable(request.RuntimeIdentifier);
             agent.CihazKimligi ??= NormalizeNullable(request.CihazKimligi);
+            _capabilitySyncService.SyncFromHeartbeat(db, agent, request.SupportedCapabilities);
 
             await db.SaveChangesAsync(cancellationToken);
             await _installationSessionService.MarkOnlineFromHeartbeatAsync(agent.Id, cancellationToken);

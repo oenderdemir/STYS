@@ -71,6 +71,29 @@ public sealed class PavoPingRequest : PavoDeviceRequestBase
 
 public sealed class PavoGetDeviceInfoRequest : PavoDeviceRequestBase
 {
+    [JsonPropertyName("DeviceInfo")]
+    public PavoGetDeviceInfoRequestDeviceInfo DeviceInfo { get; set; } = new();
+}
+
+public sealed class PavoGetDeviceInfoRequestDeviceInfo
+{
+    [JsonPropertyName("AdditionalInfo")]
+    public PavoGetDeviceInfoRequestAdditionalInfo AdditionalInfo { get; set; } = new();
+}
+
+public sealed class PavoGetDeviceInfoRequestAdditionalInfo
+{
+    [JsonPropertyName("serialNumber")]
+    public bool SerialNumber { get; set; } = true;
+
+    [JsonPropertyName("fingerPrint")]
+    public bool FingerPrint { get; set; } = true;
+
+    [JsonPropertyName("appVersion")]
+    public bool AppVersion { get; set; } = true;
+
+    [JsonPropertyName("listTerminals")]
+    public bool ListTerminals { get; set; } = true;
 }
 
 /// <summary>Safe projection of the PAVO wire payment data. Field names and types mirror the
@@ -280,20 +303,151 @@ public sealed class PavoPingResponse : PavoBaseResponse
 
 public sealed class PavoGetDeviceInfoResponse : PavoBaseResponse
 {
+    [JsonPropertyName("TransactionHandle")]
     public PavoTransactionHandle? TransactionHandle { get; set; }
-    public string? DeviceName { get; set; }
+
+    [JsonPropertyName("Data")]
+    public PavoGetDeviceInfoResponseData? Data { get; set; }
+
+    [JsonIgnore]
+    public string? DeviceName
+    {
+        get => Data?.DeviceName;
+        set
+        {
+            EnsureData().DeviceName = value;
+        }
+    }
+
+    [JsonIgnore]
+    public string? SerialNumber
+    {
+        get => Data?.SerialNumber;
+        set
+        {
+            EnsureData().SerialNumber = value;
+        }
+    }
+
+    [JsonIgnore]
+    public string? Fingerprint
+    {
+        get => Data?.FingerPrint;
+        set
+        {
+            EnsureData().FingerPrint = value;
+        }
+    }
+
+    [JsonIgnore]
+    public string? TargetFingerprint
+    {
+        get => Data?.FingerPrint;
+        set
+        {
+            EnsureData().FingerPrint = value;
+        }
+    }
+
+    [JsonIgnore]
+    public List<PavoDeviceTerminalInfo> Terminals
+    {
+        get => Data?.ListTerminals ?? [];
+        set
+        {
+            EnsureData().ListTerminals = value ?? [];
+        }
+    }
+
+    private PavoGetDeviceInfoResponseData EnsureData() => Data ??= new PavoGetDeviceInfoResponseData();
+}
+
+public sealed class PavoGetDeviceInfoResponseData
+{
+    [JsonPropertyName("serialNumber")]
     public string? SerialNumber { get; set; }
-    public string? Fingerprint { get; set; }
-    public string? TargetFingerprint { get; set; }
-    public List<PavoDeviceTerminalInfo> Terminals { get; set; } = [];
+
+    [JsonPropertyName("deviceName")]
+    public string? DeviceName { get; set; }
+
+    [JsonPropertyName("fingerPrint")]
+    public string? FingerPrint { get; set; }
+
+    [JsonPropertyName("appVersion")]
+    public string? AppVersion { get; set; }
+
+    [JsonPropertyName("defaultAcquirerId")]
+    public int? DefaultAcquirerId { get; set; }
+
+    [JsonPropertyName("listTerminals")]
+    public List<PavoDeviceTerminalInfo> ListTerminals { get; set; } = [];
 }
 
 public sealed class PavoDeviceTerminalInfo
 {
-    public string TerminalId { get; set; } = string.Empty;
-    public string? MerchantId { get; set; }
+    [JsonPropertyName("acquirerId")]
+    [JsonConverter(typeof(PavoFlexibleStringJsonConverter))]
     public string? AcquirerId { get; set; }
+
+    [JsonPropertyName("acquirerName")]
     public string? AcquirerName { get; set; }
+
+    [JsonPropertyName("terminalLabel")]
+    public string? TerminalLabel { get; set; }
+
+    [JsonPropertyName("terminalId")]
+    public string TerminalId { get; set; } = string.Empty;
+
+    [JsonPropertyName("merchantId")]
+    public string? MerchantId { get; set; }
+
+    [JsonPropertyName("isyeriSlipIsim")]
+    public string? IsyeriSlipIsim { get; set; }
+
+    [JsonPropertyName("isyeriSlipAdres")]
+    public string? IsyeriSlipAdres { get; set; }
+
+    [JsonPropertyName("loyaltyIndex")]
+    public int? LoyaltyIndex { get; set; }
+
+    [JsonPropertyName("availableCurrencyList")]
+    public List<string>? AvailableCurrencyList { get; set; }
+}
+
+internal sealed class PavoFlexibleStringJsonConverter : JsonConverter<string?>
+{
+    public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType switch
+        {
+            JsonTokenType.Null => null,
+            JsonTokenType.String => reader.GetString(),
+            JsonTokenType.Number when reader.TryGetInt64(out var value) => value.ToString(CultureInfo.InvariantCulture),
+            JsonTokenType.Number => reader.GetDecimal().ToString(CultureInfo.InvariantCulture),
+            _ => throw new JsonException($"Geçersiz string/number değeri: {reader.TokenType}")
+        };
+
+    public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
+        {
+            writer.WriteNumberValue(longValue);
+            return;
+        }
+
+        if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue) && value.Contains('.'))
+        {
+            writer.WriteNumberValue(decimalValue);
+            return;
+        }
+
+        writer.WriteStringValue(value);
+    }
 }
 
 public abstract class PavoPaymentResponseBase : PavoBaseResponse

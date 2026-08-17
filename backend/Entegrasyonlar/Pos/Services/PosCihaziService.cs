@@ -511,6 +511,16 @@ public sealed class PosCihaziService : BaseRdbmsService<PosCihaziDto, PosCihazi,
         HttpPort = cihaz.HttpPort,
         HttpsPort = cihaz.HttpsPort,
         UseHttps = cihaz.HttpsPort.HasValue,
+        DeviceInfo = new PavoGetDeviceInfoRequestDeviceInfo
+        {
+            AdditionalInfo = new PavoGetDeviceInfoRequestAdditionalInfo
+            {
+                SerialNumber = true,
+                FingerPrint = true,
+                AppVersion = true,
+                ListTerminals = true
+            }
+        },
         TransactionHandle = BuildTransactionHandle(cihaz)
     };
 

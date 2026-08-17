@@ -7,9 +7,7 @@ using STYS.Agent.Entities;
 using STYS.Agent.Services;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
-using STYS.Entegrasyonlar.Pos.Options;
 using STYS.Infrastructure.EntityFramework;
-using STYS.Rezervasyonlar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Tesisler.Entities;
@@ -26,18 +24,15 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
     private readonly StysAppDbContext _db;
     private readonly AgentCommandService _agentCommandService;
     private readonly ICurrentTenantAccessor _tenantAccessor;
-    private readonly PosOperationalHealthOptions _healthOptions;
 
     public PosPaymentTestService(
         StysAppDbContext db,
         AgentCommandService agentCommandService,
-        ICurrentTenantAccessor tenantAccessor,
-        Microsoft.Extensions.Options.IOptions<PosOperationalHealthOptions>? healthOptions = null)
+        ICurrentTenantAccessor tenantAccessor)
     {
         _db = db;
         _agentCommandService = agentCommandService;
         _tenantAccessor = tenantAccessor;
-        _healthOptions = healthOptions?.Value ?? new PosOperationalHealthOptions();
     }
 
     public async Task<IReadOnlyCollection<PosOdemeIslemiDto>> GetRecentAsync(int cihazId, int take, CancellationToken cancellationToken)
@@ -72,14 +67,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         var terminal = await GetTerminalAsync(request.PosTerminalId, cancellationToken);
         EnsureTerminalBelongsToDevice(cihaz, terminal);
         _ = await GetValidatedAgentAsync(cihaz, cancellationToken);
-        var readiness = await GetReadinessAsync(cihaz, cancellationToken);
-        if (!readiness.Ready)
-        {
-            throw new BaseException($"PAVO cihazı ödeme için hazır değil: {readiness.LastError ?? "hazırlık doğrulanamadı."}", 409);
-        }
         var hesap = await GetValidatedAccountAsync(terminal, cancellationToken);
-        var rezervasyonId = await ResolveReservationIdAsync(cihaz.TesisId, cancellationToken);
-
         var now = DateTime.UtcNow;
         PosOdemeIslemi? islem;
         var loadedFromConflict = false;
@@ -100,9 +88,10 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
                         PosCihaziId = cihaz.Id,
                         PosTerminalId = terminal.Id,
                         KasaBankaHesapId = hesap.Id,
+                        IslemReferansi = GenerateIslemReferansi(cihaz.Id, terminal.Id, now),
                         SaleReference = saleReference,
                         IdempotencyKey = idempotencyKey,
-                        RezervasyonId = rezervasyonId,
+                        RezervasyonId = null,
                         Tutar = request.Tutar,
                         ParaBirimi = NormalizeCurrency(request.ParaBirimi),
                         Durum = PosOdemeDurumlari.Pending,
@@ -246,20 +235,6 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         await _db.SaveChangesAsync(cancellationToken);
         await EnsureTerminalLoadedAsync(payment, cancellationToken);
         return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
-    }
-
-    private async Task<PosOperationalReadinessDto> GetReadinessAsync(PosCihazi cihaz, CancellationToken cancellationToken)
-    {
-        var agent = cihaz.AgentId.HasValue
-            ? await _db.Set<AgentEntity>().FirstOrDefaultAsync(x => x.Id == cihaz.AgentId.Value && !x.IsDeleted, cancellationToken)
-            : null;
-
-        var terminals = await _db.PosTerminaller
-            .AsNoTracking()
-            .Where(x => x.PosCihaziId == cihaz.Id && !x.IsDeleted)
-            .ToListAsync(cancellationToken);
-
-        return PosOperationalReadinessEvaluator.Evaluate(cihaz, agent, terminals, _healthOptions, DateTime.UtcNow);
     }
 
     private async Task<PosOdemeIslemi?> LoadExistingPaymentForStartAsync(PosPaymentBaslatRequest request, string idempotencyKey, CancellationToken cancellationToken)
@@ -409,23 +384,6 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         return hesap;
     }
 
-    private async Task<int> ResolveReservationIdAsync(int tesisId, CancellationToken cancellationToken)
-    {
-        var rezervasyonId = await _db.Set<Rezervasyon>()
-            .AsNoTracking()
-            .Where(x => x.TesisId == tesisId && x.AktifMi && !x.IsDeleted)
-            .OrderByDescending(x => x.Id)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (rezervasyonId <= 0)
-        {
-            throw new BaseException("POS ödeme testi için uygun rezervasyon bulunamadı.", 400);
-        }
-
-        return rezervasyonId;
-    }
-
     private void EnsureTerminalBelongsToDevice(PosCihazi cihaz, PosTerminal terminal)
     {
         if (terminal.KurumId != cihaz.KurumId || terminal.TesisId != cihaz.TesisId)
@@ -502,6 +460,12 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
     private static string GenerateSaleReference(int cihazId, int terminalId, DateTime now)
     {
         var value = $"STYS-PAY-{now:yyyyMMddHHmmssfff}-{cihazId}-{terminalId}-{Guid.NewGuid():N}";
+        return value.Length <= 96 ? value : value[..96];
+    }
+
+    private static string GenerateIslemReferansi(int cihazId, int terminalId, DateTime now)
+    {
+        var value = $"STYS-PAYTEST-{now:yyyyMMddHHmmssfff}-{cihazId}-{terminalId}-{Guid.NewGuid():N}";
         return value.Length <= 96 ? value : value[..96];
     }
 

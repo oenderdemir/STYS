@@ -23,9 +23,9 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
             Environment.GetEnvironmentVariable(PavoAgentOptions.FingerprintEnvironmentVariable));
     }
 
-    public async Task<PavoTransactionHandle> ReserveAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken)
+    public async Task<PavoTransactionHandle> ReserveAsync(int centralPosCihaziId, string? serialNumber, DateTime? transactionDate, CancellationToken cancellationToken)
     {
-        var device = await GetPavoDeviceAsync(centralPosCihaziId, cancellationToken);
+        var device = await GetPavoDeviceAsync(centralPosCihaziId, serialNumber, cancellationToken);
 
         if (device.ProvisioningStatus is LocalDeviceProvisioningStatus.ReProvisionRequired
             or LocalDeviceProvisioningStatus.Conflict
@@ -48,15 +48,23 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
         return await ReserveHandleAsync(device, transactionDate, cancellationToken);
     }
 
-    public async Task<PavoTransactionHandle> ReserveForPairingAsync(int centralPosCihaziId, DateTime? transactionDate, CancellationToken cancellationToken)
+    public async Task<PavoTransactionHandle> ReserveForPairingAsync(int centralPosCihaziId, string? serialNumber, DateTime? transactionDate, CancellationToken cancellationToken)
     {
-        var device = await GetPavoDeviceAsync(centralPosCihaziId, cancellationToken);
+        var device = await GetPavoDeviceAsync(centralPosCihaziId, serialNumber, cancellationToken);
         return await ReserveHandleAsync(device, transactionDate, cancellationToken);
     }
 
-    private async Task<LocalDevice> GetPavoDeviceAsync(int centralPosCihaziId, CancellationToken cancellationToken)
+    public async Task AdvanceAsync(int centralPosCihaziId, string? serialNumber, CancellationToken cancellationToken)
     {
-        var device = await _localDeviceStore.GetByCentralPosCihaziIdAsync(centralPosCihaziId, cancellationToken)
+        var device = await GetPavoDeviceAsync(centralPosCihaziId, serialNumber, cancellationToken);
+        await _pairingStore.AdvanceOutgoingSequenceAsync(device.Id, cancellationToken);
+    }
+
+    private async Task<LocalDevice> GetPavoDeviceAsync(int centralPosCihaziId, string? serialNumber, CancellationToken cancellationToken)
+    {
+        var devices = await _localDeviceStore.GetAllAsync(cancellationToken);
+        var device = devices.FirstOrDefault(x => x.CentralPosCihaziId == centralPosCihaziId)
+            ?? ResolveBySerialNumber(devices, serialNumber)
             ?? throw new InvalidOperationException("Bu POS cihazına bağlı yerel PAVO cihazı bulunamadı.");
 
         if (device.Provider is not LocalDeviceProvider.Pavo || device.DeviceType is not LocalDeviceType.Pos)
@@ -72,15 +80,18 @@ public sealed class PavoCommandSequenceReservationService : IPavoCommandSequence
         return device;
     }
 
-    public async Task AdvanceAsync(int centralPosCihaziId, CancellationToken cancellationToken)
+    private static LocalDevice? ResolveBySerialNumber(IEnumerable<LocalDevice> devices, string? serialNumber)
     {
-        var device = await _localDeviceStore.GetByCentralPosCihaziIdAsync(centralPosCihaziId, cancellationToken);
-        if (device is null)
+        var normalizedSerial = serialNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedSerial))
         {
-            return;
+            return null;
         }
 
-        await _pairingStore.AdvanceOutgoingSequenceAsync(device.Id, cancellationToken);
+        return devices.FirstOrDefault(x =>
+            x.Provider is LocalDeviceProvider.Pavo
+            && x.DeviceType is LocalDeviceType.Pos
+            && string.Equals(x.SerialNumber, normalizedSerial, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<PavoTransactionHandle> ReserveHandleAsync(LocalDevice device, DateTime? transactionDate, CancellationToken cancellationToken)

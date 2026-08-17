@@ -19,6 +19,13 @@
     <ProjectReference Include="..\..\backend\STYS.csproj" />
     <ProjectReference Include="..\..\agent\STYS.Agent\STYS.Agent.csproj" />
     <ProjectReference Include="..\..\agent\STYS.Agent.Client\STYS.Agent.Client.csproj" />
+    <!--
+      AgentHealthProbe decides whether an upgrade is kept or rolled back, so it is covered here.
+      Aliased because the updater declares its own STYS.Agent.Options.AgentUpgradeOptions: the type
+      name AND namespace collide with STYS.Agent, so a fully qualified name cannot disambiguate.
+      The alias confines that to the one test file that needs updater types.
+    -->
+    <ProjectReference Include="..\..\agent\STYS.Agent.Updater\STYS.Agent.Updater.csproj" Aliases="updater" />
   </ItemGroup>
 
   <ItemGroup>

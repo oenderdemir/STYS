@@ -54,18 +54,29 @@ public sealed class AgentHealthProbe : IAgentHealthProbe
                 return false;
             }
 
-            if (TryGetPropertyIgnoreCase(doc.RootElement, "agentVersion", out var versionElement))
+            // Fail closed: an agent that does not report a version is not evidence that the new
+            // build is running. Treating a missing or blank value as "good enough" would let a
+            // failed upgrade pass the health gate and skip the rollback.
+            if (!TryGetPropertyIgnoreCase(doc.RootElement, "agentVersion", out var versionElement))
             {
-                var reportedVersion = versionElement.GetString();
+                _logger.LogWarning("Agent health response reported no version. Expected={Expected}", targetVersion);
+                return false;
+            }
 
-                // Compare release identity, not the raw string: the SDK appends "+<commit-sha>" to
-                // the informational version in a git build, which would otherwise make a healthy
-                // upgrade look like the wrong binary and trigger a rollback.
-                if (!string.IsNullOrWhiteSpace(reportedVersion) && !AgentVersionComparison.SameRelease(reportedVersion, targetVersion))
-                {
-                    _logger.LogWarning("Agent version mismatch after upgrade. Expected={Expected}, Actual={Actual}", targetVersion, reportedVersion);
-                    return false;
-                }
+            var reportedVersion = versionElement.ValueKind == JsonValueKind.String ? versionElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(reportedVersion))
+            {
+                _logger.LogWarning("Agent health response reported an empty version. Expected={Expected}", targetVersion);
+                return false;
+            }
+
+            // Compare release identity, not the raw string: the SDK appends "+<commit-sha>" to the
+            // informational version in a git build, which would otherwise make a healthy upgrade
+            // look like the wrong binary and trigger a rollback.
+            if (!AgentVersionComparison.SameRelease(reportedVersion, targetVersion))
+            {
+                _logger.LogWarning("Agent version mismatch after upgrade. Expected={Expected}, Actual={Actual}", targetVersion, reportedVersion);
+                return false;
             }
 
             return true;

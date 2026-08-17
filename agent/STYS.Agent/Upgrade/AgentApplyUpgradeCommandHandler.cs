@@ -123,6 +123,8 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
 
     public const string UpdaterNotAvailableCode = "AGENT_UPDATER_NOT_AVAILABLE";
     public const string UpdaterStatusUnknownCode = "AGENT_UPDATER_STATUS_UNKNOWN";
+    public const string UpdaterConfigurationInvalidCode = "AGENT_UPDATER_CONFIGURATION_INVALID";
+    public const string UpdaterNotRunningCode = "AGENT_UPDATER_NOT_RUNNING";
 
     /// <summary>
     /// Verifies that the updater service exists. Returns a failed result to report on, or null when
@@ -140,7 +142,12 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
         var serviceName = _options.UpdaterServiceName?.Trim();
         if (string.IsNullOrWhiteSpace(serviceName))
         {
-            return null;
+            // A blank service name is a deployment misconfiguration, not permission to skip the
+            // check: proceeding would write a request no service is known to consume.
+            _logger.LogError("Updater servis adı yapılandırılmamış; apply reddedildi.");
+            return AgentCommandResult.Fail(
+                "Updater servis adı yapılandırılmamış, güncelleme uygulanamaz.",
+                UpdaterConfigurationInvalidCode);
         }
 
         return _updaterProbe.Check(serviceName) switch
@@ -149,6 +156,9 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
             UpdaterPresence.Missing => AgentCommandResult.Fail(
                 $"'{serviceName}' servisi kurulu değil, güncelleme uygulanamaz.",
                 UpdaterNotAvailableCode),
+            UpdaterPresence.NotRunning => AgentCommandResult.Fail(
+                $"'{serviceName}' servisi çalışmıyor, güncelleme uygulanamaz.",
+                UpdaterNotRunningCode),
             _ => AgentCommandResult.Fail(
                 $"Updater servis durumu doğrulanamadı ('{serviceName}'), güncelleme uygulanmadı.",
                 UpdaterStatusUnknownCode)

@@ -86,7 +86,9 @@ public sealed class AgentApplyUpgradeUpdaterGuardTests : IDisposable
         public string InstanceIdPath => Path.Combine(DataDirectory, "instance.id");
     }
 
-    private (AgentApplyUpgradeCommandHandler Handler, RecordingRequestStore Store) NewHandler(UpdaterPresence presence)
+    private (AgentApplyUpgradeCommandHandler Handler, RecordingRequestStore Store) NewHandler(
+        UpdaterPresence presence,
+        string serviceName = "STYS Agent Updater")
     {
         var store = new RecordingRequestStore();
         IAgentPathResolver paths = new FixedPathResolver(_tempDir);
@@ -100,7 +102,7 @@ public sealed class AgentApplyUpgradeUpdaterGuardTests : IDisposable
             store,
             new StagedStore(),
             paths,
-            Options.Create(new AgentUpgradeOptions { UpdaterServiceName = "STYS Agent Updater" }),
+            Options.Create(new AgentUpgradeOptions { UpdaterServiceName = serviceName }),
             new StubProbe(presence),
             NullLogger<AgentApplyUpgradeCommandHandler>.Instance);
 
@@ -167,6 +169,41 @@ public sealed class AgentApplyUpgradeUpdaterGuardTests : IDisposable
         Assert.Equal(ReleaseId, store.Written.ReleaseId);
     }
 
+    // ---------------------------------------------------------------- J. invalid configuration
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task UpdaterServisAdiBossa_YapilandirmaHatasiVeIstekYazilmaz(string? serviceName)
+    {
+        // A blank name is a deployment error. Skipping the guard would write a request that no
+        // known service consumes, which is the silent hang this whole check exists to prevent.
+        var (handler, store) = NewHandler(UpdaterPresence.Present, serviceName!);
+
+        var result = await handler.HandleAsync(NewCommand(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AgentApplyUpgradeCommandHandler.UpdaterConfigurationInvalidCode, result.ErrorCode);
+        Assert.False(result.DeferCompletion);
+        Assert.Null(store.Written);
+    }
+
+    // ---------------------------------------------------------------- stopped service
+
+    [Fact]
+    public async Task UpdaterCalismiyorsa_NotRunningDonerVeIstekYazilmaz()
+    {
+        var (handler, store) = NewHandler(UpdaterPresence.NotRunning);
+
+        var result = await handler.HandleAsync(NewCommand(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(AgentApplyUpgradeCommandHandler.UpdaterNotRunningCode, result.ErrorCode);
+        Assert.False(result.DeferCompletion);
+        Assert.Null(store.Written);
+    }
+
     [Fact]
     public async Task HataKodlari_GenerikOlmayanSabitDegerler()
     {
@@ -174,6 +211,8 @@ public sealed class AgentApplyUpgradeUpdaterGuardTests : IDisposable
         // the real cause from command history; these must arrive as explicit codes instead.
         Assert.Equal("AGENT_UPDATER_NOT_AVAILABLE", AgentApplyUpgradeCommandHandler.UpdaterNotAvailableCode);
         Assert.Equal("AGENT_UPDATER_STATUS_UNKNOWN", AgentApplyUpgradeCommandHandler.UpdaterStatusUnknownCode);
+        Assert.Equal("AGENT_UPDATER_CONFIGURATION_INVALID", AgentApplyUpgradeCommandHandler.UpdaterConfigurationInvalidCode);
+        Assert.Equal("AGENT_UPDATER_NOT_RUNNING", AgentApplyUpgradeCommandHandler.UpdaterNotRunningCode);
 
         var (handler, _) = NewHandler(UpdaterPresence.Missing);
         var result = await handler.HandleAsync(NewCommand(), CancellationToken.None);

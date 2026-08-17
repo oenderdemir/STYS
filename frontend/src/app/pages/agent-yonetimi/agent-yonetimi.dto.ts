@@ -142,6 +142,9 @@ export interface AgentCommandDto {
     correlationId: string;
     idempotencyKey: string;
     resultPayload?: string;
+    /** Failure diagnostics from the agent, e.g. AGENT_UPDATER_NOT_AVAILABLE. */
+    errorCode?: string;
+    errorMessage?: string;
     createdAt: string;
 }
 

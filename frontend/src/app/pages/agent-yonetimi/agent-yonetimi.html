@@ -225,6 +225,20 @@
                                 <td>{{ cmd.priority }}</td>
                                 <td>{{ cmd.createdAt | date:'short' }}</td>
                             </tr>
+                            @if (cmd.errorCode || cmd.errorMessage) {
+                                <tr>
+                                    <td colspan="4">
+                                        <small class="text-red-500">
+                                            @if (cmd.errorCode) {
+                                                <span class="font-semibold">Hata: {{ cmd.errorCode }}</span>
+                                            }
+                                            @if (cmd.errorMessage) {
+                                                <span class="ml-2">{{ cmd.errorMessage }}</span>
+                                            }
+                                        </small>
+                                    </td>
+                                </tr>
+                            }
                             @if (cmd.resultPayload && (cmd.commandType === 'AgentStageUpgrade' || cmd.commandType === 'AgentApplyUpgrade')) {
                                 <tr>
                                     <td colspan="4">

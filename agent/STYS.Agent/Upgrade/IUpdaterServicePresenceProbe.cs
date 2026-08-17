@@ -4,14 +4,21 @@ namespace STYS.Agent.Upgrade;
 
 public enum UpdaterPresence
 {
-    /// <summary>The updater service is installed and can carry out an apply.</summary>
+    /// <summary>The updater service is installed and running, so it can carry out an apply.</summary>
     Present = 0,
 
     /// <summary>The query succeeded and the service is definitively absent.</summary>
     Missing = 1,
 
     /// <summary>The query itself failed, so presence could not be established either way.</summary>
-    Unknown = 2
+    Unknown = 2,
+
+    /// <summary>
+    /// Installed but not running. A stopped service never reads the apply request, which would
+    /// leave the command deferred until it expired, so this is reported separately from Missing to
+    /// point the operator at starting the service rather than reinstalling it.
+    /// </summary>
+    NotRunning = 3
 }
 
 public interface IUpdaterServicePresenceProbe
@@ -43,7 +50,7 @@ public sealed class WindowsUpdaterServicePresenceProbe : IUpdaterServicePresence
 
         try
         {
-            return IsServiceInstalled(serviceName) ? UpdaterPresence.Present : UpdaterPresence.Missing;
+            return Resolve(serviceName);
         }
         catch (Exception ex)
         {
@@ -55,9 +62,22 @@ public sealed class WindowsUpdaterServicePresenceProbe : IUpdaterServicePresence
     // Separate method so the platform guard in Check() is visible to the platform-compatibility
     // analyzer, which cannot see through the LINQ closure.
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    private static bool IsServiceInstalled(string serviceName) =>
-        System.ServiceProcess.ServiceController
+    private static UpdaterPresence Resolve(string serviceName)
+    {
+        using var service = System.ServiceProcess.ServiceController
             .GetServices()
-            .Any(x => string.Equals(x.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase)
+            .FirstOrDefault(x => string.Equals(x.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(x.DisplayName, serviceName, StringComparison.OrdinalIgnoreCase));
+
+        if (service is null)
+        {
+            return UpdaterPresence.Missing;
+        }
+
+        // StartPending counts as running: the service is coming up and will read the request.
+        return service.Status is System.ServiceProcess.ServiceControllerStatus.Running
+            or System.ServiceProcess.ServiceControllerStatus.StartPending
+            ? UpdaterPresence.Present
+            : UpdaterPresence.NotRunning;
+    }
 }

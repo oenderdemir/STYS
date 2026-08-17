@@ -18,6 +18,15 @@ public sealed class AgentCommandDto
     public string CorrelationId { get; set; } = string.Empty;
     public string IdempotencyKey { get; set; } = string.Empty;
     public string? ResultPayload { get; set; }
+
+    /// <summary>
+    /// Failure diagnostics as reported by the agent, e.g. AGENT_UPDATER_NOT_AVAILABLE. Persisted
+    /// already; exposed here so command history can tell an operator why an upgrade did not run
+    /// instead of only showing a Failed status.
+    /// </summary>
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }
 

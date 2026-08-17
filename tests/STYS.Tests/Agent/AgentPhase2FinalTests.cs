@@ -326,6 +326,35 @@ public sealed class AgentPhase2FinalTests : IAsyncLifetime
     }
 
     [IntegrationFact]
+    public async Task History_ExposesErrorCodeAndMessage()
+    {
+        var db = await SetupAsync(); if (db is null) return;
+        var factory = NewFactory();
+        var svc = new AgentCommandService(factory, new FakeSuperAdminTenantAccessor(), NullLogger<AgentCommandService>.Instance);
+        var agentId = await SeedAgentWithScopeAsync(db, "agent.command.execute");
+
+        var cmd = await svc.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest { AgentId = agentId, CommandType = "AgentApplyUpgrade", Priority = 1, IdempotencyKey = Guid.NewGuid().ToString("N") }, "test", CancellationToken.None);
+        var pending = await svc.GetPendingCommandsAsync(agentId, CancellationToken.None);
+        var leaseToken = pending.Single(x => x.Id == cmd.Id).LeaseToken;
+
+        await svc.FailAsync(cmd.Id, agentId, new STYS.Agent.Contracts.Dtos.AgentCommandCompleteRequest
+        {
+            Id = cmd.Id,
+            Success = false,
+            LeaseToken = leaseToken ?? string.Empty,
+            ErrorCode = "AGENT_UPDATER_NOT_AVAILABLE",
+            ErrorMessage = "'STYS Agent Updater' servisi kurulu değil, güncelleme uygulanamaz."
+        }, CancellationToken.None);
+
+        // Without these on the DTO the operator only sees a Failed status with no reason.
+        var row = (await svc.GetHistoryAsync(agentId, CancellationToken.None)).Single(x => x.Id == cmd.Id);
+        Assert.Equal("AGENT_UPDATER_NOT_AVAILABLE", row.ErrorCode);
+        Assert.Contains("kurulu değil", row.ErrorMessage);
+
+        await AgentTestSupport.CleanupAsync(db, _uniqueSuffix);
+    }
+
+    [IntegrationFact]
     public async Task History_DoesNotExposeLeaseToken()
     {
         var db = await SetupAsync(); if (db is null) return;

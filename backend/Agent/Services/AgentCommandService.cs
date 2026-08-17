@@ -343,7 +343,7 @@ public sealed class AgentCommandService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         return await db.Set<AgentCommand>().Where(x => x.AgentId == agentId && !x.IsDeleted)
             .OrderByDescending(x => x.CreatedAt).Take(100)
-            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, LeaseToken = null, LeaseExpiresAt = null, DeliveredAt = x.DeliveredAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
+            .Select(x => new AgentCommandDto { Id = x.Id, AgentId = x.AgentId, CommandType = x.CommandType, Status = (int)x.Status, Priority = x.Priority, ScheduledAt = x.ScheduledAt, ExpiresAt = x.ExpiresAt, LeaseToken = null, LeaseExpiresAt = null, DeliveredAt = x.DeliveredAt, RetryCount = x.RetryCount, MaxRetryCount = x.MaxRetryCount, CorrelationId = x.CorrelationId, IdempotencyKey = x.IdempotencyKey, ResultPayload = x.ResultPayload, ErrorCode = x.ErrorCode, ErrorMessage = x.ErrorMessage, CreatedAt = x.CreatedAt ?? DateTime.MinValue })
             .ToListAsync(ct);
     }
 
@@ -1431,7 +1431,8 @@ public sealed class AgentCommandService
         Status = (int)c.Status, Priority = c.Priority, ScheduledAt = c.ScheduledAt,
         ExpiresAt = c.ExpiresAt, RetryCount = c.RetryCount, MaxRetryCount = c.MaxRetryCount,
         LeaseToken = c.LeaseToken, LeaseExpiresAt = c.LeaseExpiresAt, DeliveredAt = c.DeliveredAt,
-        CorrelationId = c.CorrelationId, IdempotencyKey = c.IdempotencyKey, ResultPayload = c.ResultPayload, CreatedAt = c.CreatedAt ?? DateTime.MinValue
+        CorrelationId = c.CorrelationId, IdempotencyKey = c.IdempotencyKey, ResultPayload = c.ResultPayload,
+        ErrorCode = c.ErrorCode, ErrorMessage = c.ErrorMessage, CreatedAt = c.CreatedAt ?? DateTime.MinValue
     };
 
     private static void EnsureLeaseOwnership(AgentCommand cmd, string? leaseToken, bool requireActiveLease)

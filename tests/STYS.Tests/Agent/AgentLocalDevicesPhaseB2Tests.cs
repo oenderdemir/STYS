@@ -91,6 +91,44 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
     }
 
     [Fact]
+    public async Task PairedCihaz_TerminalDiscovery_BasariliCachei_KorurEgerCihazInfoBasarisizsa()
+    {
+        var client = new FakePavoRestClient
+        {
+            GetDeviceInfoResponse = new PavoGetDeviceInfoResponse
+            {
+                HasError = true,
+                Message = "Beklenmedik Hata: type 'Null' is not a subtype of type 'Map<String, dynamic>'"
+            }
+        };
+        var store = CreateStore();
+        var terminalStore = CreateTerminalStore();
+        var pairingStore = CreatePairingStore();
+        var service = CreateService(client, store, terminalStore, pairingStore);
+        var device = await CreatePairedDeviceAsync(service, store, pairingStore);
+
+        await terminalStore.UpsertAsync(new LocalDeviceTerminal
+        {
+            LocalDeviceId = device.Id,
+            AcquirerId = "ACQ-1",
+            AcquirerName = "Cached Bank",
+            TerminalId = "TERM-CACHED",
+            MerchantId = "MER-CACHED",
+            SourceReference = $"{device.Id}::ACQ-1::TERM-CACHED",
+            Active = true
+        }, CancellationToken.None);
+
+        var discovered = await service.DiscoverTerminalsAsync(device.Id, CancellationToken.None);
+        var loaded = await terminalStore.GetByLocalDeviceIdAsync(device.Id, CancellationToken.None);
+
+        Assert.Single(discovered);
+        Assert.Single(loaded);
+        Assert.Equal("TERM-CACHED", loaded.Single().TerminalId);
+        Assert.Equal("Cached Bank", loaded.Single().AcquirerName);
+        Assert.Equal(1, client.GetDeviceInfoCallCount);
+    }
+
+    [Fact]
     public async Task DuplicateDiscovery_DuplicateTerminalUretmez_veMetadataGunceller()
     {
         var client = new FakePavoRestClient

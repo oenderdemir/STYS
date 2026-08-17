@@ -107,14 +107,35 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     {
         var device = await GetDeviceOrThrowAsync(id, cancellationToken);
         ValidatePavoLocalDevice(device, "Terminal discovery");
+        var pairingState = await _pairingStore.GetAsync(device.Id, cancellationToken);
+        EnsurePaired(pairingState);
 
-        var existingTerminalKeys = (await _terminalStore.GetByLocalDeviceIdAsync(device.Id, cancellationToken))
+        var existingTerminals = await _terminalStore.GetByLocalDeviceIdAsync(device.Id, cancellationToken);
+        var existingTerminalKeys = existingTerminals
             .Where(x => x.Active)
             .Select(BuildTerminalIdentity)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var execution = await ExecuteDeviceInfoAsync(device, requirePairing: true, cancellationToken);
+        DeviceInfoExecution execution;
+        try
+        {
+            execution = await ExecuteDeviceInfoAsync(device, requirePairing: false, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // Some physical PAVO deployments do not support the STYS-specific GetDeviceInfo/terminal
+            // discovery contract reliably. In that case discovery should degrade to a no-op instead
+            // of breaking the paired/payment flow. The last known terminal set remains authoritative
+            // for the local UI until a device that supports discovery is available.
+            return existingTerminals;
+        }
+
         var terminals = MapDiscoveredTerminals(device.Id, execution.Response.Terminals);
+        if (terminals.Count == 0)
+        {
+            return existingTerminals;
+        }
+
         var reconciled = await _terminalStore.ReconcileAsync(device.Id, terminals, cancellationToken);
 
         if (device.ProvisioningStatus == LocalDeviceProvisioningStatus.Provisioned)

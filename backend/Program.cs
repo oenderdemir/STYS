@@ -123,6 +123,9 @@ builder.Services.Configure<PosOperationalHealthOptions>(builder.Configuration.Ge
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
 builder.Services.Configure<AgentCompatibilityOptions>(builder.Configuration.GetSection(AgentCompatibilityOptions.SectionName));
 builder.Services.PostConfigure<AgentCompatibilityOptions>(options => options.SupportedContractVersion = AgentContractVersion.Current);
+// Release publishing is optional: deployments that never publish must still start, so the signing
+// key and storage root are validated when a publish is attempted rather than at startup.
+builder.Services.Configure<AgentReleasePublishingOptions>(builder.Configuration.GetSection(AgentReleasePublishingOptions.SectionName));
 builder.Services.Configure<EBelgeUblOptions>(builder.Configuration.GetSection(EBelgeUblOptions.SectionName));
 builder.Services.Configure<AgentAuthOptions>(builder.Configuration.GetSection(AgentAuthOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
@@ -203,6 +206,9 @@ builder.Services.AddScoped<IMuhasebeSmokeTestSeedService, MuhasebeSmokeTestSeedS
 builder.Services.AddScoped<AgentCommandExpiryService>();
 builder.Services.AddScoped<AgentCommandService>();
 builder.Services.AddScoped<IAgentReleaseService, AgentReleaseService>();
+builder.Services.AddScoped<IAgentReleasePublishingService, AgentReleasePublishingService>();
+builder.Services.AddSingleton<IAgentReleaseSigner, AgentReleaseSigner>();
+builder.Services.AddSingleton<IAgentReleasePackageStorage, AgentReleasePackageStorage>();
 builder.Services.AddScoped<IAgentCommandRealtimeNotifier, STYS.Agent.Hubs.AgentCommandRealtimeNotifier>();
 builder.Services.AddScoped<IAgentRealtimeNotifier, STYS.Agent.Hubs.AgentRealtimeNotifier>();
 builder.Services.AddScoped<IAgentService, AgentService>();

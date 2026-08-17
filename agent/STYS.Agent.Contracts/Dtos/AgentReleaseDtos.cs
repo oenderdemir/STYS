@@ -16,6 +16,20 @@ public sealed class AgentReleaseDto
     public string? ReleaseNotes { get; set; }
 }
 
+/// <summary>
+/// Publish input. The package itself arrives as a separate multipart file part; Sha256 and
+/// PackageSize are deliberately absent because the server computes both from the uploaded bytes
+/// rather than trusting the client.
+/// </summary>
+public sealed class AgentReleasePublishRequest
+{
+    public string Version { get; set; } = string.Empty;
+    public string ContractVersion { get; set; } = string.Empty;
+    public string RuntimeIdentifier { get; set; } = "win-x64";
+    public string? ReleaseNotes { get; set; }
+    public bool Enabled { get; set; } = true;
+}
+
 public sealed class AgentStageUpgradeRequest
 {
     public int ReleaseId { get; set; }

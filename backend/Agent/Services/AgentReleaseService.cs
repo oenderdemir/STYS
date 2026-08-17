@@ -299,6 +299,13 @@ public sealed class AgentReleaseService : IAgentReleaseService
                 continue;
             }
 
+            // A release whose publish did not reach the signing step must never be offered: the
+            // agent would reject it at verification, and staging it wastes a download.
+            if (string.IsNullOrWhiteSpace(release.Signature))
+            {
+                continue;
+            }
+
             if (!AgentSemVer.TryParse(release.Version, out var targetVersion))
             {
                 continue;

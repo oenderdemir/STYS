@@ -34,6 +34,7 @@ import { TesisDto } from '../tesis-yonetimi/tesis-yonetimi.dto';
 import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AgentInstallationWizardComponent } from './agent-installation-wizard.component';
+import { AgentReleasesComponent } from './agent-releases.component';
 
 type AgentFormState = AgentKaydetRequest & { id?: number };
 
@@ -56,7 +57,8 @@ type AgentFormState = AgentKaydetRequest & { id?: number };
         CheckboxModule,
         TooltipModule,
         TabsModule,
-        AgentInstallationWizardComponent
+        AgentInstallationWizardComponent,
+        AgentReleasesComponent
     ],
     providers: [ConfirmationService, MessageService],
     templateUrl: './agent-yonetimi.html'
@@ -439,6 +441,44 @@ export class AgentYonetimiComponent implements OnInit, OnDestroy {
         const statusLabel = this.getCommandStatusLabel(applyCommand.status);
         const severity = this.getCommandStatusSeverity(applyCommand.status);
         return { label: statusLabel, severity, commandId: applyCommand.id };
+    }
+
+    /**
+     * Surfaces where the most recent staging attempt got to. getApplyCommandStatus() only reports
+     * the terminal Staged case, so on its own it leaves an in-flight or failed stage invisible.
+     */
+    getStageStatus(): { label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' } | null {
+        const stageCommand = [...this.commands()]
+            .filter((cmd) => cmd.commandType === 'AgentStageUpgrade')
+            .sort((left, right) => (right.createdAt ?? '').localeCompare(left.createdAt ?? ''))[0];
+
+        if (!stageCommand) {
+            return null;
+        }
+
+        // Still travelling to the agent or running there.
+        if ([0, 1, 2, 3].includes(stageCommand.status)) {
+            return { label: 'Hazırlanıyor', severity: 'info' };
+        }
+
+        if (stageCommand.status !== 4) {
+            return { label: `Başarısız (${this.getCommandStatusLabel(stageCommand.status)})`, severity: 'danger' };
+        }
+
+        const parsed = stageCommand.resultPayload ? this.tryParseStageResponse(stageCommand.resultPayload) : null;
+        if (!parsed) {
+            return { label: 'Sonuç okunamadı', severity: 'warn' };
+        }
+
+        const stageLabels: Record<number, { label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' }> = {
+            0: { label: 'Başlatılmadı', severity: 'secondary' },
+            1: { label: 'İndiriliyor', severity: 'info' },
+            2: { label: 'Doğrulanıyor', severity: 'info' },
+            3: { label: 'Staged', severity: 'success' },
+            4: { label: 'Başarısız', severity: 'danger' }
+        };
+
+        return stageLabels[parsed.stageStatus] ?? { label: 'Bilinmiyor', severity: 'secondary' };
     }
 
     canStageUpgrade(detail: AgentDto | null): boolean {

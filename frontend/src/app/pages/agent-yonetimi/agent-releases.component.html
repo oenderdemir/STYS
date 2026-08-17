@@ -1,0 +1,160 @@
+<div class="card">
+    <p-toolbar styleClass="mb-4">
+        <ng-template pTemplate="left">
+            <div>
+                <div class="font-semibold text-xl">Agent Sürümleri</div>
+                <div class="text-color-secondary mt-1">
+                    Yayınlanan paketler STYS tarafından imzalanır; uzak agent'lar güncellemeyi bu imzayla doğrular.
+                </div>
+            </div>
+        </ng-template>
+        <ng-template pTemplate="right">
+            <button
+                pButton
+                pRipple
+                label="Yeni Sürüm Yayınla"
+                icon="pi pi-upload"
+                class="p-button-success mr-2"
+                (click)="openPublishDialog()"></button>
+            <button
+                pButton
+                pRipple
+                label="Yenile"
+                icon="pi pi-refresh"
+                class="p-button-secondary"
+                [loading]="loading()"
+                (click)="loadReleases()"></button>
+        </ng-template>
+    </p-toolbar>
+
+    <p-table [value]="releases()" [loading]="loading()" dataKey="id" responsiveLayout="scroll" [rows]="10" [paginator]="releases().length > 10">
+        <ng-template pTemplate="header">
+            <tr>
+                <th>Sürüm</th>
+                <th>Contract</th>
+                <th>Runtime</th>
+                <th>Yayın Tarihi</th>
+                <th>Boyut</th>
+                <th>SHA-256</th>
+                <th>Durum</th>
+                <th>Notlar</th>
+                <th style="width: 10rem"></th>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-release>
+            <tr>
+                <td class="font-semibold">{{ release.version }}</td>
+                <td>{{ release.contractVersion }}</td>
+                <td>{{ release.runtimeIdentifier }}</td>
+                <td>{{ release.publishedAt | date: 'dd.MM.yyyy HH:mm' }}</td>
+                <td>{{ formatSize(release.packageSize) }}</td>
+                <td><code class="text-sm" [title]="release.sha256">{{ shortHash(release.sha256) }}</code></td>
+                <td>
+                    <p-tag [value]="release.enabled ? 'Aktif' : 'Pasif'" [severity]="release.enabled ? 'success' : 'secondary'" />
+                </td>
+                <td class="text-color-secondary">{{ release.releaseNotes || '-' }}</td>
+                <td>
+                    <button
+                        pButton
+                        pRipple
+                        [label]="release.enabled ? 'Pasifleştir' : 'Aktifleştir'"
+                        [icon]="release.enabled ? 'pi pi-ban' : 'pi pi-check'"
+                        [class]="release.enabled ? 'p-button-outlined p-button-secondary' : 'p-button-outlined'"
+                        [loading]="togglingId() === release.id"
+                        (click)="toggleEnabled(release)"></button>
+                </td>
+            </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+            <tr>
+                <td colspan="9" class="text-center text-color-secondary p-4">
+                    Henüz yayınlanmış bir agent sürümü yok.
+                    Paketi <code>scripts/agent/build-agent-release.ps1</code> ile üretip buradan yayınlayabilirsiniz.
+                </td>
+            </tr>
+        </ng-template>
+    </p-table>
+</div>
+
+<p-dialog
+    header="Yeni Sürüm Yayınla"
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [style]="{ width: '38rem' }"
+    [closable]="!publishing()">
+    <div class="field">
+        <label for="releaseVersion">Sürüm</label>
+        <input
+            pInputText
+            id="releaseVersion"
+            [(ngModel)]="form.version"
+            placeholder="1.0.1"
+            [class.ng-invalid]="submitted() && !form.version" />
+    </div>
+
+    <div class="field">
+        <label for="releaseContractVersion">Contract Sürümü</label>
+        <input
+            pInputText
+            id="releaseContractVersion"
+            [(ngModel)]="form.contractVersion"
+            placeholder="1.0.0"
+            [class.ng-invalid]="submitted() && !form.contractVersion" />
+    </div>
+
+    <div class="field">
+        <label for="releaseRuntime">Runtime</label>
+        <p-select
+            inputId="releaseRuntime"
+            [options]="runtimeOptions"
+            optionLabel="label"
+            optionValue="value"
+            [(ngModel)]="form.runtimeIdentifier"
+            [appendTo]="'body'"
+            styleClass="w-full" />
+    </div>
+
+    <div class="field">
+        <label for="releaseNotes">Sürüm Notları</label>
+        <textarea pTextarea id="releaseNotes" rows="3" [(ngModel)]="form.releaseNotes" class="w-full"></textarea>
+    </div>
+
+    <div class="field">
+        <label for="releasePackage">Paket (ZIP)</label>
+        <input
+            type="file"
+            id="releasePackage"
+            accept=".zip"
+            class="w-full"
+            (change)="onFileSelected($event)" />
+        @if (selectedFile(); as file) {
+            <small class="text-color-secondary">{{ file.name }} · {{ formatSize(file.size) }}</small>
+        } @else if (submitted()) {
+            <small class="text-red-500">Paket dosyası seçilmedi.</small>
+        }
+    </div>
+
+    <div class="text-color-secondary mt-2">
+        SHA-256 ve imza sunucu tarafında üretilir. İmzalama anahtarı sunucu yapılandırmasında tutulur ve arayüze hiçbir şekilde girilmez.
+    </div>
+
+    <ng-template pTemplate="footer">
+        <button
+            pButton
+            pRipple
+            label="Vazgeç"
+            icon="pi pi-times"
+            class="p-button-text"
+            [disabled]="publishing()"
+            (click)="dialogVisible.set(false)"></button>
+        <button
+            pButton
+            pRipple
+            label="Yayınla"
+            icon="pi pi-upload"
+            class="p-button-success"
+            [loading]="publishing()"
+            [disabled]="!canPublish()"
+            (click)="publish()"></button>
+    </ng-template>
+</p-dialog>

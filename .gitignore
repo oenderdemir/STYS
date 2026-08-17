@@ -484,3 +484,7 @@ sidecar/schematron-validator/out/
 # ikili dosyası tekrar üretilebilir, commit edilmez (bkz. poc/schematron-xpath2-poc/SONUC.md).
 poc/schematron-xpath2-poc/out/
 poc/schematron-xpath2-poc/*.jar
+
+# Agent release trust anchor: provisioned out-of-band per environment, never committed.
+# See docs/agent-production-installation.md ("Trust boundary and release key provisioning").
+trust/

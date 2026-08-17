@@ -13,7 +13,9 @@ import {
     AgentListDto,
     AgentKaydetRequest,
     AgentCommandDto,
-    AgentCommandSendRequest
+    AgentCommandSendRequest,
+    AgentReleaseDto,
+    AgentReleasePublishForm
 } from './agent-yonetimi.dto';
 
 @Injectable({ providedIn: 'root' })
@@ -175,6 +177,46 @@ export class AgentYonetimiService {
         return this.http.post<ApiResponse<void>>(`${this.apiBaseUrl}/ui/agent-installations/${id}/cancel`, {}).pipe(
             map((r) => {
                 if (!r.success) throw new Error(tryReadApiMessage(r) ?? 'Kurulum oturumu iptal edilemedi.');
+            })
+        );
+    }
+
+    getReleases(): Observable<AgentReleaseDto[]> {
+        return this.http.get<ApiResponse<AgentReleaseDto[]>>(`${this.apiBaseUrl}/ui/agent-releases`).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Sürüm listesi alınamadı.');
+            })
+        );
+    }
+
+    /**
+     * Uploads the package as multipart/form-data. SHA-256 and package size are computed by the
+     * server from the uploaded bytes, so they are intentionally not sent from here.
+     */
+    publishRelease(form: AgentReleasePublishForm, packageFile: File): Observable<AgentReleaseDto> {
+        const body = new FormData();
+        body.append('Version', form.version);
+        body.append('ContractVersion', form.contractVersion);
+        body.append('RuntimeIdentifier', form.runtimeIdentifier);
+        body.append('ReleaseNotes', form.releaseNotes ?? '');
+        body.append('Enabled', String(form.enabled));
+        body.append('package', packageFile, packageFile.name);
+
+        return this.http.post<ApiResponse<AgentReleaseDto>>(`${this.apiBaseUrl}/ui/agent-releases`, body).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Sürüm yayınlanamadı.');
+            })
+        );
+    }
+
+    setReleaseEnabled(releaseId: number, enabled: boolean): Observable<AgentReleaseDto> {
+        const action = enabled ? 'enable' : 'disable';
+        return this.http.post<ApiResponse<AgentReleaseDto>>(`${this.apiBaseUrl}/ui/agent-releases/${releaseId}/${action}`, {}).pipe(
+            map((r) => {
+                if (r.success && r.data) return r.data;
+                throw new Error(tryReadApiMessage(r) ?? 'Sürüm durumu değiştirilemedi.');
             })
         );
     }

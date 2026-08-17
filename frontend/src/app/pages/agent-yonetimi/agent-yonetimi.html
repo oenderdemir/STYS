@@ -82,6 +82,8 @@
 
 <app-agent-installation-wizard [initialTesisId]="selectedTesisFilterId()"></app-agent-installation-wizard>
 
+<app-agent-releases></app-agent-releases>
+
 <p-dialog
     [visible]="dialogVisible()"
     (onHide)="closeDialog()"
@@ -143,6 +145,27 @@
                                         <p-tag
                                             [value]="getCompatibilityLabel(detail.compatibilityStatus)"
                                             [severity]="getCompatibilitySeverity(detail.compatibilityStatus)" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="field">
+                                    <label>Güncelleme Durumu</label>
+                                    <div class="flex align-items-center gap-3 flex-wrap">
+                                        <span>
+                                            <span class="text-color-secondary">Mevcut sürüm:</span>
+                                            <span class="font-semibold ml-1">{{ detail.agentVersion ?? '-' }}</span>
+                                        </span>
+                                        <span>
+                                            <span class="text-color-secondary">Önerilen sürüm:</span>
+                                            <span class="font-semibold ml-1">{{ detail.recommendedAgentVersion ?? '-' }}</span>
+                                        </span>
+                                        @if (getStageStatus(); as stage) {
+                                            <span>
+                                                <span class="text-color-secondary mr-1">Hazırlama:</span>
+                                                <p-tag [value]="stage.label" [severity]="stage.severity" />
+                                            </span>
+                                        }
                                     </div>
                                 </div>
                             </div>

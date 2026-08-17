@@ -63,6 +63,8 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
             throw new InvalidOperationException("Sahnelenmiş paket bulunamadı.");
         }
 
+        EnsureUpdaterAvailable();
+
         var request = new ClientApplyUpgradeRequest
         {
             CommandId = command.CommandId,
@@ -108,5 +110,49 @@ public sealed class AgentApplyUpgradeCommandHandler : IAgentCommandHandler<Agent
         };
 
         return AgentCommandResult.Ok(JsonSerializer.Serialize(response, JsonOptions), deferCompletion: true);
+    }
+
+    public const string UpdaterNotAvailableCode = "AGENT_UPDATER_NOT_AVAILABLE";
+
+    /// <summary>
+    /// The apply command completes asynchronously: this handler only records the request and the
+    /// updater service carries it out. If that service is not installed nothing would ever pick the
+    /// request up and the command would hang until it expired, so refuse up front instead.
+    /// Detection failures are treated as "present" so a working install is never blocked by a
+    /// permissions quirk in the service query.
+    /// </summary>
+    private void EnsureUpdaterAvailable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var serviceName = _options.UpdaterServiceName?.Trim();
+        if (string.IsNullOrWhiteSpace(serviceName))
+        {
+            return;
+        }
+
+        bool installed;
+        try
+        {
+            installed = System.ServiceProcess.ServiceController
+                .GetServices()
+                .Any(x => string.Equals(x.ServiceName, serviceName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(x.DisplayName, serviceName, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Updater servis durumu sorgulanamadı; apply isteği yine de yazılacak.");
+            return;
+        }
+
+        if (!installed)
+        {
+            _logger.LogError("Updater servisi bulunamadı: {ServiceName}", serviceName);
+            throw new InvalidOperationException(
+                $"{UpdaterNotAvailableCode}: '{serviceName}' servisi kurulu değil, güncelleme uygulanamaz.");
+        }
     }
 }

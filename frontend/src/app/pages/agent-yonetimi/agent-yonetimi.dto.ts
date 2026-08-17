@@ -153,3 +153,28 @@ export interface AgentCommandSendRequest {
     expirationMinutes?: number;
     maxRetryCount?: number;
 }
+
+/**
+ * Release metadata as returned by /ui/agent-releases. Deliberately carries no server path: the
+ * package location never leaves the backend.
+ */
+export interface AgentReleaseDto {
+    id: number;
+    version: string;
+    contractVersion: string;
+    runtimeIdentifier: string;
+    sha256: string;
+    signature: string;
+    packageSize: number;
+    publishedAt: string;
+    enabled: boolean;
+    releaseNotes?: string;
+}
+
+export interface AgentReleasePublishForm {
+    version: string;
+    contractVersion: string;
+    runtimeIdentifier: string;
+    releaseNotes: string;
+    enabled: boolean;
+}

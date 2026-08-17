@@ -455,7 +455,8 @@ printf 'Environment=STYS_AGENT_LOCAL_UI_PORT=%s\nEnvironment=ASPNETCORE_URLS=htt
         "install-agent.ps1",
         "install-agent-updater.ps1",
         "uninstall-agent.ps1",
-        "uninstall-agent-updater.ps1"
+        "uninstall-agent-updater.ps1",
+        "build-agent-release.ps1"
     ];
 
     [Theory]

@@ -129,6 +129,35 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
     }
 
     [Fact]
+    public async Task PairedCihaz_TerminalDiscovery_TimeoutOlursaCacheiKorur()
+    {
+        var client = new TimeoutPavoRestClient();
+        var store = CreateStore();
+        var terminalStore = CreateTerminalStore();
+        var pairingStore = CreatePairingStore();
+        var service = CreateService(client, store, terminalStore, pairingStore);
+        var device = await CreatePairedDeviceAsync(service, store, pairingStore);
+
+        await terminalStore.UpsertAsync(new LocalDeviceTerminal
+        {
+            LocalDeviceId = device.Id,
+            AcquirerId = "ACQ-1",
+            AcquirerName = "Cached Bank",
+            TerminalId = "TERM-CACHED",
+            MerchantId = "MER-CACHED",
+            SourceReference = $"{device.Id}::ACQ-1::TERM-CACHED",
+            Active = true
+        }, CancellationToken.None);
+
+        var discovered = await service.DiscoverTerminalsAsync(device.Id, CancellationToken.None);
+        var loaded = await terminalStore.GetByLocalDeviceIdAsync(device.Id, CancellationToken.None);
+
+        Assert.Single(discovered);
+        Assert.Single(loaded);
+        Assert.Equal("TERM-CACHED", loaded.Single().TerminalId);
+    }
+
+    [Fact]
     public async Task DuplicateDiscovery_DuplicateTerminalUretmez_veMetadataGunceller()
     {
         var client = new FakePavoRestClient
@@ -913,7 +942,7 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
     }
 
     private LocalDeviceManagementService CreateService(
-        FakePavoRestClient client,
+        IPavoRestClient client,
         FileLocalDeviceStore? store = null,
         FileLocalDeviceTerminalStore? terminalStore = null,
         FilePavoLocalPairingStore? pairingStore = null,
@@ -1082,6 +1111,36 @@ public sealed class AgentLocalDevicesPhaseB2Tests : IDisposable
                 }
             });
         }
+
+        public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPerformEodResponse> PerformEodAsync(PavoPerformEodRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoRebootDeviceResponse> RebootDeviceAsync(PavoRebootDeviceRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoEnterPinModeResponse> EnterPinModeAsync(PavoEnterPinModeRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoExitPinModeResponse> ExitPinModeAsync(PavoExitPinModeRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class TimeoutPavoRestClient : IPavoRestClient
+    {
+        public Task<PavoPairingResponse> PairingAsync(PavoPairingRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoPingResponse> PingAsync(PavoPingRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PavoGetDeviceInfoResponse> GetDeviceInfoAsync(PavoGetDeviceInfoRequest request, CancellationToken cancellationToken) =>
+            throw new PavoRestClientException("TIMEOUT", "timeout", httpResponseReceived: false);
+
+        public Task<PavoStartPaymentResponse> StartPaymentAsync(PavoStartPaymentRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

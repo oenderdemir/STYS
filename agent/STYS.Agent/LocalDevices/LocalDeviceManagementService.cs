@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using STYS.Agent.Contracts.Dtos;
 using STYS.Agent.Client;
 using STYS.Agent.Modules.Pavo;
@@ -14,6 +15,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
     private readonly IPavoRestClient _pavoRestClient;
     private readonly IStysAgentApiClient? _agentApiClient;
     private readonly string _pavoFingerprint;
+    private readonly ILogger<LocalDeviceManagementService> _logger;
 
     public LocalDeviceManagementService(
         ILocalDeviceStore store,
@@ -22,7 +24,8 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         IPavoLocalPairingStore pairingStore,
         IPavoRestClient pavoRestClient,
         IStysAgentApiClient? agentApiClient = null,
-        IOptions<PavoAgentOptions>? pavoOptions = null)
+        IOptions<PavoAgentOptions>? pavoOptions = null,
+        ILogger<LocalDeviceManagementService>? logger = null)
     {
         _store = store;
         _terminalStore = terminalStore;
@@ -33,6 +36,7 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
         _pavoFingerprint = PavoAgentOptions.ResolveFingerprint(
             pavoOptions?.Value.Fingerprint,
             Environment.GetEnvironmentVariable(PavoAgentOptions.FingerprintEnvironmentVariable));
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<LocalDeviceManagementService>.Instance;
     }
 
     public Task<IReadOnlyCollection<LocalDevice>> GetAllAsync(CancellationToken cancellationToken) =>
@@ -127,6 +131,15 @@ public sealed class LocalDeviceManagementService : ILocalDeviceManagementService
             // discovery contract reliably. In that case discovery should degrade to a no-op instead
             // of breaking the paired/payment flow. The last known terminal set remains authoritative
             // for the local UI until a device that supports discovery is available.
+            return existingTerminals;
+        }
+        catch (PavoRestClientException ex) when (ex.ErrorCode is "TIMEOUT" or "NETWORK" or "CONNECTION_REFUSED" or "NETWORK_UNREACHABLE" or "TLS_CERTIFICATE" or "BODY_READ_FAILED" or "INVALID_RESPONSE" or "EMPTY_RESPONSE")
+        {
+            // Some physical PAVO deployments do not support the STYS-specific GetDeviceInfo/terminal
+            // discovery contract reliably. In that case discovery should degrade to a no-op instead
+            // of breaking the paired/payment flow. The last known terminal set remains authoritative
+            // for the local UI until a device that supports discovery is available.
+            _logger.LogWarning(ex, "PAVO terminal discovery failed; returning cached terminals.");
             return existingTerminals;
         }
 

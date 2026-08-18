@@ -8,6 +8,7 @@ import {
     PosCihaziKaydetRequest,
     PosOperationalReadinessDto,
     PosOdemeIslemiDto,
+    PosOdemeSlipDto,
     PosPaymentBaslatRequestDto,
     PosSaglayiciDto,
     PosTerminalDto,
@@ -147,5 +148,18 @@ export class PosYonetimiService {
             if (r.success && r.data) return r.data;
             throw new Error(tryReadApiMessage(r) ?? 'Ödeme sonucu sorgulanamadı.');
         }));
+    }
+
+    getReceipts(paymentId: number): Observable<PosOdemeSlipDto[]> {
+        return this.http.get<ApiResponse<PosOdemeSlipDto[]>>(`${this.apiBaseUrl}/ui/pos/payments/${paymentId}/receipts`).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Slip listesi alınamadı.');
+        }));
+    }
+
+    getReceiptContent(paymentId: number, receiptId: number): Observable<Blob> {
+        return this.http.get(`${this.apiBaseUrl}/ui/pos/payments/${paymentId}/receipts/${receiptId}/content`, {
+            responseType: 'blob'
+        });
     }
 }

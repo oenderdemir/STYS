@@ -386,6 +386,7 @@ public sealed class PavoGetPaymentResultCommandHandler : IAgentCommandHandler<Pa
         HttpPort = command.HttpPort,
         HttpsPort = command.HttpsPort,
         UseHttps = command.UseHttps,
+        ReceiptOptions = command.ReceiptOptions ?? new PavoReceiptRequestOptions(),
         TransactionHandle = command.TransactionHandle
     };
 }

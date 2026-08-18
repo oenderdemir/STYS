@@ -156,6 +156,7 @@ public class StysAppDbContext : DbContext
     public DbSet<PosTerminal> PosTerminaller => Set<PosTerminal>();
     public DbSet<PosCihazi> PosCihazlari => Set<PosCihazi>();
     public DbSet<PosOdemeIslemi> PosOdemeIslemleri => Set<PosOdemeIslemi>();
+    public DbSet<PosOdemeSlip> PosOdemeSlipleri => Set<PosOdemeSlip>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
     public DbSet<RestoranGarson> RestoranGarsonlari => Set<RestoranGarson>();
@@ -1982,6 +1983,28 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.RezervasyonOdeme)
                 .WithMany()
                 .HasForeignKey(x => x.RezervasyonOdemeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosOdemeSlip>(entity =>
+        {
+            entity.ToTable("PosOdemeSlipleri", entegrasyonSchema);
+            entity.Property(x => x.Tip).HasConversion<int>().IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(64).IsRequired().HasDefaultValue("image/png");
+            entity.Property(x => x.StoragePath).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.KaynakKomutTipi).HasMaxLength(64);
+
+            // One logical current record per (payment, slip type). Soft-delete filtered so a
+            // deleted/replaced row does not block a fresh one for the same payment/type.
+            entity.HasIndex(x => new { x.PosOdemeIslemiId, x.Tip })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.PosOdemeIslemiId);
+
+            entity.HasOne(x => x.PosOdemeIslemi)
+                .WithMany(x => x.Slipler)
+                .HasForeignKey(x => x.PosOdemeIslemiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

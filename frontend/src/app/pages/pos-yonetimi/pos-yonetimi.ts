@@ -29,6 +29,7 @@ import {
     PosCihaziKaydetRequest,
     PosOperationalReadinessDto,
     PosOdemeIslemiDto,
+    PosOdemeSlipDto,
     PosPaymentBaslatRequestDto,
     PosSaglayiciDto,
     PosTerminalDto,
@@ -98,6 +99,10 @@ export class PosYonetimiComponent implements OnInit {
     paymentSaving = signal(false);
     currentPaymentTest = signal<PosOdemeIslemiDto | null>(null);
     paymentSubmitted = signal(false);
+
+    receiptDialogVisible = signal(false);
+    receiptImageUrl = signal<string | null>(null);
+    receiptImageLoading = signal(false);
 
     form: PosCihaziFormState = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
     terminalForm: PosTerminalFormState = this.createEmptyTerminalForm();
@@ -612,6 +617,52 @@ export class PosYonetimiComponent implements OnInit {
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
+    }
+
+    getSlipByTip(payment: PosOdemeIslemiDto, tip: number): PosOdemeSlipDto | undefined {
+        return payment.slipler?.find((item) => item.tip === tip);
+    }
+
+    getSlipTipLabel(tip: number): string {
+        switch (tip) {
+            case 1: return 'Müşteri Slipi';
+            case 2: return 'İşyeri Slipi';
+            case 3: return 'Hata Slipi';
+            default: return 'Slip';
+        }
+    }
+
+    openReceipt(payment: PosOdemeIslemiDto, tip: number): void {
+        const slip = this.getSlipByTip(payment, tip);
+        if (!slip) {
+            return;
+        }
+
+        this.receiptImageLoading.set(true);
+        this.receiptDialogVisible.set(true);
+        this.service.getReceiptContent(payment.id, slip.id).pipe(finalize(() => this.receiptImageLoading.set(false))).subscribe({
+            next: (blob) => {
+                this.closeReceiptUrl();
+                this.receiptImageUrl.set(URL.createObjectURL(blob));
+            },
+            error: (err) => {
+                this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message ?? 'Slip görüntülenemedi.' });
+                this.receiptDialogVisible.set(false);
+            }
+        });
+    }
+
+    closeReceiptDialog(): void {
+        this.receiptDialogVisible.set(false);
+        this.closeReceiptUrl();
+    }
+
+    private closeReceiptUrl(): void {
+        const url = this.receiptImageUrl();
+        if (url) {
+            URL.revokeObjectURL(url);
+        }
+        this.receiptImageUrl.set(null);
     }
 
     getTerminalSaglayiciLabel(kod: string): string {

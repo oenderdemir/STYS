@@ -143,6 +143,16 @@ export interface PosPaymentBaslatRequestDto {
     idempotencyKey: string;
 }
 
+export interface PosOdemeSlipDto {
+    id: number;
+    tip: number;
+    contentType: string;
+    dosyaBoyutu: number;
+    sha256: string;
+    kaydedilmeTarihi: string;
+    kaynakKomutTipi?: string | null;
+}
+
 export interface PosOdemeIslemiDto {
     id: number;
     posCihaziId?: number | null;
@@ -173,6 +183,7 @@ export interface PosOdemeIslemiDto {
     sorgulamaDenemeSayisi: number;
     rezervasyonOdemeId?: number | null;
     tamamlandiMi: boolean;
+    slipler: PosOdemeSlipDto[];
 }
 
 export const SaglayiciLabels: Record<number, string> = { 0: 'PAVO', 1: 'Diğer' };

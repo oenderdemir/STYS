@@ -460,6 +460,21 @@
                             <div class="flex justify-content-end gap-2 mt-3">
                                 <button pButton pRipple label="Sonucu Sorgula" icon="pi pi-refresh" class="p-button-outlined" [loading]="paymentSaving()" [disabled]="paymentSaving() || !payment.saleReference" (click)="queryPaymentTestResult(payment)"></button>
                             </div>
+
+                            @if (payment.slipler.length) {
+                                <div class="flex align-items-center gap-2 mt-3">
+                                    <span class="text-color-secondary">Slipler:</span>
+                                    @if (getSlipByTip(payment, 1)) {
+                                        <button pButton pRipple label="Müşteri Slipi" icon="pi pi-image" severity="secondary" [outlined]="true" size="small" (click)="openReceipt(payment, 1)"></button>
+                                    }
+                                    @if (getSlipByTip(payment, 2)) {
+                                        <button pButton pRipple label="İşyeri Slipi" icon="pi pi-image" severity="secondary" [outlined]="true" size="small" (click)="openReceipt(payment, 2)"></button>
+                                    }
+                                    @if (getSlipByTip(payment, 3)) {
+                                        <button pButton pRipple label="Hata Slipi" icon="pi pi-exclamation-triangle" severity="danger" [outlined]="true" size="small" (click)="openReceipt(payment, 3)"></button>
+                                    }
+                                </div>
+                            }
                         </div>
 
                         <div class="form-section">
@@ -495,6 +510,15 @@
                                             <td><p-tag [value]="p.durum" [severity]="getPaymentStatusSeverity(p.durum)" /></td>
                                             <td>
                                                 <button pButton pRipple icon="pi pi-refresh" class="p-button-rounded p-button-text p-button-sm" (click)="queryPaymentTestResult(p)" pTooltip="Sonucu sorgula"></button>
+                                                @if (getSlipByTip(p, 1)) {
+                                                    <button pButton pRipple icon="pi pi-image" class="p-button-rounded p-button-text p-button-sm" (click)="openReceipt(p, 1)" pTooltip="Müşteri slipi"></button>
+                                                }
+                                                @if (getSlipByTip(p, 2)) {
+                                                    <button pButton pRipple icon="pi pi-image" class="p-button-rounded p-button-text p-button-sm" (click)="openReceipt(p, 2)" pTooltip="İşyeri slipi"></button>
+                                                }
+                                                @if (getSlipByTip(p, 3)) {
+                                                    <button pButton pRipple icon="pi pi-exclamation-triangle" class="p-button-rounded p-button-text p-button-sm p-button-danger" (click)="openReceipt(p, 3)" pTooltip="Hata slipi"></button>
+                                                }
                                             </td>
                                         </tr>
                                     </ng-template>
@@ -535,6 +559,23 @@
         <div class="flex justify-content-end gap-2">
             <button pButton pRipple label="İptal" icon="pi pi-times" class="p-button-text" (click)="terminalDialogVisible.set(false)"></button>
             <button pButton pRipple label="Kaydet" icon="pi pi-check" class="p-button-success" [loading]="terminalSaving()" (click)="saveTerminal()"></button>
+        </div>
+    </ng-template>
+</p-dialog>
+
+<!-- ===== RECEIPT DIALOG ===== -->
+<p-dialog [visible]="receiptDialogVisible()" (onHide)="closeReceiptDialog()" header="Ödeme Slipi"
+    [modal]="true" styleClass="p-fluid pos-receipt-dialog" [dismissableMask]="true">
+    <ng-template pTemplate="content">
+        @if (receiptImageLoading()) {
+            <div class="empty-state">Slip yükleniyor...</div>
+        } @else if (receiptImageUrl()) {
+            <img [src]="receiptImageUrl()!" alt="Ödeme slipi" class="w-full" />
+        }
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <div class="flex justify-content-end gap-2">
+            <button pButton pRipple label="Kapat" icon="pi pi-times" class="p-button-text" (click)="closeReceiptDialog()"></button>
         </div>
     </ng-template>
 </p-dialog>

@@ -88,6 +88,7 @@ public class PosOdemeIslemi : BaseEntity<int>, ITenantEntity
     public KasaBankaHesap? KasaBankaHesap { get; set; }
     public Rezervasyon? Rezervasyon { get; set; }
     public RezervasyonOdeme? RezervasyonOdeme { get; set; }
+    public ICollection<PosOdemeSlip> Slipler { get; set; } = [];
 }
 
 public static class PosOdemeDurumlari

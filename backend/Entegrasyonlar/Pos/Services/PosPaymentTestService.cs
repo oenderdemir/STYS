@@ -41,12 +41,13 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         var query = _db.PosOdemeIslemleri
             .AsNoTracking()
             .Include(x => x.PosTerminal)
+            .Include(x => x.Slipler)
             .Where(x => x.PosCihaziId == cihaz.Id && x.SaleReference != null)
             .OrderByDescending(x => x.BaslatilmaTarihi ?? x.CreatedAt ?? DateTime.MinValue)
             .Take(Math.Clamp(take, 1, 20));
 
         return await query
-            .Select(x => ToDto(x, x.PosTerminal == null ? null : x.PosTerminal.SaglayiciKodu))
+            .Select(x => ToDto(x, x.PosTerminal == null ? null : x.PosTerminal.SaglayiciKodu, x.Slipler))
             .ToListAsync(cancellationToken);
     }
 
@@ -143,7 +144,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         if (IsFinalPaymentState(islem.Durum) || IsAlreadyDispatchedState(islem.Durum))
         {
             await EnsureTerminalLoadedAsync(islem, cancellationToken);
-            return ToDto(islem, islem.PosTerminal?.SaglayiciKodu);
+            return ToDto(islem, islem.PosTerminal?.SaglayiciKodu, islem.Slipler);
         }
 
         var command = BuildStartCommand(cihaz, terminal, islem, request, now);
@@ -185,6 +186,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         _ = await GetValidatedAgentAsync(cihaz, cancellationToken);
         var payment = await _db.PosOdemeIslemleri
             .Include(x => x.PosTerminal)
+            .Include(x => x.Slipler)
             .FirstOrDefaultAsync(x => x.Id == posOdemeIslemiId, cancellationToken)
             ?? throw new BaseException("POS ödeme işlemi bulunamadı.", 404);
 
@@ -203,16 +205,18 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             throw new BaseException("SaleReference bulunamadı.", 400);
         }
 
-        if (IsFinalPaymentState(payment.Durum))
+        if (IsFinalPaymentState(payment.Durum) && payment.Slipler.Any(x => !x.IsDeleted))
         {
+            // Already final AND slips are present: nothing left to recover, and re-querying would
+            // only re-send GetPaymentResult for no gain.
             await EnsureTerminalLoadedAsync(payment, cancellationToken);
-            return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
+            return ToDto(payment, payment.PosTerminal?.SaglayiciKodu, payment.Slipler);
         }
 
         if (await HasActiveReconciliationCommandAsync(cihaz.AgentId!.Value, payment.Id, cancellationToken))
         {
             await EnsureTerminalLoadedAsync(payment, cancellationToken);
-            return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
+            return ToDto(payment, payment.PosTerminal?.SaglayiciKodu, payment.Slipler);
         }
 
         var command = BuildResultCommand(cihaz, payment);
@@ -243,6 +247,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         {
             var byId = await _db.PosOdemeIslemleri
                 .Include(x => x.PosTerminal)
+                .Include(x => x.Slipler)
                 .FirstOrDefaultAsync(x => x.Id == request.PosOdemeIslemiId.Value, cancellationToken)
                 ?? throw new BaseException("POS ödeme işlemi bulunamadı.", 404);
 
@@ -256,6 +261,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
 
         return await _db.PosOdemeIslemleri
             .Include(x => x.PosTerminal)
+            .Include(x => x.Slipler)
             .FirstOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey && !x.IsDeleted, cancellationToken);
     }
 
@@ -417,6 +423,12 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             HttpPort = cihaz.HttpPort,
             HttpsPort = cihaz.HttpsPort,
             UseHttps = cihaz.HttpsPort.HasValue,
+            // Receipt request policy is explicit (not left to agent defaults): request both customer
+            // and merchant receipt images at the reference width.
+            ReceiptImage = true,
+            CustomerReceiptImageEnabled = true,
+            MerchantReceiptImageEnabled = true,
+            ReceiptWidth = "58mm",
             TransactionHandle = new PavoTransactionHandle
             {
                 SerialNumber = cihaz.SeriNo,
@@ -439,6 +451,17 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             HttpPort = cihaz.HttpPort,
             HttpsPort = cihaz.HttpsPort,
             UseHttps = cihaz.HttpsPort.HasValue,
+            // Recovery query: request receipt images explicitly so a lost StartPayment response can
+            // still have its slips recovered by SaleReference.
+            ReceiptOptions = new PavoReceiptRequestOptions
+            {
+                ReceiptImage = true,
+                CustomerReceiptImageEnabled = true,
+                MerchantReceiptImageEnabled = true,
+                ReceiptWidth = "58mm",
+                HeadUnmaskLength = 0,
+                TailUnmaskLength = 4
+            },
             TransactionHandle = new PavoTransactionHandle
             {
                 SerialNumber = cihaz.SeriNo,
@@ -577,7 +600,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         return false;
     }
 
-    private static PosOdemeIslemiDto ToDto(PosOdemeIslemi x, string? saglayiciKodu) => new()
+    private static PosOdemeIslemiDto ToDto(PosOdemeIslemi x, string? saglayiciKodu, IEnumerable<PosOdemeSlip>? slipler = null) => new()
     {
         Id = x.Id,
         PosCihaziId = x.PosCihaziId,
@@ -607,6 +630,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         SonSorgulamaTarihi = x.SonSorgulamaTarihi,
         SorgulamaDenemeSayisi = x.SorgulamaDenemeSayisi,
         RezervasyonOdemeId = x.RezervasyonOdemeId,
+        Slipler = slipler?.Where(s => !s.IsDeleted).Select(ToSlipDto).ToList() ?? [],
         TamamlandiMi = string.Equals(x.Durum, PosOdemeDurumlari.Muhasebelestirildi, StringComparison.OrdinalIgnoreCase)
             || string.Equals(x.Durum, PosOdemeDurumlari.Basarili, StringComparison.OrdinalIgnoreCase)
             || string.Equals(x.Durum, PosOdemeDurumlari.Basarisiz, StringComparison.OrdinalIgnoreCase)
@@ -614,5 +638,16 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             || string.Equals(x.Durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
             || string.Equals(x.Durum, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
             || string.Equals(x.Durum, PosOdemeDurumlari.Unknown, StringComparison.OrdinalIgnoreCase)
+    };
+
+    private static PosOdemeSlipDto ToSlipDto(PosOdemeSlip s) => new()
+    {
+        Id = s.Id,
+        Tip = (int)s.Tip,
+        ContentType = s.ContentType,
+        DosyaBoyutu = s.DosyaBoyutu,
+        Sha256 = s.Sha256,
+        KaydedilmeTarihi = s.KaydedilmeTarihi,
+        KaynakKomutTipi = s.KaynakKomutTipi
     };
 }

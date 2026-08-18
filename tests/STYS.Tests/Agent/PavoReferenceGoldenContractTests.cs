@@ -421,6 +421,126 @@ public sealed class PavoReferenceGoldenContractTests
         Assert.DoesNotContain("cardNo", serialized, StringComparison.OrdinalIgnoreCase);
     }
 
+    // ------------------------------------------------- GetPaymentResult wire request
+
+    [Fact]
+    public async Task GetPaymentResultRequest_ReferansGoldenJsonIleBirebir()
+    {
+        var handler = new CapturingHandler();
+        var client = CreateClient(handler);
+
+        await client.GetPaymentResultAsync(new PavoGetPaymentResultRequest
+        {
+            IpAddress = "10.0.0.5",
+            HttpPort = 4567,
+            UseHttps = false,
+            SaleReference = "SALE-999",
+            ReceiptOptions = new PavoReceiptRequestOptions
+            {
+                ReceiptImage = true,
+                CustomerReceiptImageEnabled = true,
+                MerchantReceiptImageEnabled = true,
+                ReceiptWidth = "58mm",
+                HeadUnmaskLength = 0,
+                TailUnmaskLength = 4
+            },
+            TransactionHandle = BuildHandle(1)
+        }, CancellationToken.None);
+
+        const string expected = """
+        {
+          "PaymentResult": {
+            "SaleReference": "SALE-999",
+            "AdditionalInfo": {
+              "receiptImage": true,
+              "customerReceiptImageEnabled": true,
+              "merchantReceiptImageEnabled": true,
+              "receiptWidth": "58mm",
+              "headUnmaskLength": 0,
+              "tailUnmaskLength": 4,
+              "printData": {
+                "receiptJsonEnabled": false,
+                "customerReceiptJsonEnabled": false,
+                "merchantReceiptJsonEnabled": false,
+                "receiptTextEnabled": false,
+                "receiptTextWidth": "40",
+                "customerReceiptTextEnabled": false,
+                "customerReceiptTextWidth": "40",
+                "merchantReceiptTextEnabled": false,
+                "merchantReceiptTextWidth": "40"
+              }
+            }
+          },
+          "TransactionHandle": {
+            "SerialNumber": "PAV200019619",
+            "Fingerprint": "Pavo509DotNetClient",
+            "TransactionSequence": 1,
+            "TransactionDate": "2026-08-15T10:20:30.123456"
+          }
+        }
+        """;
+
+        AssertJsonStructurallyEqual(expected, handler.LastBody);
+        Assert.Equal("/GetPaymentResult", handler.LastRequestUri?.AbsolutePath);
+    }
+
+    // ------------------------------------------------- Receipt image response parsing
+
+    [Fact]
+    public async Task PaymentResponse_ErrorReceiptImage_DeserializeOlur()
+    {
+        const string body = """
+        {
+          "HasAbondon": false, "HasError": false, "ErrorCode": 0,
+          "Data": {
+            "isSuccessful": false,
+            "failMessage": "RED",
+            "errorReceiptImage": "iVBORw0KGgoAAAANSUhEUg=="
+          }
+        }
+        """;
+
+        var handler = new CapturingHandler { ResponseBody = body };
+        var client = CreateClient(handler);
+
+        var response = await client.GetPaymentResultAsync(new PavoGetPaymentResultRequest
+        {
+            IpAddress = "10.0.0.5",
+            HttpPort = 4567,
+            SaleReference = "SALE-999",
+            TransactionHandle = BuildHandle(1)
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Data);
+        Assert.Equal("iVBORw0KGgoAAAANSUhEUg==", response.Data!.ErrorReceiptImage);
+        Assert.Null(response.Data.CustomerReceiptImage);
+        Assert.Null(response.Data.MerchantReceiptImage);
+    }
+
+    [Fact]
+    public async Task PaymentResponse_CustomerVeMerchantReceiptImage_DeserializeOlur()
+    {
+        const string body = """
+        {
+          "HasAbondon": false, "HasError": false, "ErrorCode": 0,
+          "Data": {
+            "isSuccessful": true,
+            "customerReceiptImage": "iVBORw0KGgoAAAANSUhEUg==",
+            "merchantReceiptImage": "iVBORw0KGgoAAAANSUhEUg=="
+          }
+        }
+        """;
+
+        var handler = new CapturingHandler { ResponseBody = body };
+        var client = CreateClient(handler);
+
+        var response = await client.StartPaymentAsync(BuildReferenceStartPaymentRequest(), CancellationToken.None);
+
+        Assert.Equal("iVBORw0KGgoAAAANSUhEUg==", response.Data!.CustomerReceiptImage);
+        Assert.Equal("iVBORw0KGgoAAAANSUhEUg==", response.Data!.MerchantReceiptImage);
+        Assert.Null(response.Data.ErrorReceiptImage);
+    }
+
     // ---------------------------------------------------------------- L. PerformEOD
 
     [Fact]

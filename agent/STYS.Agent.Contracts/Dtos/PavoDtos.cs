@@ -214,6 +214,34 @@ public class PavoStartPaymentRequest : PavoPaymentRequestBase
 
 public class PavoGetPaymentResultRequest : PavoPaymentRequestBase
 {
+    /// <summary>Receipt image request policy for the recovery query. Defaults request both customer
+    /// and merchant receipt images (and accept the error receipt image on the response side).</summary>
+    public PavoReceiptRequestOptions ReceiptOptions { get; set; } = new();
+}
+
+/// <summary>
+/// Receipt image request options carried by GetPaymentResult. Kept as a dedicated domain object so
+/// the recovery query's receipt policy is explicit rather than relying on agent-side defaults. This
+/// is a STYS domain concept and must never be serialized as part of the PAVO wire contract directly;
+/// the wire mapper projects it into the exact PAVO AdditionalInfo shape.
+/// </summary>
+public sealed class PavoReceiptRequestOptions
+{
+    public bool ReceiptImage { get; set; } = true;
+    public bool CustomerReceiptImageEnabled { get; set; } = true;
+    public bool MerchantReceiptImageEnabled { get; set; } = true;
+    public string ReceiptWidth { get; set; } = "58mm";
+    public int HeadUnmaskLength { get; set; }
+    public int TailUnmaskLength { get; set; } = 4;
+    public bool ReceiptJsonEnabled { get; set; }
+    public bool CustomerReceiptJsonEnabled { get; set; }
+    public bool MerchantReceiptJsonEnabled { get; set; }
+    public bool ReceiptTextEnabled { get; set; }
+    public string ReceiptTextWidth { get; set; } = "40";
+    public bool CustomerReceiptTextEnabled { get; set; }
+    public string CustomerReceiptTextWidth { get; set; } = "40";
+    public bool MerchantReceiptTextEnabled { get; set; }
+    public string MerchantReceiptTextWidth { get; set; } = "40";
 }
 
 public sealed class PavoPerformEodRequest : PavoDeviceRequestBase

@@ -231,13 +231,9 @@ internal sealed class PavoWireReceiptListItemRequest
 }
 
 /// <summary>
-/// GetPaymentResult body. PaymentResult is a required object in the PAVO contract; sending only
-/// TransactionHandle (as this client previously did) leaves the device with no indication of which
-/// payment is being queried.
-///
-/// AdditionalInfo is intentionally omitted: every one of its fields is optional with a documented
-/// default, and reconciliation only needs the transaction outcome. Requesting receipts would return
-/// base64 images and slip text this caller never reads.
+/// GetPaymentResult body. PaymentResult is a required object in the PAVO contract and carries the
+/// SaleReference the device matches against plus the receipt image request policy; sending only
+/// TransactionHandle leaves the device with no indication of which payment is being queried.
 /// </summary>
 internal sealed class PavoWireGetPaymentResultRequest
 {
@@ -253,6 +249,33 @@ internal sealed class PavoWirePaymentResultQuery
     /// <summary>Reference of the payment being queried; the device matches it within the last 48 hours.</summary>
     [JsonPropertyName("SaleReference")]
     public string SaleReference { get; init; } = string.Empty;
+
+    [JsonPropertyName("AdditionalInfo")]
+    public PavoWireGetPaymentResultAdditionalInfo AdditionalInfo { get; init; } = new();
+}
+
+internal sealed class PavoWireGetPaymentResultAdditionalInfo
+{
+    [JsonPropertyName("receiptImage")]
+    public bool ReceiptImage { get; init; }
+
+    [JsonPropertyName("customerReceiptImageEnabled")]
+    public bool CustomerReceiptImageEnabled { get; init; }
+
+    [JsonPropertyName("merchantReceiptImageEnabled")]
+    public bool MerchantReceiptImageEnabled { get; init; }
+
+    [JsonPropertyName("receiptWidth")]
+    public string ReceiptWidth { get; init; } = "58mm";
+
+    [JsonPropertyName("headUnmaskLength")]
+    public int HeadUnmaskLength { get; init; }
+
+    [JsonPropertyName("tailUnmaskLength")]
+    public int TailUnmaskLength { get; init; } = 4;
+
+    [JsonPropertyName("printData")]
+    public PavoWirePrintDataRequest PrintData { get; init; } = new();
 }
 
 internal sealed class PavoWirePerformEodRequest
@@ -465,6 +488,9 @@ internal sealed class PavoWirePaymentResponseData
 
     [JsonPropertyName("merchantReceiptImage")]
     public string? MerchantReceiptImage { get; set; }
+
+    [JsonPropertyName("errorReceiptImage")]
+    public string? ErrorReceiptImage { get; set; }
 
     [JsonPropertyName("gunSonu")]
     public string? GunSonu { get; set; }

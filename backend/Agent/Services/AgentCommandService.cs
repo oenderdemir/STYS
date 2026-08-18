@@ -10,8 +10,10 @@ using STYS.Agent.Entities;
 using STYS.Agent.Options;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
+using STYS.Entegrasyonlar.Pos.Services;
 using STYS.Infrastructure.EntityFramework;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using AgentEntity = STYS.Agent.Entities.Agent;
@@ -27,6 +29,7 @@ public sealed class AgentCommandService
     private readonly AgentCommandExpiryService _commandExpiryService;
     private readonly ILogger<AgentCommandService> _logger;
     private readonly AgentCompatibilityOptions _compatibilityOptions;
+    private readonly IPosReceiptPersistenceService? _posReceiptPersistence;
 
     private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -63,11 +66,13 @@ public sealed class AgentCommandService
         ILogger<AgentCommandService> logger,
         IAgentCommandRealtimeNotifier? notifier = null,
         AgentCommandExpiryService? commandExpiryService = null,
-        IOptions<AgentCompatibilityOptions>? compatibilityOptions = null)
+        IOptions<AgentCompatibilityOptions>? compatibilityOptions = null,
+        IPosReceiptPersistenceService? posReceiptPersistence = null)
     {
         _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _logger = logger; _notifier = notifier;
         _commandExpiryService = commandExpiryService ?? new AgentCommandExpiryService(dbContextFactory, NullLogger<AgentCommandExpiryService>.Instance);
         _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
+        _posReceiptPersistence = posReceiptPersistence;
     }
 
     public async Task<AgentCommandDto> SendAsync(AgentCommandSendRequest request, string requestedBy, CancellationToken ct)
@@ -432,7 +437,7 @@ public sealed class AgentCommandService
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
+        await ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -477,7 +482,7 @@ public sealed class AgentCommandService
         cmd.Status = AgentCommandStatus.Failed;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = request.ErrorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
+        await ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorCode: request.ErrorCode, errorMessage: request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -516,7 +521,7 @@ public sealed class AgentCommandService
         cmd.Status = AgentCommandStatus.Rejected;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = request.ErrorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
+        await ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorCode: request.ErrorCode, errorMessage: request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -594,7 +599,7 @@ public sealed class AgentCommandService
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
-        ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
+        await ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
         NotifyIfNeeded(MapToDto(cmd));
@@ -614,7 +619,7 @@ public sealed class AgentCommandService
             throw new BaseException($"Agent '{c}' capability'sine sahip değil.", 403);
     }
 
-    private void ApplyPavoCommandResultIfNeeded(
+    private async Task ApplyPavoCommandResultIfNeeded(
         StysAppDbContext db,
         AgentCommand cmd,
         AgentCommandCompleteRequest request,
@@ -626,7 +631,7 @@ public sealed class AgentCommandService
         {
             if (IsPaymentCommand(cmd.CommandType))
             {
-                ApplyPavoPaymentResult(db, cmd, request, validatedDevice, validatedPayment);
+                await ApplyPavoPaymentResult(db, cmd, request, validatedDevice, validatedPayment, ct);
                 return;
             }
 
@@ -723,12 +728,13 @@ public sealed class AgentCommandService
         SyncDiscoveredTerminals(db, device, response.Terminals);
     }
 
-    private void ApplyPavoPaymentResult(
+    private async Task ApplyPavoPaymentResult(
         StysAppDbContext db,
         AgentCommand cmd,
         AgentCommandCompleteRequest request,
         PosCihazi? device,
-        PosOdemeIslemi? payment)
+        PosOdemeIslemi? payment,
+        CancellationToken ct)
     {
         if (device is null || payment is null)
         {
@@ -739,6 +745,18 @@ public sealed class AgentCommandService
         PavoPaymentResponseBase? response = commandType.Equals("PavoStartPayment", StringComparison.OrdinalIgnoreCase)
             ? DeserializePayload<PavoStartPaymentResponse>(request.ResultPayload)
             : DeserializePayload<PavoGetPaymentResultResponse>(request.ResultPayload);
+
+        // Receipt extraction + persistence + sanitization happen for every payment result, BEFORE any
+        // final-state short-circuit: a final Successful payment can still recover its missing slip via
+        // GetPaymentResult, and the raw receipt Base64 must never persist centrally (AgentCommand
+        // ResultPayload / PosOdemeIslemi.SonSaglayiciYaniti).
+        if (_posReceiptPersistence is not null && response?.Data is not null)
+        {
+            await _posReceiptPersistence.PersistAsync(db, commandType, payment, response, ct);
+        }
+
+        var sanitizedPayload = SanitizeReceiptImages(request.ResultPayload);
+        cmd.ResultPayload = sanitizedPayload ?? request.ResultPayload;
 
         var proposedStatus = ResolveProposedPaymentStatus(commandType, request, response);
         var resolvedStatus = ResolveMonotonicPaymentStatus(commandType, payment.Durum, proposedStatus);
@@ -780,7 +798,7 @@ public sealed class AgentCommandService
         payment.AuthorizationCode = response?.Data?.AuthorizationCode ?? payment.AuthorizationCode;
         payment.SonSorgulamaTarihi = DateTime.UtcNow;
         payment.SaglayiciDurumKodu = response?.Data?.TransactionStatus ?? payment.SaglayiciDurumKodu;
-        payment.SonSaglayiciYaniti = request.ResultPayload;
+        payment.SonSaglayiciYaniti = sanitizedPayload ?? request.ResultPayload;
 
         if (!request.Success)
         {
@@ -789,6 +807,34 @@ public sealed class AgentCommandService
         }
 
         ApplyResolvedPaymentState(payment, resolvedStatus, response?.Data?.Message ?? request.ErrorMessage ?? response?.Message);
+    }
+
+    /// <summary>Removes the receipt image Base64 fields from a PAVO result payload so the raw images
+    /// never persist centrally. Preserves all other fields verbatim; returns the original string when
+    /// parsing fails or no image fields exist.</summary>
+    private static string? SanitizeReceiptImages(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return payload;
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(payload);
+            if (node is JsonObject root && root["Data"] is JsonObject data)
+            {
+                data["customerReceiptImage"] = null;
+                data["merchantReceiptImage"] = null;
+                data["errorReceiptImage"] = null;
+            }
+
+            return node?.ToJsonString(JsonOptions) ?? payload;
+        }
+        catch
+        {
+            return payload;
+        }
     }
 
     private static string ResolveProposedPaymentStatus(string commandType, AgentCommandCompleteRequest request, PavoPaymentResponseBase? response)

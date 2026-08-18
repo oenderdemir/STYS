@@ -130,9 +130,15 @@ public sealed class PavoRestClientWirePayloadTests
         Assert.False(doc.RootElement.TryGetProperty("PosOdemeIslemiId", out _));
         Assert.False(doc.RootElement.TryGetProperty("SaleReference", out _));
 
-        // Receipt options are omitted so the device applies its documented defaults rather than
-        // returning slip images this caller never reads.
-        Assert.False(paymentResult.TryGetProperty("AdditionalInfo", out _));
+        // Receipt options are explicitly requested so the recovery query can return slip images.
+        Assert.True(paymentResult.TryGetProperty("AdditionalInfo", out var additionalInfo));
+        Assert.True(additionalInfo.GetProperty("receiptImage").GetBoolean());
+        Assert.True(additionalInfo.GetProperty("customerReceiptImageEnabled").GetBoolean());
+        Assert.True(additionalInfo.GetProperty("merchantReceiptImageEnabled").GetBoolean());
+        Assert.Equal("58mm", additionalInfo.GetProperty("receiptWidth").GetString());
+        Assert.Equal(0, additionalInfo.GetProperty("headUnmaskLength").GetInt32());
+        Assert.Equal(4, additionalInfo.GetProperty("tailUnmaskLength").GetInt32());
+        Assert.True(additionalInfo.TryGetProperty("printData", out _));
     }
 
     [Theory]

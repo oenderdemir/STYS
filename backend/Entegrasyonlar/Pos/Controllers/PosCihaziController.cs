@@ -13,12 +13,14 @@ public sealed class PosCihaziController : UIController
 {
     private readonly IPosCihaziService _service;
     private readonly IPosPaymentTestService _paymentService;
+    private readonly IPosReceiptService _receiptService;
     private readonly IMapper _mapper;
 
-    public PosCihaziController(IPosCihaziService service, IPosPaymentTestService paymentService, IMapper mapper)
+    public PosCihaziController(IPosCihaziService service, IPosPaymentTestService paymentService, IPosReceiptService receiptService, IMapper mapper)
     {
         _service = service;
         _paymentService = paymentService;
+        _receiptService = receiptService;
         _mapper = mapper;
     }
 
@@ -103,4 +105,22 @@ public sealed class PosCihaziController : UIController
         int posOdemeIslemiId,
         CancellationToken cancellationToken) =>
         Ok(await _paymentService.GetResultAsync(id, posOdemeIslemiId, User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpGet("payments/{paymentId:int}/receipts")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<ActionResult<IReadOnlyCollection<PosOdemeSlipDto>>> GetReceipts(
+        int paymentId,
+        CancellationToken cancellationToken) =>
+        Ok(await _receiptService.GetReceiptsAsync(paymentId, cancellationToken));
+
+    [HttpGet("payments/{paymentId:int}/receipts/{receiptId:int}/content")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<IActionResult> GetReceiptContent(
+        int paymentId,
+        int receiptId,
+        CancellationToken cancellationToken)
+    {
+        var content = await _receiptService.OpenReceiptContentAsync(paymentId, receiptId, cancellationToken);
+        return File(content.Stream, content.ContentType);
+    }
 }

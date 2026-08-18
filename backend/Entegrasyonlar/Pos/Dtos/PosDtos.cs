@@ -155,6 +155,20 @@ public sealed class PosOdemeIslemiDto
     public int SorgulamaDenemeSayisi { get; set; }
     public int? RezervasyonOdemeId { get; set; }
     public bool TamamlandiMi { get; set; }
+
+    /// <summary>Receipt slip metadata (Customer/Merchant/Error). StoragePath is never exposed.</summary>
+    public IReadOnlyCollection<PosOdemeSlipDto> Slipler { get; set; } = [];
+}
+
+public sealed class PosOdemeSlipDto
+{
+    public int Id { get; set; }
+    public int Tip { get; set; }
+    public string ContentType { get; set; } = "image/png";
+    public long DosyaBoyutu { get; set; }
+    public string Sha256 { get; set; } = string.Empty;
+    public DateTime KaydedilmeTarihi { get; set; }
+    public string? KaynakKomutTipi { get; set; }
 }
 
 public sealed class PosPaymentBaslatRequest

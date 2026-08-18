@@ -121,6 +121,7 @@ builder.Services.Configure<KurumLogoStorageOptions>(
 builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOptions.SectionName));
 builder.Services.Configure<PosOperationalHealthOptions>(builder.Configuration.GetSection(PosOperationalHealthOptions.SectionName));
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
+builder.Services.Configure<PosReceiptStorageOptions>(builder.Configuration.GetSection(PosReceiptStorageOptions.SectionName));
 builder.Services.Configure<AgentCompatibilityOptions>(builder.Configuration.GetSection(AgentCompatibilityOptions.SectionName));
 builder.Services.PostConfigure<AgentCompatibilityOptions>(options => options.SupportedContractVersion = AgentContractVersion.Current);
 // Release publishing is optional: deployments that never publish must still start, so the signing
@@ -138,6 +139,9 @@ builder.Services.AddHttpClient<IPavoUniCloudClient, PavoUniCloudClient>((service
 builder.Services.AddScoped<IPosOdemeSaglayicisi, PavoPosOdemeSaglayicisi>();
 builder.Services.AddScoped<IPosService, PosService>();
 builder.Services.AddScoped<IPosPaymentTestService, PosPaymentTestService>();
+builder.Services.AddSingleton<IPosReceiptStorage, PosReceiptStorage>();
+builder.Services.AddScoped<IPosReceiptPersistenceService, PosReceiptPersistenceService>();
+builder.Services.AddScoped<IPosReceiptService, PosReceiptService>();
 builder.Services.AddScoped<PosTerminalService>();
 builder.Services.AddHostedService<PosOdemeDurumTakipHostedService>();
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);

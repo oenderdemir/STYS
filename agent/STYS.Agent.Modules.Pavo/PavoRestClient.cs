@@ -103,11 +103,7 @@ public sealed class PavoRestClient : IPavoRestClient
                 httpResponseReceived: false);
         }
 
-        return SendAsync<PavoGetPaymentResultResponse>(GetPaymentResultPath, request, new PavoWireGetPaymentResultRequest
-        {
-            PaymentResult = new PavoWirePaymentResultQuery { SaleReference = request.SaleReference.Trim() },
-            TransactionHandle = BuildWireHandle(request.TransactionHandle)
-        }, cancellationToken);
+        return SendAsync<PavoGetPaymentResultResponse>(GetPaymentResultPath, request, BuildGetPaymentResultWireRequest(request), cancellationToken);
     }
 
     private async Task<TResponse> SendAsync<TResponse>(
@@ -481,6 +477,7 @@ public sealed class PavoRestClient : IPavoRestClient
             Terminal = data.Terminal,
             CustomerReceiptImage = data.CustomerReceiptImage,
             MerchantReceiptImage = data.MerchantReceiptImage,
+            ErrorReceiptImage = data.ErrorReceiptImage,
             GunSonu = data.GunSonu,
             EodData = data.EodData,
             EodJson = data.EodJson,
@@ -580,6 +577,44 @@ public sealed class PavoRestClient : IPavoRestClient
     {
         TransactionHandle = BuildWireHandle(request.TransactionHandle)
     };
+
+    /// <summary>GetPaymentResult wire request: PaymentResult.SaleReference + AdditionalInfo (receipt
+    /// image policy) + TransactionHandle. The receipt image flags come from the request's
+    /// ReceiptOptions so the caller (backend) explicitly controls whether slips are requested.</summary>
+    private static PavoWireGetPaymentResultRequest BuildGetPaymentResultWireRequest(PavoGetPaymentResultRequest request)
+    {
+        var options = request.ReceiptOptions ?? new PavoReceiptRequestOptions();
+
+        return new PavoWireGetPaymentResultRequest
+        {
+            PaymentResult = new PavoWirePaymentResultQuery
+            {
+                SaleReference = request.SaleReference.Trim(),
+                AdditionalInfo = new PavoWireGetPaymentResultAdditionalInfo
+                {
+                    ReceiptImage = options.ReceiptImage,
+                    CustomerReceiptImageEnabled = options.CustomerReceiptImageEnabled,
+                    MerchantReceiptImageEnabled = options.MerchantReceiptImageEnabled,
+                    ReceiptWidth = string.IsNullOrWhiteSpace(options.ReceiptWidth) ? "58mm" : options.ReceiptWidth.Trim(),
+                    HeadUnmaskLength = options.HeadUnmaskLength,
+                    TailUnmaskLength = options.TailUnmaskLength,
+                    PrintData = new PavoWirePrintDataRequest
+                    {
+                        ReceiptJsonEnabled = options.ReceiptJsonEnabled,
+                        CustomerReceiptJsonEnabled = options.CustomerReceiptJsonEnabled,
+                        MerchantReceiptJsonEnabled = options.MerchantReceiptJsonEnabled,
+                        ReceiptTextEnabled = options.ReceiptTextEnabled,
+                        ReceiptTextWidth = string.IsNullOrWhiteSpace(options.ReceiptTextWidth) ? "40" : options.ReceiptTextWidth.Trim(),
+                        CustomerReceiptTextEnabled = options.CustomerReceiptTextEnabled,
+                        CustomerReceiptTextWidth = string.IsNullOrWhiteSpace(options.CustomerReceiptTextWidth) ? "40" : options.CustomerReceiptTextWidth.Trim(),
+                        MerchantReceiptTextEnabled = options.MerchantReceiptTextEnabled,
+                        MerchantReceiptTextWidth = string.IsNullOrWhiteSpace(options.MerchantReceiptTextWidth) ? "40" : options.MerchantReceiptTextWidth.Trim()
+                    }
+                }
+            },
+            TransactionHandle = BuildWireHandle(request.TransactionHandle)
+        };
+    }
 
     private static PavoWireStartPaymentRequest BuildStartPaymentWireRequest(PavoStartPaymentRequest request)
     {

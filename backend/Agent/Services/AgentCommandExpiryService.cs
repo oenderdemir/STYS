@@ -210,6 +210,12 @@ public sealed class AgentCommandExpiryService
                 ? db.PosOdemeIslemleri.FirstOrDefault(x => x.Id == paymentId.Value && !x.IsDeleted)
                 : null;
             ApplyPavoPaymentExpiry(payment, cmd.CommandType, utcNow);
+            return;
+        }
+
+        if (string.Equals(cmd.CommandType, "PavoPerformEOD", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyEodExpiry(db, cmd, utcNow);
         }
     }
 
@@ -265,6 +271,53 @@ public sealed class AgentCommandExpiryService
         {
             return;
         }
+
+        if (string.Equals(cmd.CommandType, "PavoPerformEOD", StringComparison.OrdinalIgnoreCase) && !shouldRetry)
+        {
+            ApplyEodExpiry(db, cmd, utcNow);
+        }
+    }
+
+    private void ApplyEodExpiry(StysAppDbContext db, AgentCommand cmd, DateTime utcNow)
+    {
+        var eodId = TryGetEodIdFromCommandPayload(cmd.Payload);
+        if (eodId is null)
+        {
+            return;
+        }
+
+        var eod = db.PosGunSonuIslemleri.FirstOrDefault(x => x.Id == eodId.Value && !x.IsDeleted);
+        if (eod is null || eod.Durum != PosGunSonuDurumu.Pending)
+        {
+            return;
+        }
+
+        eod.Durum = PosGunSonuDurumu.Unknown;
+        eod.PavoErrorCode = "EOD_COMMAND_EXPIRED";
+        eod.PavoMessage = "Gün sonu sonucu doğrulanamadı; komut süresi doldu.";
+        eod.TamamlanmaTarihi = utcNow;
+    }
+
+    private static int? TryGetEodIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (TryGetPropertyIgnoreCase(doc.RootElement, "posGunSonuIslemiId", out var idElement) && idElement.TryGetInt32(out var id))
+            {
+                return id;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
     }
 
     private void ApplyPavoPingExpiry(PosCihazi? device, DateTime utcNow)

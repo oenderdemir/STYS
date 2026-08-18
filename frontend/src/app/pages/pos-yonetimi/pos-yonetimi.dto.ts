@@ -187,3 +187,39 @@ export interface PosOdemeIslemiDto {
 }
 
 export const SaglayiciLabels: Record<number, string> = { 0: 'PAVO', 1: 'Diğer' };
+
+export interface PosGunSonuBaslatRequest {
+    useSummary: boolean;
+    print: boolean;
+}
+
+export interface PosGunSonuIslemiDto {
+    id: number;
+    posCihaziId: number;
+    posCihaziAd: string;
+    useSummary: boolean;
+    print: boolean;
+    durum: number;
+    durumText: string;
+    gunSonuMesaji?: string | null;
+    batchNo?: string | null;
+    eodDateTime?: string | null;
+    pavoErrorCode?: string | null;
+    pavoMessage?: string | null;
+    baslatilmaTarihi: string;
+    tamamlanmaTarihi?: string | null;
+    requestedBy?: string | null;
+    slipSayisi: number;
+}
+
+export interface PosGunSonuSlipiDto {
+    id: number;
+    posGunSonuIslemiId: number;
+    posCihaziId: number;
+    slipTipi: number;
+    slipTipiText: string;
+    contentType: string;
+    dosyaBoyutu: number;
+    sha256: string;
+    olusturulmaTarihi: string;
+}

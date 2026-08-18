@@ -24,6 +24,7 @@ public static class PavoModuleExtensions
         services.AddScoped<PavoGetDeviceInfoCommandHandler>();
         services.AddScoped<PavoStartPaymentCommandHandler>();
         services.AddScoped<PavoGetPaymentResultCommandHandler>();
+        services.AddScoped<PavoPerformEodCommandHandler>();
         services.AddHttpClient("PavoClient", (sp, client) =>
         {
             var options = sp.GetRequiredService<IOptions<PavoAgentOptions>>().Value;
@@ -55,5 +56,6 @@ public static class PavoModuleExtensions
         registry.Register<PavoGetDeviceInfoCommand, PavoGetDeviceInfoCommandHandler>("PavoGetDeviceInfo");
         registry.Register<PavoStartPaymentCommand, PavoStartPaymentCommandHandler>("PavoStartPayment");
         registry.Register<PavoGetPaymentResultCommand, PavoGetPaymentResultCommandHandler>("PavoGetPaymentResult");
+        registry.Register<PavoPerformEodCommand, PavoPerformEodCommandHandler>("PavoPerformEOD");
     }
 }

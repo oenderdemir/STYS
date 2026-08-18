@@ -180,3 +180,49 @@ public sealed class PosPaymentBaslatRequest
     public int? PosOdemeIslemiId { get; set; }
     public string IdempotencyKey { get; set; } = string.Empty;
 }
+
+public sealed class PosGunSonuBaslatRequest
+{
+    public bool UseSummary { get; set; } = true;
+    public bool Print { get; set; }
+}
+
+public class PosGunSonuIslemiDto
+{
+    public int Id { get; set; }
+    public int PosCihaziId { get; set; }
+    public string PosCihaziAd { get; set; } = string.Empty;
+    public bool UseSummary { get; set; }
+    public bool Print { get; set; }
+    public int Durum { get; set; }
+    public string DurumText { get; set; } = string.Empty;
+    public string? GunSonuMesaji { get; set; }
+    public string? BatchNo { get; set; }
+    public string? EodDateTime { get; set; }
+    public string? PavoErrorCode { get; set; }
+    public string? PavoMessage { get; set; }
+    public DateTime BaslatilmaTarihi { get; set; }
+    public DateTime? TamamlanmaTarihi { get; set; }
+    public string? RequestedBy { get; set; }
+    public int SlipSayisi { get; set; }
+}
+
+public sealed class PosGunSonuIslemiDetayDto : PosGunSonuIslemiDto
+{
+    public IReadOnlyCollection<PosGunSonuSlipiDto> Slipler { get; set; } = [];
+}
+
+public sealed class PosGunSonuSlipiDto
+{
+    public int Id { get; set; }
+    public int PosGunSonuIslemiId { get; set; }
+    public int PosCihaziId { get; set; }
+    public int SlipTipi { get; set; }
+    public string SlipTipiText { get; set; } = string.Empty;
+    public string ContentType { get; set; } = "image/png";
+    public long DosyaBoyutu { get; set; }
+    public string Sha256 { get; set; } = string.Empty;
+    public DateTime OlusturulmaTarihi { get; set; }
+}
+
+public sealed record PosGunSonuSlipContent(Stream Stream, string ContentType);

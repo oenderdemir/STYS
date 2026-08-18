@@ -244,7 +244,7 @@ public sealed class PavoReceiptRequestOptions
     public string MerchantReceiptTextWidth { get; set; } = "40";
 }
 
-public sealed class PavoPerformEodRequest : PavoDeviceRequestBase
+public class PavoPerformEodRequest : PavoDeviceRequestBase
 {
     public bool UseSummary { get; set; } = true;
     public bool Print { get; set; }
@@ -494,6 +494,9 @@ public sealed class PavoGetPaymentResultResponse : PavoPaymentResponseBase
 
 public sealed class PavoPerformEodResponse : PavoPaymentResponseBase
 {
+    /// <summary>The device's response handle. Its SerialNumber must match the request before an EOD
+    /// is accepted as successful; the Fingerprint is remote/device identity and is not compared.</summary>
+    public PavoTransactionHandle? TransactionHandle { get; set; }
 }
 
 public sealed class PavoRebootDeviceResponse : PavoPaymentResponseBase

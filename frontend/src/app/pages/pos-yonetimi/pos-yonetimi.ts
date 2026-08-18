@@ -27,6 +27,8 @@ import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
+    PosGunSonuIslemiDto,
+    PosGunSonuSlipiDto,
     PosOperationalReadinessDto,
     PosOdemeIslemiDto,
     PosOdemeSlipDto,
@@ -103,6 +105,15 @@ export class PosYonetimiComponent implements OnInit {
     receiptDialogVisible = signal(false);
     receiptImageUrl = signal<string | null>(null);
     receiptImageLoading = signal(false);
+
+    gunSonuList = signal<PosGunSonuIslemiDto[]>([]);
+    gunSonuLoading = signal(false);
+    gunSonuSaving = signal(false);
+    eodForm = { useSummary: true, print: false };
+    eodSlipDialogVisible = signal(false);
+    eodSlipList = signal<PosGunSonuSlipiDto[]>([]);
+    eodSlipLoading = signal(false);
+    eodReceiptImageUrl = signal<string | null>(null);
 
     form: PosCihaziFormState = { tesisId: 0, saglayici: 0, ad: '', seriNo: '' };
     terminalForm: PosTerminalFormState = this.createEmptyTerminalForm();
@@ -400,6 +411,7 @@ export class PosYonetimiComponent implements OnInit {
                 }
                 this.loadTerminals(cihazId);
                 this.loadPaymentTests(cihazId);
+                this.loadEodHistory(cihazId);
             },
             error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
         });
@@ -680,6 +692,92 @@ export class PosYonetimiComponent implements OnInit {
             URL.revokeObjectURL(url);
         }
         this.receiptImageUrl.set(null);
+    }
+
+    // ------------------------------ Gün Sonu ------------------------------
+
+    loadEodHistory(cihazId: number): void {
+        this.gunSonuLoading.set(true);
+        this.service.getEodHistory(cihazId, 10).pipe(finalize(() => this.gunSonuLoading.set(false))).subscribe({
+            next: (items) => this.gunSonuList.set(items),
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
+    openEodConfirm(): void {
+        this.confirmationService.confirm({
+            header: 'Gün Sonu Onayı',
+            message: 'Bu işlem PAVO cihazında gün sonu işlemini başlatacaktır. Gün sonu tamamlandığında POS batch durumu değişecektir. Devam etmek istiyor musunuz?',
+            icon: 'pi pi-exclamation-triangle',
+            accept: () => this.startEod()
+        });
+    }
+
+    startEod(): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id) {
+            return;
+        }
+
+        this.gunSonuSaving.set(true);
+        this.service.startEod(cihaz.id, { useSummary: this.eodForm.useSummary, print: this.eodForm.print })
+            .pipe(finalize(() => this.gunSonuSaving.set(false)))
+            .subscribe({
+                next: () => {
+                    this.messageService.add({ severity: 'success', summary: 'Komut gönderildi', detail: 'Gün sonu komutu agent’a iletildi.' });
+                    this.loadEodHistory(cihaz.id);
+                },
+                error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+            });
+    }
+
+    getEodDurumText(durum: number): string {
+        switch (durum) {
+            case 0: return 'Bekliyor';
+            case 1: return 'Başarılı';
+            case 2: return 'Başarısız';
+            case 3: return 'Doğrulanamadı';
+            default: return 'Bilinmiyor';
+        }
+    }
+
+    getEodTurText(useSummary: boolean): string {
+        return useSummary ? 'Özet' : 'Detay';
+    }
+
+    openEodSlips(eod: PosGunSonuIslemiDto): void {
+        this.eodSlipList.set([]);
+        this.eodSlipLoading.set(true);
+        this.eodSlipDialogVisible.set(true);
+        this.service.getEodReceipts(eod.id).pipe(finalize(() => this.eodSlipLoading.set(false))).subscribe({
+            next: (items) => this.eodSlipList.set(items),
+            error: (err) => {
+                this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message });
+                this.eodSlipDialogVisible.set(false);
+            }
+        });
+    }
+
+    viewEodSlip(slip: PosGunSonuSlipiDto): void {
+        this.service.getEodReceiptContent(slip.posGunSonuIslemiId, slip.id).subscribe({
+            next: (blob) => {
+                const old = this.eodReceiptImageUrl();
+                if (old) {
+                    URL.revokeObjectURL(old);
+                }
+                this.eodReceiptImageUrl.set(URL.createObjectURL(blob));
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message ?? 'Slip görüntülenemedi.' })
+        });
+    }
+
+    closeEodSlipDialog(): void {
+        this.eodSlipDialogVisible.set(false);
+        const old = this.eodReceiptImageUrl();
+        if (old) {
+            URL.revokeObjectURL(old);
+        }
+        this.eodReceiptImageUrl.set(null);
     }
 
     getTerminalSaglayiciLabel(kod: string): string {

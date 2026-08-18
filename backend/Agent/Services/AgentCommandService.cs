@@ -29,6 +29,7 @@ public sealed class AgentCommandService
     private readonly ILogger<AgentCommandService> _logger;
     private readonly AgentCompatibilityOptions _compatibilityOptions;
     private readonly IPosReceiptPersistenceService? _posReceiptPersistence;
+    private readonly IPosGunSonuSlipPersistenceService? _posGunSonuSlipPersistence;
 
     private static readonly Dictionary<string, string> CommandScopeMap = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -39,6 +40,7 @@ public sealed class AgentCommandService
         ["PavoGetDeviceInfo"] = "agent.command.execute",
         ["PavoStartPayment"] = "agent.command.execute",
         ["PavoGetPaymentResult"] = "agent.command.execute",
+        ["PavoPerformEOD"] = "agent.command.execute",
         ["AgentStageUpgrade"] = "agent.command.execute",
         ["AgentApplyUpgrade"] = "agent.command.execute",
         ["PavoConnectionTest"] = "stys.pavo.connection.test"
@@ -51,6 +53,7 @@ public sealed class AgentCommandService
         ["PavoGetDeviceInfo"] = "pavo",
         ["PavoStartPayment"] = "pavo",
         ["PavoGetPaymentResult"] = "pavo",
+        ["PavoPerformEOD"] = "pavo",
         ["PavoConnectionTest"] = "pavo"
     };
 
@@ -66,12 +69,14 @@ public sealed class AgentCommandService
         IAgentCommandRealtimeNotifier? notifier = null,
         AgentCommandExpiryService? commandExpiryService = null,
         IOptions<AgentCompatibilityOptions>? compatibilityOptions = null,
-        IPosReceiptPersistenceService? posReceiptPersistence = null)
+        IPosReceiptPersistenceService? posReceiptPersistence = null,
+        IPosGunSonuSlipPersistenceService? posGunSonuSlipPersistence = null)
     {
         _dbContextFactory = dbContextFactory; _tenantAccessor = tenantAccessor; _logger = logger; _notifier = notifier;
         _commandExpiryService = commandExpiryService ?? new AgentCommandExpiryService(dbContextFactory, NullLogger<AgentCommandExpiryService>.Instance);
         _compatibilityOptions = compatibilityOptions?.Value ?? new AgentCompatibilityOptions();
         _posReceiptPersistence = posReceiptPersistence;
+        _posGunSonuSlipPersistence = posGunSonuSlipPersistence;
     }
 
     public async Task<AgentCommandDto> SendAsync(AgentCommandSendRequest request, string requestedBy, CancellationToken ct)
@@ -656,6 +661,8 @@ public sealed class AgentCommandService
                     }
                     ApplyPavoGetDeviceInfoResult(db, validatedDevice, request.ResultPayload, ct);
                     break;
+                case "PavoPerformEOD":
+                    return await ApplyPavoPerformEodResult(db, cmd, request, validatedDevice, ct);
             }
 
             return Array.Empty<string>();
@@ -664,6 +671,111 @@ public sealed class AgentCommandService
         {
             _logger.LogWarning(ex, "PAVO command sonucu uygulanamadı. CommandType={CommandType}, CommandId={CommandId}", cmd.CommandType, cmd.Id);
             return Array.Empty<string>();
+        }
+    }
+
+    private async Task<IReadOnlyCollection<string>> ApplyPavoPerformEodResult(
+        StysAppDbContext db,
+        AgentCommand cmd,
+        AgentCommandCompleteRequest request,
+        PosCihazi? device,
+        CancellationToken ct)
+    {
+        if (device is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var eodId = TryGetEodIdFromCommandPayload(cmd.Payload);
+        if (eodId is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var eod = await db.PosGunSonuIslemleri.FirstOrDefaultAsync(x => x.Id == eodId && !x.IsDeleted, ct);
+        if (eod is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        // The result must belong to the same device/tesis/kurum and the same command.
+        if (eod.KurumId != device.KurumId || eod.TesisId != device.TesisId || eod.PosCihaziId != device.Id || eod.AgentCommandId != cmd.Id)
+        {
+            _logger.LogWarning("PAVO EOD sonucu eşleşmeyen kayıt için yok sayıldı. PosGunSonuIslemiId={EodId}, CommandId={CommandId}", eodId, cmd.Id);
+            return Array.Empty<string>();
+        }
+
+        var response = DeserializePayload<PavoPerformEodResponse>(request.ResultPayload);
+
+        // Slip persistence is best-effort and happens for both success and failure responses.
+        var cleanupPaths = _posGunSonuSlipPersistence is not null && response?.Data?.EodImage is not null
+            ? await _posGunSonuSlipPersistence.PersistAsync(db, eod, response.Data.EodImage, ct)
+            : Array.Empty<string>();
+
+        // Raw Base64 (eodImage) and cardNo must never persist centrally.
+        var sanitizedPayload = PavoEodSanitizer.Sanitize(request.ResultPayload);
+        cmd.ResultPayload = sanitizedPayload ?? request.ResultPayload;
+
+        eod.TamamlanmaTarihi = DateTime.UtcNow;
+
+        var success = response is not null
+            && request.Success
+            && response.HttpSuccess
+            && !response.HasError
+            && !response.HasAbondon
+            && response.TransactionHandle is not null
+            && string.Equals(response.TransactionHandle.SerialNumber, device.SeriNo, StringComparison.OrdinalIgnoreCase);
+
+        if (success)
+        {
+            eod.Durum = PosGunSonuDurumu.Successful;
+            eod.GunSonuMesaji = response!.Data?.GunSonu;
+            eod.BatchNo = response.Data?.BatchNo?.ToString(CultureInfo.InvariantCulture);
+            eod.EodDateTime = response.Data?.ResultDate;
+            eod.EodDataJson = PavoEodSanitizer.SanitizeEodData(response.Data?.EodData);
+            eod.PavoErrorCode = null;
+            eod.PavoMessage = null;
+        }
+        else if (response is not null)
+        {
+            // A response was received but it was a business failure or a device mismatch.
+            eod.Durum = PosGunSonuDurumu.Failed;
+            eod.PavoErrorCode = request.ErrorCode ?? response.ErrorCode?.ToString(CultureInfo.InvariantCulture);
+            eod.PavoMessage = request.ErrorMessage ?? response.Message;
+        }
+        else
+        {
+            // No response body: transport failure. Only a never-reached device is a confident failure;
+            // a sent-but-unanswered request stays Unknown because the device may have run the EOD.
+            var neverReached = PavoDeviceReachability.IsDeviceNeverReached(request.ErrorCode);
+            eod.Durum = neverReached ? PosGunSonuDurumu.Failed : PosGunSonuDurumu.Unknown;
+            eod.PavoErrorCode = request.ErrorCode;
+            eod.PavoMessage = request.ErrorMessage;
+        }
+
+        return cleanupPaths;
+    }
+
+    private static int? TryGetEodIdFromCommandPayload(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("posGunSonuIslemiId", out var prop) && prop.TryGetInt32(out var id))
+            {
+                return id;
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -1120,7 +1232,8 @@ public sealed class AgentCommandService
         || string.Equals(commandType, "PavoPing", StringComparison.OrdinalIgnoreCase)
         || string.Equals(commandType, "PavoGetDeviceInfo", StringComparison.OrdinalIgnoreCase)
         || string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(commandType, "PavoGetPaymentResult", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(commandType, "PavoPerformEOD", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPaymentCommand(string commandType) =>
         string.Equals(commandType, "PavoStartPayment", StringComparison.OrdinalIgnoreCase)

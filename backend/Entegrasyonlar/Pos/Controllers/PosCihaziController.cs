@@ -14,13 +14,20 @@ public sealed class PosCihaziController : UIController
     private readonly IPosCihaziService _service;
     private readonly IPosPaymentTestService _paymentService;
     private readonly IPosReceiptService _receiptService;
+    private readonly IPosGunSonuService _gunSonuService;
     private readonly IMapper _mapper;
 
-    public PosCihaziController(IPosCihaziService service, IPosPaymentTestService paymentService, IPosReceiptService receiptService, IMapper mapper)
+    public PosCihaziController(
+        IPosCihaziService service,
+        IPosPaymentTestService paymentService,
+        IPosReceiptService receiptService,
+        IPosGunSonuService gunSonuService,
+        IMapper mapper)
     {
         _service = service;
         _paymentService = paymentService;
         _receiptService = receiptService;
+        _gunSonuService = gunSonuService;
         _mapper = mapper;
     }
 
@@ -129,6 +136,40 @@ public sealed class PosCihaziController : UIController
         CancellationToken cancellationToken)
     {
         var content = await _receiptService.OpenReceiptContentAsync(paymentId, receiptId, cancellationToken);
+        return File(content.Stream, content.ContentType);
+    }
+
+    [HttpPost("cihazlar/{id:int}/eod")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<PosGunSonuIslemiDto>> StartEod(
+        int id,
+        [FromBody] PosGunSonuBaslatRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await _gunSonuService.PerformAsync(id, request ?? new PosGunSonuBaslatRequest(), User?.Identity?.Name ?? "system", cancellationToken));
+
+    [HttpGet("cihazlar/{id:int}/eod")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<ActionResult<IReadOnlyCollection<PosGunSonuIslemiDto>>> GetEodHistory(
+        int id,
+        [FromQuery] int take = 10,
+        CancellationToken cancellationToken = default) =>
+        Ok(await _gunSonuService.GetRecentAsync(id, take, cancellationToken));
+
+    [HttpGet("eod/{eodId:int}")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<ActionResult<PosGunSonuIslemiDetayDto>> GetEodDetail(int eodId, CancellationToken cancellationToken) =>
+        Ok(await _gunSonuService.GetByIdAsync(eodId, cancellationToken));
+
+    [HttpGet("eod/{eodId:int}/receipts")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<ActionResult<IReadOnlyCollection<PosGunSonuSlipiDto>>> GetEodReceipts(int eodId, CancellationToken cancellationToken) =>
+        Ok(await _gunSonuService.GetSliplerAsync(eodId, cancellationToken));
+
+    [HttpGet("eod/{eodId:int}/receipts/{receiptId:int}/content")]
+    [Permission(StructurePermissions.PosYonetimi.View)]
+    public async Task<IActionResult> GetEodReceiptContent(int eodId, int receiptId, CancellationToken cancellationToken)
+    {
+        var content = await _gunSonuService.OpenSlipContentAsync(eodId, receiptId, cancellationToken);
         return File(content.Stream, content.ContentType);
     }
 }

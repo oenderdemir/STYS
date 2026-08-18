@@ -208,6 +208,7 @@
                 <p-tab value="terminals">Terminaller</p-tab>
                 <p-tab value="connection">Bağlantı</p-tab>
                 <p-tab value="payments">Test İşlemleri</p-tab>
+                <p-tab value="eod">Gün Sonu</p-tab>
             </p-tablist>
             <p-tabpanels>
                 <!-- GENEL BİLGİLER -->
@@ -531,6 +532,77 @@
                         <div class="empty-state">Cihazı kaydettikten sonra ödeme testleri kullanılabilir.</div>
                     }
                 </p-tabpanel>
+                <!-- GÜN SONU -->
+                <p-tabpanel value="eod">
+                    @if (selectedCihaz()?.id) {
+                        <div class="pos-section">
+                            <h4>Gün Sonu Al</h4>
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="eodTur">Gün Sonu Türü</label>
+                                    <p-select inputId="eodTur" [options]="[{label:'Özet', value:true}, {label:'Detay', value:false}]" optionLabel="label" optionValue="value" appendTo="body" [(ngModel)]="eodForm.useSummary" styleClass="w-full" />
+                                </div>
+                                <div class="field">
+                                    <label for="eodPrint">POS cihazından slip yazdır</label>
+                                    <div class="flex align-items-center mt-2">
+                                        <p-checkbox inputId="eodPrint" [binary]="true" [(ngModel)]="eodForm.print" />
+                                        <label for="eodPrint" class="ml-2">Yazdır</label>
+                                    </div>
+                                </div>
+                                <div class="field-full">
+                                    <button pButton pRipple label="Gün Sonu Al" icon="pi pi-stop-circle" class="p-button-warning" [loading]="gunSonuSaving()" [disabled]="gunSonuSaving()" (click)="openEodConfirm()"></button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pos-section">
+                            <h4>Gün Sonu Geçmişi</h4>
+                            @if (gunSonuLoading()) {
+                                <div class="empty-state">Yükleniyor...</div>
+                            } @else if (gunSonuList().length) {
+                                <p-table [value]="gunSonuList()" dataKey="id">
+                                    <ng-template pTemplate="header">
+                                        <tr>
+                                            <th>Tarih</th><th>Durum</th><th>Tür</th><th>Gün Sonu Mesajı</th><th>Batch No</th><th>İstek Yapan</th><th>Slip</th><th style="width:8rem">İşlemler</th>
+                                        </tr>
+                                    </ng-template>
+                                    <ng-template pTemplate="body" let-e>
+                                        <tr>
+                                            <td>{{ e.baslatilmaTarihi | date:'dd.MM.yyyy HH:mm' }}</td>
+                                            <td>
+                                                @if (e.durum === 3) {
+                                                    <p-tag severity="warn" [value]="e.durumText" />
+                                                } @else if (e.durum === 1) {
+                                                    <p-tag severity="success" [value]="e.durumText" />
+                                                } @else if (e.durum === 2) {
+                                                    <p-tag severity="danger" [value]="e.durumText" />
+                                                } @else {
+                                                    <p-tag severity="secondary" [value]="e.durumText" />
+                                                }
+                                            </td>
+                                            <td>{{ getEodTurText(e.useSummary) }}</td>
+                                            <td>{{ e.gunSonuMesaji ?? '-' }}</td>
+                                            <td>{{ e.batchNo ?? '-' }}</td>
+                                            <td>{{ e.requestedBy ?? '-' }}</td>
+                                            <td>{{ e.slipSayisi }}</td>
+                                            <td>
+                                                @if (e.slipSayisi === 1) {
+                                                    <button pButton pRipple icon="pi pi-image" class="p-button-rounded p-button-text p-button-sm" (click)="openEodSlips(e)" pTooltip="Slip görüntüle"></button>
+                                                } @else if (e.slipSayisi > 1) {
+                                                    <button pButton pRipple icon="pi pi-images" class="p-button-rounded p-button-text p-button-sm" (click)="openEodSlips(e)" pTooltip="Slipler"></button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    </ng-template>
+                                </p-table>
+                            } @else {
+                                <div class="empty-state">Henüz gün sonu kaydı yok.</div>
+                            }
+                        </div>
+                    } @else {
+                        <div class="empty-state">Cihazı kaydettikten sonra gün sonu işlemleri kullanılabilir.</div>
+                    }
+                </p-tabpanel>
             </p-tabpanels>
         </p-tabs>
     </ng-template>
@@ -581,3 +653,42 @@
         </div>
     </ng-template>
 </p-dialog>
+
+
+<!-- ===== GÜN SONU SİLİP DİALOG ===== -->
+<p-dialog [visible]="eodSlipDialogVisible()" (onHide)="closeEodSlipDialog()" header="Gün Sonu Slipleri"
+    [modal]="true" styleClass="p-fluid pos-eod-dialog" [dismissableMask]="true">
+    <ng-template pTemplate="content">
+        @if (eodSlipLoading()) {
+            <div class="empty-state">Yükleniyor...</div>
+        } @else if (eodSlipList().length) {
+            <p-table [value]="eodSlipList()" dataKey="id">
+                <ng-template pTemplate="header">
+                    <tr><th>Tarih</th><th>Slip Tipi</th><th>Dosya Boyutu</th><th style="width:6rem">İşlem</th></tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-s>
+                    <tr>
+                        <td>{{ s.olusturulmaTarihi | date:'dd.MM.yyyy HH:mm' }}</td>
+                        <td>{{ s.slipTipiText }}</td>
+                        <td>{{ (s.dosyaBoyutu / 1024) | number:'1.0-1' }} KB</td>
+                        <td>
+                            <button pButton pRipple icon="pi pi-image" class="p-button-rounded p-button-text p-button-sm" (click)="viewEodSlip(s)" pTooltip="Görüntüle"></button>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+            @if (eodReceiptImageUrl()) {
+                <img [src]="eodReceiptImageUrl()!" alt="Gün sonu slipi" class="w-full mt-3" />
+            }
+        } @else {
+            <div class="empty-state">Slip mevcut değil.</div>
+        }
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <div class="flex justify-content-end gap-2">
+            <button pButton pRipple label="Kapat" icon="pi pi-times" class="p-button-text" (click)="closeEodSlipDialog()"></button>
+        </div>
+    </ng-template>
+</p-dialog>
+
+<p-confirmDialog />

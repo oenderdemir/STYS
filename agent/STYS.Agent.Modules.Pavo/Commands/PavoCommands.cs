@@ -31,3 +31,14 @@ public sealed class PavoGetDeviceInfoCommand : PavoDeviceCommandBase
 {
     public override string CommandType => "PavoGetDeviceInfo";
 }
+
+/// <summary>
+/// Central gün sonu (PerformEOD) command. Carries the STYS-side PosGunSonuIslemiId for result
+/// routing; that field is a STYS domain concept and must never appear in the PAVO wire request.
+/// </summary>
+public sealed class PavoPerformEodCommand : PavoPerformEodRequest, IAgentCommand
+{
+    public int PosGunSonuIslemiId { get; set; }
+
+    public string CommandType => "PavoPerformEOD";
+}

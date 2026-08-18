@@ -122,6 +122,7 @@ builder.Services.Configure<PavoOptions>(builder.Configuration.GetSection(PavoOpt
 builder.Services.Configure<PosOperationalHealthOptions>(builder.Configuration.GetSection(PosOperationalHealthOptions.SectionName));
 builder.Services.Configure<PosOdemeTakipOptions>(builder.Configuration.GetSection(PosOdemeTakipOptions.SectionName));
 builder.Services.Configure<PosReceiptStorageOptions>(builder.Configuration.GetSection(PosReceiptStorageOptions.SectionName));
+builder.Services.Configure<PosGunSonuSlipStorageOptions>(builder.Configuration.GetSection(PosGunSonuSlipStorageOptions.SectionName));
 builder.Services.Configure<AgentCompatibilityOptions>(builder.Configuration.GetSection(AgentCompatibilityOptions.SectionName));
 builder.Services.PostConfigure<AgentCompatibilityOptions>(options => options.SupportedContractVersion = AgentContractVersion.Current);
 // Release publishing is optional: deployments that never publish must still start, so the signing
@@ -142,6 +143,9 @@ builder.Services.AddScoped<IPosPaymentTestService, PosPaymentTestService>();
 builder.Services.AddSingleton<IPosReceiptStorage, PosReceiptStorage>();
 builder.Services.AddScoped<IPosReceiptPersistenceService, PosReceiptPersistenceService>();
 builder.Services.AddScoped<IPosReceiptService, PosReceiptService>();
+builder.Services.AddSingleton<IPosGunSonuSlipStorage, PosGunSonuSlipStorage>();
+builder.Services.AddScoped<IPosGunSonuSlipPersistenceService, PosGunSonuSlipPersistenceService>();
+builder.Services.AddScoped<IPosGunSonuService, PosGunSonuService>();
 builder.Services.AddScoped<PosTerminalService>();
 builder.Services.AddHostedService<PosOdemeDurumTakipHostedService>();
 builder.Services.AddBaseRdbmsServicesAndRepositoriesScoped(typeof(Program).Assembly);

@@ -157,6 +157,8 @@ public class StysAppDbContext : DbContext
     public DbSet<PosCihazi> PosCihazlari => Set<PosCihazi>();
     public DbSet<PosOdemeIslemi> PosOdemeIslemleri => Set<PosOdemeIslemi>();
     public DbSet<PosOdemeSlip> PosOdemeSlipleri => Set<PosOdemeSlip>();
+    public DbSet<PosGunSonuIslemi> PosGunSonuIslemleri => Set<PosGunSonuIslemi>();
+    public DbSet<PosGunSonuSlipi> PosGunSonuSlipleri => Set<PosGunSonuSlipi>();
     public DbSet<Restoran> Restoranlar => Set<Restoran>();
     public DbSet<RestoranYonetici> RestoranYoneticileri => Set<RestoranYonetici>();
     public DbSet<RestoranGarson> RestoranGarsonlari => Set<RestoranGarson>();
@@ -2005,6 +2007,56 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.PosOdemeIslemi)
                 .WithMany(x => x.Slipler)
                 .HasForeignKey(x => x.PosOdemeIslemiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosGunSonuIslemi>(entity =>
+        {
+            entity.ToTable("PosGunSonuIslemleri", entegrasyonSchema);
+            entity.Property(x => x.Durum).HasConversion<int>().IsRequired();
+            entity.Property(x => x.GunSonuMesaji).HasMaxLength(2048);
+            entity.Property(x => x.EodDataJson).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.BatchNo).HasMaxLength(64);
+            entity.Property(x => x.EodDateTime).HasMaxLength(64);
+            entity.Property(x => x.PavoErrorCode).HasMaxLength(64);
+            entity.Property(x => x.PavoMessage).HasMaxLength(1024);
+            entity.Property(x => x.RequestedBy).HasMaxLength(128);
+
+            entity.HasIndex(x => x.KurumId);
+            entity.HasIndex(x => x.TesisId);
+            entity.HasIndex(x => x.PosCihaziId);
+            entity.HasIndex(x => x.BaslatilmaTarihi);
+            entity.HasIndex(x => x.AgentCommandId);
+
+            entity.HasOne(x => x.PosCihazi)
+                .WithMany()
+                .HasForeignKey(x => x.PosCihaziId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PosGunSonuSlipi>(entity =>
+        {
+            entity.ToTable("PosGunSonuSlipleri", entegrasyonSchema);
+            entity.Property(x => x.SlipTipi).HasConversion<int>().IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(64).IsRequired().HasDefaultValue("image/png");
+            entity.Property(x => x.StoragePath).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(256);
+
+            entity.HasIndex(x => x.PosGunSonuIslemiId);
+            entity.HasIndex(x => x.PosCihaziId);
+            entity.HasIndex(x => x.KurumId);
+            entity.HasIndex(x => x.TesisId);
+            entity.HasIndex(x => x.Sha256);
+
+            // Same slip image (EOD, type, hash) is stored once.
+            entity.HasIndex(x => new { x.PosGunSonuIslemiId, x.SlipTipi, x.Sha256 })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.PosGunSonuIslemi)
+                .WithMany(x => x.Slipler)
+                .HasForeignKey(x => x.PosGunSonuIslemiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

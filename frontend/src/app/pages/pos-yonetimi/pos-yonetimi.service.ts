@@ -6,6 +6,9 @@ import { getApiBaseUrl } from '../../core/config';
 import {
     PosCihaziDto,
     PosCihaziKaydetRequest,
+    PosGunSonuBaslatRequest,
+    PosGunSonuIslemiDto,
+    PosGunSonuSlipiDto,
     PosOperationalReadinessDto,
     PosOdemeIslemiDto,
     PosOdemeSlipDto,
@@ -168,5 +171,30 @@ export class PosYonetimiService {
             if (r.success && r.data) return r.data;
             throw new Error(tryReadApiMessage(r) ?? 'Slip kurtarma komutu gönderilemedi.');
         }));
+    }
+
+    startEod(cihazId: number, request: PosGunSonuBaslatRequest): Observable<PosGunSonuIslemiDto> {
+        return this.http.post<ApiResponse<PosGunSonuIslemiDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/eod`, request).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Gün sonu başlatılamadı.');
+        }));
+    }
+
+    getEodHistory(cihazId: number, take = 10): Observable<PosGunSonuIslemiDto[]> {
+        return this.http.get<ApiResponse<PosGunSonuIslemiDto[]>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/eod`, { params: { take } }).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Gün sonu geçmişi alınamadı.');
+        }));
+    }
+
+    getEodReceipts(eodId: number): Observable<PosGunSonuSlipiDto[]> {
+        return this.http.get<ApiResponse<PosGunSonuSlipiDto[]>>(`${this.apiBaseUrl}/ui/pos/eod/${eodId}/receipts`).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Gün sonu slipleri alınamadı.');
+        }));
+    }
+
+    getEodReceiptContent(eodId: number, receiptId: number): Observable<Blob> {
+        return this.http.get(`${this.apiBaseUrl}/ui/pos/eod/${eodId}/receipts/${receiptId}/content`, { responseType: 'blob' });
     }
 }

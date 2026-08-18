@@ -426,3 +426,91 @@ public sealed class PavoGetPaymentResultCommandHandler : IAgentCommandHandler<Pa
         TransactionHandle = command.TransactionHandle
     };
 }
+
+public sealed class PavoPerformEodCommandHandler : IAgentCommandHandler<PavoPerformEodCommand>
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly IPavoRestClient _client;
+    private readonly IPavoCommandSequenceReservationService _sequenceReservationService;
+    private readonly ILogger<PavoPerformEodCommandHandler> _logger;
+
+    public PavoPerformEodCommandHandler(
+        IPavoRestClient client,
+        IPavoCommandSequenceReservationService sequenceReservationService,
+        ILogger<PavoPerformEodCommandHandler> logger)
+    {
+        _client = client;
+        _sequenceReservationService = sequenceReservationService;
+        _logger = logger;
+    }
+
+    public async Task<AgentCommandResult> HandleAsync(PavoPerformEodCommand command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("PAVO gün sonu başlatılıyor: {PosGunSonuIslemiId} / {PosCihaziId}", command.PosGunSonuIslemiId, command.PosCihaziId);
+            var response = await _client.PerformEodAsync(ToRequest(command), cancellationToken);
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, command.TransactionHandle.SerialNumber, response.HttpResponseReceived, cancellationToken);
+            var payload = JsonSerializer.Serialize(response, JsonOptions);
+
+            // Device identity: the response must echo back our own serial. The fingerprint is remote
+            // device identity (may differ from the client fingerprint) and is deliberately not compared.
+            if (response.TransactionHandle is null
+                || !string.Equals(response.TransactionHandle.SerialNumber, command.TransactionHandle.SerialNumber, StringComparison.OrdinalIgnoreCase))
+            {
+                return new AgentCommandResult
+                {
+                    Success = false,
+                    ResultPayload = payload,
+                    ErrorCode = "PAVO_EOD_RESPONSE_DEVICE_MISMATCH",
+                    ErrorMessage = "PAVO gün sonu yanıtı farklı bir cihazdan geldi.",
+                    HttpResponseReceived = response.HttpResponseReceived
+                };
+            }
+
+            if (!PavoResponseHelpers.IsOperationSuccessful(response))
+            {
+                return new AgentCommandResult
+                {
+                    Success = false,
+                    ResultPayload = payload,
+                    ErrorCode = response.ErrorCode?.ToString(CultureInfo.InvariantCulture) ?? "PAVO_PERFORM_EOD_FAILED",
+                    ErrorMessage = response.Message ?? "PAVO gün sonu işlemi başarısız.",
+                    HttpResponseReceived = response.HttpResponseReceived
+                };
+            }
+
+            return new AgentCommandResult
+            {
+                Success = true,
+                ResultPayload = payload,
+                HttpResponseReceived = response.HttpResponseReceived
+            };
+        }
+        catch (PavoRestClientException ex)
+        {
+            _logger.LogWarning(ex, "PAVO perform EOD transport error");
+            await PavoCommandSequenceAdvanceHelper.AdvanceIfNeededAsync(_sequenceReservationService, command.PosCihaziId, command.TransactionHandle.SerialNumber, ex.HttpResponseReceived, cancellationToken);
+            return new AgentCommandResult
+            {
+                Success = false,
+                ErrorCode = ex.ErrorCode,
+                ErrorMessage = ex.Message,
+                HttpResponseReceived = ex.HttpResponseReceived
+            };
+        }
+    }
+
+    private static PavoPerformEodRequest ToRequest(PavoPerformEodCommand command) => new()
+    {
+        PosCihaziId = command.PosCihaziId,
+        IpAddress = command.IpAddress,
+        HttpPort = command.HttpPort,
+        HttpsPort = command.HttpsPort,
+        UseHttps = command.UseHttps,
+        UseSummary = command.UseSummary,
+        Print = command.Print,
+        ReceiptImage = command.ReceiptImage,
+        TransactionHandle = command.TransactionHandle
+    };
+}

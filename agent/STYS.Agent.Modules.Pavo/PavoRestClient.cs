@@ -382,6 +382,9 @@ public sealed class PavoRestClient : IPavoRestClient
             case PavoGetDeviceInfoResponse deviceInfo:
                 deviceInfo.TransactionHandle = handle;
                 break;
+            case PavoPerformEodResponse eod:
+                eod.TransactionHandle = handle;
+                break;
         }
 
         if (result is PavoPaymentResponseBase payment)

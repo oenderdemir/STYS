@@ -169,6 +169,12 @@ public sealed class CommandPollingWorker : BackgroundService
                     await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoGetPaymentResultCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
                 }
+                case "PavoPerformEOD":
+                {
+                    var command = await PreparePavoCommandAsync(DeserializeCommand<Modules.Pavo.Commands.PavoPerformEodCommand>(dto.Payload), cancellationToken);
+                    await ExecuteTypedCommandAsync(dto, command, _handlerRegistry.Resolve<Modules.Pavo.Commands.PavoPerformEodCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
+                    break;
+                }
                 case "AgentStageUpgrade":
                     await ExecuteTypedCommandAsync(dto, DeserializeCommand<AgentStageUpgradeCommand>(dto.Payload), _handlerRegistry.Resolve<AgentStageUpgradeCommand>(dto.CommandType, scope.ServiceProvider), cancellationToken);
                     break;
@@ -324,6 +330,14 @@ public sealed class CommandPollingWorker : BackgroundService
         return command;
     }
 
+    private async Task<Modules.Pavo.Commands.PavoPerformEodCommand> PreparePavoCommandAsync(Modules.Pavo.Commands.PavoPerformEodCommand command, CancellationToken cancellationToken)
+    {
+        var localDevice = await ResolveLocalDeviceAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, cancellationToken);
+        ApplyLocalConnectionDetails(command, localDevice);
+        command.TransactionHandle = await _sequenceReservationService.ReserveAsync(command.PosCihaziId, command.TransactionHandle.SerialNumber, command.TransactionHandle.TransactionDate, cancellationToken);
+        return command;
+    }
+
     private async Task<LocalDevice?> ResolveLocalDeviceAsync(int centralPosCihaziId, string? serialNumber, CancellationToken cancellationToken)
     {
         var devices = await _localDeviceStore.GetAllAsync(cancellationToken);
@@ -350,6 +364,19 @@ public sealed class CommandPollingWorker : BackgroundService
     }
 
     private static void ApplyLocalConnectionDetails(PavoPaymentRequestBase command, LocalDevice? localDevice)
+    {
+        if (localDevice is null)
+        {
+            return;
+        }
+
+        command.IpAddress = localDevice.Host;
+        command.HttpPort = localDevice.Protocol == LocalDeviceProtocol.Http ? localDevice.HttpPort : null;
+        command.HttpsPort = localDevice.Protocol == LocalDeviceProtocol.Https ? localDevice.HttpsPort : null;
+        command.UseHttps = localDevice.Protocol == LocalDeviceProtocol.Https;
+    }
+
+    private static void ApplyLocalConnectionDetails(PavoDeviceRequestBase command, LocalDevice? localDevice)
     {
         if (localDevice is null)
         {

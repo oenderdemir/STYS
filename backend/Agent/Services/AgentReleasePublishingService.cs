@@ -272,7 +272,9 @@ public sealed class AgentReleasePublishingService : IAgentReleasePublishingServi
             throw new BaseException($"Bu aşamada yalnız {SupportedRuntimeIdentifier} release desteklenir.", 400);
         }
 
-        return normalized;
+        // Equality with the non-null constant above already proves this is not null; returning the
+        // constant says so to the compiler without a null-forgiving operator.
+        return SupportedRuntimeIdentifier;
     }
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>

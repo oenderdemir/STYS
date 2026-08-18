@@ -29,6 +29,20 @@ public static class PavoModuleExtensions
             var options = sp.GetRequiredService<IOptions<PavoAgentOptions>>().Value;
             client.Timeout = TimeSpan.FromSeconds(PavoAgentOptions.ResolveTimeoutSeconds(options.TimeoutSeconds));
             client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        })
+        .ConfigurePrimaryHttpMessageHandler(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<PavoAgentOptions>>().Value;
+
+            // A POS terminal sits on the local network: the TCP handshake either completes quickly
+            // or the device is not there. The overall Timeout stays long because a card transaction
+            // legitimately takes time once the request is in flight, but waiting that long merely to
+            // discover an unplugged device is wasted. Bounding only the connect phase gives a fast
+            // answer without shortening any request the device actually received.
+            return new SocketsHttpHandler
+            {
+                ConnectTimeout = TimeSpan.FromSeconds(PavoAgentOptions.ResolveConnectTimeoutSeconds(options.ConnectTimeoutSeconds))
+            };
         });
         services.AddScoped<IPavoRestClient, PavoRestClient>();
         return services;

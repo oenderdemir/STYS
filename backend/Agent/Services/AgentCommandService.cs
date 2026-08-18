@@ -805,6 +805,14 @@ public sealed class AgentCommandService
                 return PosOdemeDurumlari.Failed;
             }
 
+            // The agent could not open a connection, so the device never saw the request and the
+            // card cannot have been charged. Reporting Unknown here would send the operator into a
+            // reconciliation loop for a payment that provably never started.
+            if (PavoDeviceReachability.IsDeviceNeverReached(request.ErrorCode))
+            {
+                return PosOdemeDurumlari.Failed;
+            }
+
             return PosOdemeDurumlari.Unknown;
         }
 

@@ -130,7 +130,7 @@ public sealed class PavoRestClient : IPavoRestClient
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PavoRestClientException("TIMEOUT", $"PAVO isteği zaman aşımına uğradı ({client.Timeout.TotalSeconds:0}s).", httpResponseReceived: false, ex);
+            throw BuildTimeoutException(ex, client.Timeout);
         }
         catch (HttpRequestException ex) when (ex.InnerException is AuthenticationException or IOException)
         {
@@ -263,7 +263,7 @@ public sealed class PavoRestClient : IPavoRestClient
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new PavoRestClientException("TIMEOUT", $"PAVO isteği zaman aşımına uğradı ({client.Timeout.TotalSeconds:0}s).", httpResponseReceived: false, ex);
+            throw BuildTimeoutException(ex, client.Timeout);
         }
         catch (HttpRequestException ex) when (ex.InnerException is AuthenticationException or IOException)
         {
@@ -636,11 +636,46 @@ public sealed class PavoRestClient : IPavoRestClient
         new() { Name = "İşlem tarihi:", Value = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss") }
     ];
 
+    /// <summary>
+    /// Separates a connect-phase timeout from a response timeout.
+    ///
+    /// Both surface as TaskCanceledException wrapping a TimeoutException, so the outer type is not
+    /// enough. The structural difference is that HttpClient.Timeout nests a further
+    /// TaskCanceledException inside the TimeoutException, while SocketsHttpHandler.ConnectTimeout
+    /// does not. That matters for payments: a connect timeout proves the device was never reached,
+    /// whereas a response timeout leaves open that the card was charged.
+    ///
+    /// The nesting is a runtime implementation detail, so PavoTimeoutClassificationTests asserts it
+    /// against real timeouts rather than trusting it blindly — if a future runtime changes shape,
+    /// those tests fail instead of the classification silently regressing.
+    /// </summary>
+    private static PavoRestClientException BuildTimeoutException(TaskCanceledException ex, TimeSpan requestTimeout)
+    {
+        var connectPhase = ex.InnerException is TimeoutException timeout
+            && timeout.InnerException is not TaskCanceledException;
+
+        return connectPhase
+            ? new PavoRestClientException(
+                PavoDeviceReachability.ConnectTimeout,
+                "PAVO cihazına bağlantı kurulamadı (bağlantı zaman aşımı). Cihaz kapalı veya ağda erişilemiyor olabilir.",
+                httpResponseReceived: false,
+                ex)
+            : new PavoRestClientException(
+                PavoDeviceReachability.ResponseTimeout,
+                $"PAVO isteği zaman aşımına uğradı ({requestTimeout.TotalSeconds:0}s).",
+                httpResponseReceived: false,
+                ex);
+    }
+
+    // A SocketException here comes from the connect phase, so the device was never reached. The
+    // timeout case is reported as CONNECT_TIMEOUT rather than TIMEOUT specifically to keep it
+    // distinguishable from a request that was sent and went unanswered — only the latter leaves a
+    // payment genuinely ambiguous. TIMEOUT remains reserved for that (TaskCanceledException) path.
     private static string MapSocketError(SocketException ex) => ex.SocketErrorCode switch
     {
-        SocketError.ConnectionRefused => "CONNECTION_REFUSED",
-        SocketError.HostUnreachable or SocketError.NetworkUnreachable => "NETWORK_UNREACHABLE",
-        SocketError.TimedOut => "TIMEOUT",
+        SocketError.ConnectionRefused => PavoDeviceReachability.ConnectionRefused,
+        SocketError.HostUnreachable or SocketError.NetworkUnreachable => PavoDeviceReachability.NetworkUnreachable,
+        SocketError.TimedOut => PavoDeviceReachability.ConnectTimeout,
         _ => "NETWORK"
     };
 

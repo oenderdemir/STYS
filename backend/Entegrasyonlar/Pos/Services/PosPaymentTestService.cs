@@ -140,7 +140,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             return await GetResultAsync(cihazId, islem.Id, requestedBy, cancellationToken);
         }
 
-        if (IsFinalPaymentState(islem.Durum) || IsInFlightPaymentState(islem.Durum))
+        if (IsFinalPaymentState(islem.Durum) || IsAlreadyDispatchedState(islem.Durum))
         {
             await EnsureTerminalLoadedAsync(islem, cancellationToken);
             return ToDto(islem, islem.PosTerminal?.SaglayiciKodu);
@@ -469,14 +469,22 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         return value.Length <= 96 ? value : value[..96];
     }
 
-    private static bool IsFinalPaymentState(string? durum) =>
+    internal static bool IsFinalPaymentState(string? durum) =>
         string.Equals(durum, PosOdemeDurumlari.Successful, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Failed, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Cancelled, StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsInFlightPaymentState(string? durum) =>
-        string.Equals(durum, PosOdemeDurumlari.Pending, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(durum, PosOdemeDurumlari.SentToAgent, StringComparison.OrdinalIgnoreCase)
+    /// <summary>
+    /// States in which the payment has already been handed to the agent, so re-sending would
+    /// duplicate it.
+    ///
+    /// Pending is deliberately NOT here: it is the state a payment is created in, before any
+    /// command exists. Treating it as dispatched made StartAsync return early on the very first
+    /// call, so a brand new payment sat at Pending with no AgentCommandId and no PavoStartPayment
+    /// command was ever queued.
+    /// </summary>
+    internal static bool IsAlreadyDispatchedState(string? durum) =>
+        string.Equals(durum, PosOdemeDurumlari.SentToAgent, StringComparison.OrdinalIgnoreCase)
         || string.Equals(durum, PosOdemeDurumlari.Processing, StringComparison.OrdinalIgnoreCase);
 
     private static string NormalizeCurrency(string? currency) =>

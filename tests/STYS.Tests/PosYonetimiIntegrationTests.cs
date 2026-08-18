@@ -2469,9 +2469,217 @@ public sealed class PosYonetimiIntegrationTests
         await CleanupAsync(db, suffix);
     }
 
+    [IntegrationFact]
+    public async Task GetResult_CompletedQuerySonrasi_YeniCommandOlusturur()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminal = await CreateTerminalService(db, fixture.KurumId)
+            .KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-REP"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        await MakePaymentAgentCompatibleAsync(db, fixture.MainAgentId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = NewPaymentKey()
+        }, "test", CancellationToken.None);
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, payment.AgentCommandId!.Value, true,
+            JsonSerializer.Serialize(new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData { SaleReference = payment.SaleReference, IsSuccessful = true, IsPending = true, ResultCode = "00" }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        var first = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult");
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, first.Id, true,
+            JsonSerializer.Serialize(new PavoGetPaymentResultResponse
+            {
+                Data = new PavoPaymentOperationData { SaleReference = payment.SaleReference, IsPending = true }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        var all = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .Where(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult")
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+
+        Assert.Equal(2, all.Count);
+        Assert.NotEqual(all[0].Id, all[1].Id);
+        Assert.NotEqual(all[0].IdempotencyKey, all[1].IdempotencyKey);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task RecoverReceipts_CompletedRecoverySonrasi_YeniCommandOlusturur()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminal = await CreateTerminalService(db, fixture.KurumId)
+            .KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-REC"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        await MakePaymentAgentCompatibleAsync(db, fixture.MainAgentId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = NewPaymentKey()
+        }, "test", CancellationToken.None);
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, payment.AgentCommandId!.Value, true,
+            JsonSerializer.Serialize(new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData { SaleReference = payment.SaleReference, IsSuccessful = true, IsPending = true, ResultCode = "00" }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var row = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        row.Durum = PosOdemeDurumlari.Successful;
+        await db.SaveChangesAsync();
+
+        var startCount = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
+
+        await paymentService.RecoverReceiptsAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        var first = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult");
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, first.Id, true,
+            JsonSerializer.Serialize(new PavoGetPaymentResultResponse
+            {
+                Data = new PavoPaymentOperationData { SaleReference = payment.SaleReference, IsSuccessful = true }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        await paymentService.RecoverReceiptsAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        var all = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .Where(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult")
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync();
+        var startCountAfter = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoStartPayment");
+
+        Assert.Equal(2, all.Count);
+        Assert.NotEqual(all[0].Id, all[1].Id);
+        Assert.All(all, c => Assert.Equal("PavoGetPaymentResult", c.CommandType));
+        Assert.Equal(startCount, startCountAfter);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task GetResult_AktifQueryVarken_DuplicateOlusturmaz()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminal = await CreateTerminalService(db, fixture.KurumId)
+            .KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-ACT"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        await MakePaymentAgentCompatibleAsync(db, fixture.MainAgentId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = NewPaymentKey()
+        }, "test", CancellationToken.None);
+
+        await CompletePaymentCommandAsync(db, agentService, fixture.MainAgentId, payment.AgentCommandId!.Value, true,
+            JsonSerializer.Serialize(new PavoStartPaymentResponse
+            {
+                Data = new PavoPaymentOperationData { SaleReference = payment.SaleReference, IsSuccessful = true, IsPending = true, ResultCode = "00" }
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        await paymentService.GetResultAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+
+        var count = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult");
+        Assert.Equal(1, count);
+
+        await CleanupAsync(db, suffix);
+    }
+
+    [IntegrationFact]
+    public async Task RecoverReceipts_AktifRecoveryVarken_DuplicateOlusturmaz()
+    {
+        var cs = ConnectionString();
+        if (cs is null) return;
+
+        var suffix = $"{TestMarker}-{Guid.NewGuid():N}"[..24];
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var fixture = await SeedAsync(db, suffix);
+        var terminal = await CreateTerminalService(db, fixture.KurumId)
+            .KaydetAsync(fixture.DeviceId, null, BuildTerminalRequest(fixture, fixture.MainKrediHesapId, suffix, "PAY-RAC"), CancellationToken.None);
+        var paymentService = CreatePaymentService(db, cs, fixture.KurumId);
+        var agentService = CreateAgentCommandService(cs, fixture.KurumId);
+        await MakePaymentAgentCompatibleAsync(db, fixture.MainAgentId);
+
+        var payment = await paymentService.StartAsync(fixture.DeviceId, new PosPaymentBaslatRequest
+        {
+            PosTerminalId = terminal.Id,
+            Tutar = 1.00m,
+            ParaBirimi = "TRY",
+            Aciklama = "integration",
+            IdempotencyKey = NewPaymentKey()
+        }, "test", CancellationToken.None);
+
+        var row = await db.PosOdemeIslemleri.FirstAsync(x => x.Id == payment.Id);
+        row.Durum = PosOdemeDurumlari.Successful;
+        await db.SaveChangesAsync();
+
+        await paymentService.RecoverReceiptsAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+        await paymentService.RecoverReceiptsAsync(fixture.DeviceId, payment.Id, "test", CancellationToken.None);
+
+        var count = await db.Set<STYS.Agent.Entities.AgentCommand>()
+            .CountAsync(x => x.AgentId == fixture.MainAgentId && x.CommandType == "PavoGetPaymentResult");
+        Assert.Equal(1, count);
+
+        await CleanupAsync(db, suffix);
+    }
+
     private static string? ConnectionString() => Environment.GetEnvironmentVariable("STYS_INTEGRATION_TEST_CONNECTION_STRING");
 
     private static string NewPaymentKey() => Guid.NewGuid().ToString("N");
+
+    private static async Task MakePaymentAgentCompatibleAsync(StysAppDbContext db, int agentId)
+    {
+        var agent = await db.Set<AgentEntity>().FirstAsync(x => x.Id == agentId);
+        agent.AgentVersion = "1.0.0";
+        agent.ContractVersion = "1.0.0";
+        await db.SaveChangesAsync();
+    }
 
     private static IMapper CreateMapper()
     {

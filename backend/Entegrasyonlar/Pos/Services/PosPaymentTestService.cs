@@ -227,7 +227,10 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             AgentId = cihaz.AgentId!.Value,
             CommandType = "PavoGetPaymentResult",
             Payload = payload,
-            IdempotencyKey = $"pavo-reconcile:{payment.Id}",
+            // No lifetime-stable idempotency key: GetPaymentResult must be re-queryable while the
+            // payment is still processing and within the 48-hour window. Each attempt gets its own
+            // unique key (AgentCommandService generates "PavoGetPaymentResult:<guid>" when omitted),
+            // while HasActiveReconciliationCommandAsync still prevents concurrent duplicates.
             Priority = 1,
             ExpirationMinutes = 10,
             MaxRetryCount = 3
@@ -285,7 +288,9 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             AgentId = cihaz.AgentId!.Value,
             CommandType = "PavoGetPaymentResult",
             Payload = payload,
-            IdempotencyKey = $"pavo-receipt-recover:{payment.Id}",
+            // No lifetime-stable idempotency key: every valid recovery attempt creates a NEW
+            // PavoGetPaymentResult command (with a fresh unique key) so missing slips can be
+            // re-fetched repeatedly; HasActiveReconciliationCommandAsync still guards concurrency.
             Priority = 1,
             ExpirationMinutes = 10,
             MaxRetryCount = 3

@@ -122,6 +122,7 @@ public sealed class PavoPaymentOperationData
     public string? Terminal { get; set; }
     public string? CustomerReceiptImage { get; set; }
     public string? MerchantReceiptImage { get; set; }
+    public string? ErrorReceiptImage { get; set; }
     public string? GunSonu { get; set; }
     public JsonElement? EodData { get; set; }
     public JsonElement? EodJson { get; set; }

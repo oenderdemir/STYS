@@ -100,7 +100,7 @@ public sealed class PavoRestClientWirePayloadTests
     }
 
     [Fact]
-    public async Task GetPaymentResult_Body_OnlyTransactionHandle()
+    public async Task GetPaymentResult_Body_PaymentResultVeTransactionHandleIcerir()
     {
         var handler = new CapturingHandler();
         var client = CreateClient(handler);
@@ -119,9 +119,43 @@ public sealed class PavoRestClientWirePayloadTests
         var json = handler.LastBody ?? throw new Xunit.Sdk.XunitException("Request body missing.");
         using var doc = JsonDocument.Parse(json);
 
+        // PaymentResult is a required object in the PAVO contract and carries the reference the
+        // device matches against; sending only TransactionHandle asks about no payment at all.
+        Assert.True(doc.RootElement.TryGetProperty("PaymentResult", out var paymentResult));
+        Assert.Equal("SALE-999", paymentResult.GetProperty("SaleReference").GetString());
         Assert.True(doc.RootElement.TryGetProperty("TransactionHandle", out _));
+
+        // Internal identifiers stay server-side.
         Assert.False(doc.RootElement.TryGetProperty("PosCihaziId", out _));
+        Assert.False(doc.RootElement.TryGetProperty("PosOdemeIslemiId", out _));
         Assert.False(doc.RootElement.TryGetProperty("SaleReference", out _));
+
+        // Receipt options are omitted so the device applies its documented defaults rather than
+        // returning slip images this caller never reads.
+        Assert.False(paymentResult.TryGetProperty("AdditionalInfo", out _));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetPaymentResult_SaleReferenceYoksa_IstekGonderilmez(string saleReference)
+    {
+        var handler = new CapturingHandler();
+        var client = CreateClient(handler);
+
+        var ex = await Assert.ThrowsAsync<PavoRestClientException>(() =>
+            client.GetPaymentResultAsync(new PavoGetPaymentResultRequest
+            {
+                PosCihaziId = 12,
+                SaleReference = saleReference,
+                IpAddress = "10.0.0.5",
+                HttpPort = 4567,
+                TransactionHandle = CreateHandle()
+            }, CancellationToken.None));
+
+        Assert.Equal("INVALID_REQUEST", ex.ErrorCode);
+        Assert.False(ex.HttpResponseReceived);
+        Assert.Null(handler.LastBody);
     }
 
     [Fact]

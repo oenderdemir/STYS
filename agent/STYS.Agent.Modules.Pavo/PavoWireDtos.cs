@@ -230,6 +230,31 @@ internal sealed class PavoWireReceiptListItemRequest
     public string Value { get; init; } = string.Empty;
 }
 
+/// <summary>
+/// GetPaymentResult body. PaymentResult is a required object in the PAVO contract; sending only
+/// TransactionHandle (as this client previously did) leaves the device with no indication of which
+/// payment is being queried.
+///
+/// AdditionalInfo is intentionally omitted: every one of its fields is optional with a documented
+/// default, and reconciliation only needs the transaction outcome. Requesting receipts would return
+/// base64 images and slip text this caller never reads.
+/// </summary>
+internal sealed class PavoWireGetPaymentResultRequest
+{
+    [JsonPropertyName("PaymentResult")]
+    public PavoWirePaymentResultQuery PaymentResult { get; init; } = new();
+
+    [JsonPropertyName("TransactionHandle")]
+    public PavoWireTransactionHandle TransactionHandle { get; init; } = new();
+}
+
+internal sealed class PavoWirePaymentResultQuery
+{
+    /// <summary>Reference of the payment being queried; the device matches it within the last 48 hours.</summary>
+    [JsonPropertyName("SaleReference")]
+    public string SaleReference { get; init; } = string.Empty;
+}
+
 internal sealed class PavoWirePerformEodRequest
 {
     [JsonPropertyName("PerformEOD")]

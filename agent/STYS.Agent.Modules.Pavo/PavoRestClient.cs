@@ -91,8 +91,24 @@ public sealed class PavoRestClient : IPavoRestClient
     public Task<PavoGetDeviceInfoResponse> GetDeviceInfoAsync(PavoGetDeviceInfoRequest request, CancellationToken cancellationToken) =>
         SendGetDeviceInfoAsync(request, cancellationToken);
 
-    public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken) =>
-        SendAsync<PavoGetPaymentResultResponse>(GetPaymentResultPath, request, BuildDeviceCommandWireRequest(request), cancellationToken);
+    public Task<PavoGetPaymentResultResponse> GetPaymentResultAsync(PavoGetPaymentResultRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.SaleReference))
+        {
+            // Without it the device has nothing to match against and would answer about some other
+            // transaction, or none. Failing here beats reconciling against the wrong payment.
+            throw new PavoRestClientException(
+                "INVALID_REQUEST",
+                "PAVO ödeme sonucu sorgusu için SaleReference zorunludur.",
+                httpResponseReceived: false);
+        }
+
+        return SendAsync<PavoGetPaymentResultResponse>(GetPaymentResultPath, request, new PavoWireGetPaymentResultRequest
+        {
+            PaymentResult = new PavoWirePaymentResultQuery { SaleReference = request.SaleReference.Trim() },
+            TransactionHandle = BuildWireHandle(request.TransactionHandle)
+        }, cancellationToken);
+    }
 
     private async Task<TResponse> SendAsync<TResponse>(
         string path,

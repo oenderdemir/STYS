@@ -14,14 +14,20 @@ public interface IPosReceiptPersistenceService
     /// <summary>
     /// Extracts receipt images from a PAVO payment response and persists them (decode/validate/hash/
     /// store + PosOdemeSlip metadata). Changes are tracked on <paramref name="db"/> but not saved; the
-    /// caller flushes them with its own SaveChanges. Best-effort: never throws.
+    /// caller flushes them with its own SaveChanges. Returns the relative paths of any replaced files,
+    /// which the caller must delete via <see cref="Cleanup"/> only AFTER its SaveChanges succeeded.
+    /// Best-effort: never throws.
     /// </summary>
-    Task PersistAsync(
+    Task<IReadOnlyCollection<string>> PersistAsync(
         StysAppDbContext db,
         string commandType,
         PosOdemeIslemi payment,
         PavoPaymentResponseBase? response,
         CancellationToken ct);
+
+    /// <summary>Best-effort deletion of replaced receipt files. Must only be called after the caller
+    /// has committed the new DB metadata, so a still-live old file is never deleted early.</summary>
+    void Cleanup(IReadOnlyCollection<string> relativePaths);
 }
 
 /// <summary>
@@ -54,7 +60,7 @@ public sealed class PosReceiptPersistenceService : IPosReceiptPersistenceService
     /// Changes are tracked on <paramref name="db"/> but not saved; the caller flushes them with its
     /// own SaveChanges so slip rows commit in the same unit of work as the payment update.
     /// </summary>
-    public async Task PersistAsync(
+    public async Task<IReadOnlyCollection<string>> PersistAsync(
         StysAppDbContext db,
         string commandType,
         PosOdemeIslemi payment,
@@ -63,12 +69,25 @@ public sealed class PosReceiptPersistenceService : IPosReceiptPersistenceService
     {
         if (response?.Data is null)
         {
-            return;
+            return Array.Empty<string>();
         }
 
-        await PersistOneAsync(db, commandType, payment, PosOdemeSlipTipi.Customer, response.Data.CustomerReceiptImage, ct);
-        await PersistOneAsync(db, commandType, payment, PosOdemeSlipTipi.Merchant, response.Data.MerchantReceiptImage, ct);
-        await PersistOneAsync(db, commandType, payment, PosOdemeSlipTipi.Error, response.Data.ErrorReceiptImage, ct);
+        var cleanup = new List<string>();
+        await PersistOneAsync(db, commandType, payment, PosOdemeSlipTipi.Customer, response.Data.CustomerReceiptImage, cleanup, ct);
+        await PersistOneAsync(db, commandType, payment, PosOdemeSlipTipi.Merchant, response.Data.MerchantReceiptImage, cleanup, ct);
+        await PersistOneAsync(db, commandType, payment, PosOdemeSlipTipi.Error, response.Data.ErrorReceiptImage, cleanup, ct);
+        return cleanup;
+    }
+
+    public void Cleanup(IReadOnlyCollection<string> relativePaths)
+    {
+        foreach (var path in relativePaths)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                _storage.Delete(path);
+            }
+        }
     }
 
     private async Task PersistOneAsync(
@@ -77,6 +96,7 @@ public sealed class PosReceiptPersistenceService : IPosReceiptPersistenceService
         PosOdemeIslemi payment,
         PosOdemeSlipTipi tip,
         string? base64Image,
+        List<string> cleanup,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(base64Image))
@@ -111,10 +131,12 @@ public sealed class PosReceiptPersistenceService : IPosReceiptPersistenceService
 
             if (existing is not null && string.Equals(existing.Sha256, sha, StringComparison.OrdinalIgnoreCase))
             {
-                return; // same image already stored → no-op
+                return; // same image already stored → no-op (no DB update, no new file, no delete)
             }
 
-            var relativePath = await _storage.StoreAsync(payment.KurumId, payment.Id, FileNameFor(tip), bytes, ct);
+            // Immutable, content-addressed filename: a different image lands at a different path, so
+            // writing the new file can never clobber the file the DB still points at before commit.
+            var relativePath = await _storage.StoreAsync(payment.KurumId, payment.Id, FileNameFor(tip, sha), bytes, ct);
             var oldPath = existing?.StoragePath;
 
             if (existing is null)
@@ -144,9 +166,11 @@ public sealed class PosReceiptPersistenceService : IPosReceiptPersistenceService
                 existing.KaynakKomutTipi = commandType;
             }
 
-            if (!string.IsNullOrWhiteSpace(oldPath))
+            // The old file is only collected for deletion, never deleted here: the caller deletes it
+            // after its SaveChanges commits the new metadata (so the DB never points at a missing file).
+            if (!string.IsNullOrWhiteSpace(oldPath) && !string.Equals(oldPath, relativePath, StringComparison.OrdinalIgnoreCase))
             {
-                _storage.Delete(oldPath);
+                cleanup.Add(oldPath);
             }
         }
         catch (Exception ex)
@@ -155,12 +179,12 @@ public sealed class PosReceiptPersistenceService : IPosReceiptPersistenceService
         }
     }
 
-    private static string FileNameFor(PosOdemeSlipTipi tip) => tip switch
+    private static string FileNameFor(PosOdemeSlipTipi tip, string sha) => tip switch
     {
-        PosOdemeSlipTipi.Customer => "customer.png",
-        PosOdemeSlipTipi.Merchant => "merchant.png",
-        PosOdemeSlipTipi.Error => "error.png",
-        _ => "unknown.png"
+        PosOdemeSlipTipi.Customer => $"customer-{sha}.png",
+        PosOdemeSlipTipi.Merchant => $"merchant-{sha}.png",
+        PosOdemeSlipTipi.Error => $"error-{sha}.png",
+        _ => $"unknown-{sha}.png"
     };
 
     // --------------------------- pure, testable helpers ---------------------------

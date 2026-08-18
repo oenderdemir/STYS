@@ -458,6 +458,7 @@
                             </div>
 
                             <div class="flex justify-content-end gap-2 mt-3">
+                                <button pButton pRipple label="Slipleri Yeniden Al" icon="pi pi-images" class="p-button-outlined" [loading]="paymentSaving()" [disabled]="paymentSaving() || !payment.saleReference" (click)="recoverReceipts(payment)"></button>
                                 <button pButton pRipple label="Sonucu Sorgula" icon="pi pi-refresh" class="p-button-outlined" [loading]="paymentSaving()" [disabled]="paymentSaving() || !payment.saleReference" (click)="queryPaymentTestResult(payment)"></button>
                             </div>
 
@@ -510,6 +511,7 @@
                                             <td><p-tag [value]="p.durum" [severity]="getPaymentStatusSeverity(p.durum)" /></td>
                                             <td>
                                                 <button pButton pRipple icon="pi pi-refresh" class="p-button-rounded p-button-text p-button-sm" (click)="queryPaymentTestResult(p)" pTooltip="Sonucu sorgula"></button>
+                                                <button pButton pRipple icon="pi pi-images" class="p-button-rounded p-button-text p-button-sm" (click)="recoverReceipts(p)" pTooltip="Slipleri yeniden al"></button>
                                                 @if (getSlipByTip(p, 1)) {
                                                     <button pButton pRipple icon="pi pi-image" class="p-button-rounded p-button-text p-button-sm" (click)="openReceipt(p, 1)" pTooltip="Müşteri slipi"></button>
                                                 }

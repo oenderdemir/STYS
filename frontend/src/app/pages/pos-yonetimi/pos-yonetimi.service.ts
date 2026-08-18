@@ -162,4 +162,11 @@ export class PosYonetimiService {
             responseType: 'blob'
         });
     }
+
+    recoverReceipts(cihazId: number, posOdemeIslemiId: number): Observable<PosOdemeIslemiDto> {
+        return this.http.post<ApiResponse<PosOdemeIslemiDto>>(`${this.apiBaseUrl}/ui/pos/cihazlar/${cihazId}/payment-test/${posOdemeIslemiId}/receipts/recover`, {}).pipe(map(r => {
+            if (r.success && r.data) return r.data;
+            throw new Error(tryReadApiMessage(r) ?? 'Slip kurtarma komutu gönderilemedi.');
+        }));
+    }
 }

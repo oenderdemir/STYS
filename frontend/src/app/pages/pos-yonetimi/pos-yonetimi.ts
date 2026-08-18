@@ -623,6 +623,23 @@ export class PosYonetimiComponent implements OnInit {
         return payment.slipler?.find((item) => item.tip === tip);
     }
 
+    recoverReceipts(payment: PosOdemeIslemiDto): void {
+        const cihaz = this.selectedCihaz();
+        if (!cihaz?.id || !payment.id) {
+            return;
+        }
+
+        this.paymentSaving.set(true);
+        this.service.recoverReceipts(cihaz.id, payment.id).pipe(finalize(() => this.paymentSaving.set(false))).subscribe({
+            next: (updated) => {
+                this.currentPaymentTest.set(updated);
+                this.upsertPaymentTest(updated);
+                this.messageService.add({ severity: 'success', summary: 'Komut gönderildi', detail: 'Slip kurtarma komutu agent’a iletildi.' });
+            },
+            error: (err) => this.messageService.add({ severity: 'error', summary: 'Hata', detail: err.message })
+        });
+    }
+
     getSlipTipLabel(tip: number): string {
         switch (tip) {
             case 1: return 'Müşteri Slipi';

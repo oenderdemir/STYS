@@ -205,10 +205,11 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             throw new BaseException("SaleReference bulunamadı.", 400);
         }
 
-        if (IsFinalPaymentState(payment.Durum) && payment.Slipler.Any(x => !x.IsDeleted))
+        if (IsFinalPaymentState(payment.Durum))
         {
-            // Already final AND slips are present: nothing left to recover, and re-querying would
-            // only re-send GetPaymentResult for no gain.
+            // Final payments are not re-queried through the ordinary result flow: receipt recovery is
+            // an explicit operation (RecoverReceiptsAsync) so a final state is never nudged back to
+            // Processing by a generic "query result" click.
             await EnsureTerminalLoadedAsync(payment, cancellationToken);
             return ToDto(payment, payment.PosTerminal?.SaglayiciKodu, payment.Slipler);
         }
@@ -238,7 +239,61 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
         }
         await _db.SaveChangesAsync(cancellationToken);
         await EnsureTerminalLoadedAsync(payment, cancellationToken);
-        return ToDto(payment, payment.PosTerminal?.SaglayiciKodu);
+        return ToDto(payment, payment.PosTerminal?.SaglayiciKodu, payment.Slipler);
+    }
+
+    /// <summary>
+    /// Explicit receipt recovery: re-queries the device by SaleReference via PavoGetPaymentResult so
+    /// missing slips can be recovered even for a final payment. This never restarts the payment (no
+    /// PavoStartPayment) and never mutates the payment state.
+    /// </summary>
+    public async Task<PosOdemeIslemiDto> RecoverReceiptsAsync(int cihazId, int posOdemeIslemiId, string requestedBy, CancellationToken cancellationToken)
+    {
+        var cihaz = await GetDeviceAsync(cihazId, cancellationToken);
+        _ = await GetValidatedAgentAsync(cihaz, cancellationToken);
+        var payment = await _db.PosOdemeIslemleri
+            .Include(x => x.PosTerminal)
+            .Include(x => x.Slipler)
+            .FirstOrDefaultAsync(x => x.Id == posOdemeIslemiId, cancellationToken)
+            ?? throw new BaseException("POS ödeme işlemi bulunamadı.", 404);
+
+        if (payment.PosCihaziId != cihaz.Id || payment.KurumId != cihaz.KurumId || payment.TesisId != cihaz.TesisId)
+        {
+            throw new BaseException("Ödeme işlemi seçilen cihaz kapsamıyla eşleşmiyor.", 400);
+        }
+
+        if (payment.PosTerminalId == 0)
+        {
+            throw new BaseException("Ödeme işlemi terminal bilgisi eksik.", 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(payment.SaleReference))
+        {
+            throw new BaseException("SaleReference bulunamadı.", 400);
+        }
+
+        if (await HasActiveReconciliationCommandAsync(cihaz.AgentId!.Value, payment.Id, cancellationToken))
+        {
+            await EnsureTerminalLoadedAsync(payment, cancellationToken);
+            return ToDto(payment, payment.PosTerminal?.SaglayiciKodu, payment.Slipler);
+        }
+
+        var command = BuildResultCommand(cihaz, payment);
+        var payload = JsonSerializer.Serialize(command, JsonOptions);
+        await _agentCommandService.SendAsync(new STYS.Agent.Contracts.Dtos.AgentCommandSendRequest
+        {
+            AgentId = cihaz.AgentId!.Value,
+            CommandType = "PavoGetPaymentResult",
+            Payload = payload,
+            IdempotencyKey = $"pavo-receipt-recover:{payment.Id}",
+            Priority = 1,
+            ExpirationMinutes = 10,
+            MaxRetryCount = 3
+        }, requestedBy, cancellationToken);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await EnsureTerminalLoadedAsync(payment, cancellationToken);
+        return ToDto(payment, payment.PosTerminal?.SaglayiciKodu, payment.Slipler);
     }
 
     private async Task<PosOdemeIslemi?> LoadExistingPaymentForStartAsync(PosPaymentBaslatRequest request, string idempotencyKey, CancellationToken cancellationToken)

@@ -106,6 +106,14 @@ public sealed class PosCihaziController : UIController
         CancellationToken cancellationToken) =>
         Ok(await _paymentService.GetResultAsync(id, posOdemeIslemiId, User?.Identity?.Name ?? "system", cancellationToken));
 
+    [HttpPost("cihazlar/{id:int}/payment-test/{posOdemeIslemiId:int}/receipts/recover")]
+    [Permission(StructurePermissions.PosYonetimi.Manage)]
+    public async Task<ActionResult<PosOdemeIslemiDto>> RecoverPaymentReceipts(
+        int id,
+        int posOdemeIslemiId,
+        CancellationToken cancellationToken) =>
+        Ok(await _paymentService.RecoverReceiptsAsync(id, posOdemeIslemiId, User?.Identity?.Name ?? "system", cancellationToken));
+
     [HttpGet("payments/{paymentId:int}/receipts")]
     [Permission(StructurePermissions.PosYonetimi.View)]
     public async Task<ActionResult<IReadOnlyCollection<PosOdemeSlipDto>>> GetReceipts(

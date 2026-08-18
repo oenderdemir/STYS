@@ -13,7 +13,6 @@ using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Entegrasyonlar.Pos.Services;
 using STYS.Infrastructure.EntityFramework;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using AgentEntity = STYS.Agent.Entities.Agent;
@@ -437,9 +436,10 @@ public sealed class AgentCommandService
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
-        await ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
+        var cleanupPaths = await ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
+        CleanupReceiptFiles(cleanupPaths);
         NotifyIfNeeded(MapToDto(cmd));
     }
 
@@ -482,9 +482,10 @@ public sealed class AgentCommandService
         cmd.Status = AgentCommandStatus.Failed;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = request.ErrorMessage;
-        await ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
+        var cleanupPaths = await ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorCode: request.ErrorCode, errorMessage: request.ErrorMessage);
         await db.SaveChangesAsync(ct);
+        CleanupReceiptFiles(cleanupPaths);
         NotifyIfNeeded(MapToDto(cmd));
     }
 
@@ -521,9 +522,10 @@ public sealed class AgentCommandService
         cmd.Status = AgentCommandStatus.Rejected;
         cmd.CompletedAt ??= DateTime.UtcNow;
         cmd.ErrorMessage = request.ErrorMessage;
-        await ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
+        var cleanupPaths = await ApplyPavoCommandResultIfNeeded(db, cmd, new AgentCommandCompleteRequest { Id = commandId, Success = false, LeaseToken = request.LeaseToken, ErrorMessage = request.ErrorMessage, ErrorCode = request.ErrorCode, ResultPayload = request.ResultPayload }, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, errorCode: request.ErrorCode, errorMessage: request.ErrorMessage);
         await db.SaveChangesAsync(ct);
+        CleanupReceiptFiles(cleanupPaths);
         NotifyIfNeeded(MapToDto(cmd));
     }
 
@@ -599,9 +601,10 @@ public sealed class AgentCommandService
         cmd.ResultPayload = request.ResultPayload;
         cmd.ErrorCode = request.ErrorCode;
         cmd.ErrorMessage = request.ErrorMessage;
-        await ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
+        var cleanupPaths = await ApplyPavoCommandResultIfNeeded(db, cmd, request, pavoContext?.Device, pavoContext?.Payment, ct);
         AddExecution(db, cmd, cmd.Status.ToString(), prev, agentId, request.ErrorCode, request.ErrorMessage);
         await db.SaveChangesAsync(ct);
+        CleanupReceiptFiles(cleanupPaths);
         NotifyIfNeeded(MapToDto(cmd));
     }
 
@@ -619,7 +622,7 @@ public sealed class AgentCommandService
             throw new BaseException($"Agent '{c}' capability'sine sahip değil.", 403);
     }
 
-    private async Task ApplyPavoCommandResultIfNeeded(
+    private async Task<IReadOnlyCollection<string>> ApplyPavoCommandResultIfNeeded(
         StysAppDbContext db,
         AgentCommand cmd,
         AgentCommandCompleteRequest request,
@@ -631,8 +634,7 @@ public sealed class AgentCommandService
         {
             if (IsPaymentCommand(cmd.CommandType))
             {
-                await ApplyPavoPaymentResult(db, cmd, request, validatedDevice, validatedPayment, ct);
-                return;
+                return await ApplyPavoPaymentResult(db, cmd, request, validatedDevice, validatedPayment, ct);
             }
 
             switch (cmd.CommandType)
@@ -655,10 +657,13 @@ public sealed class AgentCommandService
                     ApplyPavoGetDeviceInfoResult(db, validatedDevice, request.ResultPayload, ct);
                     break;
             }
+
+            return Array.Empty<string>();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "PAVO command sonucu uygulanamadı. CommandType={CommandType}, CommandId={CommandId}", cmd.CommandType, cmd.Id);
+            return Array.Empty<string>();
         }
     }
 
@@ -728,7 +733,7 @@ public sealed class AgentCommandService
         SyncDiscoveredTerminals(db, device, response.Terminals);
     }
 
-    private async Task ApplyPavoPaymentResult(
+    private async Task<IReadOnlyCollection<string>> ApplyPavoPaymentResult(
         StysAppDbContext db,
         AgentCommand cmd,
         AgentCommandCompleteRequest request,
@@ -738,7 +743,7 @@ public sealed class AgentCommandService
     {
         if (device is null || payment is null)
         {
-            return;
+            return Array.Empty<string>();
         }
 
         var commandType = cmd.CommandType;
@@ -750,12 +755,11 @@ public sealed class AgentCommandService
         // final-state short-circuit: a final Successful payment can still recover its missing slip via
         // GetPaymentResult, and the raw receipt Base64 must never persist centrally (AgentCommand
         // ResultPayload / PosOdemeIslemi.SonSaglayiciYaniti).
-        if (_posReceiptPersistence is not null && response?.Data is not null)
-        {
-            await _posReceiptPersistence.PersistAsync(db, commandType, payment, response, ct);
-        }
+        var cleanupPaths = _posReceiptPersistence is not null && response?.Data is not null
+            ? await _posReceiptPersistence.PersistAsync(db, commandType, payment, response, ct)
+            : Array.Empty<string>();
 
-        var sanitizedPayload = SanitizeReceiptImages(request.ResultPayload);
+        var sanitizedPayload = PavoReceiptSanitizer.Sanitize(request.ResultPayload);
         cmd.ResultPayload = sanitizedPayload ?? request.ResultPayload;
 
         var proposedStatus = ResolveProposedPaymentStatus(commandType, request, response);
@@ -763,7 +767,7 @@ public sealed class AgentCommandService
 
         if (IsHardFinalPaymentState(payment.Durum) && string.Equals(resolvedStatus, payment.Durum, StringComparison.OrdinalIgnoreCase))
         {
-            return;
+            return cleanupPaths;
         }
 
         if (payment.PosCihaziId != device.Id || payment.KurumId != device.KurumId || payment.TesisId != device.TesisId)
@@ -803,38 +807,24 @@ public sealed class AgentCommandService
         if (!request.Success)
         {
             ApplyResolvedPaymentState(payment, resolvedStatus, response?.Data?.Message ?? request.ErrorMessage ?? response?.Message);
-            return;
+            return cleanupPaths;
         }
 
         ApplyResolvedPaymentState(payment, resolvedStatus, response?.Data?.Message ?? request.ErrorMessage ?? response?.Message);
+        return cleanupPaths;
     }
 
-    /// <summary>Removes the receipt image Base64 fields from a PAVO result payload so the raw images
-    /// never persist centrally. Preserves all other fields verbatim; returns the original string when
-    /// parsing fails or no image fields exist.</summary>
-    private static string? SanitizeReceiptImages(string? payload)
+    /// <summary>Best-effort deletion of replaced receipt files, called only after the caller's
+    /// SaveChanges has committed the new metadata (section 8). Old files never get deleted before the
+    /// DB points at the new, still-live file.</summary>
+    private void CleanupReceiptFiles(IReadOnlyCollection<string>? cleanupPaths)
     {
-        if (string.IsNullOrWhiteSpace(payload))
+        if (cleanupPaths is null || cleanupPaths.Count == 0)
         {
-            return payload;
+            return;
         }
 
-        try
-        {
-            var node = JsonNode.Parse(payload);
-            if (node is JsonObject root && root["Data"] is JsonObject data)
-            {
-                data["customerReceiptImage"] = null;
-                data["merchantReceiptImage"] = null;
-                data["errorReceiptImage"] = null;
-            }
-
-            return node?.ToJsonString(JsonOptions) ?? payload;
-        }
-        catch
-        {
-            return payload;
-        }
+        _posReceiptPersistence?.Cleanup(cleanupPaths);
     }
 
     private static string ResolveProposedPaymentStatus(string commandType, AgentCommandCompleteRequest request, PavoPaymentResponseBase? response)

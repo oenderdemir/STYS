@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.Entegrasyonlar.Pos.Dtos;
 using STYS.Entegrasyonlar.Pos.Entities;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Common.Services;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 
@@ -25,15 +26,18 @@ public sealed class PosReceiptService : IPosReceiptService
     private readonly StysAppDbContext _db;
     private readonly IPosReceiptStorage _storage;
     private readonly ICurrentTenantAccessor _tenantAccessor;
+    private readonly IMuhasebeTesisScopeService _tesisScopeService;
 
     public PosReceiptService(
         StysAppDbContext db,
         IPosReceiptStorage storage,
-        ICurrentTenantAccessor tenantAccessor)
+        ICurrentTenantAccessor tenantAccessor,
+        IMuhasebeTesisScopeService tesisScopeService)
     {
         _db = db;
         _storage = storage;
         _tenantAccessor = tenantAccessor;
+        _tesisScopeService = tesisScopeService;
     }
 
     public async Task<IReadOnlyCollection<PosOdemeSlipDto>> GetReceiptsAsync(int paymentId, CancellationToken ct)
@@ -82,10 +86,15 @@ public sealed class PosReceiptService : IPosReceiptService
             .FirstOrDefaultAsync(x => x.Id == paymentId && !x.IsDeleted, ct)
             ?? throw new BaseException("POS ödeme işlemi bulunamadı.", 404);
 
+        // Cross-kurum access is always blocked.
         if (!_tenantAccessor.IsSuperAdmin() && !_tenantAccessor.GetAccessibleKurumIds().Contains(payment.KurumId))
         {
             throw new BaseException("Bu kuruma erişim yetkiniz yok.", 403);
         }
+
+        // Tesis-level authorization reuses the existing user scope mechanism (MuhasebeTesisScopeService);
+        // SuperAdmin passes through it as well (it resolves to all active tesis).
+        await _tesisScopeService.EnsureCanAccessTesisAsync(payment.TesisId, ct);
 
         return payment;
     }

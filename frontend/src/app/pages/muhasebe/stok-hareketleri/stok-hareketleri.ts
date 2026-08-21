@@ -740,6 +740,10 @@ export class StokHareketleriPage implements OnInit {
         return this.isTransfer(this.model);
     }
 
+    showDurumField(): boolean {
+        return !this.showHedefDepoField();
+    }
+
     getHedefDepoOptions(): Array<{ label: string; value: number }> {
         return this.depoOptions.filter(x => x.value !== this.model.depoId);
     }

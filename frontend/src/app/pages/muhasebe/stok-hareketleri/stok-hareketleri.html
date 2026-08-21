@@ -137,7 +137,7 @@
             <label class="block font-medium mb-2">Tip</label>
             <p-select class="w-full" [options]="hareketTipleri" optionLabel="label" optionValue="value" [(ngModel)]="model.hareketTipi" (onChange)="onHareketTipiChange()" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-4" *ngIf="showDurumField()">
             <label class="block font-medium mb-2">Durum</label>
             <p-select class="w-full" [options]="durumlar" optionLabel="label" optionValue="value" [(ngModel)]="model.durum" appendTo="body" />
         </div>

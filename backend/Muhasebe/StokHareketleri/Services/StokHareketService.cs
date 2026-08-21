@@ -87,7 +87,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Transfer kayitlari dogrudan guncellenemez. Transferi iptal edip yeniden olusturunuz.", 400);
         }
 
-        await EnsureOpenPeriodAsync(existing.DepoId, existing.HareketTarihi, CancellationToken.None);
+        var existingDepo = await GetDepoOrThrowAsync(existing.DepoId);
+        await EnsureOpenPeriodAsync(existingDepo.TesisId, existing.HareketTarihi, CancellationToken.None);
         await NormalizeAndValidateAsync(dto, dto.Id);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
@@ -110,7 +111,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Transfer kayitlari dogrudan silinemez. Transferi iptal etme akisini kullaniniz.", 400);
         }
 
-        await EnsureOpenPeriodAsync(existing.DepoId, existing.HareketTarihi, CancellationToken.None);
+        var existingDepo = await GetDepoOrThrowAsync(existing.DepoId);
+        await EnsureOpenPeriodAsync(existingDepo.TesisId, existing.HareketTarihi, CancellationToken.None);
         await base.DeleteAsync(id);
     }
 
@@ -240,23 +242,28 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Bu stok hareketi bir transfer kaydi degildir.", 400);
         }
 
-        var transferHareketleri = await _dbContext.StokHareketleri
-            .Where(x => x.TransferGrupId == hareket.TransferGrupId.Value && x.Durum == StokHareketDurumlari.Aktif)
-            .ToListAsync(cancellationToken);
-
-        if (transferHareketleri.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var item in transferHareketleri)
-        {
-            await EnsureOpenPeriodAsync(item.DepoId, item.HareketTarihi, cancellationToken);
-        }
-
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         try
         {
+            var transferHareketleri = await _dbContext.StokHareketleri
+                .Where(x => x.TransferGrupId == hareket.TransferGrupId.Value && x.Durum == StokHareketDurumlari.Aktif)
+                .ToListAsync(cancellationToken);
+
+            var transferGrubu = ValidateTransferIptalGrubu(transferHareketleri);
+            var depoMap = await GetDepoMapAsync(transferHareketleri.Select(x => x.DepoId).Distinct(), cancellationToken);
+
+            foreach (var item in transferHareketleri)
+            {
+                var depo = depoMap[item.DepoId];
+                await EnsureOpenPeriodAsync(depo.TesisId, item.HareketTarihi, cancellationToken);
+            }
+
+            var hedefBakiye = await _repository.GetBakiyeMiktariAsync(transferGrubu.GirisAyagi.DepoId, transferGrubu.GirisAyagi.TasinirKartId, cancellationToken);
+            if (hedefBakiye < transferGrubu.GirisAyagi.Miktar)
+            {
+                throw new BaseException("Hedef depodaki stok kullanıldığı için transfer iptal edilemez.", 400);
+            }
+
             foreach (var item in transferHareketleri)
             {
                 item.Durum = StokHareketDurumlari.Iptal;
@@ -505,6 +512,55 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
     }
 
+    private async Task<STYS.Muhasebe.Depolar.Entities.Depo> GetDepoOrThrowAsync(int depoId)
+    {
+        return await _depoRepository.GetByIdAsync(depoId)
+            ?? throw new BaseException("Depo bulunamadi.", 400);
+    }
+
+    private async Task<Dictionary<int, STYS.Muhasebe.Depolar.Entities.Depo>> GetDepoMapAsync(IEnumerable<int> depoIds, CancellationToken cancellationToken)
+    {
+        var ids = depoIds.Distinct().ToArray();
+        var depolar = await _depoRepository.Where(x => ids.Contains(x.Id)).ToListAsync(cancellationToken);
+        var depoMap = depolar.ToDictionary(x => x.Id);
+        foreach (var id in ids)
+        {
+            if (!depoMap.ContainsKey(id))
+            {
+                throw new BaseException("Transfere bagli depo bulunamadi.", 400);
+            }
+        }
+
+        return depoMap;
+    }
+
+    private static TransferIptalGrubu ValidateTransferIptalGrubu(List<StokHareket> transferHareketleri)
+    {
+        if (transferHareketleri.Count != 2)
+        {
+            throw new BaseException("Transfer grup butunlugu bozuk oldugu icin iptal islemi yapilamaz.", 400);
+        }
+
+        var girisAyagi = transferHareketleri.SingleOrDefault(x => string.Equals(x.TransferYonu, StokTransferYonleri.Giris, StringComparison.Ordinal));
+        var cikisAyagi = transferHareketleri.SingleOrDefault(x => string.Equals(x.TransferYonu, StokTransferYonleri.Cikis, StringComparison.Ordinal));
+        if (girisAyagi is null || cikisAyagi is null)
+        {
+            throw new BaseException("Transfer grup butunlugu bozuk oldugu icin iptal islemi yapilamaz.", 400);
+        }
+
+        if (girisAyagi.TransferGrupId != cikisAyagi.TransferGrupId
+            || girisAyagi.TasinirKartId != cikisAyagi.TasinirKartId
+            || girisAyagi.Miktar != cikisAyagi.Miktar
+            || girisAyagi.DepoId == cikisAyagi.DepoId
+            || girisAyagi.KarsiDepoId != cikisAyagi.DepoId
+            || cikisAyagi.KarsiDepoId != girisAyagi.DepoId)
+        {
+            throw new BaseException("Transfer grup butunlugu bozuk oldugu icin iptal islemi yapilamaz.", 400);
+        }
+
+        return new TransferIptalGrubu(girisAyagi, cikisAyagi);
+    }
+
     private async Task EnsureDepoAccessAsync(int depoId, int? tesisId, string label, CancellationToken cancellationToken)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
@@ -582,4 +638,6 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             return result;
         };
     }
+
+    private sealed record TransferIptalGrubu(StokHareket GirisAyagi, StokHareket CikisAyagi);
 }

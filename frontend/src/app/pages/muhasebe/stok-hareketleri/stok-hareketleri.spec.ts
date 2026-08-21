@@ -138,6 +138,16 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(component.showHedefDepoField()).toBeTrue();
     });
 
+    it('transfer secilince durum alani gosterilmez', () => {
+        const component = createComponent();
+
+        component.openCreate();
+        component.model.hareketTipi = 'Transfer';
+        component.onHareketTipiChange();
+
+        expect(component.showDurumField()).toBeFalse();
+    });
+
     it('transferte kaynak depo varsayilan depo mantigindan gelir', () => {
         const component = createComponent();
         component.depoOptions = [

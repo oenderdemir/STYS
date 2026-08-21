@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Services;
+using STYS.Muhasebe.StokLotlari.Dtos;
 using TOD.Platform.AspNetCore.Authorization;
 using TOD.Platform.AspNetCore.Controllers;
 using TOD.Platform.Persistence.Rdbms.Paging;
@@ -67,6 +68,11 @@ public class StokHareketleriController : UIController
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
     public async Task<ActionResult<StokDetayDto>> GetStokDetay([FromQuery] int depoId, [FromQuery] int tasinirKartId, CancellationToken cancellationToken)
         => Ok(await _service.GetStokDetayAsync(depoId, tasinirKartId, cancellationToken));
+
+    [HttpGet("lot-bakiyeleri")]
+    [Permission(StructurePermissions.StokHareketYonetimi.View)]
+    public async Task<ActionResult<List<StokLotBakiyeDto>>> GetLotBakiyeleri([FromQuery] int depoId, [FromQuery] int tasinirKartId, CancellationToken cancellationToken)
+        => Ok(await _service.GetLotBakiyeleriAsync(depoId, tasinirKartId, cancellationToken));
 
     [HttpPost]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]

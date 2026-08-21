@@ -19,6 +19,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getPaged: () => of({ items: [], pageNumber: 1, pageSize: 10, totalCount: 0 }),
                         getStokBakiye: () => of([]),
                         getStokKartOzet: () => of([]),
+                        getLotBakiyeleri: () => of([]),
                         create: () => of({}),
                         createTransfer: () => of([]),
                         update: () => of({}),
@@ -197,5 +198,48 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(component.model.kdvOrani).toBe(0);
         expect(component.model.kdvIstisnaTanimId).toBeNull();
         expect(component.isSayimFarki(component.model)).toBeTrue();
+    });
+
+    it('takipli kart secilince giris icin lot alani acilir', () => {
+        const component = createComponent();
+        (component as any).tasinirKartByIdMap = new Map([
+            [300, { id: 300, tesisId: 1, tasinirKodId: 3, varsayilanDepoId: 5, stokKodu: 'STK-300', ad: 'Takipli Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, kdvOrani: 20, aktifMi: true }]
+        ]);
+
+        component.openCreate();
+        component.onTasinirKartChange(300);
+
+        expect(component.isTrackedSelectedCard()).toBeTrue();
+        expect(component.isLotEntryMode()).toBeTrue();
+        expect(component.isLotSelectionMode()).toBeFalse();
+    });
+
+    it('cikis ve transfer icin sadece pozitif bakiyeli lotlari kullanir', () => {
+        const component = createComponent();
+        (component as any).tasinirKartByIdMap = new Map([
+            [300, { id: 300, tesisId: 1, tasinirKodId: 3, varsayilanDepoId: 5, stokKodu: 'STK-300', ad: 'Takipli Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, kdvOrani: 20, aktifMi: true }]
+        ]);
+
+        component.openCreate();
+        component.onTasinirKartChange(300);
+        component.model.hareketTipi = 'Cikis';
+        component.onHareketTipiChange();
+        component.lotBakiyeOptions = [
+            { stokLotId: 1, lotNo: 'LOT-A', sonKullanmaTarihi: '2027-01-01', girisMiktari: 10, cikisMiktari: 7, bakiyeMiktari: 3 },
+            { stokLotId: 2, lotNo: 'LOT-B', sonKullanmaTarihi: '2027-02-01', girisMiktari: 5, cikisMiktari: 5, bakiyeMiktari: 0 }
+        ];
+
+        expect(component.isLotSelectionMode()).toBeTrue();
+        expect(component.getPositiveLotOptions().map(x => x.value)).toEqual([1]);
+
+        component.model.hareketTipi = 'Transfer';
+        component.onHareketTipiChange();
+        component.lotBakiyeOptions = [
+            { stokLotId: 1, lotNo: 'LOT-A', sonKullanmaTarihi: '2027-01-01', girisMiktari: 10, cikisMiktari: 7, bakiyeMiktari: 3 },
+            { stokLotId: 2, lotNo: 'LOT-B', sonKullanmaTarihi: '2027-02-01', girisMiktari: 5, cikisMiktari: 5, bakiyeMiktari: 0 }
+        ];
+
+        expect(component.isLotSelectionMode()).toBeTrue();
+        expect(component.getPositiveLotOptions().map(x => x.value)).toEqual([1]);
     });
 });

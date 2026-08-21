@@ -2,6 +2,7 @@ using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.StokLotlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -41,6 +42,8 @@ public class StokHareket : BaseEntity<int>
 
     public string? SayimFarkiYonu { get; set; }
 
+    public int? StokLotId { get; set; }
+
     public int? KarsiDepoId { get; set; }
 
     public string Durum { get; set; } = StokHareketDurumlari.Aktif;
@@ -66,6 +69,7 @@ public class StokHareket : BaseEntity<int>
     public Depo? Depo { get; set; }
     public Depo? KarsiDepo { get; set; }
     public TasinirKart? TasinirKart { get; set; }
+    public StokLot? StokLot { get; set; }
     public CariKart? CariKart { get; set; }
     public KdvIstisnaTanim? KdvIstisnaTanim { get; set; }
 }

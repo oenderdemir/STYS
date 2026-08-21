@@ -28,6 +28,7 @@
                         <th>Tarih</th>
                         <th>Depo</th>
                         <th>Tasinir Kart</th>
+                        <th>Lot</th>
                         <th>Tip</th>
                         <th>Miktar</th>
                         <th>Birim Fiyat</th>
@@ -47,6 +48,10 @@
                             <small *ngIf="getTransferRotaLabel(item) as rota">{{ rota }}</small>
                         </td>
                         <td>{{ getTasinirKartLabel(item.tasinirKartId) }}</td>
+                        <td>
+                            <div>{{ item.lotNo || '-' }}</div>
+                            <small *ngIf="item.sonKullanmaTarihi">{{ item.sonKullanmaTarihi | date: 'dd.MM.yyyy' }}</small>
+                        </td>
                         <td>{{ getHareketTipiLabel(item) }}</td>
                         <td>{{ item.miktar }}</td>
                         <td>{{ item.birimFiyat | number: '1.2-2' }}</td>
@@ -113,6 +118,8 @@
                                         <ng-template #header>
                                             <tr>
                                                 <th>Tarih</th>
+                                                <th>Lot</th>
+                                                <th>SKT</th>
                                                 <th>Miktar</th>
                                                 <th>Birim</th>
                                                 <th>Birim Fiyat</th>
@@ -123,6 +130,8 @@
                                         <ng-template #body let-satir>
                                             <tr>
                                                 <td>{{ satir.hareketTarihi ? (satir.hareketTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
+                                                <td>{{ satir.lotNo || '-' }}</td>
+                                                <td>{{ satir.sonKullanmaTarihi ? (satir.sonKullanmaTarihi | date: 'dd.MM.yyyy') : '-' }}</td>
                                                 <td>{{ satir.miktar | number: '1.3-3' }}</td>
                                                 <td>{{ satir.birim }}</td>
                                                 <td>{{ satir.birimFiyat | number: '1.2-2' }}</td>
@@ -174,6 +183,26 @@
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Tasinir Kart</label>
             <p-select class="w-full" [options]="tasinirKartOptions" optionLabel="label" optionValue="value" [(ngModel)]="model.tasinirKartId" (onChange)="onTasinirKartChange($event.value)" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-6" *ngIf="isLotSelectionMode()">
+            <label class="block font-medium mb-2">Lot</label>
+            <p-select class="w-full" [options]="getPositiveLotOptions()" optionLabel="label" optionValue="value" [loading]="lotOptionsLoading" [(ngModel)]="model.stokLotId" (onChange)="onLotSelectionChange($event.value)" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-6" *ngIf="isLotEntryMode()">
+            <label class="block font-medium mb-2">Lot No</label>
+            <input pInputText class="w-full" [(ngModel)]="model.lotNo" maxlength="64" />
+        </div>
+        <div class="col-span-12 md:col-span-6" *ngIf="isLotEntryMode()">
+            <label class="block font-medium mb-2">Son Kullanma Tarihi</label>
+            <p-datepicker
+                [(ngModel)]="lotSonKullanmaTarihiDate"
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                dateFormat="dd.mm.yy"
+                [showIcon]="true"
+                [showButtonBar]="true"
+                appendTo="body" />
         </div>
         <div class="col-span-12 md:col-span-6" *ngIf="showHedefDepoField()">
             <label class="block font-medium mb-2">Hedef Depo</label>

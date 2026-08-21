@@ -4,6 +4,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
+using STYS.Muhasebe.StokLotlari.Dtos;
 using TOD.Platform.Persistence.Rdbms.Repositories;
 
 namespace STYS.Muhasebe.StokHareketleri.Repositories;
@@ -99,6 +100,50 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         return rows.Sum(x => x.Giris) - rows.Sum(x => x.Cikis);
     }
 
+    public async Task<decimal> GetLotBakiyeMiktariAsync(int depoId, int tasinirKartId, int stokLotId, CancellationToken cancellationToken = default)
+    {
+        var rows = await BuildBaseQuery([depoId])
+            .Where(x => x.TasinirKartId == tasinirKartId && x.StokLotId == stokLotId)
+            .Select(x => new
+            {
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Sum(x => x.Giris) - rows.Sum(x => x.Cikis);
+    }
+
+    public async Task<List<StokLotBakiyeDto>> GetLotBakiyeleriAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
+    {
+        var rows = await BuildBaseQuery([depoId])
+            .Where(x => x.TasinirKartId == tasinirKartId && x.StokLotId.HasValue && x.StokLot != null)
+            .Select(x => new
+            {
+                x.StokLotId,
+                LotNo = x.StokLot != null ? x.StokLot.LotNo : string.Empty,
+                SonKullanmaTarihi = x.StokLot != null ? x.StokLot.SonKullanmaTarihi : null,
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => new { x.StokLotId, x.LotNo, x.SonKullanmaTarihi })
+            .Select(g => new StokLotBakiyeDto
+            {
+                StokLotId = g.Key.StokLotId!.Value,
+                LotNo = g.Key.LotNo,
+                SonKullanmaTarihi = g.Key.SonKullanmaTarihi,
+                GirisMiktari = g.Sum(x => x.Giris),
+                CikisMiktari = g.Sum(x => x.Cikis),
+                BakiyeMiktari = g.Sum(x => x.Giris) - g.Sum(x => x.Cikis)
+            })
+            .OrderBy(x => x.LotNo)
+            .ThenBy(x => x.SonKullanmaTarihi)
+            .ToList();
+    }
+
     public async Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, DepoMalzemeKayitTipleri malzemeKayitTipi, CancellationToken cancellationToken = default)
     {
         var hareketler = await BuildBaseQuery([depoId])
@@ -116,7 +161,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 DepoAd = x.Depo != null ? x.Depo.Ad : string.Empty,
                 StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
                 TasinirKartAd = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
-                Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty
+                Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
+                LotNo = x.StokLot != null ? x.StokLot.LotNo : null,
+                SonKullanmaTarihi = x.StokLot != null ? x.StokLot.SonKullanmaTarihi : null
             })
             .OrderBy(x => x.HareketTarihi)
             .ToListAsync(cancellationToken);
@@ -166,6 +213,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             .AsNoTracking()
             .Include(x => x.Depo)
             .Include(x => x.TasinirKart)
+            .Include(x => x.StokLot)
             .Where(x => x.Durum == StokHareketDurumlari.Aktif);
 
         if (depoIds is not null)
@@ -194,7 +242,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                     Birim = x.Birim,
                     BirimFiyat = x.BirimFiyat,
                     ToplamTutar = x.Tutar,
-                    HareketSayisi = 1
+                    HareketSayisi = 1,
+                    LotNo = x.LotNo,
+                    SonKullanmaTarihi = x.SonKullanmaTarihi
                 })
                 .OrderBy(x => x.HareketTarihi)
                 .ToList(),
@@ -207,7 +257,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                     Birim = g.First().Birim,
                     BirimFiyat = g.Key,
                     ToplamTutar = g.Sum(x => x.Tutar),
-                    HareketSayisi = g.Count()
+                    HareketSayisi = g.Count(),
+                    LotNo = g.Select(x => x.LotNo).Distinct().Count() == 1 ? g.Select(x => x.LotNo).FirstOrDefault() : null,
+                    SonKullanmaTarihi = g.Select(x => x.SonKullanmaTarihi).Distinct().Count() == 1 ? g.Select(x => x.SonKullanmaTarihi).FirstOrDefault() : null
                 })
                 .OrderBy(x => x.BirimFiyat)
                 .ToList(),
@@ -238,7 +290,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 Birim = girisHareketleri[0].Birim,
                 BirimFiyat = ortalamaFiyat,
                 ToplamTutar = toplamTutar,
-                HareketSayisi = girisHareketleri.Count
+                HareketSayisi = girisHareketleri.Count,
+                LotNo = girisHareketleri.Select(x => x.LotNo).Distinct().Count() == 1 ? girisHareketleri.Select(x => x.LotNo).FirstOrDefault() : null,
+                SonKullanmaTarihi = girisHareketleri.Select(x => x.SonKullanmaTarihi).Distinct().Count() == 1 ? girisHareketleri.Select(x => x.SonKullanmaTarihi).FirstOrDefault() : null
             }
         ];
     }
@@ -268,5 +322,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         public string StokKodu { get; set; } = string.Empty;
         public string TasinirKartAd { get; set; } = string.Empty;
         public string Birim { get; set; } = string.Empty;
+        public string? LotNo { get; set; }
+        public DateTime? SonKullanmaTarihi { get; set; }
     }
 }

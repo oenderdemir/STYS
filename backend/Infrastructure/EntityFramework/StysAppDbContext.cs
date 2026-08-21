@@ -30,6 +30,7 @@ using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.PaketTurleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
+using STYS.Muhasebe.StokLotlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
@@ -187,6 +188,7 @@ public class StysAppDbContext : DbContext
     public DbSet<Depo> Depolar => Set<Depo>();
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
+    public DbSet<StokLot> StokLotlar => Set<StokLot>();
     public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
     public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
     public DbSet<TevkifatHesapEsleme> TevkifatHesapEslemeleri => Set<TevkifatHesapEsleme>();
@@ -2748,6 +2750,8 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0 AND [CariKartId] IS NOT NULL");
             entity.HasIndex(x => x.TransferGrupId)
                 .HasFilter("[IsDeleted] = 0 AND [TransferGrupId] IS NOT NULL");
+            entity.HasIndex(x => x.StokLotId)
+                .HasFilter("[IsDeleted] = 0 AND [StokLotId] IS NOT NULL");
 
             entity.HasOne(x => x.Depo)
                 .WithMany(x => x.StokHareketleri)
@@ -2764,6 +2768,11 @@ public class StysAppDbContext : DbContext
                 .HasForeignKey(x => x.TasinirKartId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.StokLot)
+                .WithMany(x => x.StokHareketleri)
+                .HasForeignKey(x => x.StokLotId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasOne(x => x.CariKart)
                 .WithMany()
                 .HasForeignKey(x => x.CariKartId)
@@ -2772,6 +2781,26 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.KdvIstisnaTanim)
                 .WithMany()
                 .HasForeignKey(x => x.KdvIstisnaTanimId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokLot>(entity =>
+        {
+            entity.ToTable("StokLotlar", muhasebeSchema);
+            entity.Property(x => x.LotNo).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.TesisId, x.TasinirKartId, x.LotNo })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany()
+                .HasForeignKey(x => x.TasinirKartId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -20,6 +20,9 @@ public class StokHareketDto : BaseRdbmsDto<int>
     public Guid? TransferGrupId { get; set; }
     public string? TransferYonu { get; set; }
     public string? SayimFarkiYonu { get; set; }
+    public int? StokLotId { get; set; }
+    public string? LotNo { get; set; }
+    public DateTime? SonKullanmaTarihi { get; set; }
     public int? KarsiDepoId { get; set; }
     public string Durum { get; set; } = string.Empty;
 
@@ -46,6 +49,9 @@ public class CreateStokHareketRequest
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
     public string? SayimFarkiYonu { get; set; }
+    public int? StokLotId { get; set; }
+    public string? LotNo { get; set; }
+    public DateTime? SonKullanmaTarihi { get; set; }
     public string Durum { get; set; } = string.Empty;
 
     public int KdvUygulamaTipi { get; set; } = 1;
@@ -60,6 +66,7 @@ public class StokTransferRequest
     public int KaynakDepoId { get; set; }
     public int HedefDepoId { get; set; }
     public int TasinirKartId { get; set; }
+    public int? StokLotId { get; set; }
     public DateTime HareketTarihi { get; set; }
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
@@ -77,6 +84,8 @@ public class StokBakiyeDto
     public string StokKodu { get; set; } = string.Empty;
     public string TasinirKartAd { get; set; } = string.Empty;
     public string Birim { get; set; } = string.Empty;
+    public string? LotNo { get; set; }
+    public DateTime? SonKullanmaTarihi { get; set; }
     public decimal GirisMiktari { get; set; }
     public decimal CikisMiktari { get; set; }
     public decimal BakiyeMiktari { get; set; }
@@ -115,6 +124,8 @@ public class StokDetaySatirDto
     public DateTime? HareketTarihi { get; set; }
     public decimal Miktar { get; set; }
     public string Birim { get; set; } = string.Empty;
+    public string? LotNo { get; set; }
+    public DateTime? SonKullanmaTarihi { get; set; }
     public decimal BirimFiyat { get; set; }
     public decimal ToplamTutar { get; set; }
     public int HareketSayisi { get; set; }

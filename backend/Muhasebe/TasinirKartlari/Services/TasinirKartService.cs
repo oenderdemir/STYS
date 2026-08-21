@@ -5,6 +5,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.Depolar.Repositories;
+using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Dtos;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
@@ -98,6 +99,15 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         if (current.MuhasebeHesapPlaniId.HasValue && current.TesisId != dto.TesisId)
         {
             throw new BaseException("Muhasebe hesabı oluşturulmuş taşınır kartlarda tesis değiştirilemez.", 400);
+        }
+
+        if (current.TakipliMi != dto.TakipliMi)
+        {
+            var activeBalance = await CalculateActiveStockBalanceAsync(current.Id);
+            if (activeBalance != 0)
+            {
+                throw new BaseException("Stok bakiyesi bulunan taşınır kartın takip tipi değiştirilemez.", 400);
+            }
         }
 
         dto.MuhasebeHesapPlaniId = current.MuhasebeHesapPlaniId;
@@ -385,5 +395,35 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         {
             throw new BaseException("Secilen varsayilan depo aktif olmalidir.", 400);
         }
+    }
+
+    private async Task<decimal> CalculateActiveStockBalanceAsync(int tasinirKartId)
+    {
+        var hareketler = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .Where(x => x.TasinirKartId == tasinirKartId && x.Durum == StokHareketDurumlari.Aktif)
+            .Select(x => new
+            {
+                x.HareketTipi,
+                x.TransferYonu,
+                x.SayimFarkiYonu,
+                x.Miktar
+            })
+            .ToListAsync();
+
+        return hareketler.Sum(x =>
+        {
+            if (StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu))
+            {
+                return x.Miktar;
+            }
+
+            if (StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu))
+            {
+                return -x.Miktar;
+            }
+
+            return 0m;
+        });
     }
 }

@@ -8,6 +8,8 @@ using STYS.Kurumlar.Entities;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.Depolar.Repositories;
+using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Dtos;
 using STYS.Muhasebe.TasinirKartlari.Entities;
@@ -57,6 +59,37 @@ public class TasinirKartServiceTests
 
         Assert.Equal(400, ex.ErrorCode);
         Assert.Equal("Varsayilan depo tasinir kart ile ayni tesise ait olmalidir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_StokBakiyesiVarkenTakipliMiDegisimiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedAsync(dbContext);
+        dbContext.StokHareketleri.Add(new StokHareket
+        {
+            DepoId = 10,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 21),
+            HareketTipi = StokHareketTipleri.Giris,
+            Miktar = 5,
+            BirimFiyat = 1,
+            Tutar = 5,
+            Durum = StokHareketDurumlari.Aktif,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20,
+            KdvTutari = 1
+        });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext, DomainAccessScope.Scoped([], [1], []));
+
+        var dto = CreateUpdateDto(varsayilanDepoId: 10);
+        dto.TakipliMi = true;
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(dto));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Stok bakiyesi bulunan taşınır kartın takip tipi değiştirilemez.", ex.Message);
     }
 
     private static TasinirKartDto CreateUpdateDto(int? varsayilanDepoId)

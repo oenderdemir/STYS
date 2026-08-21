@@ -30,7 +30,7 @@ import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.ser
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
+import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -79,6 +79,7 @@ export class StokHareketleriPage implements OnInit {
     dialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
     hareketTarihiDate: Date | null = null;
+    lotSonKullanmaTarihiDate: Date | null = null;
 
     selectedDepoId?: number;
 
@@ -113,6 +114,8 @@ export class StokHareketleriPage implements OnInit {
     private tasinirKartByIdMap = new Map<number, TasinirKartModel>();
     private selectedDepoPresetSource: 'none' | 'filter' | 'default' | 'manual' = 'none';
     private lastSelectedTasinirKartId: number | null = null;
+    lotBakiyeOptions: StokLotBakiyeModel[] = [];
+    lotOptionsLoading = false;
 
     /** Full KdvIstisnaTanim records indexed by id for O(1) lookups. */
     private kdvIstisnaTanimByIdMap = new Map<number, KdvIstisnaTanimDto>();
@@ -310,6 +313,8 @@ export class StokHareketleriPage implements OnInit {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         this.hareketTarihiDate = this.startOfNow();
+        this.lotSonKullanmaTarihiDate = null;
+        this.resetLotState();
         this.selectedDepoPresetSource = 'none';
         this.lastSelectedTasinirKartId = null;
         if (this.selectedDepoId && this.selectedDepoId > 0) {
@@ -332,9 +337,12 @@ export class StokHareketleriPage implements OnInit {
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.hareketTarihiDate = parseApiDate(item.hareketTarihi);
+        this.lotSonKullanmaTarihiDate = parseApiDate(item.sonKullanmaTarihi);
+        this.resetLotState();
         this.selectedDepoPresetSource = 'manual';
         this.lastSelectedTasinirKartId = item.tasinirKartId;
         this.applyIstisnaFilter();
+        this.refreshLotState();
         this.dialogVisible = true;
     }
 
@@ -344,6 +352,7 @@ export class StokHareketleriPage implements OnInit {
 
         this.model.tasinirKartId = yeniTasinirKartId ?? 0;
         this.lastSelectedTasinirKartId = yeniTasinirKartId;
+        this.refreshLotState({ resetSelection: kartDegisti, clearEntryFields: kartDegisti });
 
         if (this.dialogMode !== 'create') {
             return;
@@ -384,6 +393,7 @@ export class StokHareketleriPage implements OnInit {
         if (this.dialogMode === 'create') {
             this.selectedDepoPresetSource = depoId && depoId > 0 ? 'manual' : 'none';
         }
+        this.refreshLotState({ resetSelection: true });
     }
 
     save(): void {
@@ -409,6 +419,18 @@ export class StokHareketleriPage implements OnInit {
 
             if (this.model.hedefDepoId === this.model.depoId) {
                 this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: 'Hedef depo kaynak depo ile aynı olamaz.' });
+                return;
+            }
+        }
+
+        if (this.isTrackedSelectedCard()) {
+            if (this.isLotEntryMode() && !this.model.lotNo?.trim()) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Takipli taşınır kart için lot numarası zorunludur.' });
+                return;
+            }
+
+            if (this.isLotSelectionMode() && !this.model.stokLotId) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Takipli taşınır kart için lot seçimi zorunludur.' });
                 return;
             }
         }
@@ -442,6 +464,9 @@ export class StokHareketleriPage implements OnInit {
         const payload = {
             depoId: this.model.depoId,
             tasinirKartId: this.model.tasinirKartId,
+            stokLotId: this.isTrackedSelectedCard() ? this.model.stokLotId ?? null : null,
+            lotNo: this.isTrackedSelectedCard() && this.isLotEntryMode() ? this.model.lotNo?.trim() || null : null,
+            sonKullanmaTarihi: this.isTrackedSelectedCard() && this.isLotEntryMode() ? formatDateForApi(this.lotSonKullanmaTarihiDate) : null,
             hareketTarihi: this.formatDateTimeForApi(this.hareketTarihiDate) ?? this.model.hareketTarihi,
             hareketTipi: this.model.hareketTipi,
             miktar: this.model.miktar,
@@ -463,6 +488,7 @@ export class StokHareketleriPage implements OnInit {
             kaynakDepoId: this.model.depoId,
             hedefDepoId: this.model.hedefDepoId!,
             tasinirKartId: this.model.tasinirKartId,
+            stokLotId: this.isTrackedSelectedCard() ? this.model.stokLotId ?? null : null,
             hareketTarihi: this.formatDateTimeForApi(this.hareketTarihiDate) ?? this.model.hareketTarihi,
             miktar: this.model.miktar,
             birimFiyat: this.model.birimFiyat,
@@ -484,6 +510,7 @@ export class StokHareketleriPage implements OnInit {
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
                 this.dialogVisible = false;
+                this.resetLotState();
                 this.load();
                 this.loadSummary();
                 this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Kayıt kaydedildi.' });
@@ -679,6 +706,9 @@ export class StokHareketleriPage implements OnInit {
         return {
             depoId: 0,
             tasinirKartId: 0,
+            stokLotId: null,
+            lotNo: null,
+            sonKullanmaTarihi: null,
             hareketTarihi: this.formatDateTimeForApi(now) ?? '',
             hareketTipi: 'Giris',
             hedefDepoId: null,
@@ -789,6 +819,7 @@ export class StokHareketleriPage implements OnInit {
         } else if (!this.model.sayimFarkiYonu) {
             this.model.sayimFarkiYonu = 'Fazla';
         }
+        this.refreshLotState({ resetSelection: this.isLotSelectionMode(), clearEntryFields: this.isLotEntryMode() });
         this.applyIstisnaFilter();
     }
 
@@ -802,6 +833,52 @@ export class StokHareketleriPage implements OnInit {
 
     showHedefDepoField(): boolean {
         return this.isTransfer(this.model);
+    }
+
+    isTrackedSelectedCard(): boolean {
+        const kart = this.model.tasinirKartId ? this.tasinirKartByIdMap.get(this.model.tasinirKartId) : null;
+        return !!kart?.takipliMi;
+    }
+
+    isLotEntryMode(): boolean {
+        if (!this.isTrackedSelectedCard()) {
+            return false;
+        }
+
+        if (this.isTransfer(this.model)) {
+            return false;
+        }
+
+        if (this.isSayimFarki(this.model)) {
+            return this.model.sayimFarkiYonu !== 'Eksik';
+        }
+
+        return this.model.hareketTipi === 'Giris' || this.model.hareketTipi === 'Iade';
+    }
+
+    isLotSelectionMode(): boolean {
+        if (!this.isTrackedSelectedCard()) {
+            return false;
+        }
+
+        if (this.isTransfer(this.model)) {
+            return true;
+        }
+
+        if (this.isSayimFarki(this.model)) {
+            return this.model.sayimFarkiYonu === 'Eksik';
+        }
+
+        return this.model.hareketTipi === 'Cikis' || this.model.hareketTipi === 'Sarf' || this.model.hareketTipi === 'Zimmet';
+    }
+
+    getPositiveLotOptions(): Array<{ label: string; value: number }> {
+        return this.lotBakiyeOptions
+            .filter((x) => x.bakiyeMiktari > 0)
+            .map((x) => ({
+                label: this.getLotOptionLabel(x),
+                value: x.stokLotId
+            }));
     }
 
     showDurumField(): boolean {
@@ -865,6 +942,14 @@ export class StokHareketleriPage implements OnInit {
         }
 
         return row.transferYonu === 'Giris' ? 'Transfer / Giriş' : 'Transfer / Çıkış';
+    }
+
+    onLotSelectionChange(stokLotId: number | null): void {
+        this.model.stokLotId = stokLotId;
+        const lot = stokLotId ? this.lotBakiyeOptions.find((x) => x.stokLotId === stokLotId) ?? null : null;
+        this.model.lotNo = lot?.lotNo ?? null;
+        this.model.sonKullanmaTarihi = lot?.sonKullanmaTarihi ?? null;
+        this.lotSonKullanmaTarihiDate = parseApiDate(lot?.sonKullanmaTarihi);
     }
 
     getTransferRotaLabel(row: StokHareketModel): string | null {
@@ -951,5 +1036,76 @@ export class StokHareketleriPage implements OnInit {
         this.expandedStokDetayKeys = {};
         this.stokDetayByKey.clear();
         this.stokDetayLoadingKeys.clear();
+    }
+
+    private refreshLotState(options?: { resetSelection?: boolean; clearEntryFields?: boolean }): void {
+        if (!this.dialogVisible && this.dialogMode !== 'edit') {
+            return;
+        }
+
+        const shouldResetSelection = options?.resetSelection ?? false;
+        const shouldClearEntryFields = options?.clearEntryFields ?? false;
+
+        if (!this.isTrackedSelectedCard()) {
+            this.resetLotState();
+            return;
+        }
+
+        if (shouldResetSelection || !this.isLotSelectionMode()) {
+            this.model.stokLotId = null;
+        }
+
+        if (shouldClearEntryFields || !this.isLotEntryMode()) {
+            this.model.lotNo = null;
+            this.model.sonKullanmaTarihi = null;
+            this.lotSonKullanmaTarihiDate = null;
+        }
+
+        if (!this.isLotSelectionMode()) {
+            this.lotBakiyeOptions = [];
+            this.lotOptionsLoading = false;
+            return;
+        }
+
+        if (!this.model.depoId || !this.model.tasinirKartId) {
+            this.lotBakiyeOptions = [];
+            return;
+        }
+
+        this.lotOptionsLoading = true;
+        this.service.getLotBakiyeleri(this.model.depoId, this.model.tasinirKartId).pipe(finalize(() => {
+            this.lotOptionsLoading = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (items) => {
+                this.lotBakiyeOptions = items;
+                if (this.model.stokLotId && !items.some((x) => x.stokLotId === this.model.stokLotId)) {
+                    this.onLotSelectionChange(null);
+                } else if (this.model.stokLotId) {
+                    this.onLotSelectionChange(this.model.stokLotId);
+                }
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.lotBakiyeOptions = [];
+                this.onLotSelectionChange(null);
+                this.showError(error);
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    private resetLotState(): void {
+        this.lotBakiyeOptions = [];
+        this.lotOptionsLoading = false;
+        this.model.stokLotId = null;
+        this.model.lotNo = null;
+        this.model.sonKullanmaTarihi = null;
+        this.lotSonKullanmaTarihiDate = null;
+    }
+
+    private getLotOptionLabel(item: StokLotBakiyeModel): string {
+        const skt = item.sonKullanmaTarihi ? ` | SKT: ${formatDateForApi(item.sonKullanmaTarihi)}` : '';
+        return `${item.lotNo} | Bakiye: ${item.bakiyeMiktari}${skt}`;
     }
 }

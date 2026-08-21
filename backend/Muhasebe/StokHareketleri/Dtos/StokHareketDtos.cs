@@ -19,6 +19,7 @@ public class StokHareketDto : BaseRdbmsDto<int>
     public int? KaynakId { get; set; }
     public Guid? TransferGrupId { get; set; }
     public string? TransferYonu { get; set; }
+    public string? SayimFarkiYonu { get; set; }
     public int? KarsiDepoId { get; set; }
     public string Durum { get; set; } = string.Empty;
 
@@ -44,6 +45,7 @@ public class CreateStokHareketRequest
     public int? CariKartId { get; set; }
     public string? KaynakModul { get; set; }
     public int? KaynakId { get; set; }
+    public string? SayimFarkiYonu { get; set; }
     public string Durum { get; set; } = string.Empty;
 
     public int KdvUygulamaTipi { get; set; } = 1;

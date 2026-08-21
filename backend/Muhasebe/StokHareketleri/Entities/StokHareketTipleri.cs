@@ -11,24 +11,34 @@ public static class StokHareketTipleri
     public const string Zimmet = "Zimmet";
 
     public static readonly string[] Hepsi = [Giris, Cikis, Transfer, Iade, Sarf, SayimFarki, Zimmet];
-    public static readonly string[] GirisEtkisi = [Giris, Iade, SayimFarki];
+    public static readonly string[] GirisEtkisi = [Giris, Iade];
     public static readonly string[] CikisEtkisi = [Cikis, Transfer, Sarf, Zimmet];
 
-    public static bool IsGirisEtkisi(string? hareketTipi, string? transferYonu = null)
+    public static bool IsGirisEtkisi(string? hareketTipi, string? transferYonu = null, string? sayimFarkiYonu = null)
     {
         if (string.Equals(hareketTipi, Transfer, StringComparison.Ordinal))
         {
             return string.Equals(transferYonu, StokTransferYonleri.Giris, StringComparison.Ordinal);
         }
 
+        if (string.Equals(hareketTipi, SayimFarki, StringComparison.Ordinal))
+        {
+            return string.Equals(sayimFarkiYonu, StokSayimFarkiYonleri.Fazla, StringComparison.Ordinal);
+        }
+
         return hareketTipi is not null && GirisEtkisi.Contains(hareketTipi);
     }
 
-    public static bool IsCikisEtkisi(string? hareketTipi, string? transferYonu = null)
+    public static bool IsCikisEtkisi(string? hareketTipi, string? transferYonu = null, string? sayimFarkiYonu = null)
     {
         if (string.Equals(hareketTipi, Transfer, StringComparison.Ordinal))
         {
             return !string.Equals(transferYonu, StokTransferYonleri.Giris, StringComparison.Ordinal);
+        }
+
+        if (string.Equals(hareketTipi, SayimFarki, StringComparison.Ordinal))
+        {
+            return string.Equals(sayimFarkiYonu, StokSayimFarkiYonleri.Eksik, StringComparison.Ordinal);
         }
 
         return hareketTipi is not null && CikisEtkisi.Contains(hareketTipi);

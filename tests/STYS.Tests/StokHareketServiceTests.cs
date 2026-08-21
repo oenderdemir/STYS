@@ -416,6 +416,48 @@ public class StokHareketServiceTests
         Assert.Equal(5, Assert.Single(bakiye).BakiyeMiktari);
     }
 
+    [Fact]
+    public async Task AddAsync_SayimFarkiFazlaGirisEtkisiYaratir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.SayimFarki, miktar: 2, sayimFarkiYonu: StokSayimFarkiYonleri.Fazla));
+
+        var bakiye = await service.GetStokBakiyeAsync(1, 10);
+        Assert.Equal(12, Assert.Single(bakiye).BakiyeMiktari);
+    }
+
+    [Fact]
+    public async Task AddAsync_SayimFarkiEksikCikisEtkisiYaratir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.SayimFarki, miktar: 3, sayimFarkiYonu: StokSayimFarkiYonleri.Eksik));
+
+        var bakiye = await service.GetStokBakiyeAsync(1, 10);
+        Assert.Equal(7, Assert.Single(bakiye).BakiyeMiktari);
+    }
+
+    [Fact]
+    public async Task AddAsync_SayimFarkiEksikYetersizStoktaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 2);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.SayimFarki, miktar: 3, sayimFarkiYonu: StokSayimFarkiYonleri.Eksik)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
+    }
+
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -704,7 +746,8 @@ public class StokHareketServiceTests
         int? id = null,
         int depoId = 10,
         int tasinirKartId = 100,
-        string durum = StokHareketDurumlari.Aktif)
+        string durum = StokHareketDurumlari.Aktif,
+        string? sayimFarkiYonu = null)
     {
         return new StokHareketDto
         {
@@ -713,6 +756,7 @@ public class StokHareketServiceTests
             TasinirKartId = tasinirKartId,
             HareketTarihi = new DateTime(2026, 8, 21),
             HareketTipi = hareketTipi,
+            SayimFarkiYonu = sayimFarkiYonu,
             Miktar = miktar,
             BirimFiyat = 1,
             Tutar = miktar,

@@ -30,7 +30,7 @@ import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.ser
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
+import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -124,6 +124,7 @@ export class StokHareketleriPage implements OnInit {
 
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
+    readonly sayimFarkiYonleri = STOK_SAYIM_FARKI_YONLERI;
     readonly kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
 
     private readonly tesisChangeEffect = effect(() => {
@@ -395,6 +396,11 @@ export class StokHareketleriPage implements OnInit {
             return;
         }
 
+        if (this.isSayimFarki(this.model) && !this.model.sayimFarkiYonu) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Sayım farkı için yön seçimi zorunludur.' });
+            return;
+        }
+
         if (this.isTransfer(this.model)) {
             if (!this.model.hedefDepoId) {
                 this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Transfer için hedef depo seçimi zorunludur.' });
@@ -446,6 +452,7 @@ export class StokHareketleriPage implements OnInit {
             cariKartId: this.model.cariKartId || null,
             kaynakModul: this.model.kaynakModul?.trim() || null,
             kaynakId: this.model.kaynakId || null,
+            sayimFarkiYonu: this.isSayimFarki(this.model) ? this.model.sayimFarkiYonu ?? null : null,
             durum: this.model.durum,
             kdvUygulamaTipi: this.model.kdvUygulamaTipi,
             kdvIstisnaTanimId: this.model.kdvIstisnaTanimId ?? null,
@@ -686,6 +693,7 @@ export class StokHareketleriPage implements OnInit {
             kaynakId: null,
             transferGrupId: null,
             transferYonu: null,
+            sayimFarkiYonu: null,
             karsiDepoId: null,
             durum: 'Aktif',
             kdvUygulamaTipi: 1,
@@ -745,6 +753,9 @@ export class StokHareketleriPage implements OnInit {
         if (this.model.hareketTipi === 'Transfer') {
             return this.model.transferYonu === 'Giris' ? 'Alis' : 'Satis';
         }
+        if (this.isSayimFarki(this.model)) {
+            return this.model.sayimFarkiYonu === 'Eksik' ? 'Satis' : 'Alis';
+        }
         return StokHareketleriPage.CIKIS_ETKISI.has(this.model.hareketTipi) ? 'Satis' : 'Alis';
     }
 
@@ -766,7 +777,16 @@ export class StokHareketleriPage implements OnInit {
         if (!this.isTransfer(this.model)) {
             this.model.hedefDepoId = null;
         }
+        if (!this.isSayimFarki(this.model)) {
+            this.model.sayimFarkiYonu = null;
+        } else if (!this.model.sayimFarkiYonu) {
+            this.model.sayimFarkiYonu = 'Fazla';
+        }
         this.applyIstisnaFilter();
+    }
+
+    isSayimFarki(row: Pick<StokHareketModel, 'hareketTipi'>): boolean {
+        return row.hareketTipi === 'SayimFarki';
     }
 
     isTransfer(row: Pick<StokHareketModel, 'hareketTipi'>): boolean {
@@ -827,6 +847,10 @@ export class StokHareketleriPage implements OnInit {
     }
 
     getHareketTipiLabel(row: StokHareketModel): string {
+        if (row.hareketTipi === 'SayimFarki') {
+            return row.sayimFarkiYonu ? `Sayim Farki / ${row.sayimFarkiYonu}` : 'Sayim Farki';
+        }
+
         if (row.hareketTipi !== 'Transfer') {
             return row.hareketTipi;
         }

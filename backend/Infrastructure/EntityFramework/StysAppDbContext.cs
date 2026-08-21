@@ -2734,6 +2734,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.Property(x => x.KaynakModul).HasMaxLength(64);
             entity.Property(x => x.TransferYonu).HasMaxLength(16);
+            entity.Property(x => x.SayimFarkiYonu).HasMaxLength(16);
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.Property(x => x.KdvIstisnaKodu).HasMaxLength(50);
             entity.Property(x => x.KdvIstisnaAciklamasi).HasMaxLength(250);

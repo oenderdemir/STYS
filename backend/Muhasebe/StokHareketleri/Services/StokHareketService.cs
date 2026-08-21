@@ -452,10 +452,23 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         dto.BelgeNo = NormalizeOptional(dto.BelgeNo);
         dto.Aciklama = NormalizeOptional(dto.Aciklama);
         dto.KaynakModul = NormalizeOptional(dto.KaynakModul);
+        dto.SayimFarkiYonu = NormalizeOptional(dto.SayimFarkiYonu);
 
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
         {
             throw new BaseException("Transfer hareketleri yalnizca transfer olusturma akisi ile kaydedilebilir.", 400);
+        }
+
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.SayimFarki, StringComparison.Ordinal))
+        {
+            if (!StokSayimFarkiYonleri.Hepsi.Contains(dto.SayimFarkiYonu ?? string.Empty))
+            {
+                throw new BaseException("Sayım farkı yönü Fazla veya Eksik olmalıdır.", 400);
+            }
+        }
+        else
+        {
+            dto.SayimFarkiYonu = null;
         }
 
         if (dto.DepoId <= 0 || !await _depoRepository.AnyAsync(x => x.Id == dto.DepoId))
@@ -538,7 +551,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task ApplyKdvAsync(StokHareketDto dto)
     {
-        var islemYonu = StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu)
+        var islemYonu = StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu)
             ? KdvIslemYonu.Satis
             : KdvIslemYonu.Alis;
 
@@ -694,24 +707,24 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         => currentBalance - existingMovementEffect + newMovementEffect;
 
     private static decimal CalculateMovementEffect(StokHareketDto dto)
-        => CalculateMovementEffect(dto.HareketTipi, dto.TransferYonu, dto.Miktar, dto.Durum);
+        => CalculateMovementEffect(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu, dto.Miktar, dto.Durum);
 
     private static decimal CalculateMovementEffect(StokHareket hareket)
-        => CalculateMovementEffect(hareket.HareketTipi, hareket.TransferYonu, hareket.Miktar, hareket.Durum);
+        => CalculateMovementEffect(hareket.HareketTipi, hareket.TransferYonu, hareket.SayimFarkiYonu, hareket.Miktar, hareket.Durum);
 
-    private static decimal CalculateMovementEffect(string? hareketTipi, string? transferYonu, decimal miktar, string? durum)
+    private static decimal CalculateMovementEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar, string? durum)
     {
         if (!string.Equals(durum, StokHareketDurumlari.Aktif, StringComparison.Ordinal))
         {
             return 0m;
         }
 
-        if (StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu))
+        if (StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
         {
             return miktar;
         }
 
-        if (StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu))
+        if (StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
         {
             return -miktar;
         }

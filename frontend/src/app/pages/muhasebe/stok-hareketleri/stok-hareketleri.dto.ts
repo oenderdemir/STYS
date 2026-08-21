@@ -15,6 +15,7 @@ export interface StokHareketModel {
     kaynakId?: number | null;
     transferGrupId?: string | null;
     transferYonu?: string | null;
+    sayimFarkiYonu?: string | null;
     karsiDepoId?: number | null;
     hedefDepoId?: number | null;
     durum: string;
@@ -40,6 +41,7 @@ export interface CreateStokHareketRequest {
     cariKartId?: number | null;
     kaynakModul?: string | null;
     kaynakId?: number | null;
+    sayimFarkiYonu?: string | null;
     durum: string;
     kdvUygulamaTipi: number;
     kdvIstisnaTanimId?: number | null;
@@ -121,4 +123,9 @@ export const STOK_HAREKET_TIPLERI: Array<{ label: string; value: string }> = [
 export const STOK_HAREKET_DURUMLARI: Array<{ label: string; value: string }> = [
     { label: 'Aktif', value: 'Aktif' },
     { label: 'Iptal', value: 'Iptal' }
+];
+
+export const STOK_SAYIM_FARKI_YONLERI: Array<{ label: string; value: string }> = [
+    { label: 'Fazla', value: 'Fazla' },
+    { label: 'Eksik', value: 'Eksik' }
 ];

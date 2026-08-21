@@ -22,6 +22,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         create: () => of({}),
                         createTransfer: () => of([]),
                         update: () => of({}),
+                        delete: () => of(void 0),
                         transferIptal: () => of(void 0)
                     }
                 },
@@ -182,5 +183,16 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
 
         expect(component.getHedefDepoOptions().map(x => x.value)).toEqual([5, 12]);
         expect(component.getHedefDepoOptions().some(x => x.value === 9)).toBeFalse();
+    });
+
+    it('sayim farki secilince varsayilan yon fazla olur', () => {
+        const component = createComponent();
+
+        component.openCreate();
+        component.model.hareketTipi = 'SayimFarki';
+        component.onHareketTipiChange();
+
+        expect(component.model.sayimFarkiYonu).toBe('Fazla');
+        expect(component.isSayimFarki(component.model)).toBeTrue();
     });
 });

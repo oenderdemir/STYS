@@ -30,8 +30,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
                 TasinirKartAd = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
                 Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
-                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m,
-                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -64,8 +64,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
                 Ad = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
                 Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
-                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m,
-                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -91,8 +91,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             .Where(x => x.TasinirKartId == tasinirKartId)
             .Select(x => new
             {
-                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m,
-                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -108,6 +108,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 HareketTarihi = x.HareketTarihi,
                 HareketTipi = x.HareketTipi,
                 TransferYonu = x.TransferYonu,
+                SayimFarkiYonu = x.SayimFarkiYonu,
                 Miktar = x.Miktar,
                 BirimFiyat = x.BirimFiyat,
                 Tutar = x.Tutar,
@@ -132,13 +133,13 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         }
 
         var girisMiktari = hareketler
-            .Where(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu))
+            .Where(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu))
             .Sum(x => x.Miktar);
         var cikisMiktari = hareketler
-            .Where(x => StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu))
+            .Where(x => StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu))
             .Sum(x => x.Miktar);
         var girisHareketleri = hareketler
-            .Where(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu))
+            .Where(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu))
             .ToList();
 
         return new StokDetayDto
@@ -258,6 +259,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         public DateTime HareketTarihi { get; set; }
         public string HareketTipi { get; set; } = string.Empty;
         public string? TransferYonu { get; set; }
+        public string? SayimFarkiYonu { get; set; }
         public decimal Miktar { get; set; }
         public decimal BirimFiyat { get; set; }
         public decimal Tutar { get; set; }

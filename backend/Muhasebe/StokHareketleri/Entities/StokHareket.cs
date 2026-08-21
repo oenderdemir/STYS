@@ -39,6 +39,8 @@ public class StokHareket : BaseEntity<int>
 
     public string? TransferYonu { get; set; }
 
+    public string? SayimFarkiYonu { get; set; }
+
     public int? KarsiDepoId { get; set; }
 
     public string Durum { get; set; } = StokHareketDurumlari.Aktif;

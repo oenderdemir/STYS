@@ -4,6 +4,7 @@ using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.Common.Services;
+using STYS.Muhasebe.Depolar.Repositories;
 using STYS.Muhasebe.TasinirKartlari.Dtos;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
@@ -17,6 +18,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
 {
     private readonly ITasinirKartRepository _repository;
     private readonly ITasinirKodRepository _tasinirKodRepository;
+    private readonly IDepoRepository _depoRepository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeDetayHesapService _muhasebeDetayHesapService;
@@ -25,6 +27,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
     public TasinirKartService(
         ITasinirKartRepository repository,
         ITasinirKodRepository tasinirKodRepository,
+        IDepoRepository depoRepository,
         IUserAccessScopeService userAccessScopeService,
         StysAppDbContext dbContext,
         IMapper mapper,
@@ -34,6 +37,7 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
     {
         _repository = repository;
         _tasinirKodRepository = tasinirKodRepository;
+        _depoRepository = depoRepository;
         _userAccessScopeService = userAccessScopeService;
         _dbContext = dbContext;
         _muhasebeDetayHesapService = muhasebeDetayHesapService;
@@ -220,6 +224,8 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
                 throw new BaseException("Stok kodu ayni tesis altinda benzersiz olmalidir.", 400);
             }
         }
+
+        await ValidateVarsayilanDepoAsync(dto, currentId);
     }
 
     private async Task<int?> ResolveWriteTesisIdAsync(int? tesisId, int? existingId)
@@ -343,5 +349,41 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         }
 
         return anaHesap.TamKod;
+    }
+
+    private async Task ValidateVarsayilanDepoAsync(TasinirKartDto dto, int? currentId)
+    {
+        if (!dto.VarsayilanDepoId.HasValue || dto.VarsayilanDepoId.Value <= 0)
+        {
+            dto.VarsayilanDepoId = null;
+            return;
+        }
+
+        var varsayilanDepoId = dto.VarsayilanDepoId.Value;
+        var depo = await _depoRepository.GetByIdAsync(varsayilanDepoId);
+        if (depo is null)
+        {
+            throw new BaseException("Secilen varsayilan depo bulunamadi.", 400);
+        }
+
+        if (depo.TesisId != dto.TesisId)
+        {
+            throw new BaseException("Varsayilan depo tasinir kart ile ayni tesise ait olmalidir.", 400);
+        }
+
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        if (scope.IsScoped && (!depo.TesisId.HasValue || !scope.TesisIds.Contains(depo.TesisId.Value)))
+        {
+            throw new BaseException("Secilen varsayilan depo icin yetkiniz bulunmuyor.", 403);
+        }
+
+        var mevcutVarsayilanDepoId = currentId.HasValue
+            ? await _repository.Where(x => x.Id == currentId.Value).Select(x => x.VarsayilanDepoId).FirstOrDefaultAsync()
+            : null;
+
+        if (!depo.AktifMi && mevcutVarsayilanDepoId != varsayilanDepoId)
+        {
+            throw new BaseException("Secilen varsayilan depo aktif olmalidir.", 400);
+        }
     }
 }

@@ -2506,6 +2506,8 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.MuhasebeHesapPlaniId)
                 .HasFilter("[IsDeleted] = 0 AND [MuhasebeHesapPlaniId] IS NOT NULL");
+            entity.HasIndex(x => x.VarsayilanDepoId)
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanDepoId] IS NOT NULL");
             entity.HasIndex(x => new { x.TesisId, x.AnaMuhasebeHesapKodu })
                 .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL AND [AnaMuhasebeHesapKodu] IS NOT NULL");
 
@@ -2517,6 +2519,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.VarsayilanDepo)
+                .WithMany()
+                .HasForeignKey(x => x.VarsayilanDepoId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.MuhasebeHesapPlani)

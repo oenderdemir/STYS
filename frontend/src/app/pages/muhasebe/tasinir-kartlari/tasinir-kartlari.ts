@@ -21,6 +21,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { DepolarService } from '../depolar/depolar.service';
 import { TasinirKodlariService } from '../tasinir-kodlari/tasinir-kodlari.service';
 import { MALZEME_TIPLERI, PaketTuruOptionModel, TasinirKartModel } from './tasinir-kartlari.dto';
 import { TasinirKartlariService } from './tasinir-kartlari.service';
@@ -34,6 +35,7 @@ import { TasinirKartlariService } from './tasinir-kartlari.service';
 })
 export class TasinirKartlariPage implements OnInit {
     private readonly service = inject(TasinirKartlariService);
+    private readonly depolarService = inject(DepolarService);
     private readonly tasinirKodService = inject(TasinirKodlariService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
@@ -60,6 +62,7 @@ export class TasinirKartlariPage implements OnInit {
     readonly malzemeTipleri = MALZEME_TIPLERI;
     paketTurleri: PaketTuruOptionModel[] = [];
     paketTuruSecenekleri: Array<{ label: string; value: string }> = [];
+    varsayilanDepoSecenekleri: Array<{ label: string; value: number }> = [];
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -71,6 +74,7 @@ export class TasinirKartlariPage implements OnInit {
         if (tesisId) {
             this.pageNumber = 1;
             this.closeOpenDialogForTesisChange();
+            this.loadVarsayilanDepolar();
             this.load(1, this.pageSize);
             this.messageService.add({
                 severity: UiSeverity.Warn,
@@ -86,6 +90,7 @@ export class TasinirKartlariPage implements OnInit {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
                 this.loadPaketTurleri();
+                this.loadVarsayilanDepolar();
                 this.load(1, this.pageSize);
             },
             error: (error: unknown) => this.showError(error)
@@ -253,6 +258,7 @@ export class TasinirKartlariPage implements OnInit {
         const payload = {
             tesisId,
             tasinirKodId: this.model.tasinirKodId,
+            varsayilanDepoId: this.model.varsayilanDepoId ?? null,
             stokKodu: null,
             ad: this.model.ad.trim(),
             birim: this.model.birim?.trim() || 'Adet',
@@ -318,6 +324,7 @@ export class TasinirKartlariPage implements OnInit {
         return {
             tesisId: null,
             tasinirKodId: 0,
+            varsayilanDepoId: null,
             stokKodu: '',
             muhasebeHesapPlaniId: null,
             anaMuhasebeHesapKodu: null,
@@ -348,6 +355,28 @@ export class TasinirKartlariPage implements OnInit {
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
+                this.showError(error);
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    private loadVarsayilanDepolar(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId) {
+            this.varsayilanDepoSecenekleri = [];
+            return;
+        }
+
+        this.depolarService.getAll(tesisId).subscribe({
+            next: (items) => {
+                this.varsayilanDepoSecenekleri = items
+                    .filter((x) => x.aktifMi && x.id)
+                    .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.varsayilanDepoSecenekleri = [];
                 this.showError(error);
                 this.cdr.detectChanges();
             }

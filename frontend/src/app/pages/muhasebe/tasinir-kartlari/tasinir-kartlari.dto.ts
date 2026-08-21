@@ -2,6 +2,7 @@ export interface TasinirKartModel {
     id?: number;
     tesisId?: number | null;
     tasinirKodId: number;
+    varsayilanDepoId?: number | null;
     stokKodu: string;
     muhasebeHesapPlaniId?: number | null;
     anaMuhasebeHesapKodu?: string | null;

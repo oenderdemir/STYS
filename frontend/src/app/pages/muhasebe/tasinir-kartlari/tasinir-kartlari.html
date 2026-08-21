@@ -79,6 +79,10 @@
             <label class="block font-medium mb-2">Stok Kodu</label>
             <input pInputText class="w-full" [value]="model.stokKodu || ''" readonly placeholder="Sistem tarafından oluşturulacak" />
         </div>
+        <div class="col-span-12 md:col-span-7">
+            <label class="block font-medium mb-2">Varsayilan Depo</label>
+            <p-select class="w-full" [options]="varsayilanDepoSecenekleri" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.varsayilanDepoId" appendTo="body" />
+        </div>
         <div class="col-span-12">
             <label class="block font-medium mb-2">Ad</label>
             <input pInputText class="w-full" [(ngModel)]="model.ad" maxlength="256" />

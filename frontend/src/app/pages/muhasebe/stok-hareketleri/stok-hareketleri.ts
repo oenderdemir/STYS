@@ -110,6 +110,8 @@ export class StokHareketleriPage implements OnInit {
 
     /** Full TasinirKart models indexed by id for O(1) lookups of tesisId and stokKodu. */
     private tasinirKartByIdMap = new Map<number, TasinirKartModel>();
+    private selectedDepoPresetSource: 'none' | 'filter' | 'default' | 'manual' = 'none';
+    private lastSelectedTasinirKartId: number | null = null;
 
     /** Full KdvIstisnaTanim records indexed by id for O(1) lookups. */
     private kdvIstisnaTanimByIdMap = new Map<number, KdvIstisnaTanimDto>();
@@ -270,8 +272,11 @@ export class StokHareketleriPage implements OnInit {
         this.dialogMode = 'create';
         this.model = this.createEmpty();
         this.hareketTarihiDate = this.startOfNow();
+        this.selectedDepoPresetSource = 'none';
+        this.lastSelectedTasinirKartId = null;
         if (this.selectedDepoId && this.selectedDepoId > 0) {
             this.model.depoId = this.selectedDepoId;
+            this.selectedDepoPresetSource = 'filter';
         }
         this.applyIstisnaFilter();
         this.dialogVisible = true;
@@ -284,8 +289,55 @@ export class StokHareketleriPage implements OnInit {
         this.dialogMode = 'edit';
         this.model = { ...item };
         this.hareketTarihiDate = parseApiDate(item.hareketTarihi);
+        this.selectedDepoPresetSource = 'manual';
+        this.lastSelectedTasinirKartId = item.tasinirKartId;
         this.applyIstisnaFilter();
         this.dialogVisible = true;
+    }
+
+    onTasinirKartChange(tasinirKartId: number | null): void {
+        const oncekiTasinirKartId = this.model.tasinirKartId > 0 ? this.model.tasinirKartId : null;
+        this.model.tasinirKartId = tasinirKartId ?? 0;
+        if (this.dialogMode !== 'create') {
+            this.lastSelectedTasinirKartId = this.model.tasinirKartId > 0 ? this.model.tasinirKartId : null;
+            return;
+        }
+
+        const kartDegisti = oncekiTasinirKartId !== this.model.tasinirKartId;
+        this.lastSelectedTasinirKartId = this.model.tasinirKartId > 0 ? this.model.tasinirKartId : null;
+
+        if (this.selectedDepoId && this.selectedDepoId > 0) {
+            this.model.depoId = this.selectedDepoId;
+            this.selectedDepoPresetSource = 'filter';
+            return;
+        }
+
+        if (!kartDegisti && this.selectedDepoPresetSource === 'manual') {
+            return;
+        }
+
+        const tasinirKart = this.model.tasinirKartId > 0
+            ? this.tasinirKartByIdMap.get(this.model.tasinirKartId)
+            : null;
+
+        const varsayilanDepoId = tasinirKart?.varsayilanDepoId ?? null;
+        if (varsayilanDepoId && this.depoOptions.some(x => x.value === varsayilanDepoId)) {
+            this.model.depoId = varsayilanDepoId;
+            this.selectedDepoPresetSource = 'default';
+            return;
+        }
+
+        if (this.selectedDepoPresetSource !== 'manual') {
+            this.model.depoId = 0;
+            this.selectedDepoPresetSource = 'none';
+        }
+    }
+
+    onDepoChange(depoId: number | null): void {
+        this.model.depoId = depoId ?? 0;
+        if (this.dialogMode === 'create') {
+            this.selectedDepoPresetSource = depoId && depoId > 0 ? 'manual' : 'none';
+        }
     }
 
     save(): void {

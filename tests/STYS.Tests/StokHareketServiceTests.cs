@@ -281,6 +281,113 @@ public class StokHareketServiceTests
         Assert.DoesNotContain(result.Satirlar, x => x.BirimFiyat == 77);
     }
 
+    [Fact]
+    public async Task AddAsync_YetersizNormalCikisReddederVeYeniHareketOlusturmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, miktar: 11)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
+        Assert.Equal(1, await dbContext.StokHareketleri.CountAsync());
+    }
+
+    [Fact]
+    public async Task AddAsync_YeterliSarfIleBakiyeDusurur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Sarf, miktar: 8));
+
+        var bakiye = await service.GetStokBakiyeAsync(1, 10);
+        Assert.Equal(2, Assert.Single(bakiye).BakiyeMiktari);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_CikisMiktariniArtirincaProjeksiyonBakiyeyiDogruHesaplar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 100);
+        var existingCikisId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Cikis, 20, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        await service.UpdateAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, miktar: 30, id: existingCikisId));
+
+        var bakiye = await service.GetStokBakiyeAsync(1, 10);
+        Assert.Equal(70, Assert.Single(bakiye).BakiyeMiktari);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_GirisKucultmeNegatifStokYaratirsaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var girisId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 10, 1, StokHareketDurumlari.Aktif);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Sarf, 8, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(CreateStokHareketDto(StokHareketTipleri.Giris, miktar: 5, id: girisId)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_GirisSilininceNegatifStokOlusuyorsaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var girisId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 10, 1, StokHareketDurumlari.Aktif);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Cikis, 8, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.DeleteAsync(girisId));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Bu stok hareketi silinirse depo bakiyesi negatif olacağı için işlem yapılamaz.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AddUpdateVeGetStokDetay_FarkliTesisDepoKartKombinasyonunuReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedCrossTesisDataAsync(dbContext);
+        var existingId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        var addEx = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, miktar: 1, tasinirKartId: 101)));
+        var updateEx = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(CreateStokHareketDto(StokHareketTipleri.Giris, miktar: 5, id: existingId, tasinirKartId: 101)));
+        var detayEx = await Assert.ThrowsAsync<BaseException>(() => service.GetStokDetayAsync(10, 101));
+
+        Assert.Equal("Seçilen depo ve taşınır kart aynı tesise ait olmalıdır.", addEx.Message);
+        Assert.Equal("Seçilen depo ve taşınır kart aynı tesise ait olmalıdır.", updateEx.Message);
+        Assert.Equal("Seçilen depo ve taşınır kart aynı tesise ait olmalıdır.", detayEx.Message);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AktifGirisiIptalEtmekNegatifStokYaratirsaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var girisId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 10, 1, StokHareketDurumlari.Aktif);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Sarf, 8, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(CreateStokHareketDto(StokHareketTipleri.Giris, miktar: 10, id: girisId, durum: StokHareketDurumlari.Iptal)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
+    }
+
     private static StysAppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -561,6 +668,89 @@ public class StokHareketServiceTests
         dbContext.StokHareketleri.Add(entity);
         await dbContext.SaveChangesAsync();
         return entity.Id;
+    }
+
+    private static StokHareketDto CreateStokHareketDto(
+        string hareketTipi,
+        decimal miktar,
+        int? id = null,
+        int depoId = 10,
+        int tasinirKartId = 100,
+        string durum = StokHareketDurumlari.Aktif)
+    {
+        return new StokHareketDto
+        {
+            Id = id,
+            DepoId = depoId,
+            TasinirKartId = tasinirKartId,
+            HareketTarihi = new DateTime(2026, 8, 21),
+            HareketTipi = hareketTipi,
+            Miktar = miktar,
+            BirimFiyat = 1,
+            Tutar = miktar,
+            Durum = durum,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20
+        };
+    }
+
+    private static async Task<int> SeedMovementAsync(
+        StysAppDbContext dbContext,
+        int depoId,
+        int tasinirKartId,
+        string hareketTipi,
+        decimal miktar,
+        decimal birimFiyat,
+        string durum)
+    {
+        var entity = new StokHareket
+        {
+            DepoId = depoId,
+            TasinirKartId = tasinirKartId,
+            HareketTarihi = new DateTime(2026, 8, 21),
+            HareketTipi = hareketTipi,
+            Miktar = miktar,
+            BirimFiyat = birimFiyat,
+            Tutar = miktar * birimFiyat,
+            Durum = durum,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20,
+            KdvTutari = Math.Round(miktar * birimFiyat * 0.2m, 2, MidpointRounding.AwayFromZero)
+        };
+
+        dbContext.StokHareketleri.Add(entity);
+        await dbContext.SaveChangesAsync();
+        return entity.Id;
+    }
+
+    private static async Task SeedCrossTesisDataAsync(StysAppDbContext dbContext)
+    {
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 2,
+            KurumId = 1,
+            IlId = 1,
+            Ad = "Tesis 2",
+            Telefon = "111",
+            Adres = "Adres 2",
+            AktifMi = true
+        });
+
+        dbContext.TasinirKartlar.Add(new TasinirKart
+        {
+            Id = 101,
+            TesisId = 2,
+            TasinirKodId = 200,
+            MuhasebeHesapPlaniId = 1,
+            StokKodu = "STK-101",
+            Ad = "Diger Kart",
+            Birim = "Adet",
+            MalzemeTipi = MalzemeTipleri.Diger,
+            KdvOrani = 20,
+            AktifMi = true
+        });
+
+        await dbContext.SaveChangesAsync();
     }
 
     private sealed class FakeMuhasebeDonemService : IMuhasebeDonemService

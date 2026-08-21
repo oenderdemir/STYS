@@ -193,6 +193,9 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         component.onHareketTipiChange();
 
         expect(component.model.sayimFarkiYonu).toBe('Fazla');
+        expect(component.model.kdvUygulamaTipi).toBe(4);
+        expect(component.model.kdvOrani).toBe(0);
+        expect(component.model.kdvIstisnaTanimId).toBeNull();
         expect(component.isSayimFarki(component.model)).toBeTrue();
     });
 });

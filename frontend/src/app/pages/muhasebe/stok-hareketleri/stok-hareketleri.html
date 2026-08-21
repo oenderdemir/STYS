@@ -191,7 +191,7 @@
             <label class="block font-medium mb-2">Durum</label>
             <p-select class="w-full" [options]="durumlar" optionLabel="label" optionValue="value" [(ngModel)]="model.durum" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField()">
+        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField() && !isSayimFarki(model)">
             <label class="block font-medium mb-2">Cari (opsiyonel)</label>
             <p-select class="w-full" [options]="cariKartOptions" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.cariKartId" appendTo="body" />
         </div>
@@ -222,15 +222,15 @@
                 [showButtonBar]="true"
                 appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField()">
+        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField() && !isSayimFarki(model)">
             <label class="block font-medium mb-2">KDV Uygulama Tipi</label>
             <p-select class="w-full" [options]="filteredKdvUygulamaTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.kdvUygulamaTipi" (onChange)="onKdvUygulamaTipiChange()" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-8" *ngIf="!showHedefDepoField() && model.kdvUygulamaTipi !== 1">
+        <div class="col-span-12 md:col-span-8" *ngIf="!showHedefDepoField() && !isSayimFarki(model) && model.kdvUygulamaTipi !== 1">
             <label class="block font-medium mb-2">KDV Istisna Tanimi</label>
             <p-select class="w-full" [options]="filteredKdvIstisnaTanimOptions" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.kdvIstisnaTanimId" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField() && model.kdvUygulamaTipi === 1">
+        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField() && !isSayimFarki(model) && model.kdvUygulamaTipi === 1">
             <label class="block font-medium mb-2">KDV Orani (%)</label>
             <p-select class="w-full" [options]="getKdvOraniSecenekleri(model.kdvOrani)" optionLabel="label" optionValue="value" [(ngModel)]="model.kdvOrani" appendTo="body" />
         </div>

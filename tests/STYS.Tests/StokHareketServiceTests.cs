@@ -458,6 +458,61 @@ public class StokHareketServiceTests
         Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
     }
 
+    [Fact]
+    public async Task GetStokBakiyeAsync_LegacyNullSayimFarkiYonuGirisEtkisiGosterir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.SayimFarki, 2, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        var bakiye = await service.GetStokBakiyeAsync(1, 10);
+        Assert.Equal(12, Assert.Single(bakiye).BakiyeMiktari);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_SayimFarkiYonDegisinceProjeksiyonNegatifseReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 8);
+        var sayimFarkiId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.SayimFarki, 5, 1, StokHareketDurumlari.Aktif, StokSayimFarkiYonleri.Fazla);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(CreateStokHareketDto(
+            StokHareketTipleri.SayimFarki,
+            miktar: 10,
+            id: sayimFarkiId,
+            sayimFarkiYonu: StokSayimFarkiYonleri.Eksik)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AddAsync_SayimFarkiKdvAlanlariniKapsamDisiNormalizeEder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var kdvService = new FakeKdvUygulamaService();
+        var service = CreateService(dbContext, kdvService: kdvService);
+
+        var created = await service.AddAsync(CreateStokHareketDto(
+            StokHareketTipleri.SayimFarki,
+            miktar: 2,
+            sayimFarkiYonu: StokSayimFarkiYonleri.Fazla,
+            kdvUygulamaTipi: (int)KdvUygulamaTipi.Kdvli,
+            kdvOrani: 20));
+
+        Assert.Equal((int)KdvUygulamaTipi.KdvKapsamDisi, created.KdvUygulamaTipi);
+        Assert.Equal(0, created.KdvOrani);
+        Assert.Equal(0, created.KdvTutari);
+        Assert.Null(created.KdvIstisnaTanimId);
+        Assert.Equal(0, kdvService.CallCount);
+    }
+
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -473,7 +528,8 @@ public class StokHareketServiceTests
 
     private static StokHareketService CreateService(
         StysAppDbContext dbContext,
-        FakeMuhasebeDonemService? muhasebeDonemService = null)
+        FakeMuhasebeDonemService? muhasebeDonemService = null,
+        FakeKdvUygulamaService? kdvService = null)
     {
         var mapperConfig = new MapperConfiguration(cfg =>
         {
@@ -489,7 +545,7 @@ public class StokHareketServiceTests
             new CariKartRepository(dbContext, mapper),
             muhasebeDonemService ?? new FakeMuhasebeDonemService(),
             new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
-            new FakeKdvUygulamaService(),
+            kdvService ?? new FakeKdvUygulamaService(),
             mapper);
     }
 
@@ -747,7 +803,9 @@ public class StokHareketServiceTests
         int depoId = 10,
         int tasinirKartId = 100,
         string durum = StokHareketDurumlari.Aktif,
-        string? sayimFarkiYonu = null)
+        string? sayimFarkiYonu = null,
+        int kdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+        decimal kdvOrani = 20)
     {
         return new StokHareketDto
         {
@@ -761,8 +819,8 @@ public class StokHareketServiceTests
             BirimFiyat = 1,
             Tutar = miktar,
             Durum = durum,
-            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
-            KdvOrani = 20
+            KdvUygulamaTipi = kdvUygulamaTipi,
+            KdvOrani = kdvOrani
         };
     }
 
@@ -773,7 +831,8 @@ public class StokHareketServiceTests
         string hareketTipi,
         decimal miktar,
         decimal birimFiyat,
-        string durum)
+        string durum,
+        string? sayimFarkiYonu = null)
     {
         var entity = new StokHareket
         {
@@ -781,6 +840,7 @@ public class StokHareketServiceTests
             TasinirKartId = tasinirKartId,
             HareketTarihi = new DateTime(2026, 8, 21),
             HareketTipi = hareketTipi,
+            SayimFarkiYonu = sayimFarkiYonu,
             Miktar = miktar,
             BirimFiyat = birimFiyat,
             Tutar = miktar * birimFiyat,
@@ -858,8 +918,11 @@ public class StokHareketServiceTests
 
     private sealed class FakeKdvUygulamaService : IKdvUygulamaService
     {
+        public int CallCount { get; private set; }
+
         public Task<KdvUygulamaResult> ValidateAndSnapshotAsync(int kdvUygulamaTipi, int? kdvIstisnaTanimId, decimal kdvOrani, decimal tutar, DateTime islemTarihi, KdvIslemYonu islemYonu, CancellationToken cancellationToken = default)
         {
+            CallCount++;
             return Task.FromResult(new KdvUygulamaResult
             {
                 KdvUygulamaTipi = kdvUygulamaTipi,

@@ -23,7 +23,8 @@ public static class StokHareketTipleri
 
         if (string.Equals(hareketTipi, SayimFarki, StringComparison.Ordinal))
         {
-            return string.Equals(sayimFarkiYonu, StokSayimFarkiYonleri.Fazla, StringComparison.Ordinal);
+            return string.IsNullOrWhiteSpace(sayimFarkiYonu)
+                || string.Equals(sayimFarkiYonu, StokSayimFarkiYonleri.Fazla, StringComparison.Ordinal);
         }
 
         return hareketTipi is not null && GirisEtkisi.Contains(hareketTipi);

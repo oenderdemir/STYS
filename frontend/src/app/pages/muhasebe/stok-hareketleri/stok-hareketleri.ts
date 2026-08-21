@@ -414,27 +414,27 @@ export class StokHareketleriPage implements OnInit {
         }
 
         // Client-side KDV validation
-        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi === 5) {
+        if (!this.isTransfer(this.model) && !this.isSayimFarki(this.model) && this.model.kdvUygulamaTipi === 5) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Desteklenmiyor', detail: 'Tevkifatlı KDV uygulaması henüz desteklenmemektedir.' });
             return;
         }
 
-        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
+        if (!this.isTransfer(this.model) && !this.isSayimFarki(this.model) && this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li dışındaki işlemlerde istisna tanımı seçilmesi zorunludur.' });
             return;
         }
 
-        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi === 1 && this.model.kdvIstisnaTanimId) {
+        if (!this.isTransfer(this.model) && !this.isSayimFarki(this.model) && this.model.kdvUygulamaTipi === 1 && this.model.kdvIstisnaTanimId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: 'KDV\'li işlemlerde istisna tanımı seçilemez.' });
             return;
         }
 
-        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi === 1 && (this.model.kdvOrani == null || this.model.kdvOrani <= 0)) {
+        if (!this.isTransfer(this.model) && !this.isSayimFarki(this.model) && this.model.kdvUygulamaTipi === 1 && (this.model.kdvOrani == null || this.model.kdvOrani <= 0)) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li işlemlerde KDV oranı 0\'dan büyük olmalıdır.' });
             return;
         }
 
-        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi !== 1 && this.model.kdvOrani !== 0) {
+        if (!this.isTransfer(this.model) && !this.isSayimFarki(this.model) && this.model.kdvUygulamaTipi !== 1 && this.model.kdvOrani !== 0) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Değer', detail: 'İstisna/kapsam dışı işlemlerde KDV oranı 0 olmalıdır.' });
             return;
         }
@@ -769,6 +769,13 @@ export class StokHareketleriPage implements OnInit {
             this.model.kdvIstisnaAciklamasi = null;
             this.model.kdvOrani = 0;
             this.model.kdvTutari = 0;
+        } else if (this.isSayimFarki(this.model)) {
+            this.model.kdvUygulamaTipi = 4;
+            this.model.kdvIstisnaTanimId = null;
+            this.model.kdvIstisnaKodu = null;
+            this.model.kdvIstisnaAciklamasi = null;
+            this.model.kdvOrani = 0;
+            this.model.kdvTutari = 0;
         } else if (this.dialogMode === 'create' && this.model.kdvUygulamaTipi === 4 && this.model.kdvOrani === 0) {
             this.model.kdvUygulamaTipi = 1;
             this.model.kdvOrani = 20;
@@ -848,7 +855,9 @@ export class StokHareketleriPage implements OnInit {
 
     getHareketTipiLabel(row: StokHareketModel): string {
         if (row.hareketTipi === 'SayimFarki') {
-            return row.sayimFarkiYonu ? `Sayim Farki / ${row.sayimFarkiYonu}` : 'Sayim Farki';
+            return row.sayimFarkiYonu === 'Eksik'
+                ? 'Sayım Farkı / Stok Eksiği'
+                : 'Sayım Farkı / Stok Fazlası';
         }
 
         if (row.hareketTipi !== 'Transfer') {

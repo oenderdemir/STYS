@@ -551,6 +551,17 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task ApplyKdvAsync(StokHareketDto dto)
     {
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.SayimFarki, StringComparison.Ordinal))
+        {
+            dto.KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi;
+            dto.KdvIstisnaTanimId = null;
+            dto.KdvIstisnaKodu = null;
+            dto.KdvIstisnaAciklamasi = null;
+            dto.KdvOrani = 0;
+            dto.KdvTutari = 0;
+            return;
+        }
+
         var islemYonu = StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu)
             ? KdvIslemYonu.Satis
             : KdvIslemYonu.Alis;

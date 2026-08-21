@@ -126,6 +126,6 @@ export const STOK_HAREKET_DURUMLARI: Array<{ label: string; value: string }> = [
 ];
 
 export const STOK_SAYIM_FARKI_YONLERI: Array<{ label: string; value: string }> = [
-    { label: 'Fazla', value: 'Fazla' },
-    { label: 'Eksik', value: 'Eksik' }
+    { label: 'Stok Fazlası', value: 'Fazla' },
+    { label: 'Stok Eksiği', value: 'Eksik' }
 ];

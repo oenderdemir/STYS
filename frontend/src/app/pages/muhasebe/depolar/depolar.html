@@ -78,9 +78,12 @@
         <div class="col-span-12">
             <label class="block font-medium mb-2">Malzeme Kayit Tipi</label>
             <div class="flex flex-wrap gap-4">
-                <div class="flex align-items-center gap-2" *ngFor="let option of malzemeKayitTipiOptions; let i = index">
+                <div class="flex align-items-start gap-2" *ngFor="let option of malzemeKayitTipiOptions; let i = index">
                     <p-radioButton [inputId]="'malzemeTipi-' + i" name="malzemeKayitTipi" [value]="option.value" [(ngModel)]="model.malzemeKayitTipi"></p-radioButton>
-                    <label [for]="'malzemeTipi-' + i">{{ option.label }}</label>
+                    <div>
+                        <label [for]="'malzemeTipi-' + i">{{ option.label }}</label>
+                        <div class="text-sm text-color-secondary">{{ option.description }}</div>
+                    </div>
                 </div>
             </div>
         </div>

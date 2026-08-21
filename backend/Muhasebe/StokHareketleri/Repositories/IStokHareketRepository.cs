@@ -1,4 +1,5 @@
 using STYS.Muhasebe.StokHareketleri.Dtos;
+using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Repositories;
 
@@ -9,4 +10,5 @@ public interface IStokHareketRepository : IBaseRdbmsRepository<StokHareket, int>
     Task<List<StokBakiyeDto>> GetDepoStokBakiyeleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
     Task<List<StokKartOzetDto>> GetStokKartOzetleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
     Task<decimal> GetBakiyeMiktariAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default);
+    Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, DepoMalzemeKayitTipleri malzemeKayitTipi, CancellationToken cancellationToken = default);
 }

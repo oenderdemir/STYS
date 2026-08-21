@@ -168,6 +168,119 @@ public class StokHareketServiceTests
         Assert.DoesNotContain(10, donemService.Calls);
     }
 
+    [Fact]
+    public async Task GetStokDetayAsync_AyriKayitModundaUcAyrıGirisDetayiDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedDetayHareketleriAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        Assert.Equal("MalzemeleriAyriKayittaTut", result.MalzemeKayitTipi);
+        Assert.Equal(3, result.Satirlar.Count);
+        Assert.Equal(new decimal[] { 10, 5, 8 }, result.Satirlar.Select(x => x.Miktar));
+        Assert.Equal(new decimal[] { 100, 100, 120 }, result.Satirlar.Select(x => x.BirimFiyat));
+    }
+
+    [Fact]
+    public async Task GetStokDetayAsync_FiyatBazliModdaAyniFiyatliGirisleriGruplar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut);
+        await SeedDetayHareketleriAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        Assert.Equal("FiyatFarkliMalzemeleriAyriKayittaTut", result.MalzemeKayitTipi);
+        Assert.Equal(2, result.Satirlar.Count);
+        Assert.Collection(result.Satirlar.OrderBy(x => x.BirimFiyat),
+            ilk =>
+            {
+                Assert.Equal(15, ilk.Miktar);
+                Assert.Equal(100, ilk.BirimFiyat);
+                Assert.Equal(1500, ilk.ToplamTutar);
+            },
+            ikinci =>
+            {
+                Assert.Equal(8, ikinci.Miktar);
+                Assert.Equal(120, ikinci.BirimFiyat);
+                Assert.Equal(960, ikinci.ToplamTutar);
+            });
+    }
+
+    [Fact]
+    public async Task GetStokDetayAsync_AyniKayitModundaAgirlikliOrtalamaDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut);
+        await SeedDetayHareketleriAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        Assert.Equal("MalzemeleriAyniKayittaTut", result.MalzemeKayitTipi);
+        var satir = Assert.Single(result.Satirlar);
+        Assert.Equal(23, satir.Miktar);
+        Assert.Equal(2460, satir.ToplamTutar);
+        Assert.Equal(Math.Round(2460m / 23m, 2, MidpointRounding.AwayFromZero), satir.BirimFiyat);
+    }
+
+    [Fact]
+    public async Task GetStokDetayVeStokBakiye_MalzemeKayitTipiDegisseDeToplamBakiyeDegismez()
+    {
+        foreach (var tip in new[]
+                 {
+                     DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut,
+                     DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut,
+                     DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut
+                 })
+        {
+            await using var dbContext = CreateDbContext();
+            await SeedBaseAsync(dbContext, tip);
+            await SeedBakiyeKorumaHareketleriAsync(dbContext);
+            var service = CreateService(dbContext);
+
+            var bakiye = await service.GetStokBakiyeAsync(1, 10);
+            var detay = await service.GetStokDetayAsync(10, 100);
+
+            var satir = Assert.Single(bakiye);
+            Assert.Equal(70, satir.BakiyeMiktari);
+            Assert.Equal(70, detay.BakiyeMiktari);
+        }
+    }
+
+    [Fact]
+    public async Task GetStokDetayAsync_IptalHareketleriniHesabaKatmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedDetayHareketleriAsync(dbContext);
+        dbContext.StokHareketleri.Add(new StokHareket
+        {
+            DepoId = 10,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 11),
+            HareketTipi = StokHareketTipleri.Giris,
+            Miktar = 99,
+            BirimFiyat = 77,
+            Tutar = 7623,
+            Durum = StokHareketDurumlari.Iptal,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20,
+            KdvTutari = 1524.6m
+        });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        Assert.Equal(3, result.Satirlar.Count);
+        Assert.DoesNotContain(result.Satirlar, x => x.BirimFiyat == 77);
+    }
+
     private static StysAppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -217,7 +330,7 @@ public class StokHareketServiceTests
         };
     }
 
-    private static async Task SeedBaseAsync(StysAppDbContext dbContext)
+    private static async Task SeedBaseAsync(StysAppDbContext dbContext, DepoMalzemeKayitTipleri malzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut)
     {
         dbContext.Kurumlar.Add(new Kurum
         {
@@ -278,7 +391,7 @@ public class StokHareketServiceTests
                 Ad = "Ana Depo",
                 AktifMi = true,
                 MuhasebeHesapPlaniId = 1,
-                MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
+                MalzemeKayitTipi = malzemeKayitTipi
             },
             new Depo
             {
@@ -288,7 +401,7 @@ public class StokHareketServiceTests
                 Ad = "Mutfak Deposu",
                 AktifMi = true,
                 MuhasebeHesapPlaniId = 1,
-                MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
+                MalzemeKayitTipi = malzemeKayitTipi
             });
 
         dbContext.TasinirKartlar.Add(new TasinirKart
@@ -324,6 +437,107 @@ public class StokHareketServiceTests
             KdvOrani = 20,
             KdvTutari = Math.Round(miktar * 0.2m, 2, MidpointRounding.AwayFromZero)
         });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedDetayHareketleriAsync(StysAppDbContext dbContext)
+    {
+        dbContext.StokHareketleri.AddRange(
+            new StokHareket
+            {
+                DepoId = 10,
+                TasinirKartId = 100,
+                HareketTarihi = new DateTime(2026, 8, 1),
+                HareketTipi = StokHareketTipleri.Giris,
+                Miktar = 10,
+                BirimFiyat = 100,
+                Tutar = 1000,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+                KdvOrani = 20,
+                KdvTutari = 200
+            },
+            new StokHareket
+            {
+                DepoId = 10,
+                TasinirKartId = 100,
+                HareketTarihi = new DateTime(2026, 8, 5),
+                HareketTipi = StokHareketTipleri.Giris,
+                Miktar = 5,
+                BirimFiyat = 100,
+                Tutar = 500,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+                KdvOrani = 20,
+                KdvTutari = 100
+            },
+            new StokHareket
+            {
+                DepoId = 10,
+                TasinirKartId = 100,
+                HareketTarihi = new DateTime(2026, 8, 10),
+                HareketTipi = StokHareketTipleri.Giris,
+                Miktar = 8,
+                BirimFiyat = 120,
+                Tutar = 960,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+                KdvOrani = 20,
+                KdvTutari = 192
+            });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedBakiyeKorumaHareketleriAsync(StysAppDbContext dbContext)
+    {
+        dbContext.StokHareketleri.AddRange(
+            new StokHareket
+            {
+                DepoId = 10,
+                TasinirKartId = 100,
+                HareketTarihi = new DateTime(2026, 8, 1),
+                HareketTipi = StokHareketTipleri.Giris,
+                Miktar = 100,
+                BirimFiyat = 10,
+                Tutar = 1000,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+                KdvOrani = 20,
+                KdvTutari = 200
+            },
+            new StokHareket
+            {
+                DepoId = 10,
+                TasinirKartId = 100,
+                HareketTarihi = new DateTime(2026, 8, 2),
+                HareketTipi = StokHareketTipleri.Cikis,
+                Miktar = 20,
+                BirimFiyat = 10,
+                Tutar = 200,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+                KdvOrani = 20,
+                KdvTutari = 40
+            },
+            new StokHareket
+            {
+                DepoId = 10,
+                TasinirKartId = 100,
+                HareketTarihi = new DateTime(2026, 8, 3),
+                HareketTipi = StokHareketTipleri.Transfer,
+                TransferYonu = StokTransferYonleri.Cikis,
+                KarsiDepoId = 20,
+                TransferGrupId = Guid.NewGuid(),
+                Miktar = 10,
+                BirimFiyat = 10,
+                Tutar = 100,
+                Durum = StokHareketDurumlari.Aktif,
+                KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
+                KdvOrani = 0,
+                KdvTutari = 0
+            });
+
         await dbContext.SaveChangesAsync();
     }
 

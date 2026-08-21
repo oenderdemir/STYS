@@ -30,7 +30,7 @@ import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.ser
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, StokBakiyeModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
+import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -88,6 +88,7 @@ export class StokHareketleriPage implements OnInit {
     totalRecords = 0;
     stokBakiye: StokBakiyeModel[] = [];
     stokKartOzet: StokKartOzetModel[] = [];
+    expandedStokDetayKeys: Record<string, boolean> = {};
     model: StokHareketModel = this.createEmpty();
 
     depoOptions: Array<{ label: string; value: number }> = [];
@@ -118,6 +119,8 @@ export class StokHareketleriPage implements OnInit {
 
     /** Active DynamicDialog reference for the muhasebe fiş taslağı dialog. */
     private fisTaslagiDialogRef: DynamicDialogRef | null = null;
+    private stokDetayByKey = new Map<string, StokDetayModel>();
+    private stokDetayLoadingKeys = new Set<string>();
 
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
@@ -248,8 +251,11 @@ export class StokHareketleriPage implements OnInit {
         if (!tesisId) {
             this.stokBakiye = [];
             this.stokKartOzet = [];
+            this.resetStokDetayState();
             return;
         }
+
+        this.resetStokDetayState();
 
         this.service.getStokBakiye(tesisId, this.selectedDepoId).subscribe({
             next: (items) => {
@@ -260,6 +266,37 @@ export class StokHareketleriPage implements OnInit {
         this.service.getStokKartOzet(tesisId, this.selectedDepoId).subscribe({
             next: (items) => {
                 this.stokKartOzet = items;
+                this.cdr.detectChanges();
+            }
+        });
+    }
+
+    toggleStokDetay(row: StokBakiyeModel): void {
+        const key = this.getStokDetayKey(row);
+        if (this.expandedStokDetayKeys[key]) {
+            delete this.expandedStokDetayKeys[key];
+            this.expandedStokDetayKeys = { ...this.expandedStokDetayKeys };
+            return;
+        }
+
+        this.expandedStokDetayKeys = { ...this.expandedStokDetayKeys, [key]: true };
+        if (this.stokDetayByKey.has(key) || this.stokDetayLoadingKeys.has(key)) {
+            return;
+        }
+
+        this.stokDetayLoadingKeys.add(key);
+        this.service.getStokDetay(row.depoId, row.tasinirKartId).pipe(finalize(() => {
+            this.stokDetayLoadingKeys.delete(key);
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (detay) => {
+                this.stokDetayByKey.set(key, detay);
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                delete this.expandedStokDetayKeys[key];
+                this.expandedStokDetayKeys = { ...this.expandedStokDetayKeys };
+                this.showError(error);
                 this.cdr.detectChanges();
             }
         });
@@ -744,6 +781,35 @@ export class StokHareketleriPage implements OnInit {
         return !this.showHedefDepoField();
     }
 
+    isStokDetayExpanded(row: StokBakiyeModel): boolean {
+        return !!this.expandedStokDetayKeys[this.getStokDetayKey(row)];
+    }
+
+    getStokDetay(row: StokBakiyeModel): StokDetayModel | undefined {
+        return this.stokDetayByKey.get(this.getStokDetayKey(row));
+    }
+
+    isStokDetayLoading(row: StokBakiyeModel): boolean {
+        return this.stokDetayLoadingKeys.has(this.getStokDetayKey(row));
+    }
+
+    getStokDetayToggleIcon(row: StokBakiyeModel): string {
+        return this.isStokDetayExpanded(row) ? 'pi pi-chevron-down' : 'pi pi-chevron-right';
+    }
+
+    getStokDetayModuLabel(malzemeKayitTipi: string | null | undefined): string {
+        switch (malzemeKayitTipi) {
+            case 'MalzemeleriAyriKayittaTut':
+                return 'Malzemeleri Ayrı Kayıtta Tut';
+            case 'FiyatFarkliMalzemeleriAyriKayittaTut':
+                return 'Fiyatı Farklı Malzemeleri Ayrı Kayıtta Tut';
+            case 'MalzemeleriAyniKayittaTut':
+                return 'Malzemeleri Aynı Kayıtta Tut';
+            default:
+                return malzemeKayitTipi ?? '-';
+        }
+    }
+
     getHedefDepoOptions(): Array<{ label: string; value: number }> {
         return this.depoOptions.filter(x => x.value !== this.model.depoId);
     }
@@ -842,5 +908,15 @@ export class StokHareketleriPage implements OnInit {
     private showError(error: unknown): void {
         const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'İşlem başarısız.';
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
+    }
+
+    private getStokDetayKey(row: Pick<StokBakiyeModel, 'depoId' | 'tasinirKartId'>): string {
+        return `${row.depoId}:${row.tasinirKartId}`;
+    }
+
+    private resetStokDetayState(): void {
+        this.expandedStokDetayKeys = {};
+        this.stokDetayByKey.clear();
+        this.stokDetayLoadingKeys.clear();
     }
 }

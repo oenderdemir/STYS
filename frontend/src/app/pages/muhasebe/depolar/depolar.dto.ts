@@ -46,8 +46,8 @@ export interface MuhasebeHesapLookupModel {
     ad: string;
 }
 
-export const MALZEME_KAYIT_TIPI_OPTIONS: Array<{ label: string; value: MalzemeKayitTipi }> = [
-    { label: 'Malzemeleri Ayri Kayitta Tut', value: 'MalzemeleriAyriKayittaTut' },
-    { label: 'Fiyat Farkli Malzemeleri Ayri Kayitta Tut', value: 'FiyatFarkliMalzemeleriAyriKayittaTut' },
-    { label: 'Malzemeleri Ayni Kayitta Tut', value: 'MalzemeleriAyniKayittaTut' }
+export const MALZEME_KAYIT_TIPI_OPTIONS: Array<{ label: string; value: MalzemeKayitTipi; description: string }> = [
+    { label: 'Malzemeleri Ayri Kayitta Tut', value: 'MalzemeleriAyriKayittaTut', description: 'Her giriş ayrı stok detayı olarak izlenir.' },
+    { label: 'Fiyat Farkli Malzemeleri Ayri Kayitta Tut', value: 'FiyatFarkliMalzemeleriAyriKayittaTut', description: 'Aynı fiyatlı girişler birlikte gösterilir.' },
+    { label: 'Malzemeleri Ayni Kayitta Tut', value: 'MalzemeleriAyniKayittaTut', description: 'Aynı taşınır kart tek stok satırında gösterilir.' }
 ];

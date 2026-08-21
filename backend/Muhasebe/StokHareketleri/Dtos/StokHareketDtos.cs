@@ -90,3 +90,30 @@ public class StokKartOzetDto
     public decimal CikisMiktari { get; set; }
     public decimal BakiyeMiktari { get; set; }
 }
+
+public class StokDetayDto
+{
+    public int DepoId { get; set; }
+    public string DepoKod { get; set; } = string.Empty;
+    public string DepoAd { get; set; } = string.Empty;
+    public string MalzemeKayitTipi { get; set; } = string.Empty;
+    public int TasinirKartId { get; set; }
+    public string StokKodu { get; set; } = string.Empty;
+    public string TasinirKartAd { get; set; } = string.Empty;
+    public string Birim { get; set; } = string.Empty;
+    public decimal GirisMiktari { get; set; }
+    public decimal CikisMiktari { get; set; }
+    public decimal BakiyeMiktari { get; set; }
+    public string Aciklama { get; set; } = string.Empty;
+    public List<StokDetaySatirDto> Satirlar { get; set; } = [];
+}
+
+public class StokDetaySatirDto
+{
+    public DateTime? HareketTarihi { get; set; }
+    public decimal Miktar { get; set; }
+    public string Birim { get; set; } = string.Empty;
+    public decimal BirimFiyat { get; set; }
+    public decimal ToplamTutar { get; set; }
+    public int HareketSayisi { get; set; }
+}

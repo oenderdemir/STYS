@@ -323,6 +323,24 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         return result;
     }
 
+    public async Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
+    {
+        if (depoId <= 0)
+        {
+            throw new BaseException("Gecerli bir depo secilmelidir.", 400);
+        }
+
+        if (tasinirKartId <= 0)
+        {
+            throw new BaseException("Gecerli bir tasinir kart secilmelidir.", 400);
+        }
+
+        var depo = await GetDepoOrThrowAsync(depoId);
+        await EnsureDepoAccessAsync(depo.Id, depo.TesisId, "Depo", cancellationToken);
+
+        return await _repository.GetStokDetayAsync(depoId, tasinirKartId, depo.MalzemeKayitTipi, cancellationToken);
+    }
+
     private async Task<HashSet<int>?> ResolveAllowedDepoIdsAsync(int? tesisId, CancellationToken cancellationToken)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);

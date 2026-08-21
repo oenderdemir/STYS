@@ -83,6 +83,31 @@ export interface StokKartOzetModel {
     bakiyeMiktari: number;
 }
 
+export interface StokDetayModel {
+    depoId: number;
+    depoKod: string;
+    depoAd: string;
+    malzemeKayitTipi: string;
+    tasinirKartId: number;
+    stokKodu: string;
+    tasinirKartAd: string;
+    birim: string;
+    girisMiktari: number;
+    cikisMiktari: number;
+    bakiyeMiktari: number;
+    aciklama: string;
+    satirlar: StokDetaySatirModel[];
+}
+
+export interface StokDetaySatirModel {
+    hareketTarihi?: string | null;
+    miktar: number;
+    birim: string;
+    birimFiyat: number;
+    toplamTutar: number;
+    hareketSayisi: number;
+}
+
 export const STOK_HAREKET_TIPLERI: Array<{ label: string; value: string }> = [
     { label: 'Giris', value: 'Giris' },
     { label: 'Cikis', value: 'Cikis' },

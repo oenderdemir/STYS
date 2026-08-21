@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using TOD.Platform.Persistence.Rdbms.Repositories;
@@ -98,6 +99,66 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         return rows.Sum(x => x.Giris) - rows.Sum(x => x.Cikis);
     }
 
+    public async Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, DepoMalzemeKayitTipleri malzemeKayitTipi, CancellationToken cancellationToken = default)
+    {
+        var hareketler = await BuildBaseQuery([depoId])
+            .Where(x => x.TasinirKartId == tasinirKartId)
+            .Select(x => new StokDetayKaynakSatiri
+            {
+                HareketTarihi = x.HareketTarihi,
+                HareketTipi = x.HareketTipi,
+                TransferYonu = x.TransferYonu,
+                Miktar = x.Miktar,
+                BirimFiyat = x.BirimFiyat,
+                Tutar = x.Tutar,
+                DepoKod = x.Depo != null ? x.Depo.Kod : string.Empty,
+                DepoAd = x.Depo != null ? x.Depo.Ad : string.Empty,
+                StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
+                TasinirKartAd = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
+                Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty
+            })
+            .OrderBy(x => x.HareketTarihi)
+            .ToListAsync(cancellationToken);
+
+        if (hareketler.Count == 0)
+        {
+            return new StokDetayDto
+            {
+                DepoId = depoId,
+                TasinirKartId = tasinirKartId,
+                MalzemeKayitTipi = malzemeKayitTipi.ToString(),
+                Aciklama = ResolveAciklama(malzemeKayitTipi)
+            };
+        }
+
+        var girisMiktari = hareketler
+            .Where(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu))
+            .Sum(x => x.Miktar);
+        var cikisMiktari = hareketler
+            .Where(x => StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu))
+            .Sum(x => x.Miktar);
+        var girisHareketleri = hareketler
+            .Where(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu))
+            .ToList();
+
+        return new StokDetayDto
+        {
+            DepoId = depoId,
+            DepoKod = hareketler[0].DepoKod,
+            DepoAd = hareketler[0].DepoAd,
+            MalzemeKayitTipi = malzemeKayitTipi.ToString(),
+            TasinirKartId = tasinirKartId,
+            StokKodu = hareketler[0].StokKodu,
+            TasinirKartAd = hareketler[0].TasinirKartAd,
+            Birim = hareketler[0].Birim,
+            GirisMiktari = girisMiktari,
+            CikisMiktari = cikisMiktari,
+            BakiyeMiktari = girisMiktari - cikisMiktari,
+            Aciklama = ResolveAciklama(malzemeKayitTipi),
+            Satirlar = BuildDetaySatirlari(girisHareketleri, malzemeKayitTipi)
+        };
+    }
+
     private IQueryable<StokHareket> BuildBaseQuery(IEnumerable<int>? depoIds)
     {
         var query = _dbContext.StokHareketleri
@@ -116,5 +177,94 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         }
 
         return query;
+    }
+
+    private static List<StokDetaySatirDto> BuildDetaySatirlari(
+        List<StokDetayKaynakSatiri> girisHareketleri,
+        DepoMalzemeKayitTipleri malzemeKayitTipi)
+    {
+        return malzemeKayitTipi switch
+        {
+            DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut => girisHareketleri
+                .Select(x => new StokDetaySatirDto
+                {
+                    HareketTarihi = x.HareketTarihi,
+                    Miktar = x.Miktar,
+                    Birim = x.Birim,
+                    BirimFiyat = x.BirimFiyat,
+                    ToplamTutar = x.Tutar,
+                    HareketSayisi = 1
+                })
+                .OrderBy(x => x.HareketTarihi)
+                .ToList(),
+            DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut => girisHareketleri
+                .GroupBy(x => x.BirimFiyat)
+                .Select(g => new StokDetaySatirDto
+                {
+                    HareketTarihi = null,
+                    Miktar = g.Sum(x => x.Miktar),
+                    Birim = g.First().Birim,
+                    BirimFiyat = g.Key,
+                    ToplamTutar = g.Sum(x => x.Tutar),
+                    HareketSayisi = g.Count()
+                })
+                .OrderBy(x => x.BirimFiyat)
+                .ToList(),
+            DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut => BuildTekKayitDetayi(girisHareketleri),
+            _ => []
+        };
+    }
+
+    private static List<StokDetaySatirDto> BuildTekKayitDetayi(List<StokDetayKaynakSatiri> girisHareketleri)
+    {
+        if (girisHareketleri.Count == 0)
+        {
+            return [];
+        }
+
+        var toplamMiktar = girisHareketleri.Sum(x => (decimal)x.Miktar);
+        var toplamTutar = girisHareketleri.Sum(x => (decimal)x.Tutar);
+        var ortalamaFiyat = toplamMiktar == 0
+            ? 0
+            : Math.Round(toplamTutar / toplamMiktar, 2, MidpointRounding.AwayFromZero);
+
+        return
+        [
+            new StokDetaySatirDto
+            {
+                HareketTarihi = null,
+                Miktar = toplamMiktar,
+                Birim = girisHareketleri[0].Birim,
+                BirimFiyat = ortalamaFiyat,
+                ToplamTutar = toplamTutar,
+                HareketSayisi = girisHareketleri.Count
+            }
+        ];
+    }
+
+    private static string ResolveAciklama(DepoMalzemeKayitTipleri malzemeKayitTipi)
+    {
+        return malzemeKayitTipi switch
+        {
+            DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut => "Her giriş ayrı stok detayı olarak gösterilir. Çıkışlar belirli giriş partilerine dağıtılmaz.",
+            DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut => "Aynı birim fiyatlı girişler birlikte gösterilir. Çıkışlar fiyat katmanlarına dağıtılmaz.",
+            DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut => "Tüm girişler tek stok satırında ağırlıklı ortalama fiyat ile özetlenir.",
+            _ => string.Empty
+        };
+    }
+
+    private sealed class StokDetayKaynakSatiri
+    {
+        public DateTime HareketTarihi { get; set; }
+        public string HareketTipi { get; set; } = string.Empty;
+        public string? TransferYonu { get; set; }
+        public decimal Miktar { get; set; }
+        public decimal BirimFiyat { get; set; }
+        public decimal Tutar { get; set; }
+        public string DepoKod { get; set; } = string.Empty;
+        public string DepoAd { get; set; } = string.Empty;
+        public string StokKodu { get; set; } = string.Empty;
+        public string TasinirKartAd { get; set; } = string.Empty;
+        public string Birim { get; set; } = string.Empty;
     }
 }

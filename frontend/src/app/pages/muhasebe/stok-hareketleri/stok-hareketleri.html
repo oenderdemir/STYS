@@ -70,6 +70,7 @@
             <p-table [value]="stokBakiye" [tableStyle]="{ 'min-width': '72rem' }">
                 <ng-template #header>
                     <tr>
+                        <th style="width: 4rem"></th>
                         <th>Depo</th>
                         <th>Stok Kodu</th>
                         <th>Kart</th>
@@ -81,6 +82,9 @@
                 </ng-template>
                 <ng-template #body let-item>
                     <tr>
+                        <td>
+                            <p-button [icon]="getStokDetayToggleIcon(item)" size="small" severity="secondary" [text]="true" (onClick)="toggleStokDetay(item)" />
+                        </td>
                         <td>{{ item.depoKod }} - {{ item.depoAd }}</td>
                         <td>{{ item.stokKodu }}</td>
                         <td>{{ item.tasinirKartAd }}</td>
@@ -88,6 +92,48 @@
                         <td>{{ item.girisMiktari }}</td>
                         <td>{{ item.cikisMiktari }}</td>
                         <td>{{ item.bakiyeMiktari }}</td>
+                    </tr>
+                    <tr *ngIf="isStokDetayExpanded(item)">
+                        <td colspan="8" class="p-0">
+                            <div class="p-3 surface-50 border-top-1 surface-border">
+                                <div *ngIf="isStokDetayLoading(item)" class="text-color-secondary">Stok detayı yükleniyor...</div>
+                                <ng-container *ngIf="getStokDetay(item) as detay">
+                                    <div class="flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+                                        <div>
+                                            <div class="font-semibold">Stok Detayı</div>
+                                            <small>{{ getStokDetayModuLabel(detay.malzemeKayitTipi) }}</small>
+                                        </div>
+                                        <div class="text-right">
+                                            <div>Mevcut Bakiye: {{ detay.bakiyeMiktari | number: '1.3-3' }} {{ detay.birim }}</div>
+                                            <small>{{ detay.aciklama }}</small>
+                                        </div>
+                                    </div>
+
+                                    <p-table [value]="detay.satirlar" [tableStyle]="{ 'min-width': '48rem' }">
+                                        <ng-template #header>
+                                            <tr>
+                                                <th>Tarih</th>
+                                                <th>Miktar</th>
+                                                <th>Birim</th>
+                                                <th>Birim Fiyat</th>
+                                                <th>Toplam Tutar</th>
+                                                <th>Hareket</th>
+                                            </tr>
+                                        </ng-template>
+                                        <ng-template #body let-satir>
+                                            <tr>
+                                                <td>{{ satir.hareketTarihi ? (satir.hareketTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
+                                                <td>{{ satir.miktar | number: '1.3-3' }}</td>
+                                                <td>{{ satir.birim }}</td>
+                                                <td>{{ satir.birimFiyat | number: '1.2-2' }}</td>
+                                                <td>{{ satir.toplamTutar | number: '1.2-2' }}</td>
+                                                <td>{{ satir.hareketSayisi }}</td>
+                                            </tr>
+                                        </ng-template>
+                                    </p-table>
+                                </ng-container>
+                            </div>
+                        </td>
                     </tr>
                 </ng-template>
             </p-table>

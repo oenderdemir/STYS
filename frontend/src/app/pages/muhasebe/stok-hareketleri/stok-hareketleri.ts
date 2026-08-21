@@ -296,15 +296,15 @@ export class StokHareketleriPage implements OnInit {
     }
 
     onTasinirKartChange(tasinirKartId: number | null): void {
-        const oncekiTasinirKartId = this.model.tasinirKartId > 0 ? this.model.tasinirKartId : null;
-        this.model.tasinirKartId = tasinirKartId ?? 0;
+        const yeniTasinirKartId = tasinirKartId && tasinirKartId > 0 ? tasinirKartId : null;
+        const kartDegisti = this.lastSelectedTasinirKartId !== yeniTasinirKartId;
+
+        this.model.tasinirKartId = yeniTasinirKartId ?? 0;
+        this.lastSelectedTasinirKartId = yeniTasinirKartId;
+
         if (this.dialogMode !== 'create') {
-            this.lastSelectedTasinirKartId = this.model.tasinirKartId > 0 ? this.model.tasinirKartId : null;
             return;
         }
-
-        const kartDegisti = oncekiTasinirKartId !== this.model.tasinirKartId;
-        this.lastSelectedTasinirKartId = this.model.tasinirKartId > 0 ? this.model.tasinirKartId : null;
 
         if (this.selectedDepoId && this.selectedDepoId > 0) {
             this.model.depoId = this.selectedDepoId;
@@ -316,8 +316,8 @@ export class StokHareketleriPage implements OnInit {
             return;
         }
 
-        const tasinirKart = this.model.tasinirKartId > 0
-            ? this.tasinirKartByIdMap.get(this.model.tasinirKartId)
+        const tasinirKart = yeniTasinirKartId
+            ? this.tasinirKartByIdMap.get(yeniTasinirKartId)
             : null;
 
         const varsayilanDepoId = tasinirKart?.varsayilanDepoId ?? null;

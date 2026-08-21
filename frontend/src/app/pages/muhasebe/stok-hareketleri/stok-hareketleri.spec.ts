@@ -76,6 +76,26 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(component.model.depoId).toBe(9);
     });
 
+    it('kullanici baska bir tasinir karta gecince yeni kartin varsayilan deposunu uygular', () => {
+        const component = createComponent();
+        component.depoOptions = [
+            { label: 'Temizlik Deposu', value: 5 },
+            { label: 'Ana Depo', value: 9 },
+            { label: 'Yedek Depo', value: 12 }
+        ];
+        (component as any).tasinirKartByIdMap = new Map([
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Kart A', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }],
+            [200, { id: 200, tesisId: 1, tasinirKodId: 2, varsayilanDepoId: 12, stokKodu: 'STK-2', ad: 'Kart B', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+        ]);
+
+        component.openCreate();
+        component.onTasinirKartChange(100);
+        component.onDepoChange(9);
+        component.onTasinirKartChange(200);
+
+        expect(component.model.depoId).toBe(12);
+    });
+
     it('varsayilan deposu olmayan kartta depo secimi bos kalir', () => {
         const component = createComponent();
         component.depoOptions = [{ label: 'Ana Depo', value: 9 }];

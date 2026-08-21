@@ -2513,6 +2513,9 @@ WHERE [Id] = {tersKayitFis.TersKayitFisId.Value} AND [IsDeleted] = 0")
         // StokHareket kaynaklı ise KDV bilgileri StokHareket'ten gelir, otomatik çözülür.
         var stokHareketKaynakliMi = !string.IsNullOrWhiteSpace(request.HareketTipi);
 
+        if (stokHareketKaynakliMi && string.Equals(request.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
+            throw new BaseException("Transfer stok hareketleri için muhasebe fişi taslağı bu fazda desteklenmemektedir.", 400);
+
         string? kdvHesapKodu = null;
         if (stokHareketKaynakliMi)
         {

@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { finalize, Observable } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
@@ -278,11 +278,16 @@ export class StokHareketleriPage implements OnInit {
             this.model.depoId = this.selectedDepoId;
             this.selectedDepoPresetSource = 'filter';
         }
+        this.onHareketTipiChange();
         this.applyIstisnaFilter();
         this.dialogVisible = true;
     }
 
     openEdit(item: StokHareketModel): void {
+        if (item.transferGrupId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Düzenleme Desteklenmiyor', detail: 'Transfer kayıtları doğrudan düzenlenemez. Transferi iptal edip yeniden oluşturunuz.' });
+            return;
+        }
         if (this.getSeciliTesisIdOrWarn() === null) {
             return;
         }
@@ -335,6 +340,9 @@ export class StokHareketleriPage implements OnInit {
 
     onDepoChange(depoId: number | null): void {
         this.model.depoId = depoId ?? 0;
+        if (this.model.hedefDepoId && this.model.hedefDepoId === this.model.depoId) {
+            this.model.hedefDepoId = null;
+        }
         if (this.dialogMode === 'create') {
             this.selectedDepoPresetSource = depoId && depoId > 0 ? 'manual' : 'none';
         }
@@ -350,28 +358,40 @@ export class StokHareketleriPage implements OnInit {
             return;
         }
 
+        if (this.isTransfer(this.model)) {
+            if (!this.model.hedefDepoId) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Transfer için hedef depo seçimi zorunludur.' });
+                return;
+            }
+
+            if (this.model.hedefDepoId === this.model.depoId) {
+                this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: 'Hedef depo kaynak depo ile aynı olamaz.' });
+                return;
+            }
+        }
+
         // Client-side KDV validation
-        if (this.model.kdvUygulamaTipi === 5) {
+        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi === 5) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Desteklenmiyor', detail: 'Tevkifatlı KDV uygulaması henüz desteklenmemektedir.' });
             return;
         }
 
-        if (this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
+        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi !== 1 && !this.model.kdvIstisnaTanimId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li dışındaki işlemlerde istisna tanımı seçilmesi zorunludur.' });
             return;
         }
 
-        if (this.model.kdvUygulamaTipi === 1 && this.model.kdvIstisnaTanimId) {
+        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi === 1 && this.model.kdvIstisnaTanimId) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Seçim', detail: 'KDV\'li işlemlerde istisna tanımı seçilemez.' });
             return;
         }
 
-        if (this.model.kdvUygulamaTipi === 1 && (this.model.kdvOrani == null || this.model.kdvOrani <= 0)) {
+        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi === 1 && (this.model.kdvOrani == null || this.model.kdvOrani <= 0)) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'KDV\'li işlemlerde KDV oranı 0\'dan büyük olmalıdır.' });
             return;
         }
 
-        if (this.model.kdvUygulamaTipi !== 1 && this.model.kdvOrani !== 0) {
+        if (!this.isTransfer(this.model) && this.model.kdvUygulamaTipi !== 1 && this.model.kdvOrani !== 0) {
             this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Değer', detail: 'İstisna/kapsam dışı işlemlerde KDV oranı 0 olmalıdır.' });
             return;
         }
@@ -395,10 +415,27 @@ export class StokHareketleriPage implements OnInit {
             kdvOrani: this.model.kdvOrani
         };
 
+        const transferPayload = {
+            kaynakDepoId: this.model.depoId,
+            hedefDepoId: this.model.hedefDepoId!,
+            tasinirKartId: this.model.tasinirKartId,
+            hareketTarihi: this.formatDateTimeForApi(this.hareketTarihiDate) ?? this.model.hareketTarihi,
+            miktar: this.model.miktar,
+            birimFiyat: this.model.birimFiyat,
+            belgeNo: this.model.belgeNo?.trim() || null,
+            belgeTarihi: this.model.belgeTarihi || null,
+            aciklama: this.model.aciklama?.trim() || null
+        };
+
         this.saving = true;
-        const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload)
-            : this.service.create(payload);
+        let request$: Observable<unknown>;
+        if (this.dialogMode === 'create' && this.isTransfer(this.model)) {
+            request$ = this.service.createTransfer(transferPayload);
+        } else if (this.dialogMode === 'edit' && this.model.id) {
+            request$ = this.service.update(this.model.id, payload);
+        } else {
+            request$ = this.service.create(payload);
+        }
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
             next: () => {
@@ -417,17 +454,18 @@ export class StokHareketleriPage implements OnInit {
         }
 
         this.confirmationService.confirm({
-            message: 'Kayıt silinsin mi?',
+            message: item.transferGrupId ? 'Transfer iptal edilsin mi?' : 'Kayıt silinsin mi?',
             header: 'Onay',
             icon: 'pi pi-exclamation-triangle',
             acceptLabel: 'Evet',
             rejectLabel: 'Hayır',
             accept: () => {
-                this.service.delete(item.id!).subscribe({
+                const request$ = item.transferGrupId ? this.service.transferIptal(item.id!) : this.service.delete(item.id!);
+                request$.subscribe({
                     next: () => {
                         this.load();
                         this.loadSummary();
-                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Kayıt silindi.' });
+                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: item.transferGrupId ? 'Transfer iptal edildi.' : 'Kayıt silindi.' });
                     },
                     error: (error: unknown) => this.showError(error)
                 });
@@ -444,6 +482,9 @@ export class StokHareketleriPage implements OnInit {
      * Requires: resolved tesisId > 0, resolved tasinirKodu non-empty, and row.tutar > 0.
      */
     canCreateMuhasebeFisTaslagi(row: StokHareketModel): boolean {
+        if (row.transferGrupId || row.hareketTipi === 'Transfer') {
+            return false;
+        }
         if (!row.tutar || row.tutar <= 0) {
             return false;
         }
@@ -465,6 +506,9 @@ export class StokHareketleriPage implements OnInit {
      * or the enabled tooltip text if the button is active.
      */
     getMuhasebeFisTaslagiTooltip(row: StokHareketModel): string {
+        if (row.transferGrupId || row.hareketTipi === 'Transfer') {
+            return 'Transfer stok hareketleri için muhasebe fiş taslağı bu fazda desteklenmemektedir.';
+        }
         if (!row.tutar || row.tutar <= 0) {
             return 'Tutar sıfır veya negatif olduğu için muhasebe fiş taslağı oluşturulamaz.';
         }
@@ -592,7 +636,8 @@ export class StokHareketleriPage implements OnInit {
             depoId: 0,
             tasinirKartId: 0,
             hareketTarihi: this.formatDateTimeForApi(now) ?? '',
-            hareketTipi: 'Giriş',
+            hareketTipi: 'Giris',
+            hedefDepoId: null,
             miktar: 1,
             birimFiyat: 0,
             tutar: 0,
@@ -602,6 +647,9 @@ export class StokHareketleriPage implements OnInit {
             cariKartId: null,
             kaynakModul: null,
             kaynakId: null,
+            transferGrupId: null,
+            transferYonu: null,
+            karsiDepoId: null,
             durum: 'Aktif',
             kdvUygulamaTipi: 1,
             kdvIstisnaTanimId: null,
@@ -657,12 +705,75 @@ export class StokHareketleriPage implements OnInit {
      * Çıkış etkisi olanlar → Satış, diğerleri → Alış.
      */
     private getIslemYonu(): 'Satis' | 'Alis' {
+        if (this.model.hareketTipi === 'Transfer') {
+            return this.model.transferYonu === 'Giris' ? 'Alis' : 'Satis';
+        }
         return StokHareketleriPage.CIKIS_ETKISI.has(this.model.hareketTipi) ? 'Satis' : 'Alis';
     }
 
     /** Hareket tipi değiştiğinde istisna filtresini yeniden uygula. */
     onHareketTipiChange(): void {
+        if (this.isTransfer(this.model)) {
+            this.model.cariKartId = null;
+            this.model.kdvUygulamaTipi = 4;
+            this.model.kdvIstisnaTanimId = null;
+            this.model.kdvIstisnaKodu = null;
+            this.model.kdvIstisnaAciklamasi = null;
+            this.model.kdvOrani = 0;
+            this.model.kdvTutari = 0;
+        } else if (this.dialogMode === 'create' && this.model.kdvUygulamaTipi === 4 && this.model.kdvOrani === 0) {
+            this.model.kdvUygulamaTipi = 1;
+            this.model.kdvOrani = 20;
+        }
+
+        if (!this.isTransfer(this.model)) {
+            this.model.hedefDepoId = null;
+        }
         this.applyIstisnaFilter();
+    }
+
+    isTransfer(row: Pick<StokHareketModel, 'hareketTipi'>): boolean {
+        return row.hareketTipi === 'Transfer';
+    }
+
+    showHedefDepoField(): boolean {
+        return this.isTransfer(this.model);
+    }
+
+    getHedefDepoOptions(): Array<{ label: string; value: number }> {
+        return this.depoOptions.filter(x => x.value !== this.model.depoId);
+    }
+
+    getDepoLabel(depoId: number | null | undefined): string {
+        if (!depoId) {
+            return '-';
+        }
+
+        return this.depoOptions.find(x => x.value === depoId)?.label ?? String(depoId);
+    }
+
+    getTasinirKartLabel(tasinirKartId: number): string {
+        return this.tasinirKartOptions.find(x => x.value === tasinirKartId)?.label ?? String(tasinirKartId);
+    }
+
+    getHareketTipiLabel(row: StokHareketModel): string {
+        if (row.hareketTipi !== 'Transfer') {
+            return row.hareketTipi;
+        }
+
+        return row.transferYonu === 'Giris' ? 'Transfer / Giriş' : 'Transfer / Çıkış';
+    }
+
+    getTransferRotaLabel(row: StokHareketModel): string | null {
+        if (row.hareketTipi !== 'Transfer' || !row.karsiDepoId) {
+            return null;
+        }
+
+        if (row.transferYonu === 'Giris') {
+            return `${this.getDepoLabel(row.karsiDepoId)} → ${this.getDepoLabel(row.depoId)}`;
+        }
+
+        return `${this.getDepoLabel(row.depoId)} → ${this.getDepoLabel(row.karsiDepoId)}`;
     }
 
     /** Called when KDV uygulama tipi changes in the dialog. Clears istisna selection if Kdvli. */

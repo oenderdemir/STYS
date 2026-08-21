@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using STYS.Infrastructure.EntityFramework;
 using STYS.AccessScope;
 using STYS.Muhasebe.CariKartlar.Repositories;
 using STYS.Muhasebe.Depolar.Repositories;
@@ -13,11 +14,13 @@ using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
+using System.Data;
 
 namespace STYS.Muhasebe.StokHareketleri.Services;
 
 public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, int>, IStokHareketService
 {
+    private readonly StysAppDbContext _dbContext;
     private readonly IStokHareketRepository _repository;
     private readonly IDepoRepository _depoRepository;
     private readonly ITasinirKartRepository _tasinirKartRepository;
@@ -25,8 +28,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IKdvUygulamaService _kdvUygulamaService;
+    private readonly IMapper _mapper;
 
     public StokHareketService(
+        StysAppDbContext dbContext,
         IStokHareketRepository repository,
         IDepoRepository depoRepository,
         ITasinirKartRepository tasinirKartRepository,
@@ -37,6 +42,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         IMapper mapper)
         : base(repository, mapper)
     {
+        _dbContext = dbContext;
         _repository = repository;
         _depoRepository = depoRepository;
         _tasinirKartRepository = tasinirKartRepository;
@@ -44,10 +50,16 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
         _kdvUygulamaService = kdvUygulamaService;
+        _mapper = mapper;
     }
 
     public override async Task<StokHareketDto> AddAsync(StokHareketDto dto)
     {
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
+        {
+            throw new BaseException("Transfer hareketleri yalnizca transfer olusturma akisi ile kaydedilebilir.", 400);
+        }
+
         await NormalizeAndValidateAsync(dto, null);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
@@ -70,6 +82,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
+        if (existing.TransferGrupId.HasValue)
+        {
+            throw new BaseException("Transfer kayitlari dogrudan guncellenemez. Transferi iptal edip yeniden olusturunuz.", 400);
+        }
+
         await EnsureOpenPeriodAsync(existing.DepoId, existing.HareketTarihi, CancellationToken.None);
         await NormalizeAndValidateAsync(dto, dto.Id);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
@@ -88,8 +105,171 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         var existing = await _repository.GetByIdAsync(id)
             ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
+        if (existing.TransferGrupId.HasValue)
+        {
+            throw new BaseException("Transfer kayitlari dogrudan silinemez. Transferi iptal etme akisini kullaniniz.", 400);
+        }
+
         await EnsureOpenPeriodAsync(existing.DepoId, existing.HareketTarihi, CancellationToken.None);
         await base.DeleteAsync(id);
+    }
+
+    public async Task<IReadOnlyList<StokHareketDto>> CreateTransferAsync(StokTransferRequest request, CancellationToken cancellationToken = default)
+    {
+        NormalizeTransferRequest(request);
+
+        if (request.KaynakDepoId <= 0 || request.HedefDepoId <= 0)
+        {
+            throw new BaseException("Kaynak depo ve hedef depo secimi zorunludur.", 400);
+        }
+
+        if (request.KaynakDepoId == request.HedefDepoId)
+        {
+            throw new BaseException("Kaynak depo ile hedef depo ayni olamaz.", 400);
+        }
+
+        if (request.TasinirKartId <= 0)
+        {
+            throw new BaseException("Gecerli bir tasinir kart secilmelidir.", 400);
+        }
+
+        if (request.Miktar <= 0)
+        {
+            throw new BaseException("Miktar 0'dan buyuk olmalidir.", 400);
+        }
+
+        if (request.BirimFiyat < 0)
+        {
+            throw new BaseException("Birim fiyat negatif olamaz.", 400);
+        }
+
+        if (request.HareketTarihi == default)
+        {
+            request.HareketTarihi = DateTime.UtcNow;
+        }
+
+        var kaynakDepo = await _depoRepository.GetByIdAsync(request.KaynakDepoId)
+            ?? throw new BaseException("Kaynak depo bulunamadi.", 400);
+        var hedefDepo = await _depoRepository.GetByIdAsync(request.HedefDepoId)
+            ?? throw new BaseException("Hedef depo bulunamadi.", 400);
+        var tasinirKart = await _tasinirKartRepository.GetByIdAsync(request.TasinirKartId)
+            ?? throw new BaseException("Secilen tasinir kart bulunamadi.", 400);
+
+        ValidateTransferDepo(kaynakDepo, "Kaynak depo");
+        ValidateTransferDepo(hedefDepo, "Hedef depo");
+
+        if (!kaynakDepo.TesisId.HasValue || !hedefDepo.TesisId.HasValue || kaynakDepo.TesisId.Value != hedefDepo.TesisId.Value)
+        {
+            throw new BaseException("Transfer yalnizca ayni tesise ait depolar arasinda yapilabilir.", 400);
+        }
+
+        if (!tasinirKart.AktifMi)
+        {
+            throw new BaseException("Secilen tasinir kart aktif degil.", 400);
+        }
+
+        if (!tasinirKart.TesisId.HasValue || tasinirKart.TesisId.Value != kaynakDepo.TesisId.Value)
+        {
+            throw new BaseException("Secilen tasinir kart depolar ile ayni tesise ait olmalidir.", 400);
+        }
+
+        if (!tasinirKart.MuhasebeHesapPlaniId.HasValue)
+        {
+            throw new BaseException("Seçilen taşınır kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
+        }
+
+        await EnsureDepoAccessAsync(kaynakDepo.Id, kaynakDepo.TesisId, "Kaynak depo", cancellationToken);
+        await EnsureDepoAccessAsync(hedefDepo.Id, hedefDepo.TesisId, "Hedef depo", cancellationToken);
+        await EnsureOpenPeriodAsync(kaynakDepo.TesisId, request.HareketTarihi, cancellationToken);
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        try
+        {
+            var kaynakBakiye = await _repository.GetBakiyeMiktariAsync(request.KaynakDepoId, request.TasinirKartId, cancellationToken);
+            if (kaynakBakiye < request.Miktar)
+            {
+                throw new BaseException("Kaynak depoda transfer için yeterli stok bulunmamaktadır.", 400);
+            }
+
+            var transferGrupId = Guid.NewGuid();
+            var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
+
+            var kaynakHareket = CreateTransferLeg(
+                request,
+                transferGrupId,
+                request.KaynakDepoId,
+                request.HedefDepoId,
+                StokTransferYonleri.Cikis,
+                tutar);
+
+            var hedefHareket = CreateTransferLeg(
+                request,
+                transferGrupId,
+                request.HedefDepoId,
+                request.KaynakDepoId,
+                StokTransferYonleri.Giris,
+                tutar);
+
+            await _dbContext.StokHareketleri.AddRangeAsync([kaynakHareket, hedefHareket], cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return [_mapper.Map<StokHareketDto>(kaynakHareket), _mapper.Map<StokHareketDto>(hedefHareket)];
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task TransferIptalAsync(int id, CancellationToken cancellationToken = default)
+    {
+        var visible = await GetByIdAsync(id);
+        if (visible is null)
+        {
+            throw new BaseException("Stok hareket bulunamadı.", 404);
+        }
+
+        var hareket = await _dbContext.StokHareketleri.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new BaseException("Stok hareket bulunamadı.", 404);
+
+        if (!hareket.TransferGrupId.HasValue)
+        {
+            throw new BaseException("Bu stok hareketi bir transfer kaydi degildir.", 400);
+        }
+
+        var transferHareketleri = await _dbContext.StokHareketleri
+            .Where(x => x.TransferGrupId == hareket.TransferGrupId.Value && x.Durum == StokHareketDurumlari.Aktif)
+            .ToListAsync(cancellationToken);
+
+        if (transferHareketleri.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in transferHareketleri)
+        {
+            await EnsureOpenPeriodAsync(item.DepoId, item.HareketTarihi, cancellationToken);
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            foreach (var item in transferHareketleri)
+            {
+                item.Durum = StokHareketDurumlari.Iptal;
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<List<StokBakiyeDto>> GetStokBakiyeAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default)
@@ -198,6 +378,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         dto.Aciklama = NormalizeOptional(dto.Aciklama);
         dto.KaynakModul = NormalizeOptional(dto.KaynakModul);
 
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
+        {
+            throw new BaseException("Transfer hareketleri yalnizca transfer olusturma akisi ile kaydedilebilir.", 400);
+        }
+
         if (dto.DepoId <= 0 || !await _depoRepository.AnyAsync(x => x.Id == dto.DepoId))
         {
             throw new BaseException("Gecerli bir depo secilmelidir.", 400);
@@ -276,7 +461,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task ApplyKdvAsync(StokHareketDto dto)
     {
-        var islemYonu = StokHareketTipleri.CikisEtkisi.Contains(dto.HareketTipi)
+        var islemYonu = StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu)
             ? KdvIslemYonu.Satis
             : KdvIslemYonu.Alis;
 
@@ -294,6 +479,83 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         dto.KdvIstisnaAciklamasi = result.KdvIstisnaAciklamasi;
         dto.KdvOrani = result.KdvOrani;
         dto.KdvTutari = result.KdvTutari;
+    }
+
+    private static void NormalizeTransferRequest(StokTransferRequest request)
+    {
+        request.BelgeNo = NormalizeOptional(request.BelgeNo);
+        request.Aciklama = NormalizeOptional(request.Aciklama);
+    }
+
+    private static void ValidateTransferDepo(STYS.Muhasebe.Depolar.Entities.Depo depo, string label)
+    {
+        if (!depo.AktifMi)
+        {
+            throw new BaseException($"{label} aktif degil.", 400);
+        }
+
+        if (!depo.TesisId.HasValue)
+        {
+            throw new BaseException($"{label} icin tesis bilgisi bulunamadi.", 400);
+        }
+
+        if (!depo.MuhasebeHesapPlaniId.HasValue)
+        {
+            throw new BaseException($"{label} icin muhasebe hesap plani baglantisi bulunmuyor.", 400);
+        }
+    }
+
+    private async Task EnsureDepoAccessAsync(int depoId, int? tesisId, string label, CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (!scope.IsScoped)
+        {
+            return;
+        }
+
+        if (!tesisId.HasValue || !scope.TesisIds.Contains(tesisId.Value))
+        {
+            throw new BaseException($"{label} icin yetkiniz bulunmuyor.", 403);
+        }
+
+        var allowedDepo = await _depoRepository.AnyAsync(x => x.Id == depoId && x.TesisId == tesisId.Value);
+        if (!allowedDepo)
+        {
+            throw new BaseException($"{label} bulunamadi.", 400);
+        }
+    }
+
+    private static StokHareket CreateTransferLeg(
+        StokTransferRequest request,
+        Guid transferGrupId,
+        int depoId,
+        int karsiDepoId,
+        string transferYonu,
+        decimal tutar)
+    {
+        return new StokHareket
+        {
+            DepoId = depoId,
+            TasinirKartId = request.TasinirKartId,
+            HareketTarihi = request.HareketTarihi,
+            HareketTipi = StokHareketTipleri.Transfer,
+            Miktar = request.Miktar,
+            BirimFiyat = request.BirimFiyat,
+            Tutar = tutar,
+            BelgeNo = request.BelgeNo,
+            BelgeTarihi = request.BelgeTarihi,
+            Aciklama = request.Aciklama,
+            Durum = StokHareketDurumlari.Aktif,
+            TransferGrupId = transferGrupId,
+            TransferYonu = transferYonu,
+            KarsiDepoId = karsiDepoId,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
+            KdvOrani = 0,
+            KdvTutari = 0,
+            KdvIstisnaTanimId = null,
+            KdvIstisnaKodu = null,
+            KdvIstisnaAciklamasi = null
+        };
     }
 
     private static decimal CalculateTutar(decimal miktar, decimal birimFiyat)

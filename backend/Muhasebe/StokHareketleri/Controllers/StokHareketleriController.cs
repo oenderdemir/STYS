@@ -68,6 +68,11 @@ public class StokHareketleriController : UIController
     public async Task<ActionResult<StokHareketDto>> Create([FromBody] CreateStokHareketRequest request, CancellationToken cancellationToken)
         => Ok(await _service.AddAsync(_mapper.Map<StokHareketDto>(request)));
 
+    [HttpPost("transfer")]
+    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    public async Task<ActionResult<IReadOnlyList<StokHareketDto>>> CreateTransfer([FromBody] StokTransferRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.CreateTransferAsync(request, cancellationToken));
+
     [HttpPut("{id:int}")]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
     public async Task<ActionResult<StokHareketDto>> Update(int id, [FromBody] UpdateStokHareketRequest request, CancellationToken cancellationToken)
@@ -82,6 +87,14 @@ public class StokHareketleriController : UIController
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         await _service.DeleteAsync(id);
+        return Ok();
+    }
+
+    [HttpPost("{id:int}/transfer-iptal")]
+    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    public async Task<IActionResult> TransferIptal(int id, CancellationToken cancellationToken)
+    {
+        await _service.TransferIptalAsync(id, cancellationToken);
         return Ok();
     }
 

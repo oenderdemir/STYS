@@ -42,9 +42,12 @@
                 <ng-template #body let-item>
                     <tr>
                         <td>{{ item.hareketTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
-                        <td>{{ item.depoId }}</td>
-                        <td>{{ item.tasinirKartId }}</td>
-                        <td>{{ item.hareketTipi }}</td>
+                        <td>
+                            <div>{{ getDepoLabel(item.depoId) }}</div>
+                            <small *ngIf="getTransferRotaLabel(item) as rota">{{ rota }}</small>
+                        </td>
+                        <td>{{ getTasinirKartLabel(item.tasinirKartId) }}</td>
+                        <td>{{ getHareketTipiLabel(item) }}</td>
                         <td>{{ item.miktar }}</td>
                         <td>{{ item.birimFiyat | number: '1.2-2' }}</td>
                         <td>{{ item.tutar | number: '1.2-2' }}</td>
@@ -54,7 +57,7 @@
                         <td>{{ item.durum }}</td>
                         <td>
                             <div class="flex gap-2">
-                                <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" />
+                                <p-button icon="pi pi-pencil" size="small" severity="secondary" [outlined]="true" (onClick)="openEdit(item)" [disabled]="!!item.transferGrupId" />
                                 <p-button icon="pi pi-file-plus" size="small" severity="success" [outlined]="true" (onClick)="muhasebeFisTaslagiOlustur(item)" [disabled]="!canCreateMuhasebeFisTaslagi(item)" [pTooltip]="getMuhasebeFisTaslagiTooltip(item)" tooltipPosition="top" />
                                 <p-button icon="pi pi-trash" size="small" severity="danger" [outlined]="true" (onClick)="delete(item)" />
                             </div>
@@ -119,12 +122,16 @@
 <p-dialog [(visible)]="dialogVisible" [modal]="true" [header]="dialogMode === 'edit' ? 'Stok Hareket Duzenle' : 'Yeni Stok Hareket'" [style]="{ width: '56rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">
         <div class="col-span-12 md:col-span-6">
-            <label class="block font-medium mb-2">Depo</label>
+            <label class="block font-medium mb-2">{{ showHedefDepoField() ? 'Kaynak Depo' : 'Depo' }}</label>
             <p-select class="w-full" [options]="depoOptions" optionLabel="label" optionValue="value" [(ngModel)]="model.depoId" (onChange)="onDepoChange($event.value)" appendTo="body" />
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Tasinir Kart</label>
             <p-select class="w-full" [options]="tasinirKartOptions" optionLabel="label" optionValue="value" [(ngModel)]="model.tasinirKartId" (onChange)="onTasinirKartChange($event.value)" appendTo="body" />
+        </div>
+        <div class="col-span-12 md:col-span-6" *ngIf="showHedefDepoField()">
+            <label class="block font-medium mb-2">Hedef Depo</label>
+            <p-select class="w-full" [options]="getHedefDepoOptions()" optionLabel="label" optionValue="value" [(ngModel)]="model.hedefDepoId" appendTo="body" />
         </div>
         <div class="col-span-12 md:col-span-4">
             <label class="block font-medium mb-2">Tip</label>
@@ -134,7 +141,7 @@
             <label class="block font-medium mb-2">Durum</label>
             <p-select class="w-full" [options]="durumlar" optionLabel="label" optionValue="value" [(ngModel)]="model.durum" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField()">
             <label class="block font-medium mb-2">Cari (opsiyonel)</label>
             <p-select class="w-full" [options]="cariKartOptions" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.cariKartId" appendTo="body" />
         </div>
@@ -165,15 +172,15 @@
                 [showButtonBar]="true"
                 appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4">
+        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField()">
             <label class="block font-medium mb-2">KDV Uygulama Tipi</label>
             <p-select class="w-full" [options]="filteredKdvUygulamaTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.kdvUygulamaTipi" (onChange)="onKdvUygulamaTipiChange()" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-8" *ngIf="model.kdvUygulamaTipi !== 1">
+        <div class="col-span-12 md:col-span-8" *ngIf="!showHedefDepoField() && model.kdvUygulamaTipi !== 1">
             <label class="block font-medium mb-2">KDV Istisna Tanimi</label>
             <p-select class="w-full" [options]="filteredKdvIstisnaTanimOptions" optionLabel="label" optionValue="value" [showClear]="true" [(ngModel)]="model.kdvIstisnaTanimId" appendTo="body" />
         </div>
-        <div class="col-span-12 md:col-span-4" *ngIf="model.kdvUygulamaTipi === 1">
+        <div class="col-span-12 md:col-span-4" *ngIf="!showHedefDepoField() && model.kdvUygulamaTipi === 1">
             <label class="block font-medium mb-2">KDV Orani (%)</label>
             <p-select class="w-full" [options]="getKdvOraniSecenekleri(model.kdvOrani)" optionLabel="label" optionValue="value" [(ngModel)]="model.kdvOrani" appendTo="body" />
         </div>

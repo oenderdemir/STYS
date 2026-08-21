@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateStokHareketRequest, StokBakiyeModel, StokHareketModel, StokKartOzetModel, UpdateStokHareketRequest } from './stok-hareketleri.dto';
+import { CreateStokHareketRequest, StokBakiyeModel, StokHareketModel, StokKartOzetModel, StokTransferRequest, UpdateStokHareketRequest } from './stok-hareketleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class StokHareketleriService {
@@ -38,6 +38,10 @@ export class StokHareketleriService {
         return this.http.post<ApiResponse<StokHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri`, payload).pipe(map(this.unwrap<StokHareketModel>('Stok hareket olusturulamadi.')));
     }
 
+    createTransfer(payload: StokTransferRequest): Observable<StokHareketModel[]> {
+        return this.http.post<ApiResponse<StokHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/transfer`, payload).pipe(map(this.unwrap<StokHareketModel[]>('Transfer olusturulamadi.')));
+    }
+
     update(id: number, payload: UpdateStokHareketRequest): Observable<StokHareketModel> {
         return this.http.put<ApiResponse<StokHareketModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/${id}`, payload).pipe(map(this.unwrap<StokHareketModel>('Stok hareket guncellenemedi.')));
     }
@@ -48,6 +52,15 @@ export class StokHareketleriService {
                 return;
             }
             throw new Error(tryReadApiMessage(envelope) ?? 'Stok hareket silinemedi.');
+        }));
+    }
+
+    transferIptal(id: number): Observable<void> {
+        return this.http.post<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/${id}/transfer-iptal`, {}).pipe(map((envelope) => {
+            if (envelope.success) {
+                return;
+            }
+            throw new Error(tryReadApiMessage(envelope) ?? 'Transfer iptal edilemedi.');
         }));
     }
 

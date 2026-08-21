@@ -13,6 +13,10 @@ export interface StokHareketModel {
     cariKartId?: number | null;
     kaynakModul?: string | null;
     kaynakId?: number | null;
+    transferGrupId?: string | null;
+    transferYonu?: string | null;
+    karsiDepoId?: number | null;
+    hedefDepoId?: number | null;
     durum: string;
     kdvUygulamaTipi: number;
     kdvIstisnaTanimId?: number | null;
@@ -43,6 +47,18 @@ export interface CreateStokHareketRequest {
 }
 
 export interface UpdateStokHareketRequest extends CreateStokHareketRequest {}
+
+export interface StokTransferRequest {
+    kaynakDepoId: number;
+    hedefDepoId: number;
+    tasinirKartId: number;
+    hareketTarihi: string;
+    miktar: number;
+    birimFiyat: number;
+    belgeNo?: string | null;
+    belgeTarihi?: string | null;
+    aciklama?: string | null;
+}
 
 export interface StokBakiyeModel {
     depoId: number;

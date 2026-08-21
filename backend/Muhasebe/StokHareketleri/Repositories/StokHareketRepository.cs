@@ -29,8 +29,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
                 TasinirKartAd = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
                 Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
-                Giris = StokHareketTipleri.GirisEtkisi.Contains(x.HareketTipi) ? x.Miktar : 0m,
-                Cikis = StokHareketTipleri.CikisEtkisi.Contains(x.HareketTipi) ? x.Miktar : 0m
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -63,8 +63,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
                 Ad = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
                 Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
-                Giris = StokHareketTipleri.GirisEtkisi.Contains(x.HareketTipi) ? x.Miktar : 0m,
-                Cikis = StokHareketTipleri.CikisEtkisi.Contains(x.HareketTipi) ? x.Miktar : 0m
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m
             })
             .ToListAsync(cancellationToken);
 
@@ -82,6 +82,20 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             })
             .OrderBy(x => x.StokKodu)
             .ToList();
+    }
+
+    public async Task<decimal> GetBakiyeMiktariAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
+    {
+        var rows = await BuildBaseQuery([depoId])
+            .Where(x => x.TasinirKartId == tasinirKartId)
+            .Select(x => new
+            {
+                Giris = StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m,
+                Cikis = StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu) ? x.Miktar : 0m
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Sum(x => x.Giris) - rows.Sum(x => x.Cikis);
     }
 
     private IQueryable<StokHareket> BuildBaseQuery(IEnumerable<int>? depoIds)

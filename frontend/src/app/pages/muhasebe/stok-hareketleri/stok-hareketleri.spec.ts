@@ -20,7 +20,9 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getStokBakiye: () => of([]),
                         getStokKartOzet: () => of([]),
                         create: () => of({}),
-                        update: () => of({})
+                        createTransfer: () => of([]),
+                        update: () => of({}),
+                        transferIptal: () => of(void 0)
                     }
                 },
                 { provide: DepolarService, useValue: { getAll: () => of([]) } },
@@ -124,5 +126,51 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         component.onTasinirKartChange(100);
 
         expect(component.model.depoId).toBe(9);
+    });
+
+    it('transfer secilince hedef depo alani aktif olur', () => {
+        const component = createComponent();
+
+        component.openCreate();
+        component.model.hareketTipi = 'Transfer';
+        component.onHareketTipiChange();
+
+        expect(component.showHedefDepoField()).toBeTrue();
+    });
+
+    it('transferte kaynak depo varsayilan depo mantigindan gelir', () => {
+        const component = createComponent();
+        component.depoOptions = [
+            { label: 'Ana Depo', value: 5 },
+            { label: 'Yedek Depo', value: 9 }
+        ];
+        (component as any).tasinirKartByIdMap = new Map([
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Transfer Karti', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+        ]);
+
+        component.openCreate();
+        component.model.hareketTipi = 'Transfer';
+        component.onHareketTipiChange();
+        component.onTasinirKartChange(100);
+
+        expect(component.model.depoId).toBe(5);
+        expect(component.model.hedefDepoId).toBeNull();
+    });
+
+    it('transferte hedef depo kaynak depo olamaz', () => {
+        const component = createComponent();
+        component.depoOptions = [
+            { label: 'Ana Depo', value: 5 },
+            { label: 'Yedek Depo', value: 9 },
+            { label: 'Mutfak Deposu', value: 12 }
+        ];
+
+        component.openCreate();
+        component.model.hareketTipi = 'Transfer';
+        component.onHareketTipiChange();
+        component.onDepoChange(9);
+
+        expect(component.getHedefDepoOptions().map(x => x.value)).toEqual([5, 12]);
+        expect(component.getHedefDepoOptions().some(x => x.value === 9)).toBeFalse();
     });
 });

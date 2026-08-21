@@ -35,6 +35,12 @@ public class StokHareket : BaseEntity<int>
 
     public int? KaynakId { get; set; }
 
+    public Guid? TransferGrupId { get; set; }
+
+    public string? TransferYonu { get; set; }
+
+    public int? KarsiDepoId { get; set; }
+
     public string Durum { get; set; } = StokHareketDurumlari.Aktif;
 
     /// <summary>KDV uygulama tipi (enum değeri olarak tutulur).</summary>
@@ -56,6 +62,7 @@ public class StokHareket : BaseEntity<int>
     public decimal KdvTutari { get; set; }
 
     public Depo? Depo { get; set; }
+    public Depo? KarsiDepo { get; set; }
     public TasinirKart? TasinirKart { get; set; }
     public CariKart? CariKart { get; set; }
     public KdvIstisnaTanim? KdvIstisnaTanim { get; set; }

@@ -2733,6 +2733,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.BelgeNo).HasMaxLength(64);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.Property(x => x.KaynakModul).HasMaxLength(64);
+            entity.Property(x => x.TransferYonu).HasMaxLength(16);
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.Property(x => x.KdvIstisnaKodu).HasMaxLength(50);
             entity.Property(x => x.KdvIstisnaAciklamasi).HasMaxLength(250);
@@ -2744,10 +2745,17 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0 AND [BelgeNo] IS NOT NULL");
             entity.HasIndex(x => x.CariKartId)
                 .HasFilter("[IsDeleted] = 0 AND [CariKartId] IS NOT NULL");
+            entity.HasIndex(x => x.TransferGrupId)
+                .HasFilter("[IsDeleted] = 0 AND [TransferGrupId] IS NOT NULL");
 
             entity.HasOne(x => x.Depo)
                 .WithMany(x => x.StokHareketleri)
                 .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KarsiDepo)
+                .WithMany()
+                .HasForeignKey(x => x.KarsiDepoId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.TasinirKart)

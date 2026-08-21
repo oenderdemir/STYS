@@ -388,10 +388,38 @@ public class StokHareketServiceTests
         Assert.Equal("Depoda bu işlem için yeterli stok bulunmamaktadır.", ex.Message);
     }
 
-    private static StysAppDbContext CreateDbContext()
+    [Fact]
+    public async Task UpdateAsync_TrackedEskiEntityYerineTransactionIciFreshSnapshotKullanir()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+
+        await using var dbContext = CreateDbContext(databaseName);
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 100);
+        var existingCikisId = await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Cikis, 20, 1, StokHareketDurumlari.Aktif);
+        var service = CreateService(dbContext);
+
+        var tracked = await dbContext.StokHareketleri.FirstAsync(x => x.Id == existingCikisId);
+        Assert.Equal(20, tracked.Miktar);
+
+        await using (var concurrentContext = CreateDbContext(databaseName))
+        {
+            var sameMovement = await concurrentContext.StokHareketleri.FirstAsync(x => x.Id == existingCikisId);
+            sameMovement.Miktar = 90;
+            sameMovement.Tutar = 90;
+            await concurrentContext.SaveChangesAsync();
+        }
+
+        await service.UpdateAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, miktar: 95, id: existingCikisId));
+
+        var bakiye = await service.GetStokBakiyeAsync(1, 10);
+        Assert.Equal(5, Assert.Single(bakiye).BakiyeMiktari);
+    }
+
+    private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString())
             .ConfigureWarnings(x => x.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 

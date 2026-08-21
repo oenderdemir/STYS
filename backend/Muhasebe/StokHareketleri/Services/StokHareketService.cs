@@ -91,7 +91,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Stok hareket bulunamadı.", 404);
         }
 
-        var existing = await _repository.GetByIdAsync(dto.Id.Value)
+        DetachTrackedStokHareket(dto.Id.Value);
+
+        var existing = await GetExistingMovementSnapshotAsync(dto.Id.Value, CancellationToken.None)
             ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
         if (existing.TransferGrupId.HasValue)
@@ -107,10 +109,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, CancellationToken.None);
         try
         {
-            existing = await _dbContext.StokHareketleri.FirstOrDefaultAsync(x => x.Id == dto.Id.Value, CancellationToken.None)
+            existing = await GetExistingMovementSnapshotAsync(dto.Id.Value, CancellationToken.None)
                 ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
             await EnsureUpdateDoesNotGoNegativeAsync(existing, dto, CancellationToken.None);
+            DetachTrackedStokHareket(dto.Id.Value);
             var updated = await base.UpdateAsync(dto);
             await transaction.CommitAsync(CancellationToken.None);
             return updated;
@@ -130,7 +133,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Stok hareket bulunamadı.", 404);
         }
 
-        var existing = await _repository.GetByIdAsync(id)
+        DetachTrackedStokHareket(id);
+
+        var existing = await GetExistingMovementSnapshotAsync(id, CancellationToken.None)
             ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
         if (existing.TransferGrupId.HasValue)
@@ -143,10 +148,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, CancellationToken.None);
         try
         {
-            existing = await _dbContext.StokHareketleri.FirstOrDefaultAsync(x => x.Id == id, CancellationToken.None)
+            existing = await GetExistingMovementSnapshotAsync(id, CancellationToken.None)
                 ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
             await EnsureDeleteDoesNotGoNegativeAsync(existing, CancellationToken.None);
+            DetachTrackedStokHareket(id);
             await base.DeleteAsync(id);
             await transaction.CommitAsync(CancellationToken.None);
         }
@@ -679,6 +685,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private async Task<decimal> GetCurrentBalanceAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)
         => await _repository.GetBakiyeMiktariAsync(depoId, tasinirKartId, cancellationToken);
 
+    private async Task<StokHareket?> GetExistingMovementSnapshotAsync(int id, CancellationToken cancellationToken)
+        => await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
     private static decimal CalculateProjectedBalance(decimal currentBalance, decimal existingMovementEffect, decimal newMovementEffect)
         => currentBalance - existingMovementEffect + newMovementEffect;
 
@@ -713,6 +724,18 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         if (projectedBalance < 0)
         {
             throw new BaseException(errorMessage, 400);
+        }
+    }
+
+    private void DetachTrackedStokHareket(int id)
+    {
+        var trackedEntry = _dbContext.ChangeTracker
+            .Entries<StokHareket>()
+            .FirstOrDefault(x => x.Entity.Id == id);
+
+        if (trackedEntry is not null)
+        {
+            trackedEntry.State = EntityState.Detached;
         }
     }
 

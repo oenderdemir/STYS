@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Services;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokLotlari.Dtos;
 
@@ -46,7 +47,7 @@ public class StokLotSktUyariService : IStokLotSktUyariService
             allowedDepoIds = [depoId.Value];
         }
 
-        var today = _timeProvider.GetUtcNow().UtcDateTime.Date;
+        var today = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(_timeProvider.GetUtcNow().UtcDateTime).Date;
         var rows = await _dbContext.StokHareketleri
             .AsNoTracking()
             .Where(x =>

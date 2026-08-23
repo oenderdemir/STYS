@@ -376,6 +376,26 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task GetSktUyarilariAsync_TurkiyeSaatindeGunKaymasiYapmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var lotId = await CreateLotAsync(dbContext, "LOT-TRT", new DateTime(2026, 8, 24));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        var service = new StokLotSktUyariService(
+            dbContext,
+            new FakeMuhasebeTesisScopeService(),
+            new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 23, 22, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(0, row.KalanGun);
+        Assert.Equal(StokLotSktUyariDurumlari.Kritik, row.Durum);
+    }
+
+    [Fact]
     public async Task UpdateVeDelete_DonemKontrolundeDepoIdYerineTesisIdKullanir()
     {
         await using var dbContext = CreateDbContext();
@@ -2235,6 +2255,22 @@ public class StokHareketServiceTests
         var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
 
         Assert.True(migrationsAssembly.Migrations.ContainsKey("20260823220000_AddCostMethodToStokMaliyetKatmanlari"));
+    }
+
+    [Fact]
+    public void AddStockLotExpiryWarningsMenuMigration_MigrationsAssemblydeDiscoverEdilir()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=StysMigrationDiscovery;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+        using var dbContext = new StysAppDbContext(options, new FakeCurrentUserAccessor(), new FakeCurrentTenantAccessor())
+        {
+            AllowExplicitTenantWritesWithoutAmbientTenant = true
+        };
+
+        var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+
+        Assert.True(migrationsAssembly.Migrations.ContainsKey("20260823231000_AddStockLotExpiryWarningsMenu"));
     }
 
     private static StysAppDbContext CreateDbContext(string? databaseName = null)

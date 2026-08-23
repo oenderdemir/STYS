@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CurrentStokMaliyetPolitikasiModel, StokMaliyetPolitikasiModel, UpsertStokMaliyetPolitikasiRequest } from '../stok-hareketleri/stok-hareketleri.dto';
+import { CreateFifoBaslangicStoguRequest, CurrentStokMaliyetPolitikasiModel, FifoBaslangicStoguSatirModel, StokMaliyetPolitikasiModel, UpsertStokMaliyetPolitikasiRequest } from '../stok-hareketleri/stok-hareketleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class StokMaliyetPolitikasiService {
@@ -24,6 +24,22 @@ export class StokMaliyetPolitikasiService {
         return this.http
             .post<ApiResponse<StokMaliyetPolitikasiModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-maliyet-politikalari`, payload)
             .pipe(map(this.unwrap<StokMaliyetPolitikasiModel>('Stok maliyet politikasi kaydedilemedi.')));
+    }
+
+    getFifoBaslangic(tesisId: number, maliYil: number): Observable<FifoBaslangicStoguSatirModel[]> {
+        const params = new HttpParams()
+            .set('tesisId', tesisId)
+            .set('maliYil', maliYil);
+
+        return this.http
+            .get<ApiResponse<FifoBaslangicStoguSatirModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-maliyet-politikalari/fifo-baslangic`, { params })
+            .pipe(map(this.unwrap<FifoBaslangicStoguSatirModel[]>('FIFO başlangıç stoğu alınamadı.')));
+    }
+
+    createFifoBaslangic(payload: CreateFifoBaslangicStoguRequest): Observable<FifoBaslangicStoguSatirModel[]> {
+        return this.http
+            .post<ApiResponse<FifoBaslangicStoguSatirModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-maliyet-politikalari/fifo-baslangic`, payload)
+            .pipe(map(this.unwrap<FifoBaslangicStoguSatirModel[]>('FIFO başlangıç stoğu oluşturulamadı.')));
     }
 
     private unwrap<T>(fallback: string) {

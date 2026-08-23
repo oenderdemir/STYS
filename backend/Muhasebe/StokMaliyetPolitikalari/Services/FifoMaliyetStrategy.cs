@@ -130,7 +130,7 @@ public class FifoMaliyetStrategy : IStokMaliyetStrategy
                 x.TasinirKartId == tasinirKartId &&
                 x.KalanMiktar > 0)
             .OrderBy(x => x.GirisTarihi)
-            .ThenBy(x => x.KaynakStokHareketId)
+            .ThenBy(x => x.KaynakStokHareketId ?? 0)
             .ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
@@ -216,6 +216,7 @@ public class FifoMaliyetStrategy : IStokMaliyetStrategy
             DepoId = depoId,
             TasinirKartId = tasinirKartId,
             KaynakStokHareketId = kaynakStokHareketId,
+            KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi,
             GirisTarihi = girisTarihi,
             IlkMiktar = miktar,
             KalanMiktar = miktar,

@@ -38,7 +38,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                 { provide: CariKartlarService, useValue: { getAll: () => of([]) } },
                 { provide: MuhasebeFisService, useValue: { getByKaynak: () => of([]) } },
                 { provide: KdvIstisnaTanimService, useValue: { filter: () => of([]) } },
-                { provide: StokMaliyetPolitikasiService, useValue: { getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama', politikaSecildiMi: true }), upsert: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }) } },
+                { provide: StokMaliyetPolitikasiService, useValue: { getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama', politikaSecildiMi: true }), upsert: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }), getFifoBaslangic: () => of([]), createFifoBaslangic: () => of([]) } },
                 {
                     provide: MuhasebeTesisContextService,
                     useValue: {
@@ -301,6 +301,16 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(lifo?.disabled).toBeTrue();
     });
 
+    it('FIFO ve katmansiz stok varsa FIFO Baslangic Stogu aksiyonu gorunur', () => {
+        const component = createComponent();
+        component.currentMaliyetPolitikasi = { tesisId: 1, maliYil: 2026, maliyetYontemi: 'FIFO', politikaSecildiMi: true };
+        component.fifoBaslangicSatirlari = [
+            { depoId: 10, depoKod: 'D-001', depoAd: 'Ana Depo', tasinirKartId: 100, stokKodu: 'STK-100', tasinirKartAd: 'Kart 100', birim: 'Adet', mevcutStokMiktari: 10, fifoKatmanMiktari: 0, katmansizMiktar: 10, onerilenBirimMaliyet: 80, maliyetGuvenilirMi: true, birimMaliyet: 80 }
+        ];
+
+        expect(component.showFifoBaslangicAction()).toBeTrue();
+    });
+
     it('loadSummary stok degerleme verisini doldurur', () => {
         TestBed.resetTestingModule();
         TestBed.configureTestingModule({
@@ -330,7 +340,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                 { provide: CariKartlarService, useValue: { getAll: () => of([]) } },
                 { provide: MuhasebeFisService, useValue: { getByKaynak: () => of([]) } },
                 { provide: KdvIstisnaTanimService, useValue: { filter: () => of([]) } },
-                { provide: StokMaliyetPolitikasiService, useValue: { getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: null, politikaSecildiMi: false }), upsert: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }) } },
+                { provide: StokMaliyetPolitikasiService, useValue: { getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: null, politikaSecildiMi: false }), upsert: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }), getFifoBaslangic: () => of([]), createFifoBaslangic: () => of([]) } },
                 {
                     provide: MuhasebeTesisContextService,
                     useValue: {

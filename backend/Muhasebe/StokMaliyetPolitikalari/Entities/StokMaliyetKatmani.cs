@@ -11,7 +11,8 @@ public class StokMaliyetKatmani : BaseEntity<int>
     public int TesisId { get; set; }
     public int DepoId { get; set; }
     public int TasinirKartId { get; set; }
-    public int KaynakStokHareketId { get; set; }
+    public int? KaynakStokHareketId { get; set; }
+    public string KatmanKaynakTipi { get; set; } = StokMaliyetKatmanKaynakTipleri.StokHareketi;
     public DateTime GirisTarihi { get; set; }
     public decimal IlkMiktar { get; set; }
     public decimal KalanMiktar { get; set; }

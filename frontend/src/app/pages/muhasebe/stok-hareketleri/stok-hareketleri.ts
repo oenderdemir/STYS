@@ -32,7 +32,7 @@ import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.ser
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { CurrentStokMaliyetPolitikasiModel, STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
+import { CreateFifoBaslangicStoguRequest, CurrentStokMaliyetPolitikasiModel, FifoBaslangicStoguSatirModel, STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -100,6 +100,10 @@ export class StokHareketleriPage implements OnInit {
     maliyetPolitikasiDialogVisible = false;
     maliyetPolitikasiSaving = false;
     secilenMaliyetYontemi = 'AgirlikliOrtalama';
+    fifoBaslangicDialogVisible = false;
+    fifoBaslangicLoading = false;
+    fifoBaslangicSaving = false;
+    fifoBaslangicSatirlari: FifoBaslangicStoguSatirModel[] = [];
 
     depoOptions: Array<{ label: string; value: number }> = [];
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
@@ -269,6 +273,8 @@ export class StokHareketleriPage implements OnInit {
             this.stokDegerleme = [];
             this.currentMaliyetPolitikasi = null;
             this.maliyetPolitikasiDialogVisible = false;
+            this.fifoBaslangicSatirlari = [];
+            this.fifoBaslangicDialogVisible = false;
             this.resetStokDetayState();
             return;
         }
@@ -324,6 +330,80 @@ export class StokHareketleriPage implements OnInit {
                     summary: 'Maliyet Yöntemi Kaydedildi',
                     detail: `${result.maliYil} mali yılı için stok maliyet yöntemi kaydedildi.`
                 });
+                if (result.maliyetYontemi === 'FIFO') {
+                    this.loadFifoBaslangicStogu();
+                } else {
+                    this.fifoBaslangicSatirlari = [];
+                    this.fifoBaslangicDialogVisible = false;
+                }
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    showFifoBaslangicAction(): boolean {
+        return this.currentMaliyetPolitikasi?.maliyetYontemi === 'FIFO' && this.fifoBaslangicSatirlari.length > 0;
+    }
+
+    openFifoBaslangicDialog(): void {
+        if (!this.currentMaliyetPolitikasi || this.currentMaliyetPolitikasi.maliyetYontemi !== 'FIFO') {
+            return;
+        }
+
+        this.fifoBaslangicDialogVisible = true;
+        if (this.fifoBaslangicSatirlari.length === 0) {
+            this.loadFifoBaslangicStogu();
+        }
+    }
+
+    saveFifoBaslangic(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null || !this.currentMaliyetPolitikasi) {
+            return;
+        }
+
+        if (this.fifoBaslangicSatirlari.length === 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gerekli Değil', detail: 'FIFO başlangıç stoğu gerektiren kayıt bulunmuyor.' });
+            return;
+        }
+
+        const eksikSatir = this.fifoBaslangicSatirlari.find(x => x.birimMaliyet === null || x.birimMaliyet === undefined);
+        if (eksikSatir) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Her satır için başlangıç birim maliyeti girilmelidir.' });
+            return;
+        }
+
+        const negatifSatir = this.fifoBaslangicSatirlari.find(x => (x.birimMaliyet ?? 0) < 0);
+        if (negatifSatir) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Geçersiz Değer', detail: 'Başlangıç birim maliyeti negatif olamaz.' });
+            return;
+        }
+
+        const payload: CreateFifoBaslangicStoguRequest = {
+            tesisId,
+            maliYil: this.currentMaliyetPolitikasi.maliYil,
+            satirlar: this.fifoBaslangicSatirlari.map(x => ({
+                depoId: x.depoId,
+                tasinirKartId: x.tasinirKartId,
+                birimMaliyet: x.birimMaliyet ?? 0
+            }))
+        };
+
+        this.fifoBaslangicSaving = true;
+        this.stokMaliyetPolitikasiService.createFifoBaslangic(payload).pipe(finalize(() => {
+            this.fifoBaslangicSaving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (rows) => {
+                this.fifoBaslangicSatirlari = rows.map(x => ({ ...x, birimMaliyet: x.onerilenBirimMaliyet ?? null }));
+                this.fifoBaslangicDialogVisible = this.fifoBaslangicSatirlari.length > 0;
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'FIFO Başlangıç Stoğu Oluşturuldu',
+                    detail: 'Katmansız stoklar için FIFO başlangıç katmanları oluşturuldu.'
+                });
+                this.loadSummary();
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => this.showError(error)
@@ -1347,11 +1427,42 @@ export class StokHareketleriPage implements OnInit {
                 this.currentMaliyetPolitikasi = item;
                 this.secilenMaliyetYontemi = item.maliyetYontemi ?? 'AgirlikliOrtalama';
                 this.maliyetPolitikasiDialogVisible = !item.politikaSecildiMi;
+                if (item.politikaSecildiMi && item.maliyetYontemi === 'FIFO') {
+                    this.loadFifoBaslangicStogu();
+                } else {
+                    this.fifoBaslangicSatirlari = [];
+                    this.fifoBaslangicDialogVisible = false;
+                }
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => {
                 this.currentMaliyetPolitikasi = null;
                 this.maliyetPolitikasiDialogVisible = false;
+                this.fifoBaslangicSatirlari = [];
+                this.fifoBaslangicDialogVisible = false;
+                this.showError(error);
+            }
+        });
+    }
+
+    private loadFifoBaslangicStogu(): void {
+        const tesisId = this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+        if (!tesisId || !this.currentMaliyetPolitikasi) {
+            this.fifoBaslangicSatirlari = [];
+            return;
+        }
+
+        this.fifoBaslangicLoading = true;
+        this.stokMaliyetPolitikasiService.getFifoBaslangic(tesisId, this.currentMaliyetPolitikasi.maliYil).pipe(finalize(() => {
+            this.fifoBaslangicLoading = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (rows) => {
+                this.fifoBaslangicSatirlari = rows.map(x => ({ ...x, birimMaliyet: x.onerilenBirimMaliyet ?? null }));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.fifoBaslangicSatirlari = [];
                 this.showError(error);
             }
         });

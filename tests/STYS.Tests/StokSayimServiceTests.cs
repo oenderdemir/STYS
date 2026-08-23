@@ -337,7 +337,9 @@ public class StokSayimServiceTests
         => new StokMaliyetPolitikasiService(
             dbContext,
             new FakeMuhasebeDonemService(),
-            new FakeMuhasebeTesisScopeService());
+            new FakeMuhasebeTesisScopeService(),
+            new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
+            new StokHareketRepository(dbContext, new MapperConfiguration(cfg => cfg.AddProfile<StokHareketProfile>(), NullLoggerFactory.Instance).CreateMapper()));
 
     private static async Task<int> SeedMovementAsync(StysAppDbContext dbContext, int depoId, int tasinirKartId, string hareketTipi, decimal miktar, decimal birimFiyat, string durum, string? sayimFarkiYonu = null, int? stokLotId = null, int? stokSeriId = null)
     {

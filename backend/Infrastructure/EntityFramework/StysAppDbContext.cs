@@ -2832,6 +2832,10 @@ public class StysAppDbContext : DbContext
                 t.HasCheckConstraint("CK_StokMaliyetKatmanlari_BirimMaliyet", "[BirimMaliyet] >= 0");
             });
 
+            entity.Property(x => x.KatmanKaynakTipi)
+                .HasMaxLength(32)
+                .IsRequired();
+
             entity.Property(x => x.IlkMiktar).HasPrecision(18, 3);
             entity.Property(x => x.KalanMiktar).HasPrecision(18, 3);
             entity.Property(x => x.BirimMaliyet).HasPrecision(18, 6);

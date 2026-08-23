@@ -150,6 +150,34 @@ export interface UpsertStokMaliyetPolitikasiRequest {
     maliyetYontemi: string;
 }
 
+export interface FifoBaslangicStoguSatirModel {
+    depoId: number;
+    depoKod: string;
+    depoAd: string;
+    tasinirKartId: number;
+    stokKodu: string;
+    tasinirKartAd: string;
+    birim: string;
+    mevcutStokMiktari: number;
+    fifoKatmanMiktari: number;
+    katmansizMiktar: number;
+    onerilenBirimMaliyet?: number | null;
+    maliyetGuvenilirMi: boolean;
+    birimMaliyet?: number | null;
+}
+
+export interface CreateFifoBaslangicStoguRequest {
+    tesisId: number;
+    maliYil: number;
+    satirlar: CreateFifoBaslangicStoguSatirRequest[];
+}
+
+export interface CreateFifoBaslangicStoguSatirRequest {
+    depoId: number;
+    tasinirKartId: number;
+    birimMaliyet: number;
+}
+
 export const STOK_MALIYET_YONTEMI_SECENEKLERI: Array<{ label: string; value: string; disabled?: boolean }> = [
     { label: 'Ağırlıklı Ortalama', value: 'AgirlikliOrtalama' },
     { label: 'FIFO', value: 'FIFO' },

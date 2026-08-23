@@ -1255,6 +1255,179 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task GetFifoBaslangicStoguAsync_FizikselStokVarKatmanYoksaKatmansizMiktariDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        await SeedSourceStockAsync(dbContext, 10);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var satir = Assert.Single(await politikaService.GetFifoBaslangicStoguAsync(1, 2026));
+
+        Assert.Equal(10, satir.MevcutStokMiktari);
+        Assert.Equal(0, satir.FifoKatmanMiktari);
+        Assert.Equal(10, satir.KatmansizMiktar);
+    }
+
+    [Fact]
+    public async Task CreateFifoBaslangicStoguAsync_KatmanOlustururVeTekrarindaIkinciKatmanUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        await SeedSourceStockAsync(dbContext, 10);
+        var politikaService = CreatePolicyService(dbContext);
+
+        await politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = 80 }]
+        });
+        await politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = 80 }]
+        });
+
+        var katmanlar = await dbContext.StokMaliyetKatmanlari
+            .Where(x => x.DepoId == 10 && x.TasinirKartId == 100)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+
+        var katman = Assert.Single(katmanlar);
+        Assert.Equal(StokMaliyetKatmanKaynakTipleri.BaslangicStogu, katman.KatmanKaynakTipi);
+        Assert.Null(katman.KaynakStokHareketId);
+        Assert.Equal(10, katman.IlkMiktar);
+        Assert.Equal(10, katman.KalanMiktar);
+        Assert.Equal(80m, katman.BirimMaliyet);
+    }
+
+    [Fact]
+    public async Task CreateFifoBaslangicStoguAsync_MevcutKatmanVarkenSadeceKatmansizMiktarIcinOlusturur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        await SeedSourceStockAsync(dbContext, 10);
+        await SeedFifoKatmanAsync(dbContext, depoId: 10, tasinirKartId: 100, miktar: 6, birimMaliyet: 70, kaynakTipi: StokMaliyetKatmanKaynakTipleri.BaslangicStogu);
+        var politikaService = CreatePolicyService(dbContext);
+
+        await politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = 80 }]
+        });
+
+        var katmanlar = await dbContext.StokMaliyetKatmanlari
+            .Where(x => x.DepoId == 10 && x.TasinirKartId == 100)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, katmanlar.Count);
+        Assert.Equal([6m, 4m], katmanlar.Select(x => x.IlkMiktar).ToArray());
+    }
+
+    [Fact]
+    public async Task CreateFifoBaslangicStoguAsync_FifoOlmayanPolitikadaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, 10);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = 80 }]
+        }));
+
+        Assert.Equal("FIFO başlangıç stoğu yalnızca FIFO maliyet politikası seçiliyse oluşturulabilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateFifoBaslangicStoguAsync_BaslangicKatmaniSonrakiGirisleBirlikteFifoSirasiIleTuketilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        await SeedSourceStockAsync(dbContext, 10);
+        var politikaService = CreatePolicyService(dbContext);
+        var service = CreateService(dbContext);
+
+        await politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = 80 }]
+        });
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 120));
+
+        var ilkCikis = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 4, birimFiyat: 1));
+        var ikinciCikis = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 8, birimFiyat: 1));
+
+        Assert.Equal(80m, ilkCikis.MaliyetBirimFiyat);
+        Assert.Equal(90m, ikinciCikis.MaliyetBirimFiyat);
+        Assert.Equal(720m, ikinciCikis.MaliyetTutari);
+    }
+
+    [Fact]
+    public async Task GetFifoBaslangicStoguAsync_DevredenTamFifoKatmaniVarsaYeniIhtiyacCikmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
+        {
+            Id = 2,
+            TesisId = 1,
+            MaliYil = 2027,
+            DonemNo = 1,
+            BaslangicTarihi = new DateTime(2027, 1, 1),
+            BitisTarihi = new DateTime(2027, 1, 31),
+            KapaliMi = false
+        });
+        await dbContext.SaveChangesAsync();
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        dbContext.StokMaliyetPolitikalari.Add(new STYS.Muhasebe.StokMaliyetPolitikalari.Entities.StokMaliyetPolitikasi
+        {
+            TesisId = 1,
+            MaliYil = 2027,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        });
+        await SeedSourceStockAsync(dbContext, 10);
+        await SeedFifoKatmanAsync(dbContext, depoId: 10, tasinirKartId: 100, miktar: 10, birimMaliyet: 80, kaynakTipi: StokMaliyetKatmanKaynakTipleri.BaslangicStogu, girisTarihi: new DateTime(2026, 1, 1));
+        await dbContext.SaveChangesAsync();
+        var politikaService = CreatePolicyService(dbContext);
+
+        var result = await politikaService.GetFifoBaslangicStoguAsync(1, 2027);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task CreateFifoBaslangicStoguAsync_NegatifMaliyetiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        await SeedSourceStockAsync(dbContext, 10);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = -1 }]
+        }));
+
+        Assert.Equal("Başlangıç birim maliyeti negatif olamaz.", ex.Message);
+    }
+
+    [Fact]
     public async Task StokMaliyetPolitikasiService_SnapshotVarkenYontemDegisikliginiReddeder()
     {
         await using var dbContext = CreateDbContext();
@@ -1559,7 +1732,9 @@ public class StokHareketServiceTests
         => new StokMaliyetPolitikasiService(
             dbContext,
             muhasebeDonemService ?? new FakeMuhasebeDonemService(),
-            new FakeMuhasebeTesisScopeService());
+            new FakeMuhasebeTesisScopeService(),
+            new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
+            new StokHareketRepository(dbContext, new MapperConfiguration(cfg => cfg.AddProfile<StokHareketProfile>(), NullLoggerFactory.Instance).CreateMapper()));
 
     private static IMuhasebeDonemService CreateRealMuhasebeDonemService(StysAppDbContext dbContext)
     {
@@ -1718,6 +1893,30 @@ public class StokHareketServiceTests
             KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
             KdvOrani = 20,
             KdvTutari = Math.Round(miktar * 0.2m, 2, MidpointRounding.AwayFromZero)
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedFifoKatmanAsync(
+        StysAppDbContext dbContext,
+        int depoId,
+        int tasinirKartId,
+        decimal miktar,
+        decimal birimMaliyet,
+        string kaynakTipi,
+        DateTime? girisTarihi = null)
+    {
+        dbContext.StokMaliyetKatmanlari.Add(new StokMaliyetKatmani
+        {
+            TesisId = 1,
+            DepoId = depoId,
+            TasinirKartId = tasinirKartId,
+            KaynakStokHareketId = null,
+            KatmanKaynakTipi = kaynakTipi,
+            GirisTarihi = girisTarihi ?? new DateTime(2026, 1, 1),
+            IlkMiktar = miktar,
+            KalanMiktar = miktar,
+            BirimMaliyet = birimMaliyet
         });
         await dbContext.SaveChangesAsync();
     }

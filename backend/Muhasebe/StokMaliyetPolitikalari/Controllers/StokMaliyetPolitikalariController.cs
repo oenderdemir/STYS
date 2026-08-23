@@ -33,4 +33,14 @@ public class StokMaliyetPolitikalariController : UIController
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
     public async Task<ActionResult<StokMaliyetPolitikasiDto>> Upsert([FromBody] UpsertStokMaliyetPolitikasiRequest request, CancellationToken cancellationToken)
         => Ok(await _service.UpsertAsync(request, cancellationToken));
+
+    [HttpGet("fifo-baslangic")]
+    [Permission(StructurePermissions.StokHareketYonetimi.View)]
+    public async Task<ActionResult<List<FifoBaslangicStoguSatirDto>>> GetFifoBaslangic([FromQuery] int tesisId, [FromQuery] int maliYil, CancellationToken cancellationToken)
+        => Ok(await _service.GetFifoBaslangicStoguAsync(tesisId, maliYil, cancellationToken));
+
+    [HttpPost("fifo-baslangic")]
+    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    public async Task<ActionResult<List<FifoBaslangicStoguSatirDto>>> CreateFifoBaslangic([FromBody] CreateFifoBaslangicStoguRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.CreateFifoBaslangicStoguAsync(request, cancellationToken));
 }

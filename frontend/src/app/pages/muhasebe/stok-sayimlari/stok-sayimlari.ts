@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, Observable, tap } from 'rxjs';
+import { concatMap, finalize, Observable, tap } from 'rxjs';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -232,7 +232,11 @@ export class StokSayimlariPage implements OnInit {
             return;
         }
 
-        this.persistSatirlar$().subscribe({
+        this.saving = true;
+        this.persistSatirlar$().pipe(finalize(() => {
+            this.saving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
             next: () => {
                 this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Sayım satırları kaydedildi.' });
             },
@@ -245,17 +249,12 @@ export class StokSayimlariPage implements OnInit {
             throw new Error('Taslak stok sayımı seçilmedi.');
         }
 
-        this.saving = true;
         return this.service.updateSatirlar(this.selectedSayim.id, {
             satirlar: this.selectedSayim.satirlar.filter((x) => x.id).map((x) => ({ id: x.id!, sayilanMiktar: x.sayilanMiktar }))
         }).pipe(
             tap((item) => {
                 this.selectedSayim = item;
                 this.load(this.pageNumber, this.pageSize);
-            }),
-            finalize(() => {
-                this.saving = false;
-                this.cdr.detectChanges();
             }));
     }
 
@@ -328,21 +327,21 @@ export class StokSayimlariPage implements OnInit {
             return;
         }
 
-        this.persistSatirlar$().subscribe({
-            next: (savedItem) => {
+        this.saving = true;
+        this.persistSatirlar$().pipe(
+            concatMap((savedItem) => {
                 this.selectedSayim = savedItem;
-                this.saving = true;
-                this.service.kesinlestir(savedItem.id!).pipe(finalize(() => {
-                    this.saving = false;
-                    this.cdr.detectChanges();
-                })).subscribe({
-                    next: (item) => {
-                        this.selectedSayim = item;
-                        this.load(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Sayım kesinleştirildi.' });
-                    },
-                    error: (error: unknown) => this.showError(error)
-                });
+                return this.service.kesinlestir(savedItem.id!);
+            }),
+            finalize(() => {
+                this.saving = false;
+                this.cdr.detectChanges();
+            })
+        ).subscribe({
+            next: (item) => {
+                this.selectedSayim = item;
+                this.load(this.pageNumber, this.pageSize);
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Sayım kesinleştirildi.' });
             },
             error: (error: unknown) => this.showError(error)
         });

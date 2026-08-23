@@ -15,6 +15,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 DECLARE @Now datetime2 = SYSUTCDATETIME();
                 DECLARE @StokHareketMenuRoleId uniqueidentifier;
                 DECLARE @MuhasebeRootId uniqueidentifier;
+                DECLARE @StokDepoYonetimiId uniqueidentifier;
                 DECLARE @StokSayimlariMenuId uniqueidentifier;
 
                 SELECT TOP (1) @StokHareketMenuRoleId = [Id]
@@ -39,6 +40,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     VALUES (@MuhasebeRootId, N'Muhasebe', N'pi pi-wallet', N'', NULL, 6, 0, @Now, @Now);
                 END;
 
+                SELECT TOP (1) @StokDepoYonetimiId = [Id]
+                FROM [TODBase].[MenuItems]
+                WHERE [Label] = N'Stok & Depo Yönetimi' AND [ParentId] = @MuhasebeRootId AND [IsDeleted] = 0;
+
                 SELECT TOP (1) @StokSayimlariMenuId = [Id]
                 FROM [TODBase].[MenuItems]
                 WHERE [Route] = N'muhasebe/stok-sayimlari';
@@ -47,24 +52,25 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 BEGIN
                     SET @StokSayimlariMenuId = NEWID();
                     INSERT INTO [TODBase].[MenuItems] ([Id], [Label], [Icon], [Route], [ParentId], [MenuOrder], [IsDeleted], [CreatedAt], [UpdatedAt])
-                    VALUES (@StokSayimlariMenuId, N'Stok Sayımları', N'pi pi-verified', N'muhasebe/stok-sayimlari', @MuhasebeRootId, 9, 0, @Now, @Now);
+                    VALUES (@StokSayimlariMenuId, N'Stok Sayımları', N'pi pi-verified', N'muhasebe/stok-sayimlari', @StokDepoYonetimiId, 3, 0, @Now, @Now);
                 END;
                 ELSE
                 BEGIN
                     UPDATE [TODBase].[MenuItems]
                     SET [Label] = N'Stok Sayımları',
                         [Icon] = N'pi pi-verified',
-                        [ParentId] = @MuhasebeRootId,
-                        [MenuOrder] = 9,
+                        [ParentId] = @StokDepoYonetimiId,
+                        [MenuOrder] = 3,
                         [IsDeleted] = 0,
                         [DeletedAt] = NULL,
                         [UpdatedAt] = @Now
                     WHERE [Id] = @StokSayimlariMenuId;
                 END;
 
-                IF NOT EXISTS (SELECT 1 FROM [TODBase].[MenuItemRoles] WHERE [MenuItemId] = @MuhasebeRootId AND [RoleId] = @StokHareketMenuRoleId)
+                IF @StokDepoYonetimiId IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM [TODBase].[MenuItemRoles] WHERE [MenuItemId] = @StokDepoYonetimiId AND [RoleId] = @StokHareketMenuRoleId)
                     INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt])
-                    VALUES (NEWID(), @MuhasebeRootId, @StokHareketMenuRoleId, 0, @Now, @Now);
+                    VALUES (NEWID(), @StokDepoYonetimiId, @StokHareketMenuRoleId, 0, @Now, @Now);
 
                 IF NOT EXISTS (SELECT 1 FROM [TODBase].[MenuItemRoles] WHERE [MenuItemId] = @StokSayimlariMenuId AND [RoleId] = @StokHareketMenuRoleId)
                     INSERT INTO [TODBase].[MenuItemRoles] ([Id], [MenuItemId], [RoleId], [IsDeleted], [CreatedAt], [UpdatedAt])

@@ -122,6 +122,7 @@ public class StokDetayDto
 public class StokDetaySatirDto
 {
     public DateTime? HareketTarihi { get; set; }
+    public int? StokLotId { get; set; }
     public decimal Miktar { get; set; }
     public string Birim { get; set; } = string.Empty;
     public string? LotNo { get; set; }

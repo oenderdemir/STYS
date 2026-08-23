@@ -162,6 +162,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
                 TasinirKartAd = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
                 Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
+                TakipliMi = x.TasinirKart != null && x.TasinirKart.TakipliMi,
+                StokLotId = x.StokLotId,
                 LotNo = x.StokLot != null ? x.StokLot.LotNo : null,
                 SonKullanmaTarihi = x.StokLot != null ? x.StokLot.SonKullanmaTarihi : null
             })
@@ -238,6 +240,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 .Select(x => new StokDetaySatirDto
                 {
                     HareketTarihi = x.HareketTarihi,
+                    StokLotId = x.StokLotId,
                     Miktar = x.Miktar,
                     Birim = x.Birim,
                     BirimFiyat = x.BirimFiyat,
@@ -249,19 +252,23 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 .OrderBy(x => x.HareketTarihi)
                 .ToList(),
             DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut => girisHareketleri
-                .GroupBy(x => x.BirimFiyat)
+                .GroupBy(x => x.TakipliMi
+                    ? new FiyatBazliDetayGrupKey(x.StokLotId, x.BirimFiyat)
+                    : new FiyatBazliDetayGrupKey(null, x.BirimFiyat))
                 .Select(g => new StokDetaySatirDto
                 {
                     HareketTarihi = null,
+                    StokLotId = g.Key.StokLotId,
                     Miktar = g.Sum(x => x.Miktar),
                     Birim = g.First().Birim,
-                    BirimFiyat = g.Key,
+                    BirimFiyat = g.Key.BirimFiyat,
                     ToplamTutar = g.Sum(x => x.Tutar),
                     HareketSayisi = g.Count(),
                     LotNo = g.Select(x => x.LotNo).Distinct().Count() == 1 ? g.Select(x => x.LotNo).FirstOrDefault() : null,
                     SonKullanmaTarihi = g.Select(x => x.SonKullanmaTarihi).Distinct().Count() == 1 ? g.Select(x => x.SonKullanmaTarihi).FirstOrDefault() : null
                 })
-                .OrderBy(x => x.BirimFiyat)
+                .OrderBy(x => x.LotNo)
+                .ThenBy(x => x.BirimFiyat)
                 .ToList(),
             DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut => BuildTekKayitDetayi(girisHareketleri),
             _ => []
@@ -275,6 +282,16 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             return [];
         }
 
+        if (girisHareketleri[0].TakipliMi)
+        {
+            return girisHareketleri
+                .GroupBy(x => x.StokLotId)
+                .Select(BuildLotOzetSatiri)
+                .OrderBy(x => x.LotNo)
+                .ThenBy(x => x.BirimFiyat)
+                .ToList();
+        }
+
         var toplamMiktar = girisHareketleri.Sum(x => (decimal)x.Miktar);
         var toplamTutar = girisHareketleri.Sum(x => (decimal)x.Tutar);
         var ortalamaFiyat = toplamMiktar == 0
@@ -286,6 +303,7 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             new StokDetaySatirDto
             {
                 HareketTarihi = null,
+                StokLotId = null,
                 Miktar = toplamMiktar,
                 Birim = girisHareketleri[0].Birim,
                 BirimFiyat = ortalamaFiyat,
@@ -295,6 +313,28 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 SonKullanmaTarihi = girisHareketleri.Select(x => x.SonKullanmaTarihi).Distinct().Count() == 1 ? girisHareketleri.Select(x => x.SonKullanmaTarihi).FirstOrDefault() : null
             }
         ];
+    }
+
+    private static StokDetaySatirDto BuildLotOzetSatiri(IGrouping<int?, StokDetayKaynakSatiri> grup)
+    {
+        var toplamMiktar = grup.Sum(x => (decimal)x.Miktar);
+        var toplamTutar = grup.Sum(x => (decimal)x.Tutar);
+        var ortalamaFiyat = toplamMiktar == 0
+            ? 0
+            : Math.Round(toplamTutar / toplamMiktar, 2, MidpointRounding.AwayFromZero);
+
+        return new StokDetaySatirDto
+        {
+            HareketTarihi = null,
+            StokLotId = grup.Key,
+            Miktar = toplamMiktar,
+            Birim = grup.First().Birim,
+            BirimFiyat = ortalamaFiyat,
+            ToplamTutar = toplamTutar,
+            HareketSayisi = grup.Count(),
+            LotNo = grup.Select(x => x.LotNo).Distinct().Count() == 1 ? grup.Select(x => x.LotNo).FirstOrDefault() : null,
+            SonKullanmaTarihi = grup.Select(x => x.SonKullanmaTarihi).Distinct().Count() == 1 ? grup.Select(x => x.SonKullanmaTarihi).FirstOrDefault() : null
+        };
     }
 
     private static string ResolveAciklama(DepoMalzemeKayitTipleri malzemeKayitTipi)
@@ -322,7 +362,11 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
         public string StokKodu { get; set; } = string.Empty;
         public string TasinirKartAd { get; set; } = string.Empty;
         public string Birim { get; set; } = string.Empty;
+        public bool TakipliMi { get; set; }
+        public int? StokLotId { get; set; }
         public string? LotNo { get; set; }
         public DateTime? SonKullanmaTarihi { get; set; }
     }
+
+    private sealed record FiyatBazliDetayGrupKey(int? StokLotId, decimal BirimFiyat);
 }

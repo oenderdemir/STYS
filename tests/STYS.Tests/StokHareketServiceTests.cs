@@ -623,6 +623,100 @@ public class StokHareketServiceTests
         Assert.Equal("Ayni lot numarasi farkli son kullanma tarihi ile kullanilamaz.", ex.Message);
     }
 
+    [Fact]
+    public async Task GetByIdVeGetPagedAsync_LotNoVeSktAlanlariniDoldurur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(CreateStokHareketDto(
+            StokHareketTipleri.Giris,
+            10,
+            lotNo: " LOT-A ",
+            sonKullanmaTarihi: new DateTime(2027, 1, 1)));
+
+        var byId = await service.GetByIdAsync(created.Id!.Value);
+        var paged = await service.GetPagedAsync(new PagedRequest { PageNumber = 1, PageSize = 10 });
+        var pagedItem = Assert.Single(paged.Items.Where(x => x.Id == created.Id));
+
+        Assert.NotNull(byId);
+        Assert.Equal("LOT-A", byId!.LotNo);
+        Assert.Equal(new DateTime(2027, 1, 1), byId.SonKullanmaTarihi);
+        Assert.Equal("LOT-A", pagedItem.LotNo);
+        Assert.Equal(new DateTime(2027, 1, 1), pagedItem.SonKullanmaTarihi);
+    }
+
+    [Fact]
+    public async Task GetStokDetayAsync_FiyatBazliModdaAyniFiyatliFarkliLotlariBirleştirmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut, takipliMi: true);
+        var lotAId = await CreateLotAsync(dbContext, "LOT-A", new DateTime(2027, 1, 1));
+        var lotBId = await CreateLotAsync(dbContext, "LOT-B", new DateTime(2027, 2, 1));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 100, StokHareketDurumlari.Aktif, stokLotId: lotAId);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 7, 100, StokHareketDurumlari.Aktif, stokLotId: lotBId);
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        Assert.Equal(2, result.Satirlar.Count);
+        Assert.Equal(["LOT-A", "LOT-B"], result.Satirlar.Select(x => x.LotNo).OrderBy(x => x).ToArray());
+    }
+
+    [Fact]
+    public async Task GetStokDetayAsync_AyniKayitModundaFarkliLotlariAyriSatirdaGosterir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut, takipliMi: true);
+        var lotAId = await CreateLotAsync(dbContext, "LOT-A", new DateTime(2027, 1, 1));
+        var lotBId = await CreateLotAsync(dbContext, "LOT-B", new DateTime(2027, 2, 1));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 100, StokHareketDurumlari.Aktif, stokLotId: lotAId);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 7, 120, StokHareketDurumlari.Aktif, stokLotId: lotBId);
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        Assert.Equal(2, result.Satirlar.Count);
+        Assert.Equal(["LOT-A", "LOT-B"], result.Satirlar.Select(x => x.LotNo).OrderBy(x => x).ToArray());
+    }
+
+    [Fact]
+    public async Task GetStokDetayAsync_AyniLotVeAyniFiyatFiyatBazliModdaBirlesebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, DepoMalzemeKayitTipleri.FiyatFarkliMalzemeleriAyriKayittaTut, takipliMi: true);
+        var lotAId = await CreateLotAsync(dbContext, "LOT-A", new DateTime(2027, 1, 1));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 100, StokHareketDurumlari.Aktif, stokLotId: lotAId);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 7, 100, StokHareketDurumlari.Aktif, stokLotId: lotAId);
+        var service = CreateService(dbContext);
+
+        var result = await service.GetStokDetayAsync(10, 100);
+
+        var satir = Assert.Single(result.Satirlar);
+        Assert.Equal("LOT-A", satir.LotNo);
+        Assert.Equal(12, satir.Miktar);
+        Assert.Equal(100, satir.BirimFiyat);
+    }
+
+    [Fact]
+    public async Task AddAsync_LegacyLotsuzStokVarkenLotluCikisReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 10, 1, StokHareketDurumlari.Aktif);
+        var lotAId = await CreateLotAsync(dbContext, "LOT-A", new DateTime(2027, 1, 1));
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(
+            StokHareketTipleri.Cikis,
+            2,
+            stokLotId: lotAId)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Bu takipli kart için lota dağıtılmamış eski stok bulundu. Lotlu çıkış yapmadan önce legacy stokları açılış işlemiyle dağıtınız.", ex.Message);
+    }
+
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()

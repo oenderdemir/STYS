@@ -1168,7 +1168,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     {
         return query =>
         {
-            var result = include is null ? query : include(query);
+            IQueryable<StokHareket> result = include is null ? query : include(query);
+            result = result.Include(x => x.StokLot);
             if (scope.IsScoped)
             {
                 result = result.Where(x =>

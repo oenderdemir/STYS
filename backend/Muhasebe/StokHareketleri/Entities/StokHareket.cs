@@ -25,6 +25,10 @@ public class StokHareket : BaseEntity<int>
 
     public decimal Tutar { get; set; }
 
+    public decimal? MaliyetBirimFiyat { get; set; }
+
+    public decimal? MaliyetTutari { get; set; }
+
     public string? BelgeNo { get; set; }
 
     public DateTime? BelgeTarihi { get; set; }

@@ -86,6 +86,57 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             .ToList();
     }
 
+    public async Task<List<StokDegerlemeDto>> GetStokDegerlemeAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default)
+    {
+        var rows = await BuildBaseQuery(depoIds)
+            .Select(x => new
+            {
+                x.DepoId,
+                DepoKod = x.Depo != null ? x.Depo.Kod : string.Empty,
+                DepoAd = x.Depo != null ? x.Depo.Ad : string.Empty,
+                x.TasinirKartId,
+                StokKodu = x.TasinirKart != null ? x.TasinirKart.StokKodu : string.Empty,
+                TasinirKartAd = x.TasinirKart != null ? x.TasinirKart.Ad : string.Empty,
+                Birim = x.TasinirKart != null ? x.TasinirKart.Birim : string.Empty,
+                HareketTipi = x.HareketTipi,
+                TransferYonu = x.TransferYonu,
+                SayimFarkiYonu = x.SayimFarkiYonu,
+                x.Miktar,
+                x.BirimFiyat,
+                x.MaliyetTutari
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => new { x.DepoId, x.DepoKod, x.DepoAd, x.TasinirKartId, x.StokKodu, x.TasinirKartAd, x.Birim })
+            .Select(g =>
+            {
+                var bakiyeMiktari = g.Sum(x => GetMovementQuantityEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar));
+                var toplamStokDegeri = g.Sum(x => GetMovementCostEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar, x.MaliyetTutari, x.BirimFiyat));
+                var ortalamaMaliyet = bakiyeMiktari == 0
+                    ? 0m
+                    : Math.Round(toplamStokDegeri / bakiyeMiktari, 6, MidpointRounding.AwayFromZero);
+
+                return new StokDegerlemeDto
+                {
+                    DepoId = g.Key.DepoId,
+                    DepoKod = g.Key.DepoKod,
+                    DepoAd = g.Key.DepoAd,
+                    TasinirKartId = g.Key.TasinirKartId,
+                    StokKodu = g.Key.StokKodu,
+                    TasinirKartAd = g.Key.TasinirKartAd,
+                    Birim = g.Key.Birim,
+                    BakiyeMiktari = bakiyeMiktari,
+                    OrtalamaMaliyet = ortalamaMaliyet,
+                    ToplamStokDegeri = toplamStokDegeri
+                };
+            })
+            .Where(x => x.BakiyeMiktari > 0)
+            .OrderBy(x => x.DepoKod)
+            .ThenBy(x => x.StokKodu)
+            .ToList();
+    }
+
     public async Task<decimal> GetBakiyeMiktariAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
     {
         var rows = await BuildBaseQuery([depoId])
@@ -418,6 +469,37 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
             DepoMalzemeKayitTipleri.MalzemeleriAyniKayittaTut => "Tüm girişler tek stok satırında ağırlıklı ortalama fiyat ile özetlenir.",
             _ => string.Empty
         };
+    }
+
+    private static decimal GetMovementQuantityEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar)
+    {
+        if (StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
+        {
+            return miktar;
+        }
+
+        if (StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
+        {
+            return -miktar;
+        }
+
+        return 0m;
+    }
+
+    private static decimal GetMovementCostEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar, decimal? maliyetTutari, decimal birimFiyat)
+    {
+        var tutar = maliyetTutari ?? Math.Round(miktar * birimFiyat, 2, MidpointRounding.AwayFromZero);
+        if (StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
+        {
+            return tutar;
+        }
+
+        if (StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
+        {
+            return -(maliyetTutari ?? 0m);
+        }
+
+        return 0m;
     }
 
     private sealed class StokDetayKaynakSatiri

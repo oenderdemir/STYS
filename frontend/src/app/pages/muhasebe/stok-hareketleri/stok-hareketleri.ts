@@ -30,7 +30,7 @@ import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.ser
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
+import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -89,6 +89,7 @@ export class StokHareketleriPage implements OnInit {
     totalRecords = 0;
     stokBakiye: StokBakiyeModel[] = [];
     stokKartOzet: StokKartOzetModel[] = [];
+    stokDegerleme: StokDegerlemeModel[] = [];
     expandedStokDetayKeys: Record<string, boolean> = {};
     model: StokHareketModel = this.createEmpty();
 
@@ -257,6 +258,7 @@ export class StokHareketleriPage implements OnInit {
         if (!tesisId) {
             this.stokBakiye = [];
             this.stokKartOzet = [];
+            this.stokDegerleme = [];
             this.resetStokDetayState();
             return;
         }
@@ -272,6 +274,12 @@ export class StokHareketleriPage implements OnInit {
         this.service.getStokKartOzet(tesisId, this.selectedDepoId).subscribe({
             next: (items) => {
                 this.stokKartOzet = items;
+                this.cdr.detectChanges();
+            }
+        });
+        this.service.getStokDegerleme(tesisId, this.selectedDepoId).subscribe({
+            next: (items) => {
+                this.stokDegerleme = items;
                 this.cdr.detectChanges();
             }
         });

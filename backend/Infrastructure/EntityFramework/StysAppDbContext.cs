@@ -2738,6 +2738,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Miktar).HasPrecision(18, 3);
             entity.Property(x => x.BirimFiyat).HasPrecision(18, 2);
             entity.Property(x => x.Tutar).HasPrecision(18, 2);
+            entity.Property(x => x.MaliyetBirimFiyat).HasPrecision(18, 6);
+            entity.Property(x => x.MaliyetTutari).HasPrecision(18, 2);
             entity.Property(x => x.BelgeNo).HasMaxLength(64);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.Property(x => x.KaynakModul).HasMaxLength(64);

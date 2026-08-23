@@ -19,6 +19,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getPaged: () => of({ items: [], pageNumber: 1, pageSize: 10, totalCount: 0 }),
                         getStokBakiye: () => of([]),
                         getStokKartOzet: () => of([]),
+                        getStokDegerleme: () => of([]),
                         getLotBakiyeleri: () => of([]),
                         getSeriBakiyeleri: () => of([]),
                         create: () => of({}),
@@ -38,7 +39,12 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                     useValue: {
                         initialize: () => of(void 0),
                         seciliTesis: () => ({ id: 1, ad: 'Tesis 1' }),
-                        requireSeciliTesisId: () => 1
+                        requireSeciliTesisId: () => 1,
+                        tesisler: () => [],
+                        tesislerLoading: () => false,
+                        tesislerError: () => null,
+                        tesisSecenekleri: () => [],
+                        selectTesis: () => undefined
                     }
                 }
             ]
@@ -280,5 +286,57 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
 
         expect(component.getTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
         expect(component.getDetayTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
+    });
+
+    it('loadSummary stok degerleme verisini doldurur', () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                {
+                    provide: StokHareketleriService,
+                    useValue: {
+                        getPaged: () => of({ items: [], pageNumber: 1, pageSize: 10, totalCount: 0 }),
+                        getStokBakiye: () => of([]),
+                        getStokKartOzet: () => of([]),
+                        getStokDegerleme: () => of([
+                            { depoId: 10, depoKod: 'D-001', depoAd: 'Ana Depo', tasinirKartId: 100, stokKodu: 'STK-100', tasinirKartAd: 'Kart 100', birim: 'Adet', bakiyeMiktari: 15, ortalamaMaliyet: 120, toplamStokDegeri: 1800 }
+                        ]),
+                        getLotBakiyeleri: () => of([]),
+                        getSeriBakiyeleri: () => of([]),
+                        create: () => of({}),
+                        createTransfer: () => of([]),
+                        update: () => of({}),
+                        delete: () => of(void 0),
+                        transferIptal: () => of(void 0)
+                    }
+                },
+                { provide: DepolarService, useValue: { getAll: () => of([]) } },
+                { provide: TasinirKartlariService, useValue: { getAll: () => of([]) } },
+                { provide: CariKartlarService, useValue: { getAll: () => of([]) } },
+                { provide: MuhasebeFisService, useValue: { getByKaynak: () => of([]) } },
+                { provide: KdvIstisnaTanimService, useValue: { filter: () => of([]) } },
+                {
+                    provide: MuhasebeTesisContextService,
+                    useValue: {
+                        initialize: () => of(void 0),
+                        seciliTesis: () => ({ id: 1, ad: 'Tesis 1' }),
+                        requireSeciliTesisId: () => 1,
+                        tesisler: () => [],
+                        tesislerLoading: () => false,
+                        tesislerError: () => null,
+                        tesisSecenekleri: () => [],
+                        selectTesis: () => undefined
+                    }
+                }
+            ]
+        });
+
+        const component = TestBed.createComponent(StokHareketleriPage).componentInstance;
+
+        component.loadSummary();
+
+        expect(component.stokDegerleme).toEqual([
+            jasmine.objectContaining({ depoId: 10, ortalamaMaliyet: 120, toplamStokDegeri: 1800 })
+        ]);
     });
 });

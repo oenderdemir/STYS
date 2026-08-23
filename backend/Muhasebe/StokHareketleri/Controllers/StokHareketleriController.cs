@@ -64,6 +64,11 @@ public class StokHareketleriController : UIController
     public async Task<ActionResult<List<StokKartOzetDto>>> GetStokKartOzet([FromQuery] int? tesisId, [FromQuery] int? depoId, CancellationToken cancellationToken)
         => Ok(await _service.GetStokKartOzetAsync(tesisId, depoId, cancellationToken));
 
+    [HttpGet("degerleme")]
+    [Permission(StructurePermissions.StokHareketYonetimi.View)]
+    public async Task<ActionResult<List<StokDegerlemeDto>>> GetStokDegerleme([FromQuery] int? tesisId, [FromQuery] int? depoId, CancellationToken cancellationToken)
+        => Ok(await _service.GetStokDegerlemeAsync(tesisId, depoId, cancellationToken));
+
     [HttpGet("stok-detay")]
     [Permission(StructurePermissions.StokHareketYonetimi.View)]
     public async Task<ActionResult<StokDetayDto>> GetStokDetay([FromQuery] int depoId, [FromQuery] int tasinirKartId, CancellationToken cancellationToken)

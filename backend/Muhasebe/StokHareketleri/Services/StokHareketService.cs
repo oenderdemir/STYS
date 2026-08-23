@@ -71,6 +71,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             await NormalizeAndValidateAsync(dto, null);
             dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
             await ApplyKdvAsync(dto);
+            await ApplyCostSnapshotAsync(dto, null, CancellationToken.None);
             await EnsureCreateDoesNotGoNegativeAsync(dto, CancellationToken.None);
             var created = await base.AddAsync(dto);
             await transaction.CommitAsync(CancellationToken.None);
@@ -93,6 +94,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         await NormalizeAndValidateAsync(dto, null);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
+        await ApplyCostSnapshotAsync(dto, null, cancellationToken);
         await EnsureCreateDoesNotGoNegativeAsync(dto, cancellationToken);
         return await base.AddAsync(dto);
     }
@@ -129,8 +131,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
             await NormalizeAndValidateAsync(dto, dto.Id);
+            await EnsureCostMutationAllowedAsync(existing, dto, CancellationToken.None);
             dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
             await ApplyKdvAsync(dto);
+            await ApplyCostSnapshotAsync(dto, existing, CancellationToken.None);
             await EnsureUpdateDoesNotGoNegativeAsync(existing, dto, CancellationToken.None);
             DetachTrackedStokHareket(dto.Id.Value);
             var updated = await base.UpdateAsync(dto);
@@ -170,6 +174,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             existing = await GetExistingMovementSnapshotAsync(id, CancellationToken.None)
                 ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
+            await EnsureDeleteCostMutationAllowedAsync(existing, CancellationToken.None);
             await EnsureDeleteDoesNotGoNegativeAsync(existing, CancellationToken.None);
             DetachTrackedStokHareket(id);
             await base.DeleteAsync(id);
@@ -324,6 +329,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
             var transferGrupId = Guid.NewGuid();
             var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
+            var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, cancellationToken);
+            var transferMaliyetBirimFiyat = kaynakMaliyetSnapshot.OrtalamaMaliyet;
+            var transferMaliyetTutari = CalculateCostAmount(request.Miktar, transferMaliyetBirimFiyat);
 
             var kaynakHareket = CreateTransferLeg(
                 request,
@@ -331,7 +339,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 request.KaynakDepoId,
                 request.HedefDepoId,
                 StokTransferYonleri.Cikis,
-                tutar);
+                tutar,
+                transferMaliyetBirimFiyat,
+                transferMaliyetTutari);
 
             var hedefHareket = CreateTransferLeg(
                 request,
@@ -339,7 +349,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 request.HedefDepoId,
                 request.KaynakDepoId,
                 StokTransferYonleri.Giris,
-                tutar);
+                tutar,
+                transferMaliyetBirimFiyat,
+                transferMaliyetTutari);
 
             await _dbContext.StokHareketleri.AddRangeAsync([kaynakHareket, hedefHareket], cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -471,6 +483,27 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
         var result = await _repository.GetStokKartOzetleriAsync(allowedDepoIds, cancellationToken);
         return result;
+    }
+
+    public async Task<List<StokDegerlemeDto>> GetStokDegerlemeAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default)
+    {
+        var allowedDepoIds = await ResolveAllowedDepoIdsAsync(tesisId, cancellationToken);
+        if (allowedDepoIds is not null && allowedDepoIds.Count == 0)
+        {
+            return [];
+        }
+
+        if (depoId.HasValue && depoId.Value > 0)
+        {
+            if (allowedDepoIds is not null && !allowedDepoIds.Contains(depoId.Value))
+            {
+                return [];
+            }
+
+            return await _repository.GetStokDegerlemeAsync(new[] { depoId.Value }, cancellationToken);
+        }
+
+        return await _repository.GetStokDegerlemeAsync(allowedDepoIds, cancellationToken);
     }
 
     public async Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
@@ -863,6 +896,117 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task<decimal> GetCurrentBalanceAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)
         => await _repository.GetBakiyeMiktariAsync(depoId, tasinirKartId, cancellationToken);
+
+    private async Task ApplyCostSnapshotAsync(StokHareketDto dto, StokHareket? existing, CancellationToken cancellationToken)
+    {
+        if (!StokHareketTipleri.IsGirisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu)
+            && !StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
+        {
+            dto.MaliyetBirimFiyat = null;
+            dto.MaliyetTutari = null;
+            return;
+        }
+
+        if (StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
+        {
+            var snapshot = await GetBaseCostSnapshotForDtoAsync(dto, existing, cancellationToken);
+            dto.MaliyetBirimFiyat = snapshot.OrtalamaMaliyet;
+            dto.MaliyetTutari = CalculateCostAmount(dto.Miktar, snapshot.OrtalamaMaliyet);
+            return;
+        }
+
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.SayimFarki, StringComparison.Ordinal)
+            && string.Equals(dto.SayimFarkiYonu, StokSayimFarkiYonleri.Fazla, StringComparison.Ordinal))
+        {
+            // Bu fazda kullanıcıdan ayrı maliyet alınmıyor; varsa mevcut kart ortalaması kullanılır, yoksa 0 kabul edilir.
+            var snapshot = await GetBaseCostSnapshotForDtoAsync(dto, existing, cancellationToken);
+            dto.MaliyetBirimFiyat = snapshot.OrtalamaMaliyet;
+            dto.MaliyetTutari = CalculateCostAmount(dto.Miktar, snapshot.OrtalamaMaliyet);
+            return;
+        }
+
+        dto.MaliyetBirimFiyat = Math.Round(dto.BirimFiyat, 6, MidpointRounding.AwayFromZero);
+        dto.MaliyetTutari = CalculateCostAmount(dto.Miktar, dto.MaliyetBirimFiyat.Value);
+    }
+
+    private async Task<StockCostSnapshot> GetBaseCostSnapshotForDtoAsync(StokHareketDto dto, StokHareket? existing, CancellationToken cancellationToken)
+    {
+        var snapshot = await GetCurrentCostSnapshotAsync(dto.DepoId, dto.TasinirKartId, cancellationToken);
+        if (existing is null
+            || existing.DepoId != dto.DepoId
+            || existing.TasinirKartId != dto.TasinirKartId)
+        {
+            return snapshot;
+        }
+
+        var baseQuantity = snapshot.BakiyeMiktari - CalculateMovementEffect(existing);
+        var baseValue = snapshot.ToplamStokDegeri - CalculateCostValueEffect(existing);
+        return CreateStockCostSnapshot(baseQuantity, baseValue);
+    }
+
+    private async Task<StockCostSnapshot> GetCurrentCostSnapshotAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)
+    {
+        var rows = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .Where(x =>
+                x.DepoId == depoId
+                && x.TasinirKartId == tasinirKartId
+                && x.Durum == StokHareketDurumlari.Aktif)
+            .Select(x => new
+            {
+                x.HareketTipi,
+                x.TransferYonu,
+                x.SayimFarkiYonu,
+                x.Miktar,
+                x.BirimFiyat,
+                x.MaliyetTutari
+            })
+            .ToListAsync(cancellationToken);
+
+        var bakiyeMiktari = rows.Sum(x => CalculateMovementEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar, StokHareketDurumlari.Aktif));
+        var toplamStokDegeri = rows.Sum(x => CalculateCostValueEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar, x.MaliyetTutari, x.BirimFiyat, StokHareketDurumlari.Aktif));
+        return CreateStockCostSnapshot(bakiyeMiktari, toplamStokDegeri);
+    }
+
+    private async Task EnsureCostMutationAllowedAsync(StokHareket existing, StokHareketDto dto, CancellationToken cancellationToken)
+    {
+        if (!HasCostSensitiveChange(existing, dto))
+        {
+            return;
+        }
+
+        if (!await HasDependentCostSnapshotsAsync(existing, cancellationToken))
+        {
+            return;
+        }
+
+        throw new BaseException("Bu stok hareketi sonraki maliyet snapshot'larını etkileyeceği için güncellenemez.", 400);
+    }
+
+    private async Task EnsureDeleteCostMutationAllowedAsync(StokHareket existing, CancellationToken cancellationToken)
+    {
+        if (!await HasDependentCostSnapshotsAsync(existing, cancellationToken))
+        {
+            return;
+        }
+
+        throw new BaseException("Bu stok hareketi sonraki maliyet snapshot'larını etkileyeceği için silinemez.", 400);
+    }
+
+    private async Task<bool> HasDependentCostSnapshotsAsync(StokHareket existing, CancellationToken cancellationToken)
+    {
+        return await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .AnyAsync(x =>
+                x.Id != existing.Id
+                && x.DepoId == existing.DepoId
+                && x.TasinirKartId == existing.TasinirKartId
+                && x.Durum == StokHareketDurumlari.Aktif
+                && x.MaliyetBirimFiyat.HasValue
+                && (x.HareketTarihi > existing.HareketTarihi
+                    || (x.HareketTarihi == existing.HareketTarihi && x.Id > existing.Id)),
+                cancellationToken);
+    }
 
     private async Task<StokHareket?> GetExistingMovementSnapshotAsync(int id, CancellationToken cancellationToken)
         => await _dbContext.StokHareketleri
@@ -1360,11 +1504,43 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static decimal CalculateProjectedBalance(decimal currentBalance, decimal existingMovementEffect, decimal newMovementEffect)
         => currentBalance - existingMovementEffect + newMovementEffect;
 
+    private static StockCostSnapshot CreateStockCostSnapshot(decimal bakiyeMiktari, decimal toplamStokDegeri)
+    {
+        var ortalamaMaliyet = bakiyeMiktari <= 0
+            ? 0m
+            : Math.Round(toplamStokDegeri / bakiyeMiktari, 6, MidpointRounding.AwayFromZero);
+
+        return new StockCostSnapshot(bakiyeMiktari, toplamStokDegeri, ortalamaMaliyet);
+    }
+
     private static decimal CalculateMovementEffect(StokHareketDto dto)
         => CalculateMovementEffect(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu, dto.Miktar, dto.Durum);
 
     private static decimal CalculateMovementEffect(StokHareket hareket)
         => CalculateMovementEffect(hareket.HareketTipi, hareket.TransferYonu, hareket.SayimFarkiYonu, hareket.Miktar, hareket.Durum);
+
+    private static decimal CalculateCostValueEffect(StokHareket hareket)
+        => CalculateCostValueEffect(hareket.HareketTipi, hareket.TransferYonu, hareket.SayimFarkiYonu, hareket.Miktar, hareket.MaliyetTutari, hareket.BirimFiyat, hareket.Durum);
+
+    private static decimal CalculateCostValueEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar, decimal? maliyetTutari, decimal birimFiyat, string? durum)
+    {
+        if (!string.Equals(durum, StokHareketDurumlari.Aktif, StringComparison.Ordinal))
+        {
+            return 0m;
+        }
+
+        if (StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
+        {
+            return maliyetTutari ?? CalculateCostAmount(miktar, birimFiyat);
+        }
+
+        if (StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
+        {
+            return -(maliyetTutari ?? 0m);
+        }
+
+        return 0m;
+    }
 
     private static decimal CalculateMovementEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar, string? durum)
     {
@@ -1393,6 +1569,17 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException(errorMessage, 400);
         }
     }
+
+    private static bool HasCostSensitiveChange(StokHareket existing, StokHareketDto dto)
+        => existing.DepoId != dto.DepoId
+           || existing.TasinirKartId != dto.TasinirKartId
+           || existing.HareketTarihi != dto.HareketTarihi
+           || !string.Equals(existing.HareketTipi, dto.HareketTipi, StringComparison.Ordinal)
+           || !string.Equals(existing.TransferYonu, dto.TransferYonu, StringComparison.Ordinal)
+           || !string.Equals(existing.SayimFarkiYonu, dto.SayimFarkiYonu, StringComparison.Ordinal)
+           || existing.Miktar != dto.Miktar
+           || existing.BirimFiyat != dto.BirimFiyat
+           || !string.Equals(existing.Durum, dto.Durum, StringComparison.Ordinal);
 
     private void DetachTrackedStokHareket(int id)
     {
@@ -1455,7 +1642,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         int depoId,
         int karsiDepoId,
         string transferYonu,
-        decimal tutar)
+        decimal tutar,
+        decimal maliyetBirimFiyat,
+        decimal maliyetTutari)
     {
         return new StokHareket
         {
@@ -1475,6 +1664,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             KarsiDepoId = karsiDepoId,
             StokLotId = request.StokLotId,
             StokSeriId = request.StokSeriId,
+            MaliyetBirimFiyat = maliyetBirimFiyat,
+            MaliyetTutari = maliyetTutari,
             KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
             KdvOrani = 0,
             KdvTutari = 0,
@@ -1500,11 +1691,15 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static decimal CalculateTutar(decimal miktar, decimal birimFiyat)
         => Math.Round(miktar * birimFiyat, 2, MidpointRounding.AwayFromZero);
 
+    private static decimal CalculateCostAmount(decimal miktar, decimal birimFiyat)
+        => Math.Round(miktar * birimFiyat, 2, MidpointRounding.AwayFromZero);
+
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private readonly record struct StockKey(int DepoId, int TasinirKartId);
     private readonly record struct LotStockKey(int DepoId, int TasinirKartId, int StokLotId);
+    private readonly record struct StockCostSnapshot(decimal BakiyeMiktari, decimal ToplamStokDegeri, decimal OrtalamaMaliyet);
 
     private static Func<IQueryable<StokHareket>, IQueryable<StokHareket>> BuildScopedIncludeQuery(
         DomainAccessScope scope,

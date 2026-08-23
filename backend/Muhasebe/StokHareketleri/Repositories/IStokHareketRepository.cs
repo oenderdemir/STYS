@@ -10,6 +10,7 @@ public interface IStokHareketRepository : IBaseRdbmsRepository<StokHareket, int>
 {
     Task<List<StokBakiyeDto>> GetDepoStokBakiyeleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
     Task<List<StokKartOzetDto>> GetStokKartOzetleriAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
+    Task<List<StokDegerlemeDto>> GetStokDegerlemeAsync(IEnumerable<int>? depoIds, CancellationToken cancellationToken = default);
     Task<decimal> GetBakiyeMiktariAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default);
     Task<decimal> GetLotBakiyeMiktariAsync(int depoId, int tasinirKartId, int stokLotId, CancellationToken cancellationToken = default);
     Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, DepoMalzemeKayitTipleri malzemeKayitTipi, CancellationToken cancellationToken = default);

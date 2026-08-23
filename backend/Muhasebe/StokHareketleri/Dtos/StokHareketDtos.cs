@@ -11,6 +11,8 @@ public class StokHareketDto : BaseRdbmsDto<int>
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
     public decimal Tutar { get; set; }
+    public decimal? MaliyetBirimFiyat { get; set; }
+    public decimal? MaliyetTutari { get; set; }
     public string? BelgeNo { get; set; }
     public DateTime? BelgeTarihi { get; set; }
     public string? Aciklama { get; set; }
@@ -144,4 +146,18 @@ public class StokSeriBakiyeDto
 {
     public int StokSeriId { get; set; }
     public string SeriNo { get; set; } = string.Empty;
+}
+
+public class StokDegerlemeDto
+{
+    public int DepoId { get; set; }
+    public string DepoKod { get; set; } = string.Empty;
+    public string DepoAd { get; set; } = string.Empty;
+    public int TasinirKartId { get; set; }
+    public string StokKodu { get; set; } = string.Empty;
+    public string TasinirKartAd { get; set; } = string.Empty;
+    public string Birim { get; set; } = string.Empty;
+    public decimal BakiyeMiktari { get; set; }
+    public decimal OrtalamaMaliyet { get; set; }
+    public decimal ToplamStokDegeri { get; set; }
 }

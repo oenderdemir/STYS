@@ -12,6 +12,8 @@ export interface StokHareketModel {
     miktar: number;
     birimFiyat: number;
     tutar: number;
+    maliyetBirimFiyat?: number | null;
+    maliyetTutari?: number | null;
     belgeNo?: string | null;
     belgeTarihi?: string | null;
     aciklama?: string | null;
@@ -112,6 +114,19 @@ export interface StokDetayModel {
     bakiyeMiktari: number;
     aciklama: string;
     satirlar: StokDetaySatirModel[];
+}
+
+export interface StokDegerlemeModel {
+    depoId: number;
+    depoKod: string;
+    depoAd: string;
+    tasinirKartId: number;
+    stokKodu: string;
+    tasinirKartAd: string;
+    birim: string;
+    bakiyeMiktari: number;
+    ortalamaMaliyet: number;
+    toplamStokDegeri: number;
 }
 
 export interface StokDetaySatirModel {

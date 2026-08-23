@@ -808,6 +808,142 @@ public class StokHareketServiceTests
         Assert.Equal("Bu takipli kart için lota dağıtılmamış eski stok bulundu. Lotlu çıkış yapmadan önce legacy stokları açılış işlemiyle dağıtınız.", ex.Message);
     }
 
+    [Fact]
+    public async Task GetStokDegerlemeAsync_IkiGirisIleAgirlikliOrtalamaHesaplar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 160));
+
+        var satir = Assert.Single(await service.GetStokDegerlemeAsync(1, 10));
+
+        Assert.Equal(15, satir.BakiyeMiktari);
+        Assert.Equal(120m, satir.OrtalamaMaliyet);
+        Assert.Equal(1800m, satir.ToplamStokDegeri);
+    }
+
+    [Fact]
+    public async Task AddAsync_CikisMaliyetSnapshotiniMevcutOrtalamadanAlirVeKalanDegeriDusurur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 160));
+
+        var cikis = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 4, birimFiyat: 1));
+        var satir = Assert.Single(await service.GetStokDegerlemeAsync(1, 10));
+
+        Assert.Equal(120m, cikis.MaliyetBirimFiyat);
+        Assert.Equal(480m, cikis.MaliyetTutari);
+        Assert.Equal(11, satir.BakiyeMiktari);
+        Assert.Equal(1320m, satir.ToplamStokDegeri);
+    }
+
+    [Fact]
+    public async Task CreateTransferAsync_MaliyetiKaynakIleHedefeTasir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 160));
+
+        var transfer = await service.CreateTransferAsync(CreateTransferRequest(miktar: 4, birimFiyat: 999));
+        var cikis = Assert.Single(transfer.Where(x => x.TransferYonu == StokTransferYonleri.Cikis));
+        var giris = Assert.Single(transfer.Where(x => x.TransferYonu == StokTransferYonleri.Giris));
+        var degerleme = await service.GetStokDegerlemeAsync(1, null);
+        var kaynak = Assert.Single(degerleme.Where(x => x.DepoId == 10));
+        var hedef = Assert.Single(degerleme.Where(x => x.DepoId == 20));
+
+        Assert.Equal(120m, cikis.MaliyetBirimFiyat);
+        Assert.Equal(480m, cikis.MaliyetTutari);
+        Assert.Equal(cikis.MaliyetBirimFiyat, giris.MaliyetBirimFiyat);
+        Assert.Equal(cikis.MaliyetTutari, giris.MaliyetTutari);
+        Assert.Equal(11, kaynak.BakiyeMiktari);
+        Assert.Equal(1320m, kaynak.ToplamStokDegeri);
+        Assert.Equal(4, hedef.BakiyeMiktari);
+        Assert.Equal(480m, hedef.ToplamStokDegeri);
+    }
+
+    [Fact]
+    public async Task AddAsync_SayimFarkiEksikMevcutOrtalamayiKullanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 160));
+
+        var hareket = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.SayimFarki, 3, birimFiyat: 0, sayimFarkiYonu: StokSayimFarkiYonleri.Eksik));
+
+        Assert.Equal(120m, hareket.MaliyetBirimFiyat);
+        Assert.Equal(360m, hareket.MaliyetTutari);
+    }
+
+    [Fact]
+    public async Task AddAsync_SayimFarkiFazlaMevcutOrtalamayiKullanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 160));
+
+        var hareket = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.SayimFarki, 2, birimFiyat: 0, sayimFarkiYonu: StokSayimFarkiYonleri.Fazla));
+        var satir = Assert.Single(await service.GetStokDegerlemeAsync(1, 10));
+
+        Assert.Equal(120m, hareket.MaliyetBirimFiyat);
+        Assert.Equal(240m, hareket.MaliyetTutari);
+        Assert.Equal(17, satir.BakiyeMiktari);
+        Assert.Equal(2040m, satir.ToplamStokDegeri);
+    }
+
+    [Fact]
+    public async Task AddAsync_LotTakipliHareketKartBazliOrtalamaMaliyetKullanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Lot);
+        var lotAId = await CreateLotAsync(dbContext, "LOT-A", new DateTime(2027, 1, 1));
+        var lotBId = await CreateLotAsync(dbContext, "LOT-B", new DateTime(2027, 6, 1));
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100, stokLotId: lotAId));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, birimFiyat: 160, stokLotId: lotBId));
+
+        var cikis = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 4, birimFiyat: 1, stokLotId: lotAId));
+
+        Assert.Equal(120m, cikis.MaliyetBirimFiyat);
+        Assert.Equal(480m, cikis.MaliyetTutari);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_SonrakiMaliyetSnapshotlariVarsaMaliyetEtkiliGecmisiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var giris = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 4, birimFiyat: 1));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(CreateStokHareketDto(
+            StokHareketTipleri.Giris,
+            10,
+            id: giris.Id,
+            birimFiyat: 110)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Bu stok hareketi sonraki maliyet snapshot'larını etkileyeceği için güncellenemez.", ex.Message);
+    }
+
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -844,7 +980,7 @@ public class StokHareketServiceTests
             mapper);
     }
 
-    private static StokTransferRequest CreateTransferRequest(int? stokLotId = null, int? stokSeriId = null, string? seriNo = null, decimal miktar = 10)
+    private static StokTransferRequest CreateTransferRequest(int? stokLotId = null, int? stokSeriId = null, string? seriNo = null, decimal miktar = 10, decimal birimFiyat = 1)
     {
         return new StokTransferRequest
         {
@@ -856,7 +992,7 @@ public class StokHareketServiceTests
             SeriNo = seriNo,
             HareketTarihi = new DateTime(2026, 8, 21),
             Miktar = miktar,
-            BirimFiyat = 1,
+            BirimFiyat = birimFiyat,
             BelgeNo = "TR-001"
         };
     }
@@ -1106,6 +1242,7 @@ public class StokHareketServiceTests
         string? sayimFarkiYonu = null,
         int kdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
         decimal kdvOrani = 20,
+        decimal birimFiyat = 1,
         int? stokLotId = null,
         int? stokSeriId = null,
         string? seriNo = null,
@@ -1126,8 +1263,8 @@ public class StokHareketServiceTests
             HareketTipi = hareketTipi,
             SayimFarkiYonu = sayimFarkiYonu,
             Miktar = miktar,
-            BirimFiyat = 1,
-            Tutar = miktar,
+            BirimFiyat = birimFiyat,
+            Tutar = miktar * birimFiyat,
             Durum = durum,
             KdvUygulamaTipi = kdvUygulamaTipi,
             KdvOrani = kdvOrani

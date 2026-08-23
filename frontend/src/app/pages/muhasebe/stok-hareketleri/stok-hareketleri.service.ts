@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateStokHareketRequest, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel, StokTransferRequest, UpdateStokHareketRequest } from './stok-hareketleri.dto';
+import { CreateStokHareketRequest, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel, StokTransferRequest, UpdateStokHareketRequest } from './stok-hareketleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class StokHareketleriService {
@@ -86,6 +86,18 @@ export class StokHareketleriService {
         }
 
         return this.http.get<ApiResponse<StokKartOzetModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/stok-kart-ozet`, { params }).pipe(map(this.unwrap<StokKartOzetModel[]>('Stok kart ozeti alinamadi.')));
+    }
+
+    getStokDegerleme(tesisId?: number, depoId?: number): Observable<StokDegerlemeModel[]> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+        if (depoId && depoId > 0) {
+            params = params.set('depoId', depoId);
+        }
+
+        return this.http.get<ApiResponse<StokDegerlemeModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/degerleme`, { params }).pipe(map(this.unwrap<StokDegerlemeModel[]>('Stok degerleme alinamadi.')));
     }
 
     getStokDetay(depoId: number, tasinirKartId: number): Observable<StokDetayModel> {

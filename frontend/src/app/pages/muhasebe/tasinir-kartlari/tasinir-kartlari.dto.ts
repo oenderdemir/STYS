@@ -13,6 +13,7 @@ export interface TasinirKartModel {
     sarfMi: boolean;
     demirbasMi: boolean;
     takipliMi: boolean;
+    takipTipi: string;
     kdvOrani: number;
     aktifMi: boolean;
     aciklama?: string | null;
@@ -31,6 +32,12 @@ export const MALZEME_TIPLERI: Array<{ label: string; value: string }> = [
     { label: 'Tuketim', value: 'Tuketim' },
     { label: 'Ticari Mal', value: 'TicariMal' },
     { label: 'Diger', value: 'Diger' }
+];
+
+export const TAKIP_TIPI_SECENEKLERI: Array<{ label: string; value: string }> = [
+    { label: 'Takipsiz', value: 'Yok' },
+    { label: 'Lot- parti', value: 'Lot' },
+    { label: 'Seri', value: 'Seri' }
 ];
 
 export interface MuhasebeTesisModel {

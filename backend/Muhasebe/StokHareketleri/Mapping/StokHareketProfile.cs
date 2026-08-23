@@ -10,13 +10,15 @@ public class StokHareketProfile : Profile
     {
         CreateMap<StokHareket, StokHareketDto>()
             .ForMember(dest => dest.LotNo, opt => opt.MapFrom(src => src.StokLot != null ? src.StokLot.LotNo : null))
-            .ForMember(dest => dest.SonKullanmaTarihi, opt => opt.MapFrom(src => src.StokLot != null ? src.StokLot.SonKullanmaTarihi : null));
+            .ForMember(dest => dest.SonKullanmaTarihi, opt => opt.MapFrom(src => src.StokLot != null ? src.StokLot.SonKullanmaTarihi : null))
+            .ForMember(dest => dest.SeriNo, opt => opt.MapFrom(src => src.StokSeri != null ? src.StokSeri.SeriNo : null));
 
         CreateMap<StokHareketDto, StokHareket>()
             .ForMember(dest => dest.Depo, opt => opt.Ignore())
             .ForMember(dest => dest.KarsiDepo, opt => opt.Ignore())
             .ForMember(dest => dest.TasinirKart, opt => opt.Ignore())
             .ForMember(dest => dest.StokLot, opt => opt.Ignore())
+            .ForMember(dest => dest.StokSeri, opt => opt.Ignore())
             .ForMember(dest => dest.CariKart, opt => opt.Ignore())
             .ForMember(dest => dest.KdvIstisnaTanim, opt => opt.Ignore());
 

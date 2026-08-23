@@ -13,6 +13,9 @@ using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokLotlari.Dtos;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokSerileri.Entities;
+using STYS.Muhasebe.TasinirKartlari.Entities;
+using STYS.Muhasebe.TasinirKartlari.Services;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -229,8 +232,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             throw new BaseException("Seçilen taşınır kartın muhasebe hesap planı bağlantısı bulunmuyor.", 400);
         }
 
+        var takipTipi = ResolveTakipTipi(tasinirKart);
+
         StokLot? transferLot = null;
-        if (tasinirKart.TakipliMi)
+        if (string.Equals(takipTipi, TasinirKartTakipTipleri.Lot, StringComparison.Ordinal))
         {
             if (!request.StokLotId.HasValue || request.StokLotId.Value <= 0)
             {
@@ -243,6 +248,29 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         else
         {
             request.StokLotId = null;
+        }
+
+        if (string.Equals(takipTipi, TasinirKartTakipTipleri.Seri, StringComparison.Ordinal))
+        {
+            if (request.Miktar != 1)
+            {
+                throw new BaseException("Seri takipli taşınır kartlarda miktar 1 olmalıdır.", 400);
+            }
+
+            if (!request.StokSeriId.HasValue || request.StokSeriId.Value <= 0)
+            {
+                throw new BaseException("Seri takipli taşınır kart transferinde seri seçimi zorunludur.", 400);
+            }
+
+            var transferSeri = await GetValidatedSeriAsync(request.StokSeriId.Value, tasinirKart.Id, kaynakDepo.TesisId, cancellationToken);
+            request.StokSeriId = transferSeri.Id;
+            request.SeriNo = transferSeri.SeriNo;
+            request.StokLotId = null;
+        }
+        else
+        {
+            request.StokSeriId = null;
+            request.SeriNo = null;
         }
 
         await EnsureDepoAccessAsync(kaynakDepo.Id, kaynakDepo.TesisId, "Kaynak depo", cancellationToken);
@@ -273,6 +301,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 {
                     throw new BaseException("Seçilen lotta bu işlem için yeterli stok bulunmamaktadır.", 400);
                 }
+            }
+
+            if (request.StokSeriId.HasValue)
+            {
+                await EnsureSeriTransferCanProceedAsync(request.KaynakDepoId, request.HedefDepoId, request.TasinirKartId, request.StokSeriId.Value, cancellationToken);
             }
 
             var transferGrupId = Guid.NewGuid();
@@ -458,6 +491,27 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         return await _repository.GetLotBakiyeleriAsync(depoId, tasinirKartId, cancellationToken);
     }
 
+    public async Task<List<StokSeriBakiyeDto>> GetSeriBakiyeleriAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
+    {
+        if (depoId <= 0)
+        {
+            throw new BaseException("Gecerli bir depo secilmelidir.", 400);
+        }
+
+        if (tasinirKartId <= 0)
+        {
+            throw new BaseException("Gecerli bir tasinir kart secilmelidir.", 400);
+        }
+
+        var depo = await GetDepoOrThrowAsync(depoId);
+        await EnsureDepoAccessAsync(depo.Id, depo.TesisId, "Depo", cancellationToken);
+        var tasinirKart = await _tasinirKartRepository.GetByIdAsync(tasinirKartId)
+            ?? throw new BaseException("Secilen tasinir kart bulunamadi.", 400);
+        EnsureDepoVeTasinirKartAyniTesiste(depo, tasinirKart);
+
+        return await _repository.GetSeriBakiyeleriAsync(depoId, tasinirKartId, cancellationToken);
+    }
+
     private async Task<HashSet<int>?> ResolveAllowedDepoIdsAsync(int? tesisId, CancellationToken cancellationToken)
     {
         var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
@@ -608,7 +662,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             dto.HareketTarihi = DateTime.UtcNow;
         }
 
-        await NormalizeAndValidateLotAsync(dto, tasinirKart, depo, currentId, CancellationToken.None);
+        await NormalizeAndValidateTrackingAsync(dto, tasinirKart, depo, currentId, CancellationToken.None);
         await EnsureOpenPeriodAsync(depo.TesisId, dto.HareketTarihi, CancellationToken.None);
     }
 
@@ -750,6 +804,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         EnsureNonNegativeBalance(projectedBalance, "Depoda bu işlem için yeterli stok bulunmamaktadır.");
 
         await EnsureLotCreateDoesNotGoNegativeAsync(dto, cancellationToken);
+        await EnsureSeriCreateDoesNotGoInvalidAsync(dto, cancellationToken);
     }
 
     private async Task EnsureUpdateDoesNotGoNegativeAsync(StokHareket existing, StokHareketDto dto, CancellationToken cancellationToken)
@@ -769,6 +824,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         await EnsureLotUpdateDoesNotGoNegativeAsync(existing, dto, cancellationToken);
+        await EnsureSeriUpdateDoesNotGoInvalidAsync(existing, dto, cancellationToken);
     }
 
     private async Task EnsureDeleteDoesNotGoNegativeAsync(StokHareket existing, CancellationToken cancellationToken)
@@ -778,6 +834,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         EnsureNonNegativeBalance(projectedBalance, "Bu stok hareketi silinirse depo bakiyesi negatif olacağı için işlem yapılamaz.");
 
         await EnsureLotDeleteDoesNotGoNegativeAsync(existing, cancellationToken);
+        await EnsureSeriDeleteDoesNotGoInvalidAsync(existing, cancellationToken);
     }
 
     private async Task<decimal> GetCurrentBalanceAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)
@@ -788,16 +845,48 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
+    private async Task NormalizeAndValidateTrackingAsync(
+        StokHareketDto dto,
+        TasinirKart tasinirKart,
+        STYS.Muhasebe.Depolar.Entities.Depo depo,
+        int? currentId,
+        CancellationToken cancellationToken)
+    {
+        var takipTipi = ResolveTakipTipi(tasinirKart);
+        if (string.Equals(takipTipi, TasinirKartTakipTipleri.Lot, StringComparison.Ordinal))
+        {
+            dto.StokSeriId = null;
+            dto.SeriNo = null;
+            await NormalizeAndValidateLotAsync(dto, tasinirKart, depo, currentId, cancellationToken);
+            return;
+        }
+
+        if (string.Equals(takipTipi, TasinirKartTakipTipleri.Seri, StringComparison.Ordinal))
+        {
+            dto.StokLotId = null;
+            dto.LotNo = null;
+            dto.SonKullanmaTarihi = null;
+            await NormalizeAndValidateSeriAsync(dto, tasinirKart, depo, cancellationToken);
+            return;
+        }
+
+        dto.StokLotId = null;
+        dto.LotNo = null;
+        dto.SonKullanmaTarihi = null;
+        dto.StokSeriId = null;
+        dto.SeriNo = null;
+    }
+
     private async Task NormalizeAndValidateLotAsync(
         StokHareketDto dto,
-        STYS.Muhasebe.TasinirKartlari.Entities.TasinirKart tasinirKart,
+        TasinirKart tasinirKart,
         STYS.Muhasebe.Depolar.Entities.Depo depo,
         int? currentId,
         CancellationToken cancellationToken)
     {
         dto.LotNo = NormalizeOptional(dto.LotNo);
 
-        if (!tasinirKart.TakipliMi)
+        if (!string.Equals(ResolveTakipTipi(tasinirKart), TasinirKartTakipTipleri.Lot, StringComparison.Ordinal))
         {
             dto.StokLotId = null;
             dto.LotNo = null;
@@ -860,6 +949,62 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         dto.SonKullanmaTarihi = resolvedLot.SonKullanmaTarihi;
     }
 
+    private async Task NormalizeAndValidateSeriAsync(
+        StokHareketDto dto,
+        TasinirKart tasinirKart,
+        STYS.Muhasebe.Depolar.Entities.Depo depo,
+        CancellationToken cancellationToken)
+    {
+        dto.SeriNo = NormalizeOptional(dto.SeriNo);
+
+        if (dto.Miktar != 1)
+        {
+            throw new BaseException("Seri takipli taşınır kartlarda miktar 1 olmalıdır.", 400);
+        }
+
+        if (!RequiresLot(dto))
+        {
+            dto.StokSeriId = null;
+            dto.SeriNo = null;
+            return;
+        }
+
+        if (RequiresExistingLot(dto))
+        {
+            if (!dto.StokSeriId.HasValue || dto.StokSeriId.Value <= 0)
+            {
+                throw new BaseException("Seri takipli taşınır kart için seri seçimi zorunludur.", 400);
+            }
+
+            var existingSeri = await GetValidatedSeriAsync(dto.StokSeriId.Value, tasinirKart.Id, depo.TesisId, cancellationToken);
+            dto.StokSeriId = existingSeri.Id;
+            dto.SeriNo = existingSeri.SeriNo;
+            return;
+        }
+
+        if (dto.StokSeriId.HasValue && dto.StokSeriId.Value > 0)
+        {
+            var existingSeri = await GetValidatedSeriAsync(dto.StokSeriId.Value, tasinirKart.Id, depo.TesisId, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dto.SeriNo) && !string.Equals(existingSeri.SeriNo, dto.SeriNo, StringComparison.Ordinal))
+            {
+                throw new BaseException("Seçilen seri bilgisi ile girilen seri numarası uyuşmuyor.", 400);
+            }
+
+            dto.StokSeriId = existingSeri.Id;
+            dto.SeriNo = existingSeri.SeriNo;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.SeriNo))
+        {
+            throw new BaseException("Seri takipli taşınır kart için seri numarası zorunludur.", 400);
+        }
+
+        var resolvedSeri = await ResolveOrCreateSeriAsync(tasinirKart, depo, dto.SeriNo, cancellationToken);
+        dto.StokSeriId = resolvedSeri.Id;
+        dto.SeriNo = resolvedSeri.SeriNo;
+    }
+
     private async Task<StokLot> ResolveOrCreateLotAsync(
         STYS.Muhasebe.TasinirKartlari.Entities.TasinirKart tasinirKart,
         STYS.Muhasebe.Depolar.Entities.Depo depo,
@@ -912,6 +1057,53 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         return lot;
+    }
+
+    private async Task<StokSeri> ResolveOrCreateSeriAsync(
+        TasinirKart tasinirKart,
+        STYS.Muhasebe.Depolar.Entities.Depo depo,
+        string seriNo,
+        CancellationToken cancellationToken)
+    {
+        var normalizedSeriNo = seriNo.Trim();
+        var existingSeri = await _dbContext.StokSeriler
+            .FirstOrDefaultAsync(x =>
+                x.TasinirKartId == tasinirKart.Id &&
+                x.TesisId == depo.TesisId &&
+                x.SeriNo == normalizedSeriNo,
+                cancellationToken);
+
+        if (existingSeri is not null)
+        {
+            return existingSeri;
+        }
+
+        var newSeri = new StokSeri
+        {
+            TesisId = depo.TesisId!.Value,
+            TasinirKartId = tasinirKart.Id,
+            SeriNo = normalizedSeriNo,
+            AktifMi = true
+        };
+
+        _dbContext.StokSeriler.Add(newSeri);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return newSeri;
+    }
+
+    private async Task<StokSeri> GetValidatedSeriAsync(int stokSeriId, int tasinirKartId, int? tesisId, CancellationToken cancellationToken)
+    {
+        var seri = await _dbContext.StokSeriler
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == stokSeriId, cancellationToken)
+            ?? throw new BaseException("Seçilen seri bulunamadı.", 400);
+
+        if (seri.TasinirKartId != tasinirKartId || seri.TesisId != tesisId)
+        {
+            throw new BaseException("Seçilen seri taşınır kart ve tesis ile uyumlu değil.", 400);
+        }
+
+        return seri;
     }
 
     private async Task EnsureLotCreateDoesNotGoNegativeAsync(StokHareketDto dto, CancellationToken cancellationToken)
@@ -1018,6 +1210,114 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private async Task<decimal> GetCurrentLotBalanceAsync(int depoId, int tasinirKartId, int stokLotId, CancellationToken cancellationToken)
         => await _repository.GetLotBakiyeMiktariAsync(depoId, tasinirKartId, stokLotId, cancellationToken);
 
+    private async Task EnsureSeriCreateDoesNotGoInvalidAsync(StokHareketDto dto, CancellationToken cancellationToken)
+    {
+        if (!dto.StokSeriId.HasValue)
+        {
+            return;
+        }
+
+        await EnsureProjectedSeriStateAsync(null, dto, cancellationToken);
+    }
+
+    private async Task EnsureSeriUpdateDoesNotGoInvalidAsync(StokHareket existing, StokHareketDto dto, CancellationToken cancellationToken)
+        => await EnsureProjectedSeriStateAsync(existing, dto, cancellationToken);
+
+    private async Task EnsureSeriDeleteDoesNotGoInvalidAsync(StokHareket existing, CancellationToken cancellationToken)
+    {
+        if (!existing.StokSeriId.HasValue)
+        {
+            return;
+        }
+
+        await EnsureProjectedSeriStateAsync(existing, null, cancellationToken);
+    }
+
+    private async Task EnsureProjectedSeriStateAsync(StokHareket? existing, StokHareketDto? dto, CancellationToken cancellationToken)
+    {
+        var affectedSeriIds = new HashSet<int>();
+        if (existing?.StokSeriId is int existingSeriId)
+        {
+            affectedSeriIds.Add(existingSeriId);
+        }
+
+        if (dto?.StokSeriId is int dtoSeriId)
+        {
+            affectedSeriIds.Add(dtoSeriId);
+        }
+
+        foreach (var stokSeriId in affectedSeriIds)
+        {
+            var currentBalances = await GetCurrentSeriDepotBalancesAsync(stokSeriId, cancellationToken);
+
+            if (existing?.StokSeriId == stokSeriId)
+            {
+                ApplySeriEffect(currentBalances, existing.DepoId, -CalculateMovementEffect(existing));
+            }
+
+            if (dto?.StokSeriId == stokSeriId)
+            {
+                ApplySeriEffect(currentBalances, dto.DepoId, CalculateMovementEffect(dto));
+            }
+
+            foreach (var balance in currentBalances.Values)
+            {
+                if (balance < 0 || balance > 1)
+                {
+                    throw new BaseException("Seri numarası için seçilen depo hareketi geçersizdir.", 400);
+                }
+            }
+
+            var total = currentBalances.Values.Sum();
+            if (total < 0 || total > 1)
+            {
+                throw new BaseException("Aynı seri numarası aynı anda birden fazla depoda bulunamaz.", 400);
+            }
+        }
+    }
+
+    private async Task EnsureSeriTransferCanProceedAsync(int kaynakDepoId, int hedefDepoId, int tasinirKartId, int stokSeriId, CancellationToken cancellationToken)
+    {
+        var kaynakDepo = await GetDepoOrThrowAsync(kaynakDepoId);
+        var seri = await GetValidatedSeriAsync(stokSeriId, tasinirKartId, kaynakDepo.TesisId, cancellationToken);
+        var balances = await GetCurrentSeriDepotBalancesAsync(seri.Id, cancellationToken);
+        var kaynakBalance = balances.TryGetValue(kaynakDepoId, out var kaynak) ? kaynak : 0m;
+        var hedefBalance = balances.TryGetValue(hedefDepoId, out var hedef) ? hedef : 0m;
+        var toplam = balances.Values.Sum();
+
+        if (kaynakBalance != 1 || hedefBalance != 0 || toplam != 1)
+        {
+            throw new BaseException("Seçilen seri kaynak depoda mevcut değil veya hedef depoda zaten bulunuyor.", 400);
+        }
+    }
+
+    private async Task<Dictionary<int, decimal>> GetCurrentSeriDepotBalancesAsync(int stokSeriId, CancellationToken cancellationToken)
+    {
+        var rows = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .Where(x => x.StokSeriId == stokSeriId && x.Durum == StokHareketDurumlari.Aktif)
+            .Select(x => new
+            {
+                x.DepoId,
+                Effect = CalculateMovementEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar, x.Durum)
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => x.DepoId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Effect));
+    }
+
+    private static void ApplySeriEffect(Dictionary<int, decimal> balances, int depoId, decimal effect)
+    {
+        if (!balances.TryGetValue(depoId, out var current))
+        {
+            current = 0m;
+        }
+
+        balances[depoId] = current + effect;
+    }
+
     private static decimal CalculateProjectedBalance(decimal currentBalance, decimal existingMovementEffect, decimal newMovementEffect)
         => currentBalance - existingMovementEffect + newMovementEffect;
 
@@ -1097,6 +1397,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static bool RequiresExistingLot(StokHareketDto dto)
         => StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu);
 
+    private static string ResolveTakipTipi(TasinirKart tasinirKart)
+        => TasinirKartServiceHelpers.ResolveTakipTipi(tasinirKart.TakipTipi, tasinirKart.TakipliMi);
+
     private static void EnsureDepoVeTasinirKartAyniTesiste(STYS.Muhasebe.Depolar.Entities.Depo depo, STYS.Muhasebe.TasinirKartlari.Entities.TasinirKart tasinirKart)
     {
         if (!depo.TesisId.HasValue
@@ -1132,6 +1435,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             TransferYonu = transferYonu,
             KarsiDepoId = karsiDepoId,
             StokLotId = request.StokLotId,
+            StokSeriId = request.StokSeriId,
             KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
             KdvOrani = 0,
             KdvTutari = 0,
@@ -1150,7 +1454,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             TransferYonu = StokTransferYonleri.Cikis,
             Miktar = request.Miktar,
             Durum = StokHareketDurumlari.Aktif,
-            StokLotId = request.StokLotId
+            StokLotId = request.StokLotId,
+            StokSeriId = request.StokSeriId
         };
 
     private static decimal CalculateTutar(decimal miktar, decimal birimFiyat)
@@ -1170,6 +1475,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             IQueryable<StokHareket> result = include is null ? query : include(query);
             result = result.Include(x => x.StokLot);
+            result = result.Include(x => x.StokSeri);
             if (scope.IsScoped)
             {
                 result = result.Where(x =>

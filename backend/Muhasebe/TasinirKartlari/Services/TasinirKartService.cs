@@ -101,7 +101,8 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             throw new BaseException("Muhasebe hesabı oluşturulmuş taşınır kartlarda tesis değiştirilemez.", 400);
         }
 
-        if (current.TakipliMi != dto.TakipliMi)
+        var currentTakipTipi = TasinirKartServiceHelpers.ResolveTakipTipi(current.TakipTipi, current.TakipliMi);
+        if (!string.Equals(currentTakipTipi, dto.TakipTipi, StringComparison.Ordinal))
         {
             var activeBalance = await CalculateActiveStockBalanceAsync(current.Id);
             if (activeBalance != 0)
@@ -205,6 +206,8 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         dto.Birim = dto.Birim?.Trim() ?? "Adet";
         dto.MalzemeTipi = dto.MalzemeTipi?.Trim() ?? string.Empty;
         dto.Aciklama = string.IsNullOrWhiteSpace(dto.Aciklama) ? null : dto.Aciklama.Trim();
+        dto.TakipTipi = TasinirKartServiceHelpers.ResolveTakipTipi(dto.TakipTipi, dto.TakipliMi);
+        dto.TakipliMi = TasinirKartServiceHelpers.ResolveTakipliMi(dto.TakipTipi, dto.TakipliMi);
 
         if (dto.TasinirKodId <= 0 || !await _tasinirKodRepository.AnyAsync(x => x.Id == dto.TasinirKodId))
         {
@@ -219,6 +222,11 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
         if (!MalzemeTipleri.Hepsi.Contains(dto.MalzemeTipi))
         {
             throw new BaseException("Malzeme tipi gecersiz.", 400);
+        }
+
+        if (!TasinirKartTakipTipleri.Hepsi.Contains(dto.TakipTipi))
+        {
+            throw new BaseException("Takip tipi gecersiz.", 400);
         }
 
         if (dto.KdvOrani < 0 || dto.KdvOrani > 100)

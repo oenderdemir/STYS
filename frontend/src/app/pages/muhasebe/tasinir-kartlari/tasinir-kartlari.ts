@@ -23,7 +23,7 @@ import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { DepolarService } from '../depolar/depolar.service';
 import { TasinirKodlariService } from '../tasinir-kodlari/tasinir-kodlari.service';
-import { MALZEME_TIPLERI, PaketTuruOptionModel, TasinirKartModel } from './tasinir-kartlari.dto';
+import { MALZEME_TIPLERI, PaketTuruOptionModel, TAKIP_TIPI_SECENEKLERI, TasinirKartModel } from './tasinir-kartlari.dto';
 import { TasinirKartlariService } from './tasinir-kartlari.service';
 
 @Component({
@@ -60,6 +60,7 @@ export class TasinirKartlariPage implements OnInit {
     selectedTasinirKodOption: { label: string; value: number } | null = null;
     private tasinirKodSearchSeq = 0;
     readonly malzemeTipleri = MALZEME_TIPLERI;
+    readonly takipTipiSecenekleri = TAKIP_TIPI_SECENEKLERI;
     paketTurleri: PaketTuruOptionModel[] = [];
     paketTuruSecenekleri: Array<{ label: string; value: string }> = [];
     varsayilanDepoSecenekleri: Array<{ label: string; value: number }> = [];
@@ -265,7 +266,8 @@ export class TasinirKartlariPage implements OnInit {
             malzemeTipi: this.model.malzemeTipi,
             sarfMi: this.model.sarfMi,
             demirbasMi: this.model.demirbasMi,
-            takipliMi: this.model.takipliMi,
+            takipliMi: this.model.takipTipi !== 'Yok',
+            takipTipi: this.model.takipTipi,
             kdvOrani: this.model.kdvOrani,
             aktifMi: this.model.aktifMi,
             aciklama: this.model.aciklama?.trim() || null
@@ -335,6 +337,7 @@ export class TasinirKartlariPage implements OnInit {
             sarfMi: false,
             demirbasMi: false,
             takipliMi: false,
+            takipTipi: 'Yok',
             kdvOrani: 20,
             aktifMi: true,
             aciklama: null

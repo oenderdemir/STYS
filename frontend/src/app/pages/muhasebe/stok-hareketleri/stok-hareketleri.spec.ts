@@ -20,6 +20,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getStokBakiye: () => of([]),
                         getStokKartOzet: () => of([]),
                         getLotBakiyeleri: () => of([]),
+                        getSeriBakiyeleri: () => of([]),
                         create: () => of({}),
                         createTransfer: () => of([]),
                         update: () => of({}),
@@ -53,7 +54,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
             { label: 'Ana Depo', value: 9 }
         ];
         (component as any).tasinirKartByIdMap = new Map([
-            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Finish Quantum', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Finish Quantum', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -69,7 +70,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
             { label: 'Ana Depo', value: 9 }
         ];
         (component as any).tasinirKartByIdMap = new Map([
-            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Finish Quantum', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Finish Quantum', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -88,8 +89,8 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
             { label: 'Yedek Depo', value: 12 }
         ];
         (component as any).tasinirKartByIdMap = new Map([
-            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Kart A', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }],
-            [200, { id: 200, tesisId: 1, tasinirKodId: 2, varsayilanDepoId: 12, stokKodu: 'STK-2', ad: 'Kart B', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Kart A', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }],
+            [200, { id: 200, tesisId: 1, tasinirKodId: 2, varsayilanDepoId: 12, stokKodu: 'STK-2', ad: 'Kart B', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -104,7 +105,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         const component = createComponent();
         component.depoOptions = [{ label: 'Ana Depo', value: 9 }];
         (component as any).tasinirKartByIdMap = new Map([
-            [200, { id: 200, tesisId: 1, tasinirKodId: 2, varsayilanDepoId: null, stokKodu: 'STK-2', ad: 'Bos Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+            [200, { id: 200, tesisId: 1, tasinirKodId: 2, varsayilanDepoId: null, stokKodu: 'STK-2', ad: 'Bos Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -121,7 +122,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         ];
         component.selectedDepoId = 9;
         (component as any).tasinirKartByIdMap = new Map([
-            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Finish Quantum', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Finish Quantum', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -157,7 +158,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
             { label: 'Yedek Depo', value: 9 }
         ];
         (component as any).tasinirKartByIdMap = new Map([
-            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Transfer Karti', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, kdvOrani: 20, aktifMi: true }]
+            [100, { id: 100, tesisId: 1, tasinirKodId: 1, varsayilanDepoId: 5, stokKodu: 'STK-1', ad: 'Transfer Karti', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: false, takipTipi: 'Yok', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -203,7 +204,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
     it('takipli kart secilince giris icin lot alani acilir', () => {
         const component = createComponent();
         (component as any).tasinirKartByIdMap = new Map([
-            [300, { id: 300, tesisId: 1, tasinirKodId: 3, varsayilanDepoId: 5, stokKodu: 'STK-300', ad: 'Takipli Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, kdvOrani: 20, aktifMi: true }]
+            [300, { id: 300, tesisId: 1, tasinirKodId: 3, varsayilanDepoId: 5, stokKodu: 'STK-300', ad: 'Takipli Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, takipTipi: 'Lot', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -217,7 +218,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
     it('cikis ve transfer icin sadece pozitif bakiyeli lotlari kullanir', () => {
         const component = createComponent();
         (component as any).tasinirKartByIdMap = new Map([
-            [300, { id: 300, tesisId: 1, tasinirKodId: 3, varsayilanDepoId: 5, stokKodu: 'STK-300', ad: 'Takipli Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, kdvOrani: 20, aktifMi: true }]
+            [300, { id: 300, tesisId: 1, tasinirKodId: 3, varsayilanDepoId: 5, stokKodu: 'STK-300', ad: 'Takipli Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, takipTipi: 'Lot', kdvOrani: 20, aktifMi: true }]
         ]);
 
         component.openCreate();
@@ -241,5 +242,36 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
 
         expect(component.isLotSelectionMode()).toBeTrue();
         expect(component.getPositiveLotOptions().map(x => x.value)).toEqual([1]);
+    });
+
+    it('seri takipli kart secilince seri alani acilir ve miktari bire sabitler', () => {
+        const component = createComponent();
+        (component as any).tasinirKartByIdMap = new Map([
+            [400, { id: 400, tesisId: 1, tasinirKodId: 4, varsayilanDepoId: 5, stokKodu: 'STK-400', ad: 'Seri Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, takipTipi: 'Seri', kdvOrani: 20, aktifMi: true }]
+        ]);
+
+        component.openCreate();
+        component.model.miktar = 4;
+        component.onTasinirKartChange(400);
+
+        expect(component.isSeriEntryMode()).toBeTrue();
+        expect(component.isLotEntryMode()).toBeFalse();
+        expect(component.model.miktar).toBe(1);
+    });
+
+    it('seri takipli kartta cikis ve transfer icin depo serileri kullanilir', () => {
+        const component = createComponent();
+        (component as any).tasinirKartByIdMap = new Map([
+            [400, { id: 400, tesisId: 1, tasinirKodId: 4, varsayilanDepoId: 5, stokKodu: 'STK-400', ad: 'Seri Kart', birim: 'Adet', malzemeTipi: 'Diger', sarfMi: false, demirbasMi: false, takipliMi: true, takipTipi: 'Seri', kdvOrani: 20, aktifMi: true }]
+        ]);
+
+        component.openCreate();
+        component.onTasinirKartChange(400);
+        component.model.hareketTipi = 'Cikis';
+        component.onHareketTipiChange();
+        component.seriBakiyeOptions = [{ stokSeriId: 7, seriNo: 'SN001' }];
+
+        expect(component.isSeriSelectionMode()).toBeTrue();
+        expect(component.getPositiveSeriOptions()).toEqual([{ label: 'SN001', value: 7 }]);
     });
 });

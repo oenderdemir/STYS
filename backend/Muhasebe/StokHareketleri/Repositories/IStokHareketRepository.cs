@@ -14,4 +14,5 @@ public interface IStokHareketRepository : IBaseRdbmsRepository<StokHareket, int>
     Task<decimal> GetLotBakiyeMiktariAsync(int depoId, int tasinirKartId, int stokLotId, CancellationToken cancellationToken = default);
     Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, DepoMalzemeKayitTipleri malzemeKayitTipi, CancellationToken cancellationToken = default);
     Task<List<StokLotBakiyeDto>> GetLotBakiyeleriAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default);
+    Task<List<StokSeriBakiyeDto>> GetSeriBakiyeleriAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default);
 }

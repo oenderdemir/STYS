@@ -21,7 +21,9 @@ public class StokHareketDto : BaseRdbmsDto<int>
     public string? TransferYonu { get; set; }
     public string? SayimFarkiYonu { get; set; }
     public int? StokLotId { get; set; }
+    public int? StokSeriId { get; set; }
     public string? LotNo { get; set; }
+    public string? SeriNo { get; set; }
     public DateTime? SonKullanmaTarihi { get; set; }
     public int? KarsiDepoId { get; set; }
     public string Durum { get; set; } = string.Empty;
@@ -50,7 +52,9 @@ public class CreateStokHareketRequest
     public int? KaynakId { get; set; }
     public string? SayimFarkiYonu { get; set; }
     public int? StokLotId { get; set; }
+    public int? StokSeriId { get; set; }
     public string? LotNo { get; set; }
+    public string? SeriNo { get; set; }
     public DateTime? SonKullanmaTarihi { get; set; }
     public string Durum { get; set; } = string.Empty;
 
@@ -67,6 +71,8 @@ public class StokTransferRequest
     public int HedefDepoId { get; set; }
     public int TasinirKartId { get; set; }
     public int? StokLotId { get; set; }
+    public int? StokSeriId { get; set; }
+    public string? SeriNo { get; set; }
     public DateTime HareketTarihi { get; set; }
     public decimal Miktar { get; set; }
     public decimal BirimFiyat { get; set; }
@@ -123,11 +129,19 @@ public class StokDetaySatirDto
 {
     public DateTime? HareketTarihi { get; set; }
     public int? StokLotId { get; set; }
+    public int? StokSeriId { get; set; }
     public decimal Miktar { get; set; }
     public string Birim { get; set; } = string.Empty;
     public string? LotNo { get; set; }
+    public string? SeriNo { get; set; }
     public DateTime? SonKullanmaTarihi { get; set; }
     public decimal BirimFiyat { get; set; }
     public decimal ToplamTutar { get; set; }
     public int HareketSayisi { get; set; }
+}
+
+public class StokSeriBakiyeDto
+{
+    public int StokSeriId { get; set; }
+    public string SeriNo { get; set; } = string.Empty;
 }

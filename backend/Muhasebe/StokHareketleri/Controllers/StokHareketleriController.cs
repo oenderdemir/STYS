@@ -74,6 +74,11 @@ public class StokHareketleriController : UIController
     public async Task<ActionResult<List<StokLotBakiyeDto>>> GetLotBakiyeleri([FromQuery] int depoId, [FromQuery] int tasinirKartId, CancellationToken cancellationToken)
         => Ok(await _service.GetLotBakiyeleriAsync(depoId, tasinirKartId, cancellationToken));
 
+    [HttpGet("seri-bakiyeleri")]
+    [Permission(StructurePermissions.StokHareketYonetimi.View)]
+    public async Task<ActionResult<List<StokSeriBakiyeDto>>> GetSeriBakiyeleri([FromQuery] int depoId, [FromQuery] int tasinirKartId, CancellationToken cancellationToken)
+        => Ok(await _service.GetSeriBakiyeleriAsync(depoId, tasinirKartId, cancellationToken));
+
     [HttpPost]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
     public async Task<ActionResult<StokHareketDto>> Create([FromBody] CreateStokHareketRequest request, CancellationToken cancellationToken)

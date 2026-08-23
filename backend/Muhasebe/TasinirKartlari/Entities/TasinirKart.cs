@@ -40,6 +40,10 @@ public class TasinirKart : BaseEntity<int>
 
     public bool TakipliMi { get; set; }
 
+    [Required]
+    [MaxLength(16)]
+    public string TakipTipi { get; set; } = TasinirKartTakipTipleri.Yok;
+
     public decimal KdvOrani { get; set; }
 
     public bool AktifMi { get; set; } = true;

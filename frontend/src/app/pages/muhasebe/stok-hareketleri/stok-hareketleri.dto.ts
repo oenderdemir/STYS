@@ -3,7 +3,9 @@ export interface StokHareketModel {
     depoId: number;
     tasinirKartId: number;
     stokLotId?: number | null;
+    stokSeriId?: number | null;
     lotNo?: string | null;
+    seriNo?: string | null;
     sonKullanmaTarihi?: string | null;
     hareketTarihi: string;
     hareketTipi: string;
@@ -35,7 +37,9 @@ export interface CreateStokHareketRequest {
     depoId: number;
     tasinirKartId: number;
     stokLotId?: number | null;
+    stokSeriId?: number | null;
     lotNo?: string | null;
+    seriNo?: string | null;
     sonKullanmaTarihi?: string | null;
     hareketTarihi: string;
     hareketTipi: string;
@@ -61,6 +65,8 @@ export interface StokTransferRequest {
     hedefDepoId: number;
     tasinirKartId: number;
     stokLotId?: number | null;
+    stokSeriId?: number | null;
+    seriNo?: string | null;
     hareketTarihi: string;
     miktar: number;
     birimFiyat: number;
@@ -110,7 +116,10 @@ export interface StokDetayModel {
 
 export interface StokDetaySatirModel {
     hareketTarihi?: string | null;
+    stokLotId?: number | null;
+    stokSeriId?: number | null;
     lotNo?: string | null;
+    seriNo?: string | null;
     sonKullanmaTarihi?: string | null;
     miktar: number;
     birim: string;
@@ -126,6 +135,11 @@ export interface StokLotBakiyeModel {
     girisMiktari: number;
     cikisMiktari: number;
     bakiyeMiktari: number;
+}
+
+export interface StokSeriBakiyeModel {
+    stokSeriId: number;
+    seriNo: string;
 }
 
 export const STOK_HAREKET_TIPLERI: Array<{ label: string; value: string }> = [

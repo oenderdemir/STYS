@@ -116,12 +116,12 @@
                     <p-checkbox inputId="demirbasMi" [(ngModel)]="model.demirbasMi" [binary]="true" />
                     <label for="demirbasMi">Demirbas</label>
                 </div>
-                <div class="flex align-items-center gap-2">
-                    <p-checkbox inputId="takipliMi" [(ngModel)]="model.takipliMi" [binary]="true" />
-                    <label for="takipliMi">Takipli</label>
+                <div class="min-w-16rem">
+                    <label class="block font-medium mb-2">Takip Tipi</label>
+                    <p-select class="w-full" [options]="takipTipiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="model.takipTipi" appendTo="body" />
                 </div>
             </div>
-            <small class="text-color-secondary block mt-3">Takipli kartlar bu fazda lot / parti bazında takip edilir.</small>
+            <small class="text-color-secondary block mt-3">Takip tipi Takipsiz, Lot-parti veya Seri olarak seçilebilir.</small>
         </div>
     </div>
 

@@ -85,6 +85,7 @@ public class TasinirKartServiceTests
 
         var dto = CreateUpdateDto(varsayilanDepoId: 10);
         dto.TakipliMi = true;
+        dto.TakipTipi = TasinirKartTakipTipleri.Lot;
 
         var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(dto));
 
@@ -106,6 +107,7 @@ public class TasinirKartServiceTests
             SarfMi = false,
             DemirbasMi = false,
             TakipliMi = false,
+            TakipTipi = TasinirKartTakipTipleri.Yok,
             KdvOrani = 20,
             AktifMi = true,
             Aciklama = null

@@ -17,6 +17,7 @@ public class TasinirKartDto : BaseRdbmsDto<int>
     public bool SarfMi { get; set; }
     public bool DemirbasMi { get; set; }
     public bool TakipliMi { get; set; }
+    public string? TakipTipi { get; set; }
     public decimal KdvOrani { get; set; }
     public bool AktifMi { get; set; } = true;
     public string? Aciklama { get; set; }
@@ -34,6 +35,7 @@ public class CreateTasinirKartRequest
     public bool SarfMi { get; set; }
     public bool DemirbasMi { get; set; }
     public bool TakipliMi { get; set; }
+    public string? TakipTipi { get; set; }
     public decimal KdvOrani { get; set; }
     public bool AktifMi { get; set; } = true;
     public string? Aciklama { get; set; }

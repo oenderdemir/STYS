@@ -22,6 +22,7 @@ using STYS.Muhasebe.StokHareketleri.Mapping;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokHareketleri.Services;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokSerileri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
 using STYS.Muhasebe.TasinirKodlari.Entities;
@@ -590,6 +591,76 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task AddAsync_SeriTakipliKarttaGirisSeriyiDepodaMevcutYapar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 1, seriNo: "SN001"));
+
+        var seri = Assert.Single(await service.GetSeriBakiyeleriAsync(10, 100));
+        Assert.Equal("SN001", created.SeriNo);
+        Assert.Equal("SN001", seri.SeriNo);
+    }
+
+    [Fact]
+    public async Task AddAsync_SeriTakipliKarttaAyniSeriStoktaysaIkinciGirisReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 1, seriNo: "SN001"));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 1, seriNo: "SN001")));
+
+        Assert.Equal("Seri numarası için seçilen depo hareketi geçersizdir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AddAsync_SeriTakipliKarttaMiktarIkiyseReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 2, seriNo: "SN001")));
+
+        Assert.Equal("Seri takipli taşınır kartlarda miktar 1 olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AddAsync_SeriCikisSonrasiKaynakDepodaGorunmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var seriId = await CreateSeriAsync(dbContext, "SN001");
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 1, 1, StokHareketDurumlari.Aktif, stokSeriId: seriId);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 1, stokSeriId: seriId));
+
+        Assert.Empty(await service.GetSeriBakiyeleriAsync(10, 100));
+    }
+
+    [Fact]
+    public async Task CreateTransferAsync_SeriTakipliKarttaAyniSeriKimliginiKorurVeHedefeTasir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var seriId = await CreateSeriAsync(dbContext, "SN001");
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 1, 1, StokHareketDurumlari.Aktif, stokSeriId: seriId);
+        var service = CreateService(dbContext);
+
+        var created = await service.CreateTransferAsync(CreateTransferRequest(stokSeriId: seriId, miktar: 1));
+
+        Assert.All(created, x => Assert.Equal(seriId, x.StokSeriId));
+        Assert.Empty(await service.GetSeriBakiyeleriAsync(10, 100));
+        Assert.Equal("SN001", Assert.Single(await service.GetSeriBakiyeleriAsync(20, 100)).SeriNo);
+    }
+
+    [Fact]
     public async Task AddAsync_AyniLotNoIkinciGiristeYeniLotOlusturmaz()
     {
         await using var dbContext = CreateDbContext();
@@ -753,7 +824,7 @@ public class StokHareketServiceTests
             mapper);
     }
 
-    private static StokTransferRequest CreateTransferRequest(int? stokLotId = null, decimal miktar = 10)
+    private static StokTransferRequest CreateTransferRequest(int? stokLotId = null, int? stokSeriId = null, string? seriNo = null, decimal miktar = 10)
     {
         return new StokTransferRequest
         {
@@ -761,6 +832,8 @@ public class StokHareketServiceTests
             HedefDepoId = 20,
             TasinirKartId = 100,
             StokLotId = stokLotId,
+            StokSeriId = stokSeriId,
+            SeriNo = seriNo,
             HareketTarihi = new DateTime(2026, 8, 21),
             Miktar = miktar,
             BirimFiyat = 1,
@@ -768,7 +841,7 @@ public class StokHareketServiceTests
         };
     }
 
-    private static async Task SeedBaseAsync(StysAppDbContext dbContext, DepoMalzemeKayitTipleri malzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut, bool takipliMi = false)
+    private static async Task SeedBaseAsync(StysAppDbContext dbContext, DepoMalzemeKayitTipleri malzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut, bool takipliMi = false, string? takipTipi = null)
     {
         dbContext.Kurumlar.Add(new Kurum
         {
@@ -853,6 +926,7 @@ public class StokHareketServiceTests
             Birim = "Adet",
             MalzemeTipi = MalzemeTipleri.Diger,
             TakipliMi = takipliMi,
+            TakipTipi = takipTipi ?? (takipliMi ? TasinirKartTakipTipleri.Lot : TasinirKartTakipTipleri.Yok),
             KdvOrani = 20,
             AktifMi = true
         });
@@ -1013,6 +1087,8 @@ public class StokHareketServiceTests
         int kdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
         decimal kdvOrani = 20,
         int? stokLotId = null,
+        int? stokSeriId = null,
+        string? seriNo = null,
         string? lotNo = null,
         DateTime? sonKullanmaTarihi = null)
     {
@@ -1022,7 +1098,9 @@ public class StokHareketServiceTests
             DepoId = depoId,
             TasinirKartId = tasinirKartId,
             StokLotId = stokLotId,
+            StokSeriId = stokSeriId,
             LotNo = lotNo,
+            SeriNo = seriNo,
             SonKullanmaTarihi = sonKullanmaTarihi,
             HareketTarihi = new DateTime(2026, 8, 21),
             HareketTipi = hareketTipi,
@@ -1045,13 +1123,15 @@ public class StokHareketServiceTests
         decimal birimFiyat,
         string durum,
         string? sayimFarkiYonu = null,
-        int? stokLotId = null)
+        int? stokLotId = null,
+        int? stokSeriId = null)
     {
         var entity = new StokHareket
         {
             DepoId = depoId,
             TasinirKartId = tasinirKartId,
             StokLotId = stokLotId,
+            StokSeriId = stokSeriId,
             HareketTarihi = new DateTime(2026, 8, 21),
             HareketTipi = hareketTipi,
             SayimFarkiYonu = sayimFarkiYonu,
@@ -1067,6 +1147,21 @@ public class StokHareketServiceTests
         dbContext.StokHareketleri.Add(entity);
         await dbContext.SaveChangesAsync();
         return entity.Id;
+    }
+
+    private static async Task<int> CreateSeriAsync(StysAppDbContext dbContext, string seriNo)
+    {
+        var seri = new StokSeri
+        {
+            TesisId = 1,
+            TasinirKartId = 100,
+            SeriNo = seriNo,
+            AktifMi = true
+        };
+
+        dbContext.StokSeriler.Add(seri);
+        await dbContext.SaveChangesAsync();
+        return seri.Id;
     }
 
     private static async Task<int> CreateLotAsync(StysAppDbContext dbContext, string lotNo, DateTime? sonKullanmaTarihi)

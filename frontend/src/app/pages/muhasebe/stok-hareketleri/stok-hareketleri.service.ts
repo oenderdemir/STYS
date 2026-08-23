@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateStokHareketRequest, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokTransferRequest, UpdateStokHareketRequest } from './stok-hareketleri.dto';
+import { CreateStokHareketRequest, StokBakiyeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel, StokTransferRequest, UpdateStokHareketRequest } from './stok-hareketleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class StokHareketleriService {
@@ -102,6 +102,14 @@ export class StokHareketleriService {
             .set('tasinirKartId', tasinirKartId);
 
         return this.http.get<ApiResponse<StokLotBakiyeModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/lot-bakiyeleri`, { params }).pipe(map(this.unwrap<StokLotBakiyeModel[]>('Lot bakiyeleri alinamadi.')));
+    }
+
+    getSeriBakiyeleri(depoId: number, tasinirKartId: number): Observable<StokSeriBakiyeModel[]> {
+        const params = new HttpParams()
+            .set('depoId', depoId)
+            .set('tasinirKartId', tasinirKartId);
+
+        return this.http.get<ApiResponse<StokSeriBakiyeModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/seri-bakiyeleri`, { params }).pipe(map(this.unwrap<StokSeriBakiyeModel[]>('Seri bakiyeleri alinamadi.')));
     }
 
     private unwrap<T>(fallback: string) {

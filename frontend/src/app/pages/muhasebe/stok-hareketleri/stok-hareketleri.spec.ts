@@ -299,7 +299,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getStokBakiye: () => of([]),
                         getStokKartOzet: () => of([]),
                         getStokDegerleme: () => of([
-                            { depoId: 10, depoKod: 'D-001', depoAd: 'Ana Depo', tasinirKartId: 100, stokKodu: 'STK-100', tasinirKartAd: 'Kart 100', birim: 'Adet', bakiyeMiktari: 15, ortalamaMaliyet: 120, toplamStokDegeri: 1800 }
+                            { depoId: 10, depoKod: 'D-001', depoAd: 'Ana Depo', tasinirKartId: 100, stokKodu: 'STK-100', tasinirKartAd: 'Kart 100', birim: 'Adet', bakiyeMiktari: 15, ortalamaMaliyet: 120, toplamStokDegeri: 1800, maliyetEksikMi: true }
                         ]),
                         getLotBakiyeleri: () => of([]),
                         getSeriBakiyeleri: () => of([]),
@@ -336,7 +336,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         component.loadSummary();
 
         expect(component.stokDegerleme).toEqual([
-            jasmine.objectContaining({ depoId: 10, ortalamaMaliyet: 120, toplamStokDegeri: 1800 })
+            jasmine.objectContaining({ depoId: 10, ortalamaMaliyet: 120, toplamStokDegeri: 1800, maliyetEksikMi: true })
         ]);
     });
 });

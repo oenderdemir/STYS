@@ -127,6 +127,7 @@ export interface StokDegerlemeModel {
     bakiyeMiktari: number;
     ortalamaMaliyet: number;
     toplamStokDegeri: number;
+    maliyetEksikMi: boolean;
 }
 
 export interface StokDetaySatirModel {

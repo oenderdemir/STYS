@@ -160,4 +160,5 @@ public class StokDegerlemeDto
     public decimal BakiyeMiktari { get; set; }
     public decimal OrtalamaMaliyet { get; set; }
     public decimal ToplamStokDegeri { get; set; }
+    public bool MaliyetEksikMi { get; set; }
 }

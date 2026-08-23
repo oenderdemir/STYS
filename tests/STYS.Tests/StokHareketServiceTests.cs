@@ -944,6 +944,122 @@ public class StokHareketServiceTests
         Assert.Equal("Bu stok hareketi sonraki maliyet snapshot'larını etkileyeceği için güncellenemez.", ex.Message);
     }
 
+    [Fact]
+    public async Task UpdateAsync_MaliyetEtkisizAlanDegisirseMevcutSnapshotiKorur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        var cikis = await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 4, birimFiyat: 1));
+        var sonrakiGiris = CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 200);
+        sonrakiGiris.HareketTarihi = new DateTime(2026, 8, 22);
+        await service.AddAsync(sonrakiGiris);
+
+        var updated = await service.UpdateAsync(new StokHareketDto
+        {
+            Id = cikis.Id,
+            DepoId = cikis.DepoId,
+            TasinirKartId = cikis.TasinirKartId,
+            HareketTarihi = cikis.HareketTarihi,
+            HareketTipi = cikis.HareketTipi,
+            Miktar = cikis.Miktar,
+            BirimFiyat = cikis.BirimFiyat,
+            Tutar = cikis.Tutar,
+            BelgeNo = cikis.BelgeNo,
+            BelgeTarihi = cikis.BelgeTarihi,
+            Aciklama = "Yalnızca açıklama güncellendi",
+            CariKartId = cikis.CariKartId,
+            KaynakModul = cikis.KaynakModul,
+            KaynakId = cikis.KaynakId,
+            TransferGrupId = cikis.TransferGrupId,
+            TransferYonu = cikis.TransferYonu,
+            SayimFarkiYonu = cikis.SayimFarkiYonu,
+            StokLotId = cikis.StokLotId,
+            StokSeriId = cikis.StokSeriId,
+            LotNo = cikis.LotNo,
+            SeriNo = cikis.SeriNo,
+            SonKullanmaTarihi = cikis.SonKullanmaTarihi,
+            KarsiDepoId = cikis.KarsiDepoId,
+            Durum = cikis.Durum,
+            KdvUygulamaTipi = cikis.KdvUygulamaTipi,
+            KdvIstisnaTanimId = cikis.KdvIstisnaTanimId,
+            KdvOrani = cikis.KdvOrani
+        });
+
+        Assert.Equal(cikis.MaliyetBirimFiyat, updated.MaliyetBirimFiyat);
+        Assert.Equal(cikis.MaliyetTutari, updated.MaliyetTutari);
+    }
+
+    [Fact]
+    public async Task AddAsync_GeriyeTarihliMaliyetEtkiliGirisSonrakiSnapshotVarkenReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ilkGiris = CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100);
+        ilkGiris.HareketTarihi = new DateTime(2026, 8, 1);
+        await service.AddAsync(ilkGiris);
+
+        var cikis = CreateStokHareketDto(StokHareketTipleri.Cikis, 5, birimFiyat: 1);
+        cikis.HareketTarihi = new DateTime(2026, 8, 10);
+        await service.AddAsync(cikis);
+
+        var geriyeTarihliGiris = CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 200);
+        geriyeTarihliGiris.HareketTarihi = new DateTime(2026, 8, 5);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(geriyeTarihliGiris));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Bu tarihten sonra maliyet snapshot'ı oluşmuş stok hareketleri bulunduğu için geriye tarihli hareket eklenemez.", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetStokDegerlemeAsync_LegacyCikisBulunursaMaliyetEksikUyarisiDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        dbContext.StokHareketleri.Add(new StokHareket
+        {
+            DepoId = 10,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 22),
+            HareketTipi = StokHareketTipleri.Cikis,
+            Miktar = 2,
+            BirimFiyat = 1,
+            Tutar = 2,
+            Durum = StokHareketDurumlari.Aktif,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.Kdvli,
+            KdvOrani = 20,
+            KdvTutari = 0.4m
+        });
+        await dbContext.SaveChangesAsync();
+
+        var satir = Assert.Single(await service.GetStokDegerlemeAsync(1, 10));
+
+        Assert.True(satir.MaliyetEksikMi);
+    }
+
+    [Fact]
+    public async Task GetStokDegerlemeAsync_GuncelMaliyetliKayitlardaMaliyetEksikUyarisiFalseDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 2, birimFiyat: 1));
+
+        var satir = Assert.Single(await service.GetStokDegerlemeAsync(1, 10));
+
+        Assert.False(satir.MaliyetEksikMi);
+    }
+
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()

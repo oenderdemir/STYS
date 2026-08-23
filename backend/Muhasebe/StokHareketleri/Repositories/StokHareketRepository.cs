@@ -116,6 +116,9 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                 var ortalamaMaliyet = bakiyeMiktari == 0
                     ? 0m
                     : Math.Round(toplamStokDegeri / bakiyeMiktari, 6, MidpointRounding.AwayFromZero);
+                var maliyetEksikMi = g.Any(x =>
+                    StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu)
+                    && x.MaliyetTutari == null);
 
                 return new StokDegerlemeDto
                 {
@@ -128,7 +131,8 @@ public class StokHareketRepository : BaseRdbmsRepository<StokHareket, int>, ISto
                     Birim = g.Key.Birim,
                     BakiyeMiktari = bakiyeMiktari,
                     OrtalamaMaliyet = ortalamaMaliyet,
-                    ToplamStokDegeri = toplamStokDegeri
+                    ToplamStokDegeri = toplamStokDegeri,
+                    MaliyetEksikMi = maliyetEksikMi
                 };
             })
             .Where(x => x.BakiyeMiktari > 0)

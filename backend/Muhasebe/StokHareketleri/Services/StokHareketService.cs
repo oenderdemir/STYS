@@ -69,6 +69,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         try
         {
             await NormalizeAndValidateAsync(dto, null);
+            await EnsureBackdatedCostCreateAllowedAsync(dto, CancellationToken.None);
             dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
             await ApplyKdvAsync(dto);
             await ApplyCostSnapshotAsync(dto, null, CancellationToken.None);
@@ -92,6 +93,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         await NormalizeAndValidateAsync(dto, null);
+        await EnsureBackdatedCostCreateAllowedAsync(dto, cancellationToken);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
         await ApplyCostSnapshotAsync(dto, null, cancellationToken);
@@ -131,10 +133,19 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
             await NormalizeAndValidateAsync(dto, dto.Id);
-            await EnsureCostMutationAllowedAsync(existing, dto, CancellationToken.None);
+            var hasCostSensitiveChange = HasCostSensitiveChange(existing, dto);
+            await EnsureCostMutationAllowedAsync(existing, dto, hasCostSensitiveChange, CancellationToken.None);
             dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
             await ApplyKdvAsync(dto);
-            await ApplyCostSnapshotAsync(dto, existing, CancellationToken.None);
+            if (hasCostSensitiveChange)
+            {
+                await ApplyCostSnapshotAsync(dto, existing, CancellationToken.None);
+            }
+            else
+            {
+                dto.MaliyetBirimFiyat = existing.MaliyetBirimFiyat;
+                dto.MaliyetTutari = existing.MaliyetTutari;
+            }
             await EnsureUpdateDoesNotGoNegativeAsync(existing, dto, CancellationToken.None);
             DetachTrackedStokHareket(dto.Id.Value);
             var updated = await base.UpdateAsync(dto);
@@ -300,6 +311,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
         try
         {
+            await EnsureBackdatedCostCreateAllowedAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
+            await EnsureBackdatedCostCreateAllowedAsync(request.HedefDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
             var kaynakBakiye = await _repository.GetBakiyeMiktariAsync(request.KaynakDepoId, request.TasinirKartId, cancellationToken);
             if (kaynakBakiye < request.Miktar)
             {
@@ -968,9 +981,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         return CreateStockCostSnapshot(bakiyeMiktari, toplamStokDegeri);
     }
 
-    private async Task EnsureCostMutationAllowedAsync(StokHareket existing, StokHareketDto dto, CancellationToken cancellationToken)
+    private async Task EnsureCostMutationAllowedAsync(StokHareket existing, StokHareketDto dto, bool hasCostSensitiveChange, CancellationToken cancellationToken)
     {
-        if (!HasCostSensitiveChange(existing, dto))
+        if (!hasCostSensitiveChange)
         {
             return;
         }
@@ -981,6 +994,34 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         throw new BaseException("Bu stok hareketi sonraki maliyet snapshot'larını etkileyeceği için güncellenemez.", 400);
+    }
+
+    private async Task EnsureBackdatedCostCreateAllowedAsync(StokHareketDto dto, CancellationToken cancellationToken)
+    {
+        if (!IsCostSensitiveMovement(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
+        {
+            return;
+        }
+
+        await EnsureBackdatedCostCreateAllowedAsync(dto.DepoId, dto.TasinirKartId, dto.HareketTarihi, cancellationToken);
+    }
+
+    private async Task EnsureBackdatedCostCreateAllowedAsync(int depoId, int tasinirKartId, DateTime hareketTarihi, CancellationToken cancellationToken)
+    {
+        var hasLaterCostSnapshots = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .AnyAsync(x =>
+                x.DepoId == depoId &&
+                x.TasinirKartId == tasinirKartId &&
+                x.Durum == StokHareketDurumlari.Aktif &&
+                x.MaliyetTutari.HasValue &&
+                x.HareketTarihi > hareketTarihi,
+                cancellationToken);
+
+        if (hasLaterCostSnapshots)
+        {
+            throw new BaseException("Bu tarihten sonra maliyet snapshot'ı oluşmuş stok hareketleri bulunduğu için geriye tarihli hareket eklenemez.", 400);
+        }
     }
 
     private async Task EnsureDeleteCostMutationAllowedAsync(StokHareket existing, CancellationToken cancellationToken)
@@ -1580,6 +1621,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
            || existing.Miktar != dto.Miktar
            || existing.BirimFiyat != dto.BirimFiyat
            || !string.Equals(existing.Durum, dto.Durum, StringComparison.Ordinal);
+
+    private static bool IsCostSensitiveMovement(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu)
+        => StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu)
+           || StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu);
 
     private void DetachTrackedStokHareket(int id)
     {

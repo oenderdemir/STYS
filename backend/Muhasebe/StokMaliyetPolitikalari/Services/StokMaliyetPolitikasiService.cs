@@ -56,6 +56,12 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
         ValidateRequest(request);
         await _tesisScopeService.EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
 
+        if (!string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal)
+            && await HasOpenFifoLayersAsync(request.TesisId, cancellationToken))
+        {
+            throw new BaseException("Devreden FIFO maliyet katmanları bulunduğu için stok maliyet yöntemi değiştirilemez.", 400);
+        }
+
         var politika = await _dbContext.StokMaliyetPolitikalari
             .FirstOrDefaultAsync(x => x.TesisId == request.TesisId && x.MaliYil == request.MaliYil, cancellationToken);
 
@@ -76,12 +82,6 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
         if (string.Equals(politika.MaliyetYontemi, request.MaliyetYontemi, StringComparison.Ordinal))
         {
             return Map(politika);
-        }
-
-        if (!string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal)
-            && await HasOpenFifoLayersAsync(request.TesisId, cancellationToken))
-        {
-            throw new BaseException("Devreden FIFO maliyet katmanları bulunduğu için stok maliyet yöntemi değiştirilemez.", 400);
         }
 
         var maliyetlendirilmisHareketVar = await HasCostSnapshottedMovementAsync(request.TesisId, request.MaliYil, cancellationToken);

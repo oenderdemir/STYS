@@ -491,6 +491,12 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                     cancellationToken);
             }
 
+            var kaynakStrategy = await ResolveCostStrategyAsync(transferGrubu.CikisAyagi.DepoId, transferGrubu.CikisAyagi.HareketTarihi, cancellationToken);
+            if (kaynakStrategy is FifoMaliyetStrategy)
+            {
+                await RollbackFifoTransferAsync(transferGrubu, cancellationToken);
+            }
+
             foreach (var item in transferHareketleri)
             {
                 item.Durum = StokHareketDurumlari.Iptal;
@@ -928,6 +934,55 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         return new TransferIptalGrubu(girisAyagi, cikisAyagi);
+    }
+
+    private async Task RollbackFifoTransferAsync(TransferIptalGrubu transferGrubu, CancellationToken cancellationToken)
+    {
+        var kaynakTuketimler = await _dbContext.StokMaliyetKatmanTuketimleri
+            .Where(x => x.CikisStokHareketId == transferGrubu.CikisAyagi.Id && !x.IsDeleted)
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var hedefKatmanlar = await _dbContext.StokMaliyetKatmanlari
+            .Where(x => x.KaynakStokHareketId == transferGrubu.GirisAyagi.Id && !x.IsDeleted)
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var hedefKatmanIds = hedefKatmanlar.Select(x => x.Id).ToList();
+        if (hedefKatmanIds.Count > 0)
+        {
+            var hedefKatmanKullanildi = await _dbContext.StokMaliyetKatmanTuketimleri
+                .AsNoTracking()
+                .AnyAsync(x => hedefKatmanIds.Contains(x.StokMaliyetKatmaniId) && !x.IsDeleted, cancellationToken);
+
+            if (hedefKatmanKullanildi)
+            {
+                throw new BaseException("Hedef depodaki FIFO maliyet katmanları kullanıldığı için transfer iptal edilemez.", 400);
+            }
+        }
+
+        if (kaynakTuketimler.Count > 0)
+        {
+            var kaynakKatmanIds = kaynakTuketimler.Select(x => x.StokMaliyetKatmaniId).Distinct().ToList();
+            var kaynakKatmanlar = await _dbContext.StokMaliyetKatmanlari
+                .Where(x => kaynakKatmanIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+            foreach (var tuketim in kaynakTuketimler)
+            {
+                if (kaynakKatmanlar.TryGetValue(tuketim.StokMaliyetKatmaniId, out var katman))
+                {
+                    katman.KalanMiktar += tuketim.Miktar;
+                }
+
+                tuketim.IsDeleted = true;
+            }
+        }
+
+        foreach (var hedefKatman in hedefKatmanlar)
+        {
+            hedefKatman.IsDeleted = true;
+        }
     }
 
     private async Task EnsureDepoAccessAsync(int depoId, int? tesisId, string label, CancellationToken cancellationToken)

@@ -82,6 +82,40 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task TransferIptalAsync_FIFO_KaynakKatmaniGeriYuklerVeHedefKatmanlariKaldirir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        var created = await service.CreateTransferAsync(CreateTransferRequest(miktar: 5, birimFiyat: 999));
+
+        await service.TransferIptalAsync(created[0].Id!.Value);
+
+        var kaynakKatman = await dbContext.StokMaliyetKatmanlari
+            .IgnoreQueryFilters()
+            .SingleAsync(x => x.DepoId == 10 && x.KaynakStokHareketId != created[1].Id);
+        var hedefKatman = await dbContext.StokMaliyetKatmanlari
+            .IgnoreQueryFilters()
+            .SingleAsync(x => x.KaynakStokHareketId == created[1].Id);
+        var kaynakTuketimler = await dbContext.StokMaliyetKatmanTuketimleri
+            .IgnoreQueryFilters()
+            .Where(x => x.CikisStokHareketId == created[0].Id)
+            .ToListAsync();
+        var degerleme = await service.GetStokDegerlemeAsync(1, null);
+
+        Assert.Equal(10, kaynakKatman.KalanMiktar);
+        Assert.True(hedefKatman.IsDeleted);
+        Assert.All(kaynakTuketimler, x => Assert.True(x.IsDeleted));
+        var kaynakSatir = Assert.Single(degerleme, x => x.DepoId == 10);
+        Assert.Equal(10, kaynakSatir.BakiyeMiktari);
+        Assert.Equal(1000m, kaynakSatir.ToplamStokDegeri);
+        Assert.DoesNotContain(degerleme, x => x.DepoId == 20);
+    }
+
+    [Fact]
     public async Task TransferIptalAsync_HedefStokKullanildiysaReddeder()
     {
         await using var dbContext = CreateDbContext();
@@ -115,6 +149,25 @@ public class StokHareketServiceTests
             .Where(x => x.TransferGrupId == created[0].TransferGrupId)
             .ToListAsync();
         Assert.All(transferHareketleri, x => Assert.Equal(StokHareketDurumlari.Aktif, x.Durum));
+    }
+
+    [Fact]
+    public async Task TransferIptalAsync_FIFO_HedefKatmanKullanildiysaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        var created = await service.CreateTransferAsync(CreateTransferRequest(miktar: 5, birimFiyat: 999));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 5, depoId: 20, birimFiyat: 120));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 1, depoId: 20, birimFiyat: 1));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.TransferIptalAsync(created[0].Id!.Value));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Hedef depodaki FIFO maliyet katmanları kullanıldığı için transfer iptal edilemez.", ex.Message);
     }
 
     [Fact]
@@ -1137,6 +1190,68 @@ public class StokHareketServiceTests
         Assert.False(current.PolitikaSecildiMi);
         Assert.Null(current.MaliyetYontemi);
         Assert.Equal("2027 mali yılı için stok maliyet yöntemi seçilmelidir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_2026FifoAcikKatmanVarken2027AgirlikliOrtalamaOlusturmayiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
+        {
+            Id = 2,
+            TesisId = 1,
+            MaliYil = 2027,
+            DonemNo = 1,
+            BaslangicTarihi = new DateTime(2027, 1, 1),
+            BitisTarihi = new DateTime(2027, 1, 31),
+            KapaliMi = false
+        });
+        await dbContext.SaveChangesAsync();
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        var service = CreateService(dbContext);
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        var politikaService = CreatePolicyService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2027,
+            MaliyetYontemi = StokMaliyetYontemleri.AgirlikliOrtalama
+        }));
+
+        Assert.Equal("Devreden FIFO maliyet katmanları bulunduğu için stok maliyet yöntemi değiştirilemez.", ex.Message);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_2026FifoAcikKatmanVarken2027FifoOlusturabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
+        {
+            Id = 2,
+            TesisId = 1,
+            MaliYil = 2027,
+            DonemNo = 1,
+            BaslangicTarihi = new DateTime(2027, 1, 1),
+            BitisTarihi = new DateTime(2027, 1, 31),
+            KapaliMi = false
+        });
+        await dbContext.SaveChangesAsync();
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        var service = CreateService(dbContext);
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        var politikaService = CreatePolicyService(dbContext);
+
+        var result = await politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2027,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        });
+
+        Assert.Equal(StokMaliyetYontemleri.FIFO, result.MaliyetYontemi);
     }
 
     [Fact]

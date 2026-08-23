@@ -152,7 +152,7 @@ export interface UpsertStokMaliyetPolitikasiRequest {
 
 export const STOK_MALIYET_YONTEMI_SECENEKLERI: Array<{ label: string; value: string; disabled?: boolean }> = [
     { label: 'Ağırlıklı Ortalama', value: 'AgirlikliOrtalama' },
-    { label: 'FIFO (Henüz desteklenmiyor)', value: 'FIFO', disabled: true },
+    { label: 'FIFO', value: 'FIFO' },
     { label: 'LIFO (Henüz desteklenmiyor)', value: 'LIFO', disabled: true }
 ];
 

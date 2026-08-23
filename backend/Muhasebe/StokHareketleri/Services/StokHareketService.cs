@@ -82,6 +82,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             await ApplyCostSnapshotAsync(dto, null, CancellationToken.None);
             await EnsureCreateDoesNotGoNegativeAsync(dto, CancellationToken.None);
             var created = await base.AddAsync(dto);
+            await ApplyPostCreateCostStateAsync(created, CancellationToken.None);
             await transaction.CommitAsync(CancellationToken.None);
             return created;
         }
@@ -105,7 +106,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         await ApplyKdvAsync(dto);
         await ApplyCostSnapshotAsync(dto, null, cancellationToken);
         await EnsureCreateDoesNotGoNegativeAsync(dto, cancellationToken);
-        return await base.AddAsync(dto);
+        var created = await base.AddAsync(dto);
+        await ApplyPostCreateCostStateAsync(created, cancellationToken);
+        return created;
     }
 
     public override async Task<StokHareketDto> UpdateAsync(StokHareketDto dto)
@@ -347,37 +350,79 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 await EnsureSeriTransferCanProceedAsync(request.KaynakDepoId, request.HedefDepoId, request.TasinirKartId, request.StokSeriId.Value, cancellationToken);
             }
 
-            var transferGrupId = Guid.NewGuid();
-            var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
-            var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
-            var transferMaliyetBirimFiyat = kaynakMaliyetSnapshot.OrtalamaMaliyet;
-            var transferMaliyetTutari = CalculateCostAmount(request.Miktar, transferMaliyetBirimFiyat);
+            var kaynakStrategy = await ResolveCostStrategyAsync(request.KaynakDepoId, request.HareketTarihi, cancellationToken);
+            if (kaynakStrategy is FifoMaliyetStrategy fifoStrategy)
+            {
+                var fifoPlan = await fifoStrategy.PlanOutgoingConsumptionAsync(request.KaynakDepoId, request.TasinirKartId, request.Miktar, cancellationToken);
+                var transferMaliyetTutari = fifoPlan.ToplamMaliyet;
+                var transferMaliyetBirimFiyat = request.Miktar <= 0
+                    ? 0m
+                    : Math.Round(transferMaliyetTutari / request.Miktar, 6, MidpointRounding.AwayFromZero);
+                var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
+                var transferGrupId = Guid.NewGuid();
 
-            var kaynakHareket = CreateTransferLeg(
+                var kaynakHareket = CreateTransferLeg(
+                    request,
+                    transferGrupId,
+                    request.KaynakDepoId,
+                    request.HedefDepoId,
+                    StokTransferYonleri.Cikis,
+                    tutar,
+                    transferMaliyetBirimFiyat,
+                    transferMaliyetTutari);
+
+                await _dbContext.StokHareketleri.AddAsync(kaynakHareket, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                var hedefHareket = CreateTransferLeg(
+                    request,
+                    transferGrupId,
+                    request.HedefDepoId,
+                    request.KaynakDepoId,
+                    StokTransferYonleri.Giris,
+                    tutar,
+                    transferMaliyetBirimFiyat,
+                    transferMaliyetTutari);
+
+                await _dbContext.StokHareketleri.AddAsync(hedefHareket, cancellationToken);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await fifoStrategy.ApplyTransferAsync(kaynakHareket, hedefHareket, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                return [_mapper.Map<StokHareketDto>(kaynakHareket), _mapper.Map<StokHareketDto>(hedefHareket)];
+            }
+
+            var weightedTransferGrupId = Guid.NewGuid();
+            var weightedTutar = CalculateTutar(request.Miktar, request.BirimFiyat);
+            var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
+            var weightedTransferMaliyetBirimFiyat = kaynakMaliyetSnapshot.OrtalamaMaliyet;
+            var weightedTransferMaliyetTutari = CalculateCostAmount(request.Miktar, weightedTransferMaliyetBirimFiyat);
+
+            var weightedKaynakHareket = CreateTransferLeg(
                 request,
-                transferGrupId,
+                weightedTransferGrupId,
                 request.KaynakDepoId,
                 request.HedefDepoId,
                 StokTransferYonleri.Cikis,
-                tutar,
-                transferMaliyetBirimFiyat,
-                transferMaliyetTutari);
+                weightedTutar,
+                weightedTransferMaliyetBirimFiyat,
+                weightedTransferMaliyetTutari);
 
-            var hedefHareket = CreateTransferLeg(
+            var weightedHedefHareket = CreateTransferLeg(
                 request,
-                transferGrupId,
+                weightedTransferGrupId,
                 request.HedefDepoId,
                 request.KaynakDepoId,
                 StokTransferYonleri.Giris,
-                tutar,
-                transferMaliyetBirimFiyat,
-                transferMaliyetTutari);
+                weightedTutar,
+                weightedTransferMaliyetBirimFiyat,
+                weightedTransferMaliyetTutari);
 
-            await _dbContext.StokHareketleri.AddRangeAsync([kaynakHareket, hedefHareket], cancellationToken);
+            await _dbContext.StokHareketleri.AddRangeAsync([weightedKaynakHareket, weightedHedefHareket], cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return [_mapper.Map<StokHareketDto>(kaynakHareket), _mapper.Map<StokHareketDto>(hedefHareket)];
+            return [_mapper.Map<StokHareketDto>(weightedKaynakHareket), _mapper.Map<StokHareketDto>(weightedHedefHareket)];
         }
         catch
         {
@@ -519,11 +564,42 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             {
                 return [];
             }
-
-            return await _repository.GetStokDegerlemeAsync(new[] { depoId.Value }, cancellationToken);
         }
 
-        return await _repository.GetStokDegerlemeAsync(allowedDepoIds, cancellationToken);
+        var stokBakiyeleri = await _repository.GetDepoStokBakiyeleriAsync(
+            depoId.HasValue && depoId.Value > 0 ? [depoId.Value] : allowedDepoIds,
+            cancellationToken);
+
+        var result = new List<StokDegerlemeDto>();
+        foreach (var bakiye in stokBakiyeleri)
+        {
+            var strategy = await ResolveCostStrategyAsync(bakiye.DepoId, DateTime.UtcNow, cancellationToken);
+            var snapshot = await strategy.GetCurrentCostSnapshotAsync(bakiye.DepoId, bakiye.TasinirKartId, cancellationToken);
+            if (snapshot.BakiyeMiktari <= 0)
+            {
+                continue;
+            }
+
+            result.Add(new StokDegerlemeDto
+            {
+                DepoId = bakiye.DepoId,
+                DepoKod = bakiye.DepoKod,
+                DepoAd = bakiye.DepoAd,
+                TasinirKartId = bakiye.TasinirKartId,
+                StokKodu = bakiye.StokKodu,
+                TasinirKartAd = bakiye.TasinirKartAd,
+                Birim = bakiye.Birim,
+                BakiyeMiktari = snapshot.BakiyeMiktari,
+                OrtalamaMaliyet = snapshot.OrtalamaMaliyet,
+                ToplamStokDegeri = snapshot.ToplamStokDegeri,
+                MaliyetEksikMi = await HasMissingCostInfoAsync(bakiye.DepoId, bakiye.TasinirKartId, snapshot.BakiyeMiktari, cancellationToken)
+            });
+        }
+
+        return result
+            .OrderBy(x => x.DepoKod)
+            .ThenBy(x => x.StokKodu)
+            .ToList();
     }
 
     public async Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default)
@@ -963,6 +1039,13 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             return;
         }
 
+        var strategy = await ResolveCostStrategyAsync(existing.DepoId, existing.HareketTarihi, cancellationToken);
+        if (strategy is FifoMaliyetStrategy
+            && IsCostSensitiveMovement(existing.HareketTipi, existing.TransferYonu, existing.SayimFarkiYonu))
+        {
+            throw new BaseException("FIFO maliyet katmanları oluştuğu için bu stok hareketinde maliyet etkili alanlar güncellenemez.", 400);
+        }
+
         if (!await HasDependentCostSnapshotsAsync(existing, cancellationToken))
         {
             return;
@@ -1001,6 +1084,13 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task EnsureDeleteCostMutationAllowedAsync(StokHareket existing, CancellationToken cancellationToken)
     {
+        var strategy = await ResolveCostStrategyAsync(existing.DepoId, existing.HareketTarihi, cancellationToken);
+        if (strategy is FifoMaliyetStrategy
+            && IsCostSensitiveMovement(existing.HareketTipi, existing.TransferYonu, existing.SayimFarkiYonu))
+        {
+            throw new BaseException("FIFO maliyet katmanları oluştuğu için bu stok hareketi silinemez.", 400);
+        }
+
         if (!await HasDependentCostSnapshotsAsync(existing, cancellationToken))
         {
             return;
@@ -1028,6 +1118,46 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         => await _dbContext.StokHareketleri
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+    private async Task ApplyPostCreateCostStateAsync(StokHareketDto created, CancellationToken cancellationToken)
+    {
+        if (!created.Id.HasValue || !IsCostSensitiveMovement(created.HareketTipi, created.TransferYonu, created.SayimFarkiYonu))
+        {
+            return;
+        }
+
+        var strategy = await ResolveCostStrategyAsync(created.DepoId, created.HareketTarihi, cancellationToken);
+        if (strategy is not FifoMaliyetStrategy fifoStrategy)
+        {
+            return;
+        }
+
+        var entity = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .FirstAsync(x => x.Id == created.Id.Value, cancellationToken);
+        await fifoStrategy.ApplyCreatedMovementAsync(entity, cancellationToken);
+    }
+
+    private async Task<bool> HasMissingCostInfoAsync(int depoId, int tasinirKartId, decimal snapshotBakiyeMiktari, CancellationToken cancellationToken)
+    {
+        var hasLegacyOutgoing = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .AnyAsync(x =>
+                x.DepoId == depoId &&
+                x.TasinirKartId == tasinirKartId &&
+                x.Durum == StokHareketDurumlari.Aktif &&
+                StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) &&
+                x.MaliyetTutari == null,
+                cancellationToken);
+
+        if (hasLegacyOutgoing)
+        {
+            return true;
+        }
+
+        var currentBalance = await _repository.GetBakiyeMiktariAsync(depoId, tasinirKartId, cancellationToken);
+        return currentBalance > snapshotBakiyeMiktari;
+    }
 
     private async Task NormalizeAndValidateTrackingAsync(
         StokHareketDto dto,

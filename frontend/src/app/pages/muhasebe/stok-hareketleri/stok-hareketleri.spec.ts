@@ -9,6 +9,7 @@ import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { StokMaliyetPolitikasiService } from '../services/stok-maliyet-politikasi.service';
+import { STOK_MALIYET_YONTEMI_SECENEKLERI } from './stok-hareketleri.dto';
 
 describe('StokHareketleriPage varsayilan depo davranisi', () => {
     function createComponent(): StokHareketleriPage {
@@ -290,6 +291,14 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
 
         expect(component.getTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
         expect(component.getDetayTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
+    });
+
+    it('stok maliyet yontemlerinde FIFO secilebilir ve LIFO disabled kalir', () => {
+        const fifo = STOK_MALIYET_YONTEMI_SECENEKLERI.find(x => x.value === 'FIFO');
+        const lifo = STOK_MALIYET_YONTEMI_SECENEKLERI.find(x => x.value === 'LIFO');
+
+        expect(fifo?.disabled).toBeUndefined();
+        expect(lifo?.disabled).toBeTrue();
     });
 
     it('loadSummary stok degerleme verisini doldurur', () => {

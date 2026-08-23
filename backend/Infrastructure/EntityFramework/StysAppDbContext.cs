@@ -192,6 +192,8 @@ public class StysAppDbContext : DbContext
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<StokLot> StokLotlar => Set<StokLot>();
+    public DbSet<StokMaliyetKatmani> StokMaliyetKatmanlari => Set<StokMaliyetKatmani>();
+    public DbSet<StokMaliyetKatmanTuketimi> StokMaliyetKatmanTuketimleri => Set<StokMaliyetKatmanTuketimi>();
     public DbSet<StokMaliyetPolitikasi> StokMaliyetPolitikalari => Set<StokMaliyetPolitikasi>();
     public DbSet<StokSayim> StokSayimlar => Set<StokSayim>();
     public DbSet<StokSayimSatir> StokSayimSatirlari => Set<StokSayimSatir>();
@@ -2818,6 +2820,77 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.TasinirKart)
                 .WithMany()
                 .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokMaliyetKatmani>(entity =>
+        {
+            entity.ToTable("StokMaliyetKatmanlari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint("CK_StokMaliyetKatmanlari_IlkMiktar", "[IlkMiktar] > 0");
+                t.HasCheckConstraint("CK_StokMaliyetKatmanlari_KalanMiktar", "[KalanMiktar] >= 0 AND [KalanMiktar] <= [IlkMiktar]");
+                t.HasCheckConstraint("CK_StokMaliyetKatmanlari_BirimMaliyet", "[BirimMaliyet] >= 0");
+            });
+
+            entity.Property(x => x.IlkMiktar).HasPrecision(18, 3);
+            entity.Property(x => x.KalanMiktar).HasPrecision(18, 3);
+            entity.Property(x => x.BirimMaliyet).HasPrecision(18, 6);
+
+            entity.HasIndex(x => new { x.DepoId, x.TasinirKartId, x.GirisTarihi, x.KaynakStokHareketId })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => new { x.TesisId, x.DepoId, x.TasinirKartId, x.KalanMiktar })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Depo)
+                .WithMany()
+                .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany()
+                .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KaynakStokHareket)
+                .WithMany()
+                .HasForeignKey(x => x.KaynakStokHareketId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokMaliyetKatmanTuketimi>(entity =>
+        {
+            entity.ToTable("StokMaliyetKatmanTuketimleri", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint("CK_StokMaliyetKatmanTuketimleri_Miktar", "[Miktar] > 0");
+                t.HasCheckConstraint("CK_StokMaliyetKatmanTuketimleri_BirimMaliyet", "[BirimMaliyet] >= 0");
+                t.HasCheckConstraint("CK_StokMaliyetKatmanTuketimleri_Tutar", "[Tutar] >= 0");
+            });
+
+            entity.Property(x => x.Miktar).HasPrecision(18, 3);
+            entity.Property(x => x.BirimMaliyet).HasPrecision(18, 6);
+            entity.Property(x => x.Tutar).HasPrecision(18, 2);
+
+            entity.HasIndex(x => new { x.CikisStokHareketId, x.StokMaliyetKatmaniId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.StokMaliyetKatmaniId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.CikisStokHareket)
+                .WithMany()
+                .HasForeignKey(x => x.CikisStokHareketId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokMaliyetKatmani)
+                .WithMany(x => x.Tuketimler)
+                .HasForeignKey(x => x.StokMaliyetKatmaniId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

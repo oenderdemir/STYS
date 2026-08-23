@@ -33,6 +33,7 @@ using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokLotlari.Entities;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 using STYS.Muhasebe.StokSayimlari.Entities;
+using STYS.Muhasebe.StokTalepleri.Entities;
 using STYS.Muhasebe.StokSerileri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
@@ -197,6 +198,8 @@ public class StysAppDbContext : DbContext
     public DbSet<StokMaliyetPolitikasi> StokMaliyetPolitikalari => Set<StokMaliyetPolitikasi>();
     public DbSet<StokSayim> StokSayimlar => Set<StokSayim>();
     public DbSet<StokSayimSatir> StokSayimSatirlari => Set<StokSayimSatir>();
+    public DbSet<StokTalep> StokTalepler => Set<StokTalep>();
+    public DbSet<StokTalepSatir> StokTalepSatirlari => Set<StokTalepSatir>();
     public DbSet<StokSeri> StokSeriler => Set<StokSeri>();
     public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
     public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
@@ -2967,6 +2970,69 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.StokSayim)
                 .WithMany(x => x.Satirlar)
                 .HasForeignKey(x => x.StokSayimId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany()
+                .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokLot)
+                .WithMany()
+                .HasForeignKey(x => x.StokLotId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokSeri)
+                .WithMany()
+                .HasForeignKey(x => x.StokSeriId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokTalep>(entity =>
+        {
+            entity.ToTable("StokTalepler", muhasebeSchema);
+            entity.Property(x => x.Durum).HasMaxLength(24).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.TesisId, x.TalepEdenDepoId, x.KarsilayanDepoId, x.TalepTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne<Tesis>()
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TalepEdenDepo)
+                .WithMany()
+                .HasForeignKey(x => x.TalepEdenDepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.KarsilayanDepo)
+                .WithMany()
+                .HasForeignKey(x => x.KarsilayanDepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokTalepSatir>(entity =>
+        {
+            entity.ToTable("StokTalepSatirlari", muhasebeSchema);
+            entity.Property(x => x.TakipTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.StokKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.TasinirKartAd).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Birim).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.LotNo).HasMaxLength(64);
+            entity.Property(x => x.SeriNo).HasMaxLength(128);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.TalepMiktari).HasPrecision(18, 3);
+            entity.Property(x => x.OnaylananMiktar).HasPrecision(18, 3);
+            entity.Property(x => x.TeslimEdilenMiktar).HasPrecision(18, 3);
+            entity.HasIndex(x => new { x.StokTalepId, x.TasinirKartId, x.StokLotId, x.StokSeriId })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.TransferGrupId)
+                .HasFilter("[IsDeleted] = 0 AND [TransferGrupId] IS NOT NULL");
+
+            entity.HasOne(x => x.StokTalep)
+                .WithMany(x => x.Satirlar)
+                .HasForeignKey(x => x.StokTalepId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(x => x.TasinirKart)

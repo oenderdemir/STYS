@@ -1,0 +1,186 @@
+<p-toast></p-toast>
+
+<app-muhasebe-tesis-context-bar></app-muhasebe-tesis-context-bar>
+<app-muhasebe-tesis-secim-dialog></app-muhasebe-tesis-secim-dialog>
+
+<p-toolbar styleClass="mb-3">
+    <ng-template pTemplate="start">
+        <div class="flex flex-wrap gap-2">
+            <p-button label="Yeni Talep" icon="pi pi-plus" (onClick)="openCreate()" [disabled]="saving"></p-button>
+            <p-button label="Yenile" icon="pi pi-refresh" severity="secondary" (onClick)="load()" [disabled]="loading || saving"></p-button>
+        </div>
+    </ng-template>
+    <ng-template pTemplate="end">
+        <div class="flex flex-wrap gap-2">
+            <p-select [options]="depoOptions" [(ngModel)]="selectedTalepEdenDepoId" placeholder="Talep Eden Depo" optionLabel="label" optionValue="value" [showClear]="true" (onChange)="onFiltersChanged()"></p-select>
+            <p-select [options]="depoOptions" [(ngModel)]="selectedKarsilayanDepoId" placeholder="Karşılayan Depo" optionLabel="label" optionValue="value" [showClear]="true" (onChange)="onFiltersChanged()"></p-select>
+        </div>
+    </ng-template>
+</p-toolbar>
+
+<div class="grid">
+    <div class="col-12 xl:col-4">
+        <p-table
+            [value]="records"
+            dataKey="id"
+            selectionMode="single"
+            [(selection)]="selectedTalep"
+            [lazy]="true"
+            [paginator]="true"
+            [rows]="pageSize"
+            [first]="(pageNumber - 1) * pageSize"
+            [totalRecords]="totalRecords"
+            [loading]="loading"
+            (onLazyLoad)="onLazyLoad($event)"
+            (selectionChange)="selectedTalep?.id && selectTalep(selectedTalep.id)">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Talep</th>
+                    <th>Durum</th>
+                    <th>Tarih</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-row>
+                <tr [pSelectableRow]="row">
+                    <td>#{{ row.id }}<br /><small>{{ row.satirlar.length }} satır</small></td>
+                    <td><p-tag [value]="row.durum" [severity]="getLineSeverity(row.durum)"></p-tag></td>
+                    <td>{{ row.talepTarihi | date:'dd.MM.yyyy HH:mm' }}</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+
+    <div class="col-12 xl:col-8" *ngIf="selectedTalep as talep; else emptyState">
+        <div class="card">
+            <div class="flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+                <div>
+                    <h3 class="m-0">Stok Talebi #{{ talep.id }}</h3>
+                    <div class="text-color-secondary mt-2">{{ talep.talepTarihi | date:'dd.MM.yyyy HH:mm' }}</div>
+                </div>
+                <p-tag [value]="talep.durum" [severity]="getLineSeverity(talep.durum)"></p-tag>
+            </div>
+
+            <div class="grid formgrid mb-3">
+                <div class="field col-12 md:col-6">
+                    <label class="block mb-2">Talep Eden Depo</label>
+                    <p-select [options]="depoOptions" [(ngModel)]="talep.talepEdenDepoId" optionLabel="label" optionValue="value" [disabled]="!isDraft(talep)"></p-select>
+                </div>
+                <div class="field col-12 md:col-6">
+                    <label class="block mb-2">Karşılayan Depo</label>
+                    <p-select [options]="depoOptions" [(ngModel)]="talep.karsilayanDepoId" optionLabel="label" optionValue="value" [disabled]="!isDraft(talep)"></p-select>
+                </div>
+                <div class="field col-12">
+                    <label class="block mb-2">Açıklama</label>
+                    <input pInputText [(ngModel)]="talep.aciklama" [disabled]="!isDraft(talep)" class="w-full" />
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 mb-3">
+                <p-button label="Başlığı Kaydet" icon="pi pi-save" severity="secondary" (onClick)="saveHeader()" [disabled]="!isDraft(talep) || saving"></p-button>
+                <p-button label="Satır Ekle" icon="pi pi-plus" (onClick)="openAddSatir()" [disabled]="!isDraft(talep) || saving"></p-button>
+                <p-button label="Satırları Kaydet" icon="pi pi-save" severity="secondary" (onClick)="saveSatirlar()" [disabled]="!canEditLines(talep) || saving"></p-button>
+                <p-button label="Beklemeye Gönder" icon="pi pi-send" (onClick)="gonder()" [disabled]="!isDraft(talep) || saving"></p-button>
+                <p-button [label]="getOnayActionLabel()" icon="pi pi-check" severity="info" (onClick)="onayDurumunuKaydet()" [disabled]="!canApprove(talep) || saving"></p-button>
+                <p-button label="Reddet" icon="pi pi-times" severity="danger" (onClick)="reddet()" [disabled]="!canApprove(talep) || saving"></p-button>
+                <p-button label="Teslim Et" icon="pi pi-truck" severity="success" (onClick)="teslimEt()" [disabled]="!canDeliver(talep) || saving"></p-button>
+                <p-button label="İptal" icon="pi pi-ban" severity="contrast" (onClick)="iptal()" [disabled]="!canCancel(talep) || saving"></p-button>
+                <p-button label="Stok Hareketlerine Git" icon="pi pi-external-link" severity="help" (onClick)="openStokHareketleri()"></p-button>
+            </div>
+
+            <p-table [value]="talep.satirlar" responsiveLayout="scroll">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Stok Kodu</th>
+                        <th>Kart</th>
+                        <th>Mevcut</th>
+                        <th>Talep</th>
+                        <th>Onay</th>
+                        <th>Teslim</th>
+                        <th>Lot / Seri</th>
+                        <th>Açıklama</th>
+                        <th>Transfer</th>
+                        <th></th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-satir>
+                    <tr>
+                        <td>{{ satir.stokKodu }}</td>
+                        <td>{{ satir.tasinirKartAd }}</td>
+                        <td>{{ getCurrentStock(satir) | number:'1.0-3' }}</td>
+                        <td>
+                            <p-inputNumber [(ngModel)]="satir.talepMiktari" [min]="0.001" [minFractionDigits]="0" [maxFractionDigits]="3" [disabled]="!isDraft(talep)"></p-inputNumber>
+                        </td>
+                        <td>
+                            <p-inputNumber [(ngModel)]="satir.onaylananMiktar" [min]="0" [minFractionDigits]="0" [maxFractionDigits]="3" [disabled]="!canApprove(talep)"></p-inputNumber>
+                        </td>
+                        <td>{{ satir.teslimEdilenMiktar | number:'1.0-3' }}</td>
+                        <td>
+                            <ng-container [ngSwitch]="satir.takipTipi">
+                                <p-select *ngSwitchCase="'Lot'" [options]="lotOptionsByLine[satir.id!] ?? []" [(ngModel)]="satir.stokLotId" optionLabel="label" optionValue="value" placeholder="Lot seç" [disabled]="!canDeliver(talep)"></p-select>
+                                <p-select *ngSwitchCase="'Seri'" [options]="seriOptionsByLine[satir.id!] ?? []" [(ngModel)]="satir.stokSeriId" optionLabel="label" optionValue="value" placeholder="Seri seç" [disabled]="!canDeliver(talep)"></p-select>
+                                <span *ngSwitchDefault>-</span>
+                            </ng-container>
+                        </td>
+                        <td><input pInputText [(ngModel)]="satir.aciklama" class="w-full" [disabled]="!canEditLines(talep)" /></td>
+                        <td><small>{{ satir.transferGrupId ?? '-' }}</small></td>
+                        <td>
+                            <p-button icon="pi pi-trash" severity="danger" text (onClick)="deleteSatir(satir)" [disabled]="!isDraft(talep) || !satir.id"></p-button>
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </div>
+    </div>
+</div>
+
+<ng-template #emptyState>
+    <div class="col-12 xl:col-8">
+        <div class="card text-color-secondary">Detay görmek için bir stok talebi seçin.</div>
+    </div>
+</ng-template>
+
+<p-dialog header="Yeni Stok Talebi" [(visible)]="createDialogVisible" [modal]="true" [style]="{ width: '32rem' }">
+    <div class="grid formgrid">
+        <div class="field col-12">
+            <label class="block mb-2">Talep Eden Depo</label>
+            <p-select [options]="depoOptions" [(ngModel)]="createModel.talepEdenDepoId" optionLabel="label" optionValue="value"></p-select>
+        </div>
+        <div class="field col-12">
+            <label class="block mb-2">Karşılayan Depo</label>
+            <p-select [options]="depoOptions" [(ngModel)]="createModel.karsilayanDepoId" optionLabel="label" optionValue="value"></p-select>
+        </div>
+        <div class="field col-12">
+            <label class="block mb-2">Talep Tarihi</label>
+            <p-datepicker [(ngModel)]="createDate" [showTime]="true" hourFormat="24"></p-datepicker>
+        </div>
+        <div class="field col-12">
+            <label class="block mb-2">Açıklama</label>
+            <input pInputText [(ngModel)]="createModel.aciklama" class="w-full" />
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" text (onClick)="createDialogVisible=false"></p-button>
+        <p-button label="Oluştur" (onClick)="create()" [loading]="saving"></p-button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog header="Talep Satırı" [(visible)]="satirDialogVisible" [modal]="true" [style]="{ width: '28rem' }">
+    <div class="grid formgrid">
+        <div class="field col-12">
+            <label class="block mb-2">Taşınır Kart</label>
+            <p-select [options]="tasinirKartOptions" [(ngModel)]="satirModel.tasinirKartId" optionLabel="label" optionValue="value"></p-select>
+        </div>
+        <div class="field col-12">
+            <label class="block mb-2">Talep Miktarı</label>
+            <p-inputNumber [(ngModel)]="satirModel.talepMiktari" [min]="0.001" [minFractionDigits]="0" [maxFractionDigits]="3"></p-inputNumber>
+        </div>
+        <div class="field col-12">
+            <label class="block mb-2">Açıklama</label>
+            <input pInputText [(ngModel)]="satirModel.aciklama" class="w-full" />
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" text (onClick)="satirDialogVisible=false"></p-button>
+        <p-button label="Ekle" (onClick)="addSatir()" [loading]="saving"></p-button>
+    </ng-template>
+</p-dialog>

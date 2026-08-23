@@ -81,6 +81,8 @@ public class StokTransferRequest
     public string? BelgeNo { get; set; }
     public DateTime? BelgeTarihi { get; set; }
     public string? Aciklama { get; set; }
+    public string? KaynakModul { get; set; }
+    public int? KaynakId { get; set; }
 }
 
 public class StokBakiyeDto

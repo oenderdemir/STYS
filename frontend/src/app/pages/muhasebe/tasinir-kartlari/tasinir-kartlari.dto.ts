@@ -14,6 +14,8 @@ export interface TasinirKartModel {
     demirbasMi: boolean;
     takipliMi: boolean;
     takipTipi: string;
+    minimumStokMiktari?: number | null;
+    kritikStokMiktari?: number | null;
     kdvOrani: number;
     aktifMi: boolean;
     aciklama?: string | null;

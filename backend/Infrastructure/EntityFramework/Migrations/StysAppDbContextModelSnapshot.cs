@@ -4544,6 +4544,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                     b.Property<int?>("MuhasebeHesapSiraNo")
                         .HasColumnType("int");
 
+                    b.Property<decimal?>("MinimumStokMiktari")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal?>("KritikStokMiktari")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
                     b.Property<string>("Soyad")
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
@@ -8227,7 +8235,10 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .IsUnique()
                         .HasFilter("[IsDeleted] = 0");
 
-                    b.ToTable("TasinirKartlar", "muhasebe");
+                    b.ToTable("TasinirKartlar", "muhasebe", t =>
+                        {
+                            t.HasCheckConstraint("CK_TasinirKartlar_KritikStokMiktari_MinimumuAsamaz", "[KritikStokMiktari] IS NULL OR [MinimumStokMiktari] IS NULL OR [KritikStokMiktari] <= [MinimumStokMiktari]");
+                        });
                 });
 
             modelBuilder.Entity("STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities.TasinirKodMuhasebeHesapEsleme", b =>

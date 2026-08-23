@@ -2507,8 +2507,13 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Birim).HasMaxLength(32).IsRequired();
             entity.Property(x => x.MalzemeTipi).HasMaxLength(32).IsRequired();
             entity.Property(x => x.TakipTipi).HasMaxLength(16).IsRequired().HasDefaultValue(TasinirKartTakipTipleri.Yok);
+            entity.Property(x => x.MinimumStokMiktari).HasPrecision(18, 3);
+            entity.Property(x => x.KritikStokMiktari).HasPrecision(18, 3);
             entity.Property(x => x.KdvOrani).HasPrecision(5, 2);
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasCheckConstraint(
+                "CK_TasinirKartlar_KritikStokMiktari_MinimumuAsamaz",
+                "[KritikStokMiktari] IS NULL OR [MinimumStokMiktari] IS NULL OR [KritikStokMiktari] <= [MinimumStokMiktari]");
             entity.HasIndex(x => new { x.TesisId, x.StokKodu })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");

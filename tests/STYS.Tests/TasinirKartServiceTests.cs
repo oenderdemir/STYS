@@ -93,6 +93,23 @@ public class TasinirKartServiceTests
         Assert.Equal("Stok bakiyesi bulunan taşınır kartın takip tipi değiştirilemez.", ex.Message);
     }
 
+    [Fact]
+    public async Task UpdateAsync_KritikStokMinimumuAsarsaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedAsync(dbContext);
+        var service = CreateService(dbContext, DomainAccessScope.Scoped([], [1], []));
+
+        var dto = CreateUpdateDto(varsayilanDepoId: 10);
+        dto.MinimumStokMiktari = 5;
+        dto.KritikStokMiktari = 6;
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(dto));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Kritik stok miktari minimum stok miktarini asamaz.", ex.Message);
+    }
+
     private static TasinirKartDto CreateUpdateDto(int? varsayilanDepoId)
     {
         return new TasinirKartDto
@@ -108,6 +125,8 @@ public class TasinirKartServiceTests
             DemirbasMi = false,
             TakipliMi = false,
             TakipTipi = TasinirKartTakipTipleri.Yok,
+            MinimumStokMiktari = null,
+            KritikStokMiktari = null,
             KdvOrani = 20,
             AktifMi = true,
             Aciklama = null

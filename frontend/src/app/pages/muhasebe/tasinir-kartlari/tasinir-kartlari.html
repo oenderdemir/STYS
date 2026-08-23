@@ -99,6 +99,14 @@
             <label class="block font-medium mb-2">KDV Orani</label>
             <p-inputnumber [(ngModel)]="model.kdvOrani" [min]="0" [max]="100" [minFractionDigits]="0" [maxFractionDigits]="2" class="w-full" inputStyleClass="w-full" />
         </div>
+        <div class="col-span-12 md:col-span-3">
+            <label class="block font-medium mb-2">Minimum Stok</label>
+            <p-inputnumber [(ngModel)]="model.minimumStokMiktari" [min]="0" [minFractionDigits]="0" [maxFractionDigits]="3" class="w-full" inputStyleClass="w-full" />
+        </div>
+        <div class="col-span-12 md:col-span-2">
+            <label class="block font-medium mb-2">Kritik Stok</label>
+            <p-inputnumber [(ngModel)]="model.kritikStokMiktari" [min]="0" [minFractionDigits]="0" [maxFractionDigits]="3" class="w-full" inputStyleClass="w-full" />
+        </div>
         <div class="col-span-12 md:col-span-2 flex align-items-end">
             <div class="flex align-items-center gap-2">
                 <p-checkbox inputId="aktifMi" [(ngModel)]="model.aktifMi" [binary]="true" />

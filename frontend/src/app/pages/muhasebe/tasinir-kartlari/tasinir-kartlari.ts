@@ -248,6 +248,23 @@ export class TasinirKartlariPage implements OnInit {
             return;
         }
 
+        if (this.model.minimumStokMiktari != null && this.model.minimumStokMiktari < 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Minimum stok miktarı negatif olamaz.' });
+            return;
+        }
+
+        if (this.model.kritikStokMiktari != null && this.model.kritikStokMiktari < 0) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kritik stok miktarı negatif olamaz.' });
+            return;
+        }
+
+        if (this.model.kritikStokMiktari != null
+            && this.model.minimumStokMiktari != null
+            && this.model.kritikStokMiktari > this.model.minimumStokMiktari) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Kritik stok miktarı minimum stok miktarını aşamaz.' });
+            return;
+        }
+
         const tesisId = this.dialogMode === 'create'
             ? this.getSeciliTesisIdOrWarn()
             : (this.model.tesisId ?? this.getSeciliTesisIdOrWarn());
@@ -268,6 +285,8 @@ export class TasinirKartlariPage implements OnInit {
             demirbasMi: this.model.demirbasMi,
             takipliMi: this.model.takipTipi !== 'Yok',
             takipTipi: this.model.takipTipi,
+            minimumStokMiktari: this.model.minimumStokMiktari ?? null,
+            kritikStokMiktari: this.model.kritikStokMiktari ?? null,
             kdvOrani: this.model.kdvOrani,
             aktifMi: this.model.aktifMi,
             aciklama: this.model.aciklama?.trim() || null
@@ -338,6 +357,8 @@ export class TasinirKartlariPage implements OnInit {
             demirbasMi: false,
             takipliMi: false,
             takipTipi: 'Yok',
+            minimumStokMiktari: null,
+            kritikStokMiktari: null,
             kdvOrani: 20,
             aktifMi: true,
             aciklama: null

@@ -31,6 +31,8 @@ using STYS.Muhasebe.StokLotlari.Services;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
+using STYS.Muhasebe.StokUyarilari.Dtos;
+using STYS.Muhasebe.StokUyarilari.Services;
 using STYS.Muhasebe.StokSerileri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
@@ -393,6 +395,103 @@ public class StokHareketServiceTests
         var row = Assert.Single(result);
         Assert.Equal(0, row.KalanGun);
         Assert.Equal(StokLotSktUyariDurumlari.Kritik, row.Durum);
+    }
+
+    [Fact]
+    public async Task GetStokUyarilariAsync_KritikSeviyeyiDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetKartEsikleriAsync(dbContext, minimumStokMiktari: 5, kritikStokMiktari: 2);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 2, 1, StokHareketDurumlari.Aktif);
+        var service = CreateStockAlertService(dbContext);
+
+        var result = await service.GetStokUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(2, row.MevcutMiktar);
+        Assert.Equal(StokUyariDurumlari.Kritik, row.Durum);
+    }
+
+    [Fact]
+    public async Task GetStokUyarilariAsync_DusukSeviyeyiDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetKartEsikleriAsync(dbContext, minimumStokMiktari: 5, kritikStokMiktari: 2);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 4, 1, StokHareketDurumlari.Aktif);
+        var service = CreateStockAlertService(dbContext);
+
+        var result = await service.GetStokUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(StokUyariDurumlari.Dusuk, row.Durum);
+    }
+
+    [Fact]
+    public async Task GetStokUyarilariAsync_NormalSeviyeyiDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetKartEsikleriAsync(dbContext, minimumStokMiktari: 5, kritikStokMiktari: 2);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 7, 1, StokHareketDurumlari.Aktif);
+        var service = CreateStockAlertService(dbContext);
+
+        var result = await service.GetStokUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(StokUyariDurumlari.Normal, row.Durum);
+    }
+
+    [Fact]
+    public async Task GetStokUyarilariAsync_SifirStoguGosterir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetKartEsikleriAsync(dbContext, minimumStokMiktari: 5, kritikStokMiktari: 2);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Cikis, 5, 1, StokHareketDurumlari.Aktif);
+        var service = CreateStockAlertService(dbContext);
+
+        var result = await service.GetStokUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(0, row.MevcutMiktar);
+        Assert.Equal(StokUyariDurumlari.Kritik, row.Durum);
+    }
+
+    [Fact]
+    public async Task GetStokUyarilariAsync_DepoVeTesisYetkisiniKorur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedCrossTesisDataAsync(dbContext);
+        await SetKartEsikleriAsync(dbContext, minimumStokMiktari: 5, kritikStokMiktari: 2, tasinirKartId: 100);
+
+        dbContext.Depolar.Add(new Depo
+        {
+            Id = 30,
+            TesisId = 2,
+            Kod = "D-003",
+            Ad = "Tesis 2 Deposu",
+            AktifMi = true,
+            MuhasebeHesapPlaniId = 1,
+            MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
+        });
+        var tesis2Kart = await dbContext.TasinirKartlar.SingleAsync(x => x.Id == 101);
+        tesis2Kart.MinimumStokMiktari = 5;
+        tesis2Kart.KritikStokMiktari = 2;
+        await dbContext.SaveChangesAsync();
+
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 2, 1, StokHareketDurumlari.Aktif);
+        await SeedMovementAsync(dbContext, 30, 101, StokHareketTipleri.Giris, 2, 1, StokHareketDurumlari.Aktif);
+        var service = CreateStockAlertService(dbContext);
+
+        var result = await service.GetStokUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(10, row.DepoId);
+        Assert.Equal(100, row.TasinirKartId);
     }
 
     [Fact]
@@ -2328,6 +2427,12 @@ public class StokHareketServiceTests
             new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
             new FixedTimeProvider(new DateTimeOffset(2026, 8, 23, 0, 0, 0, TimeSpan.Zero)));
 
+    private static IStokUyariService CreateStockAlertService(StysAppDbContext dbContext)
+        => new StokUyariService(
+            dbContext,
+            new FakeMuhasebeTesisScopeService(),
+            new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])));
+
     private static IMuhasebeDonemService CreateRealMuhasebeDonemService(StysAppDbContext dbContext)
     {
         var mapperConfig = new MapperConfiguration(cfg =>
@@ -2778,6 +2883,14 @@ public class StokHareketServiceTests
             AktifMi = true
         });
 
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SetKartEsikleriAsync(StysAppDbContext dbContext, decimal? minimumStokMiktari, decimal? kritikStokMiktari, int tasinirKartId = 100)
+    {
+        var kart = await dbContext.TasinirKartlar.SingleAsync(x => x.Id == tasinirKartId);
+        kart.MinimumStokMiktari = minimumStokMiktari;
+        kart.KritikStokMiktari = kritikStokMiktari;
         await dbContext.SaveChangesAsync();
     }
 

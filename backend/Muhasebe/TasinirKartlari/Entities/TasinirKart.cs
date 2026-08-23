@@ -44,6 +44,10 @@ public class TasinirKart : BaseEntity<int>
     [MaxLength(16)]
     public string TakipTipi { get; set; } = TasinirKartTakipTipleri.Yok;
 
+    public decimal? MinimumStokMiktari { get; set; }
+
+    public decimal? KritikStokMiktari { get; set; }
+
     public decimal KdvOrani { get; set; }
 
     public bool AktifMi { get; set; } = true;

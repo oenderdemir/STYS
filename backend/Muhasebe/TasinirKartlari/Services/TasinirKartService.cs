@@ -234,6 +234,22 @@ public class TasinirKartService : BaseRdbmsService<TasinirKartDto, TasinirKart, 
             throw new BaseException("KDV orani 0 ile 100 arasinda olmalidir.", 400);
         }
 
+        if (dto.MinimumStokMiktari.HasValue && dto.MinimumStokMiktari.Value < 0)
+        {
+            throw new BaseException("Minimum stok miktari negatif olamaz.", 400);
+        }
+
+        if (dto.KritikStokMiktari.HasValue && dto.KritikStokMiktari.Value < 0)
+        {
+            throw new BaseException("Kritik stok miktari negatif olamaz.", 400);
+        }
+
+        if (dto.KritikStokMiktari.HasValue && dto.MinimumStokMiktari.HasValue
+            && dto.KritikStokMiktari.Value > dto.MinimumStokMiktari.Value)
+        {
+            throw new BaseException("Kritik stok miktari minimum stok miktarini asamaz.", 400);
+        }
+
         if (!string.IsNullOrWhiteSpace(dto.StokKodu))
         {
             var duplicate = await _repository.AnyAsync(x => x.StokKodu == dto.StokKodu && x.TesisId == dto.TesisId && (!currentId.HasValue || x.Id != currentId.Value));

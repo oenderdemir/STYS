@@ -18,6 +18,8 @@ public class TasinirKartDto : BaseRdbmsDto<int>
     public bool DemirbasMi { get; set; }
     public bool TakipliMi { get; set; }
     public string? TakipTipi { get; set; }
+    public decimal? MinimumStokMiktari { get; set; }
+    public decimal? KritikStokMiktari { get; set; }
     public decimal KdvOrani { get; set; }
     public bool AktifMi { get; set; } = true;
     public string? Aciklama { get; set; }
@@ -36,6 +38,8 @@ public class CreateTasinirKartRequest
     public bool DemirbasMi { get; set; }
     public bool TakipliMi { get; set; }
     public string? TakipTipi { get; set; }
+    public decimal? MinimumStokMiktari { get; set; }
+    public decimal? KritikStokMiktari { get; set; }
     public decimal KdvOrani { get; set; }
     public bool AktifMi { get; set; } = true;
     public string? Aciklama { get; set; }

@@ -1,6 +1,8 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.AccessScope;
 using STYS.Iller.Entities;
@@ -2095,6 +2097,22 @@ public class StokHareketServiceTests
         Assert.Contains("politika.[MaliyetYontemi]", content);
         Assert.Contains("SET [MaliyetYontemi] = N'FIFO'", content);
         Assert.Contains("CK_StokMaliyetKatmanlari_MaliyetYontemi", content);
+    }
+
+    [Fact]
+    public void AddCostMethodToStokMaliyetKatmanlariMigration_MigrationsAssemblydeDiscoverEdilir()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=StysMigrationDiscovery;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+        using var dbContext = new StysAppDbContext(options, new FakeCurrentUserAccessor(), new FakeCurrentTenantAccessor())
+        {
+            AllowExplicitTenantWritesWithoutAmbientTenant = true
+        };
+
+        var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+
+        Assert.True(migrationsAssembly.Migrations.ContainsKey("20260823220000_AddCostMethodToStokMaliyetKatmanlari"));
     }
 
     private static StysAppDbContext CreateDbContext(string? databaseName = null)

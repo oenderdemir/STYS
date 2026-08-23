@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateStokHareketRequest, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel, StokTransferRequest, UpdateStokHareketRequest } from './stok-hareketleri.dto';
+import { CreateStokHareketRequest, CurrentStokMaliyetPolitikasiModel, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokMaliyetPolitikasiModel, StokSeriBakiyeModel, StokTransferRequest, UpdateStokHareketRequest, UpsertStokMaliyetPolitikasiRequest } from './stok-hareketleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class StokHareketleriService {
@@ -98,6 +98,18 @@ export class StokHareketleriService {
         }
 
         return this.http.get<ApiResponse<StokDegerlemeModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/stok-hareketleri/degerleme`, { params }).pipe(map(this.unwrap<StokDegerlemeModel[]>('Stok degerleme alinamadi.')));
+    }
+
+    getCurrentMaliyetPolitikasi(tesisId: number, tarih: string): Observable<CurrentStokMaliyetPolitikasiModel> {
+        const params = new HttpParams()
+            .set('tesisId', tesisId)
+            .set('tarih', tarih);
+
+        return this.http.get<ApiResponse<CurrentStokMaliyetPolitikasiModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-maliyet-politikalari/current`, { params }).pipe(map(this.unwrap<CurrentStokMaliyetPolitikasiModel>('Stok maliyet politikasi alinamadi.')));
+    }
+
+    upsertMaliyetPolitikasi(payload: UpsertStokMaliyetPolitikasiRequest): Observable<StokMaliyetPolitikasiModel> {
+        return this.http.post<ApiResponse<StokMaliyetPolitikasiModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-maliyet-politikalari`, payload).pipe(map(this.unwrap<StokMaliyetPolitikasiModel>('Stok maliyet politikasi kaydedilemedi.')));
     }
 
     getStokDetay(depoId: number, tasinirKartId: number): Observable<StokDetayModel> {

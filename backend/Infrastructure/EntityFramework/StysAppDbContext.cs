@@ -31,6 +31,7 @@ using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.PaketTurleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 using STYS.Muhasebe.StokSayimlari.Entities;
 using STYS.Muhasebe.StokSerileri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
@@ -191,6 +192,7 @@ public class StysAppDbContext : DbContext
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<StokLot> StokLotlar => Set<StokLot>();
+    public DbSet<StokMaliyetPolitikasi> StokMaliyetPolitikalari => Set<StokMaliyetPolitikasi>();
     public DbSet<StokSayim> StokSayimlar => Set<StokSayim>();
     public DbSet<StokSayimSatir> StokSayimSatirlari => Set<StokSayimSatir>();
     public DbSet<StokSeri> StokSeriler => Set<StokSeri>();
@@ -2816,6 +2818,28 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.TasinirKart)
                 .WithMany()
                 .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StokMaliyetPolitikasi>(entity =>
+        {
+            entity.ToTable("StokMaliyetPolitikalari", muhasebeSchema, t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_StokMaliyetPolitikalari_MaliyetYontemi",
+                    "[MaliyetYontemi] IN (N'AgirlikliOrtalama', N'FIFO', N'LIFO')");
+            });
+
+            entity.Property(x => x.MaliYil).IsRequired();
+            entity.Property(x => x.MaliyetYontemi).HasMaxLength(32).IsRequired();
+
+            entity.HasIndex(x => new { x.TesisId, x.MaliYil })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

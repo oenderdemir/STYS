@@ -22,6 +22,8 @@ using STYS.Muhasebe.StokHareketleri.Mapping;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokHareketleri.Services;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
 using STYS.Muhasebe.StokSayimlari.Dtos;
 using STYS.Muhasebe.StokSayimlari.Mapping;
 using STYS.Muhasebe.StokSayimlari.Repositories;
@@ -275,6 +277,8 @@ public class StokSayimServiceTests
             new FakeMuhasebeDonemService(),
             userScope,
             new FakeKdvUygulamaService(),
+            CreatePolicyService(dbContext),
+            new StokMaliyetStrategyResolver([new AgirlikliOrtalamaMaliyetStrategy(dbContext)]),
             mapper);
 
         return new StokSayimService(
@@ -319,9 +323,21 @@ public class StokSayimServiceTests
             TakipTipi = takipTipi ?? (takipliMi ? TasinirKartTakipTipleri.Lot : TasinirKartTakipTipleri.Yok),
             AktifMi = true
         });
+        dbContext.StokMaliyetPolitikalari.Add(new STYS.Muhasebe.StokMaliyetPolitikalari.Entities.StokMaliyetPolitikasi
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.AgirlikliOrtalama
+        });
 
         await dbContext.SaveChangesAsync();
     }
+
+    private static IStokMaliyetPolitikasiService CreatePolicyService(StysAppDbContext dbContext)
+        => new StokMaliyetPolitikasiService(
+            dbContext,
+            new FakeMuhasebeDonemService(),
+            new FakeMuhasebeTesisScopeService());
 
     private static async Task<int> SeedMovementAsync(StysAppDbContext dbContext, int depoId, int tasinirKartId, string hareketTipi, decimal miktar, decimal birimFiyat, string durum, string? sayimFarkiYonu = null, int? stokLotId = null, int? stokSeriId = null)
     {
@@ -419,6 +435,13 @@ public class StokSayimServiceTests
         private readonly DomainAccessScope _scope;
         public FakeUserAccessScopeService(DomainAccessScope scope) => _scope = scope;
         public Task<DomainAccessScope> GetCurrentScopeAsync(CancellationToken cancellationToken = default) => Task.FromResult(_scope);
+    }
+
+    private sealed class FakeMuhasebeTesisScopeService : IMuhasebeTesisScopeService
+    {
+        public Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<int[]> GetEffectiveTesisIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new[] { 1 });
+        public Task<int[]> GetEffectiveTesisIdsAsync(DomainAccessScope scope, CancellationToken cancellationToken = default) => Task.FromResult(new[] { 1 });
     }
 
     private sealed class FakeCurrentUserAccessor : ICurrentUserAccessor

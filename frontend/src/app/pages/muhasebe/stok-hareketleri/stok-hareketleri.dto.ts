@@ -130,6 +130,32 @@ export interface StokDegerlemeModel {
     maliyetEksikMi: boolean;
 }
 
+export interface StokMaliyetPolitikasiModel {
+    id: number;
+    tesisId: number;
+    maliYil: number;
+    maliyetYontemi: string;
+}
+
+export interface CurrentStokMaliyetPolitikasiModel {
+    tesisId: number;
+    maliYil: number;
+    maliyetYontemi?: string | null;
+    politikaSecildiMi: boolean;
+}
+
+export interface UpsertStokMaliyetPolitikasiRequest {
+    tesisId: number;
+    maliYil: number;
+    maliyetYontemi: string;
+}
+
+export const STOK_MALIYET_YONTEMI_SECENEKLERI: Array<{ label: string; value: string; disabled?: boolean }> = [
+    { label: 'Ağırlıklı Ortalama', value: 'AgirlikliOrtalama' },
+    { label: 'FIFO (Henüz desteklenmiyor)', value: 'FIFO', disabled: true },
+    { label: 'LIFO (Henüz desteklenmiyor)', value: 'LIFO', disabled: true }
+];
+
 export interface StokDetaySatirModel {
     hareketTarihi?: string | null;
     stokLotId?: number | null;

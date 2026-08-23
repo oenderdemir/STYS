@@ -20,6 +20,8 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getStokBakiye: () => of([]),
                         getStokKartOzet: () => of([]),
                         getStokDegerleme: () => of([]),
+                        getCurrentMaliyetPolitikasi: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama', politikaSecildiMi: true }),
+                        upsertMaliyetPolitikasi: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }),
                         getLotBakiyeleri: () => of([]),
                         getSeriBakiyeleri: () => of([]),
                         create: () => of({}),
@@ -301,6 +303,8 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                         getStokDegerleme: () => of([
                             { depoId: 10, depoKod: 'D-001', depoAd: 'Ana Depo', tasinirKartId: 100, stokKodu: 'STK-100', tasinirKartAd: 'Kart 100', birim: 'Adet', bakiyeMiktari: 15, ortalamaMaliyet: 120, toplamStokDegeri: 1800, maliyetEksikMi: true }
                         ]),
+                        getCurrentMaliyetPolitikasi: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: null, politikaSecildiMi: false }),
+                        upsertMaliyetPolitikasi: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }),
                         getLotBakiyeleri: () => of([]),
                         getSeriBakiyeleri: () => of([]),
                         create: () => of({}),
@@ -338,5 +342,6 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(component.stokDegerleme).toEqual([
             jasmine.objectContaining({ depoId: 10, ortalamaMaliyet: 120, toplamStokDegeri: 1800, maliyetEksikMi: true })
         ]);
+        expect(component.maliyetPolitikasiDialogVisible).toBeTrue();
     });
 });

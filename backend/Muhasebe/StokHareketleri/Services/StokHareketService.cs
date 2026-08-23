@@ -13,6 +13,7 @@ using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokLotlari.Dtos;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
 using STYS.Muhasebe.StokSerileri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Services;
@@ -33,6 +34,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IKdvUygulamaService _kdvUygulamaService;
+    private readonly IStokMaliyetPolitikasiService _stokMaliyetPolitikasiService;
+    private readonly IStokMaliyetStrategyResolver _stokMaliyetStrategyResolver;
     private readonly IMapper _mapper;
 
     public StokHareketService(
@@ -44,6 +47,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         IMuhasebeDonemService muhasebeDonemService,
         IUserAccessScopeService userAccessScopeService,
         IKdvUygulamaService kdvUygulamaService,
+        IStokMaliyetPolitikasiService stokMaliyetPolitikasiService,
+        IStokMaliyetStrategyResolver stokMaliyetStrategyResolver,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -55,6 +60,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         _muhasebeDonemService = muhasebeDonemService;
         _userAccessScopeService = userAccessScopeService;
         _kdvUygulamaService = kdvUygulamaService;
+        _stokMaliyetPolitikasiService = stokMaliyetPolitikasiService;
+        _stokMaliyetStrategyResolver = stokMaliyetStrategyResolver;
         _mapper = mapper;
     }
 
@@ -342,7 +349,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
             var transferGrupId = Guid.NewGuid();
             var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
-            var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, cancellationToken);
+            var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
             var transferMaliyetBirimFiyat = kaynakMaliyetSnapshot.OrtalamaMaliyet;
             var transferMaliyetTutari = CalculateCostAmount(request.Miktar, transferMaliyetBirimFiyat);
 
@@ -912,73 +919,41 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private async Task ApplyCostSnapshotAsync(StokHareketDto dto, StokHareket? existing, CancellationToken cancellationToken)
     {
-        if (!StokHareketTipleri.IsGirisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu)
-            && !StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
+        if (!IsCostSensitiveMovement(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
         {
             dto.MaliyetBirimFiyat = null;
             dto.MaliyetTutari = null;
             return;
         }
 
-        if (StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
-        {
-            var snapshot = await GetBaseCostSnapshotForDtoAsync(dto, existing, cancellationToken);
-            dto.MaliyetBirimFiyat = snapshot.OrtalamaMaliyet;
-            dto.MaliyetTutari = CalculateCostAmount(dto.Miktar, snapshot.OrtalamaMaliyet);
-            return;
-        }
-
-        if (string.Equals(dto.HareketTipi, StokHareketTipleri.SayimFarki, StringComparison.Ordinal)
-            && string.Equals(dto.SayimFarkiYonu, StokSayimFarkiYonleri.Fazla, StringComparison.Ordinal))
-        {
-            // Bu fazda kullanıcıdan ayrı maliyet alınmıyor; varsa mevcut kart ortalaması kullanılır, yoksa 0 kabul edilir.
-            var snapshot = await GetBaseCostSnapshotForDtoAsync(dto, existing, cancellationToken);
-            dto.MaliyetBirimFiyat = snapshot.OrtalamaMaliyet;
-            dto.MaliyetTutari = CalculateCostAmount(dto.Miktar, snapshot.OrtalamaMaliyet);
-            return;
-        }
-
-        dto.MaliyetBirimFiyat = Math.Round(dto.BirimFiyat, 6, MidpointRounding.AwayFromZero);
-        dto.MaliyetTutari = CalculateCostAmount(dto.Miktar, dto.MaliyetBirimFiyat.Value);
+        var strategy = await ResolveCostStrategyAsync(dto.DepoId, dto.HareketTarihi, cancellationToken);
+        await strategy.ApplyCostSnapshotAsync(dto, existing, cancellationToken);
     }
 
-    private async Task<StockCostSnapshot> GetBaseCostSnapshotForDtoAsync(StokHareketDto dto, StokHareket? existing, CancellationToken cancellationToken)
+    private async Task<StokCostSnapshot> GetCurrentCostSnapshotAsync(int depoId, int tasinirKartId, DateTime? hareketTarihi, CancellationToken cancellationToken)
     {
-        var snapshot = await GetCurrentCostSnapshotAsync(dto.DepoId, dto.TasinirKartId, cancellationToken);
-        if (existing is null
-            || existing.DepoId != dto.DepoId
-            || existing.TasinirKartId != dto.TasinirKartId)
+        var depo = await GetDepoOrThrowAsync(depoId);
+        if (!depo.TesisId.HasValue)
         {
-            return snapshot;
+            throw new BaseException("Depo tesis bilgisi bulunamadı.", 400);
         }
 
-        var baseQuantity = snapshot.BakiyeMiktari - CalculateMovementEffect(existing);
-        var baseValue = snapshot.ToplamStokDegeri - CalculateCostValueEffect(existing);
-        return CreateStockCostSnapshot(baseQuantity, baseValue);
+        var effectiveTarih = hareketTarihi ?? DateTime.UtcNow;
+        var maliyetYontemi = await _stokMaliyetPolitikasiService.GetRequiredMaliyetYontemiAsync(depo.TesisId.Value, effectiveTarih, cancellationToken);
+        var strategy = _stokMaliyetStrategyResolver.Resolve(maliyetYontemi);
+        return await strategy.GetCurrentCostSnapshotAsync(depoId, tasinirKartId, cancellationToken);
     }
 
-    private async Task<StockCostSnapshot> GetCurrentCostSnapshotAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)
+    private async Task<IStokMaliyetStrategy> ResolveCostStrategyAsync(int depoId, DateTime hareketTarihi, CancellationToken cancellationToken)
     {
-        var rows = await _dbContext.StokHareketleri
-            .AsNoTracking()
-            .Where(x =>
-                x.DepoId == depoId
-                && x.TasinirKartId == tasinirKartId
-                && x.Durum == StokHareketDurumlari.Aktif)
-            .Select(x => new
-            {
-                x.HareketTipi,
-                x.TransferYonu,
-                x.SayimFarkiYonu,
-                x.Miktar,
-                x.BirimFiyat,
-                x.MaliyetTutari
-            })
-            .ToListAsync(cancellationToken);
+        var depo = await GetDepoOrThrowAsync(depoId);
+        if (!depo.TesisId.HasValue)
+        {
+            throw new BaseException("Depo tesis bilgisi bulunamadı.", 400);
+        }
 
-        var bakiyeMiktari = rows.Sum(x => CalculateMovementEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar, StokHareketDurumlari.Aktif));
-        var toplamStokDegeri = rows.Sum(x => CalculateCostValueEffect(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar, x.MaliyetTutari, x.BirimFiyat, StokHareketDurumlari.Aktif));
-        return CreateStockCostSnapshot(bakiyeMiktari, toplamStokDegeri);
+        var maliyetYontemi = await _stokMaliyetPolitikasiService.GetRequiredMaliyetYontemiAsync(depo.TesisId.Value, hareketTarihi, cancellationToken);
+        return _stokMaliyetStrategyResolver.Resolve(maliyetYontemi);
     }
 
     private async Task EnsureCostMutationAllowedAsync(StokHareket existing, StokHareketDto dto, bool hasCostSensitiveChange, CancellationToken cancellationToken)
@@ -1545,43 +1520,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static decimal CalculateProjectedBalance(decimal currentBalance, decimal existingMovementEffect, decimal newMovementEffect)
         => currentBalance - existingMovementEffect + newMovementEffect;
 
-    private static StockCostSnapshot CreateStockCostSnapshot(decimal bakiyeMiktari, decimal toplamStokDegeri)
-    {
-        var ortalamaMaliyet = bakiyeMiktari <= 0
-            ? 0m
-            : Math.Round(toplamStokDegeri / bakiyeMiktari, 6, MidpointRounding.AwayFromZero);
-
-        return new StockCostSnapshot(bakiyeMiktari, toplamStokDegeri, ortalamaMaliyet);
-    }
-
     private static decimal CalculateMovementEffect(StokHareketDto dto)
         => CalculateMovementEffect(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu, dto.Miktar, dto.Durum);
 
     private static decimal CalculateMovementEffect(StokHareket hareket)
         => CalculateMovementEffect(hareket.HareketTipi, hareket.TransferYonu, hareket.SayimFarkiYonu, hareket.Miktar, hareket.Durum);
-
-    private static decimal CalculateCostValueEffect(StokHareket hareket)
-        => CalculateCostValueEffect(hareket.HareketTipi, hareket.TransferYonu, hareket.SayimFarkiYonu, hareket.Miktar, hareket.MaliyetTutari, hareket.BirimFiyat, hareket.Durum);
-
-    private static decimal CalculateCostValueEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar, decimal? maliyetTutari, decimal birimFiyat, string? durum)
-    {
-        if (!string.Equals(durum, StokHareketDurumlari.Aktif, StringComparison.Ordinal))
-        {
-            return 0m;
-        }
-
-        if (StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
-        {
-            return maliyetTutari ?? CalculateCostAmount(miktar, birimFiyat);
-        }
-
-        if (StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu))
-        {
-            return -(maliyetTutari ?? 0m);
-        }
-
-        return 0m;
-    }
 
     private static decimal CalculateMovementEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar, string? durum)
     {
@@ -1744,8 +1687,6 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private readonly record struct StockKey(int DepoId, int TasinirKartId);
     private readonly record struct LotStockKey(int DepoId, int TasinirKartId, int StokLotId);
-    private readonly record struct StockCostSnapshot(decimal BakiyeMiktari, decimal ToplamStokDegeri, decimal OrtalamaMaliyet);
-
     private static Func<IQueryable<StokHareket>, IQueryable<StokHareket>> BuildScopedIncludeQuery(
         DomainAccessScope scope,
         Func<IQueryable<StokHareket>, IQueryable<StokHareket>>? include)

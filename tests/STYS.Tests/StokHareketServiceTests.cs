@@ -22,6 +22,8 @@ using STYS.Muhasebe.StokHareketleri.Mapping;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokHareketleri.Services;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
 using STYS.Muhasebe.StokSerileri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Repositories;
@@ -1060,6 +1062,114 @@ public class StokHareketServiceTests
         Assert.False(satir.MaliyetEksikMi);
     }
 
+    [Fact]
+    public async Task AddAsync_MaliyetPolitikasiYoksaMaliyetEtkiliHareketiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.StokMaliyetPolitikalari.RemoveRange(dbContext.StokMaliyetPolitikalari);
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("2026 mali yılı için stok maliyet yöntemi seçilmelidir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_SnapshotVarkenYontemDegisikliginiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var politikaService = CreatePolicyService(dbContext);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+        var politika = await dbContext.StokMaliyetPolitikalari.SingleAsync();
+        politika.MaliyetYontemi = StokMaliyetYontemleri.FIFO;
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.AgirlikliOrtalama
+        }));
+
+        Assert.Equal("Bu mali yılda maliyetlendirilmiş stok hareketleri bulunduğu için maliyet yöntemi değiştirilemez.", ex.Message);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_SnapshotYokkenDesteklenenYontemeGuncelleyebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var politika = await dbContext.StokMaliyetPolitikalari.SingleAsync();
+        politika.MaliyetYontemi = StokMaliyetYontemleri.FIFO;
+        await dbContext.SaveChangesAsync();
+        var politikaService = CreatePolicyService(dbContext);
+
+        var result = await politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.AgirlikliOrtalama
+        });
+
+        Assert.Equal(StokMaliyetYontemleri.AgirlikliOrtalama, result.MaliyetYontemi);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_UnsupportedFIFOseciminiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        }));
+
+        Assert.Equal("Seçilen stok maliyet yöntemi henüz desteklenmiyor.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AddAsync_DesteklenmeyenPolitikaSeciliyseHareketiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var politika = await dbContext.StokMaliyetPolitikalari.SingleAsync();
+        politika.MaliyetYontemi = StokMaliyetYontemleri.FIFO;
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100)));
+
+        Assert.Equal("Seçilen stok maliyet yöntemi henüz desteklenmiyor.", ex.Message);
+    }
+
+    [Fact]
+    public void AddStokMaliyetPolitikasiMigration_BackfillSqlIcerir()
+    {
+        var migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations", "AddStokMaliyetPolitikasiPerFiscalYear.cs");
+        if (!File.Exists(migrationPath))
+        {
+            migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations");
+            var file = Directory.GetFiles(migrationPath, "*AddStokMaliyetPolitikasiPerFiscalYear.cs").Single();
+            migrationPath = file;
+        }
+
+        var content = File.ReadAllText(migrationPath);
+
+        Assert.Contains("AgirlikliOrtalama", content);
+        Assert.Contains("StokMaliyetPolitikalari", content);
+        Assert.Contains("MaliyetBirimFiyat", content);
+    }
+
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -1093,8 +1203,18 @@ public class StokHareketServiceTests
             muhasebeDonemService ?? new FakeMuhasebeDonemService(),
             new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
             kdvService ?? new FakeKdvUygulamaService(),
+            CreatePolicyService(dbContext, muhasebeDonemService),
+            new StokMaliyetStrategyResolver([new AgirlikliOrtalamaMaliyetStrategy(dbContext)]),
             mapper);
     }
+
+    private static IStokMaliyetPolitikasiService CreatePolicyService(
+        StysAppDbContext dbContext,
+        FakeMuhasebeDonemService? muhasebeDonemService = null)
+        => new StokMaliyetPolitikasiService(
+            dbContext,
+            muhasebeDonemService ?? new FakeMuhasebeDonemService(),
+            new FakeMuhasebeTesisScopeService());
 
     private static StokTransferRequest CreateTransferRequest(int? stokLotId = null, int? stokSeriId = null, string? seriNo = null, decimal miktar = 10, decimal birimFiyat = 1)
     {
@@ -1139,6 +1259,16 @@ public class StokHareketServiceTests
             Telefon = "000",
             Adres = "Adres 1",
             AktifMi = true
+        });
+        dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
+        {
+            Id = 1,
+            TesisId = 1,
+            MaliYil = 2026,
+            DonemNo = 8,
+            BaslangicTarihi = new DateTime(2026, 8, 1),
+            BitisTarihi = new DateTime(2026, 8, 31),
+            KapaliMi = false
         });
 
         dbContext.MuhasebeHesapPlanlari.Add(new MuhasebeHesapPlani
@@ -1201,6 +1331,13 @@ public class StokHareketServiceTests
             TakipTipi = takipTipi ?? (takipliMi ? TasinirKartTakipTipleri.Lot : TasinirKartTakipTipleri.Yok),
             KdvOrani = 20,
             AktifMi = true
+        });
+
+        dbContext.StokMaliyetPolitikalari.Add(new STYS.Muhasebe.StokMaliyetPolitikalari.Entities.StokMaliyetPolitikasi
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.AgirlikliOrtalama
         });
 
         await dbContext.SaveChangesAsync();
@@ -1541,6 +1678,13 @@ public class StokHareketServiceTests
 
         public Task<DomainAccessScope> GetCurrentScopeAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(_scope);
+    }
+
+    private sealed class FakeMuhasebeTesisScopeService : IMuhasebeTesisScopeService
+    {
+        public Task EnsureCanAccessTesisAsync(int tesisId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<int[]> GetEffectiveTesisIdsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new[] { 1 });
+        public Task<int[]> GetEffectiveTesisIdsAsync(DomainAccessScope scope, CancellationToken cancellationToken = default) => Task.FromResult(new[] { 1 });
     }
 
     private sealed class FakeCurrentUserAccessor : ICurrentUserAccessor

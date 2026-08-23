@@ -30,7 +30,7 @@ import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.ser
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
+import { CurrentStokMaliyetPolitikasiModel, STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_MALIYET_YONTEMI_SECENEKLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -90,8 +90,12 @@ export class StokHareketleriPage implements OnInit {
     stokBakiye: StokBakiyeModel[] = [];
     stokKartOzet: StokKartOzetModel[] = [];
     stokDegerleme: StokDegerlemeModel[] = [];
+    currentMaliyetPolitikasi: CurrentStokMaliyetPolitikasiModel | null = null;
     expandedStokDetayKeys: Record<string, boolean> = {};
     model: StokHareketModel = this.createEmpty();
+    maliyetPolitikasiDialogVisible = false;
+    maliyetPolitikasiSaving = false;
+    secilenMaliyetYontemi = 'AgirlikliOrtalama';
 
     depoOptions: Array<{ label: string; value: number }> = [];
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
@@ -129,6 +133,7 @@ export class StokHareketleriPage implements OnInit {
     private stokDetayLoadingKeys = new Set<string>();
 
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
+    readonly maliyetYontemiSecenekleri = STOK_MALIYET_YONTEMI_SECENEKLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
     readonly sayimFarkiYonleri = STOK_SAYIM_FARKI_YONLERI;
     readonly kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
@@ -259,6 +264,8 @@ export class StokHareketleriPage implements OnInit {
             this.stokBakiye = [];
             this.stokKartOzet = [];
             this.stokDegerleme = [];
+            this.currentMaliyetPolitikasi = null;
+            this.maliyetPolitikasiDialogVisible = false;
             this.resetStokDetayState();
             return;
         }
@@ -282,6 +289,41 @@ export class StokHareketleriPage implements OnInit {
                 this.stokDegerleme = items;
                 this.cdr.detectChanges();
             }
+        });
+        this.loadCurrentMaliyetPolitikasi(tesisId);
+    }
+
+    saveMaliyetPolitikasi(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null || !this.currentMaliyetPolitikasi) {
+            return;
+        }
+
+        this.maliyetPolitikasiSaving = true;
+        this.service.upsertMaliyetPolitikasi({
+            tesisId,
+            maliYil: this.currentMaliyetPolitikasi.maliYil,
+            maliyetYontemi: this.secilenMaliyetYontemi
+        }).pipe(finalize(() => {
+            this.maliyetPolitikasiSaving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (result) => {
+                this.currentMaliyetPolitikasi = {
+                    tesisId: result.tesisId,
+                    maliYil: result.maliYil,
+                    maliyetYontemi: result.maliyetYontemi,
+                    politikaSecildiMi: true
+                };
+                this.maliyetPolitikasiDialogVisible = false;
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Maliyet Yöntemi Kaydedildi',
+                    detail: `${result.maliYil} mali yılı için stok maliyet yöntemi kaydedildi.`
+                });
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
         });
     }
 
@@ -1041,6 +1083,31 @@ export class StokHareketleriPage implements OnInit {
         return '-';
     }
 
+    getMaliyetPolitikasiLabel(): string {
+        if (!this.currentMaliyetPolitikasi) {
+            return 'Maliyet yöntemi yükleniyor';
+        }
+
+        if (!this.currentMaliyetPolitikasi.politikaSecildiMi || !this.currentMaliyetPolitikasi.maliyetYontemi) {
+            return 'Maliyet yöntemi seçilmedi';
+        }
+
+        return `${this.currentMaliyetPolitikasi.maliYil} Maliyet Yöntemi: ${this.getMaliyetYontemiLabel(this.currentMaliyetPolitikasi.maliyetYontemi)}`;
+    }
+
+    getMaliyetYontemiLabel(value: string | null | undefined): string {
+        switch (value) {
+            case 'AgirlikliOrtalama':
+                return 'Ağırlıklı Ortalama';
+            case 'FIFO':
+                return 'FIFO';
+            case 'LIFO':
+                return 'LIFO';
+            default:
+                return value ?? '-';
+        }
+    }
+
     getDetayTrackingLabel(row: Pick<StokDetayModel['satirlar'][number], 'lotNo' | 'seriNo'>): string {
         if (row.lotNo?.trim()) {
             return row.lotNo;
@@ -1269,5 +1336,17 @@ export class StokHareketleriPage implements OnInit {
     private getLotOptionLabel(item: StokLotBakiyeModel): string {
         const skt = item.sonKullanmaTarihi ? ` | SKT: ${formatDateForApi(item.sonKullanmaTarihi)}` : '';
         return `${item.lotNo} | Bakiye: ${item.bakiyeMiktari}${skt}`;
+    }
+
+    private loadCurrentMaliyetPolitikasi(tesisId: number): void {
+        this.service.getCurrentMaliyetPolitikasi(tesisId, new Date().toISOString()).subscribe({
+            next: (item) => {
+                this.currentMaliyetPolitikasi = item;
+                this.secilenMaliyetYontemi = item.maliyetYontemi ?? 'AgirlikliOrtalama';
+                this.maliyetPolitikasiDialogVisible = !item.politikaSecildiMi;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 }

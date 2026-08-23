@@ -8,6 +8,7 @@
     <ng-template #start>
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load(); loadSummary()" />
+        <span class="ml-3 text-sm font-medium">{{ getMaliyetPolitikasiLabel() }}</span>
     </ng-template>
     <ng-template #end>
         <p-select styleClass="min-w-18rem" [options]="depoOptions" optionLabel="label" optionValue="value" placeholder="Depo filtrele" [showClear]="true" [(ngModel)]="selectedDepoId" (onChange)="onDepoFilterChange()" appendTo="body" />
@@ -304,5 +305,28 @@
     <ng-template #footer>
         <p-button label="Vazgec" icon="pi pi-times" severity="secondary" [outlined]="true" (onClick)="dialogVisible = false" />
         <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="save()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="maliyetPolitikasiDialogVisible" [modal]="true" [closable]="false" [draggable]="false" [header]="(currentMaliyetPolitikasi?.maliYil ?? '-') + ' Mali Yılı Stok Maliyet Yöntemi'" [style]="{ width: '34rem', 'max-width': '95vw' }">
+    <div class="flex flex-column gap-3">
+        <p>Bu mali yıl için stok maliyet yöntemi seçilmelidir.</p>
+        <div class="flex flex-column gap-2">
+            <button
+                *ngFor="let secenek of maliyetYontemiSecenekleri"
+                pButton
+                type="button"
+                class="w-full justify-content-start"
+                [label]="secenek.label"
+                [disabled]="!!secenek.disabled"
+                [severity]="secilenMaliyetYontemi === secenek.value ? 'primary' : 'secondary'"
+                [outlined]="secilenMaliyetYontemi !== secenek.value"
+                (click)="secilenMaliyetYontemi = secenek.value">
+            </button>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="maliyetPolitikasiSaving" (onClick)="saveMaliyetPolitikasi()" />
     </ng-template>
 </p-dialog>

@@ -26,6 +26,8 @@ using STYS.Muhasebe.StokHareketleri.Mapping;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokHareketleri.Services;
 using STYS.Muhasebe.StokLotlari.Entities;
+using STYS.Muhasebe.StokLotlari.Dtos;
+using STYS.Muhasebe.StokLotlari.Services;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
@@ -251,6 +253,126 @@ public class StokHareketServiceTests
             .OrderBy(x => x.Id)
             .ToListAsync();
         Assert.Equal(new[] { StokHareketDurumlari.Aktif, StokHareketDurumlari.Iptal }, hareketler.Select(x => x.Durum));
+    }
+
+    [Fact]
+    public async Task GetSktUyarilariAsync_GecmisLotuGecmisDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var lotId = await CreateLotAsync(dbContext, "LOT-OLD", new DateTime(2026, 8, 22));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        var service = CreateLotSktUyariService(dbContext);
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal("LOT-OLD", row.LotNo);
+        Assert.Equal(StokLotSktUyariDurumlari.Gecmis, row.Durum);
+        Assert.Equal(-1, row.KalanGun);
+    }
+
+    [Fact]
+    public async Task GetSktUyarilariAsync_YediGunlukLotuKritikDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var lotId = await CreateLotAsync(dbContext, "LOT-7", new DateTime(2026, 8, 30));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        var service = CreateLotSktUyariService(dbContext);
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(StokLotSktUyariDurumlari.Kritik, row.Durum);
+        Assert.Equal(7, row.KalanGun);
+    }
+
+    [Fact]
+    public async Task GetSktUyarilariAsync_OtuzGunlukLotuYaklasiyorDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var lotId = await CreateLotAsync(dbContext, "LOT-30", new DateTime(2026, 9, 22));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        var service = CreateLotSktUyariService(dbContext);
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(StokLotSktUyariDurumlari.Yaklasiyor, row.Durum);
+        Assert.Equal(30, row.KalanGun);
+    }
+
+    [Fact]
+    public async Task GetSktUyarilariAsync_OtuzBirGunlukLotuNormalDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var lotId = await CreateLotAsync(dbContext, "LOT-31", new DateTime(2026, 9, 23));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        var service = CreateLotSktUyariService(dbContext);
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(StokLotSktUyariDurumlari.Normal, row.Durum);
+        Assert.Equal(31, row.KalanGun);
+    }
+
+    [Fact]
+    public async Task GetSktUyarilariAsync_SifirBakiyeliLotuGostermez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        var lotId = await CreateLotAsync(dbContext, "LOT-ZERO", new DateTime(2026, 9, 1));
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Cikis, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lotId);
+        var service = CreateLotSktUyariService(dbContext);
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetSktUyarilariAsync_DepoVeTesisYetkisiniKorur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true);
+        await SeedCrossTesisDataAsync(dbContext);
+
+        dbContext.Depolar.Add(new Depo
+        {
+            Id = 30,
+            TesisId = 2,
+            Kod = "D-003",
+            Ad = "Tesis 2 Deposu",
+            AktifMi = true,
+            MuhasebeHesapPlaniId = 1,
+            MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
+        });
+        var lot1Id = await CreateLotAsync(dbContext, "LOT-T1", new DateTime(2026, 8, 30));
+        dbContext.StokLotlar.Add(new StokLot
+        {
+            TesisId = 2,
+            TasinirKartId = 101,
+            LotNo = "LOT-T2",
+            SonKullanmaTarihi = new DateTime(2026, 8, 30),
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+        var lot2Id = await dbContext.StokLotlar.Where(x => x.TesisId == 2).Select(x => x.Id).SingleAsync();
+
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lot1Id);
+        await SeedMovementAsync(dbContext, 30, 101, StokHareketTipleri.Giris, 5, 1, StokHareketDurumlari.Aktif, stokLotId: lot2Id);
+        var service = CreateLotSktUyariService(dbContext);
+
+        var result = await service.GetSktUyarilariAsync(1, null, null, false);
+
+        var row = Assert.Single(result);
+        Assert.Equal(10, row.DepoId);
+        Assert.Equal("LOT-T1", row.LotNo);
     }
 
     [Fact]
@@ -2163,6 +2285,13 @@ public class StokHareketServiceTests
             new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
             new StokHareketRepository(dbContext, new MapperConfiguration(cfg => cfg.AddProfile<StokHareketProfile>(), NullLoggerFactory.Instance).CreateMapper()));
 
+    private static IStokLotSktUyariService CreateLotSktUyariService(StysAppDbContext dbContext)
+        => new StokLotSktUyariService(
+            dbContext,
+            new FakeMuhasebeTesisScopeService(),
+            new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 23, 0, 0, 0, TimeSpan.Zero)));
+
     private static IMuhasebeDonemService CreateRealMuhasebeDonemService(StysAppDbContext dbContext)
     {
         var mapperConfig = new MapperConfiguration(cfg =>
@@ -2677,6 +2806,15 @@ public class StokHareketServiceTests
 
         public Task<DomainAccessScope> GetCurrentScopeAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(_scope);
+    }
+
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _zaman;
+
+        public FixedTimeProvider(DateTimeOffset zaman) => _zaman = zaman;
+
+        public override DateTimeOffset GetUtcNow() => _zaman;
     }
 
     private sealed class FakeMuhasebeTesisScopeService : IMuhasebeTesisScopeService

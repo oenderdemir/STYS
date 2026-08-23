@@ -1,0 +1,80 @@
+<p-toast></p-toast>
+
+<app-muhasebe-tesis-context-bar />
+
+<p-toolbar styleClass="mb-3">
+    <ng-template pTemplate="start">
+        <div class="flex flex-wrap gap-2 align-items-center">
+            <p-select
+                [options]="depoOptions"
+                [(ngModel)]="selectedDepoId"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Depo"
+                appendTo="body"
+                [showClear]="true"
+                styleClass="w-15rem" />
+
+            <p-select
+                [options]="tasinirKartOptions"
+                [(ngModel)]="selectedTasinirKartId"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Kart"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterBy="label"
+                styleClass="w-18rem" />
+
+            <div class="flex align-items-center gap-2 px-2">
+                <p-checkbox [(ngModel)]="sadeceRiskli" [binary]="true" inputId="sadeceRiskli"></p-checkbox>
+                <label for="sadeceRiskli">Sadece riskli lotlar</label>
+            </div>
+        </div>
+    </ng-template>
+    <ng-template pTemplate="end">
+        <div class="flex gap-2">
+            <p-button label="Temizle" icon="pi pi-filter-slash" severity="secondary" text (onClick)="clearFilters()"></p-button>
+            <p-button label="Listele" icon="pi pi-search" (onClick)="load()"></p-button>
+        </div>
+    </ng-template>
+</p-toolbar>
+
+<p-table
+    [value]="records"
+    [loading]="loading"
+    responsiveLayout="scroll"
+    styleClass="p-datatable-sm">
+    <ng-template pTemplate="header">
+        <tr>
+            <th>Depo</th>
+            <th>Stok Kodu</th>
+            <th>Kart</th>
+            <th>Lot</th>
+            <th>SKT</th>
+            <th>Kalan Miktar</th>
+            <th>Kalan Gün</th>
+            <th>Durum</th>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-row>
+        <tr>
+            <td>{{ row.depoKod }} - {{ row.depoAd }}</td>
+            <td>{{ row.stokKodu }}</td>
+            <td>{{ row.tasinirKartAd }}</td>
+            <td>{{ row.lotNo }}</td>
+            <td>{{ formatDate(row.sonKullanmaTarihi) }}</td>
+            <td>{{ row.kalanMiktar }}</td>
+            <td>{{ row.kalanGun }}</td>
+            <td>
+                <p-tag [value]="row.durum" [severity]="getDurumSeverity(row.durum)"></p-tag>
+            </td>
+        </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+        <tr>
+            <td colspan="8" class="text-center py-4">Filtreye uygun lot bulunamadı.</td>
+        </tr>
+    </ng-template>
+</p-table>

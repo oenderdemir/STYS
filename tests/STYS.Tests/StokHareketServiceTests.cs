@@ -1428,6 +1428,41 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task CreateFifoBaslangicStoguAsync_SoftDeleteDonemiMaliYilBaslangicindaKullanmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        await SeedSourceStockAsync(dbContext, 10);
+        var silinmisDonem = new MuhasebeDonem
+        {
+            Id = 2,
+            TesisId = 1,
+            MaliYil = 2026,
+            DonemNo = 0,
+            BaslangicTarihi = new DateTime(2025, 12, 1),
+            BitisTarihi = new DateTime(2025, 12, 31),
+            KapaliMi = false
+        };
+        dbContext.MuhasebeDonemler.Add(silinmisDonem);
+        await dbContext.SaveChangesAsync();
+        silinmisDonem.IsDeleted = true;
+        await dbContext.SaveChangesAsync();
+        var politikaService = CreatePolicyService(dbContext);
+
+        await politikaService.CreateFifoBaslangicStoguAsync(new CreateFifoBaslangicStoguRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            Satirlar = [new CreateFifoBaslangicStoguSatirRequest { DepoId = 10, TasinirKartId = 100, BirimMaliyet = 80 }]
+        });
+
+        var katman = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KatmanKaynakTipi == StokMaliyetKatmanKaynakTipleri.BaslangicStogu);
+
+        Assert.Equal(new DateTime(2026, 8, 1), katman.GirisTarihi);
+    }
+
+    [Fact]
     public async Task StokMaliyetPolitikasiService_SnapshotVarkenYontemDegisikliginiReddeder()
     {
         await using var dbContext = CreateDbContext();
@@ -1686,6 +1721,23 @@ public class StokHareketServiceTests
         Assert.Contains("AgirlikliOrtalama", content);
         Assert.Contains("StokMaliyetPolitikalari", content);
         Assert.Contains("MaliyetBirimFiyat", content);
+    }
+
+    [Fact]
+    public void AddFifoOpeningStockLayersMigration_KatmanKaynakTipiniStokHareketiOlarakBackfillEder()
+    {
+        var migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations", "20260823203700_AddFifoOpeningStockLayers.cs");
+        if (!File.Exists(migrationPath))
+        {
+            migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations");
+            migrationPath = Directory.GetFiles(migrationPath, "*AddFifoOpeningStockLayers.cs").Single();
+        }
+
+        var content = File.ReadAllText(migrationPath);
+
+        Assert.Contains("defaultValue: \"StokHareketi\"", content);
+        Assert.Contains("UPDATE [muhasebe].[StokMaliyetKatmanlari]", content);
+        Assert.Contains("SET [KatmanKaynakTipi] = N'StokHareketi'", content);
     }
 
     private static StysAppDbContext CreateDbContext(string? databaseName = null)

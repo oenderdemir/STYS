@@ -26,7 +26,14 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 type: "nvarchar(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "StokHareketi");
+
+            migrationBuilder.Sql("""
+                UPDATE [muhasebe].[StokMaliyetKatmanlari]
+                SET [KatmanKaynakTipi] = N'StokHareketi'
+                WHERE [KatmanKaynakTipi] IS NULL
+                   OR [KatmanKaynakTipi] = N'';
+                """);
         }
 
         /// <inheritdoc />

@@ -330,7 +330,7 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
     {
         var baslangic = await _dbContext.MuhasebeDonemler
             .AsNoTracking()
-            .Where(x => x.TesisId == tesisId && x.MaliYil == maliYil)
+            .Where(x => x.TesisId == tesisId && x.MaliYil == maliYil && x.IsDeleted == false)
             .OrderBy(x => x.BaslangicTarihi)
             .Select(x => (DateTime?)x.BaslangicTarihi)
             .FirstOrDefaultAsync(cancellationToken);

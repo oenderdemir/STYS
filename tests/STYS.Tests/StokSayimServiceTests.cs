@@ -144,6 +144,70 @@ public class StokSayimServiceTests
     }
 
     [Fact]
+    public async Task KesinlestirAsync_AyniKartIcinIkiYeniFarkliLot_DuplicateKeyHatasiUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Lot);
+        var service = CreateSayimService(dbContext);
+
+        var sayim = await service.AddAsync(new StokSayimDto { DepoId = 10, TesisId = 1, SayimTarihi = new DateTime(2026, 8, 23, 10, 0, 0) });
+        sayim = await service.AddSatirAsync(sayim.Id!.Value, new AddStokSayimSatirRequest { TasinirKartId = 100, LotNo = "LOT-A", SayilanMiktar = 2 });
+        sayim = await service.AddSatirAsync(sayim.Id!.Value, new AddStokSayimSatirRequest { TasinirKartId = 100, LotNo = "LOT-B", SayilanMiktar = 3 });
+
+        await service.KesinlestirAsync(sayim.Id!.Value);
+
+        var hareketler = await dbContext.StokHareketleri
+            .Where(x => x.HareketTipi == StokHareketTipleri.SayimFarki)
+            .Include(x => x.StokLot)
+            .OrderBy(x => x.StokLot!.LotNo)
+            .ToListAsync();
+
+        Assert.Collection(hareketler,
+            first =>
+            {
+                Assert.Equal("LOT-A", first.StokLot?.LotNo);
+                Assert.Equal(2, first.Miktar);
+            },
+            second =>
+            {
+                Assert.Equal("LOT-B", second.StokLot?.LotNo);
+                Assert.Equal(3, second.Miktar);
+            });
+    }
+
+    [Fact]
+    public async Task KesinlestirAsync_AyniKartIcinIkiYeniFarkliSeri_DuplicateKeyHatasiUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var service = CreateSayimService(dbContext);
+
+        var sayim = await service.AddAsync(new StokSayimDto { DepoId = 10, TesisId = 1, SayimTarihi = new DateTime(2026, 8, 23, 10, 0, 0) });
+        sayim = await service.AddSatirAsync(sayim.Id!.Value, new AddStokSayimSatirRequest { TasinirKartId = 100, SeriNo = "SN001", SayilanMiktar = 1 });
+        sayim = await service.AddSatirAsync(sayim.Id!.Value, new AddStokSayimSatirRequest { TasinirKartId = 100, SeriNo = "SN002", SayilanMiktar = 1 });
+
+        await service.KesinlestirAsync(sayim.Id!.Value);
+
+        var hareketler = await dbContext.StokHareketleri
+            .Where(x => x.HareketTipi == StokHareketTipleri.SayimFarki)
+            .Include(x => x.StokSeri)
+            .OrderBy(x => x.StokSeri!.SeriNo)
+            .ToListAsync();
+
+        Assert.Collection(hareketler,
+            first =>
+            {
+                Assert.Equal("SN001", first.StokSeri?.SeriNo);
+                Assert.Equal(1, first.Miktar);
+            },
+            second =>
+            {
+                Assert.Equal("SN002", second.StokSeri?.SeriNo);
+                Assert.Equal(1, second.Miktar);
+            });
+    }
+
+    [Fact]
     public async Task KesinlestirAsync_SayimBasladiktanSonraStokDegisirseReddeder()
     {
         await using var dbContext = CreateDbContext();

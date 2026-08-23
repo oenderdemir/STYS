@@ -387,14 +387,14 @@ public class StokSayimService : BaseRdbmsService<StokSayimDto, StokSayim, int>, 
     {
         var rows = await BuildCurrentSnapshotRowsAsync(depoId, cancellationToken);
         return rows.ToDictionary(
-            x => new SnapshotKey(x.TasinirKartId, x.StokLotId, x.StokSeriId),
+            CreateSnapshotKey,
             x => x.SistemMiktari);
     }
 
     private void EnsureSnapshotMatches(List<StokSayimSatir> satirlar, Dictionary<SnapshotKey, decimal> liveSnapshot)
     {
         var expected = satirlar.ToDictionary(
-            x => new SnapshotKey(x.TasinirKartId, x.StokLotId, x.StokSeriId),
+            CreateSnapshotKey,
             x => x.SistemMiktari);
 
         var keys = expected.Keys.Union(liveSnapshot.Keys).ToList();
@@ -476,11 +476,7 @@ public class StokSayimService : BaseRdbmsService<StokSayimDto, StokSayim, int>, 
     }
 
     private static bool SameSnapshotKey(StokSayimSatir left, StokSayimSatir right)
-        => left.TasinirKartId == right.TasinirKartId
-           && left.StokLotId == right.StokLotId
-           && left.StokSeriId == right.StokSeriId
-           && string.Equals(left.LotNo ?? string.Empty, right.LotNo ?? string.Empty, StringComparison.OrdinalIgnoreCase)
-           && string.Equals(left.SeriNo ?? string.Empty, right.SeriNo ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        => CreateSnapshotKey(left) == CreateSnapshotKey(right);
 
     private static string ResolveTakipTipi(TasinirKart kart)
         => TasinirKartServiceHelpers.ResolveTakipTipi(kart.TakipTipi, kart.TakipliMi);
@@ -490,11 +486,20 @@ public class StokSayimService : BaseRdbmsService<StokSayimDto, StokSayim, int>, 
         var takipTipi = TasinirKartServiceHelpers.ResolveTakipTipi(row.TakipTipi, row.TakipliMi);
         return takipTipi switch
         {
-            TasinirKartTakipTipleri.Lot => new SnapshotGroupKey(row.TasinirKartId, row.StokLotId, null, takipTipi),
-            TasinirKartTakipTipleri.Seri => new SnapshotGroupKey(row.TasinirKartId, null, row.StokSeriId, takipTipi),
-            _ => new SnapshotGroupKey(row.TasinirKartId, null, null, TasinirKartTakipTipleri.Yok)
+            TasinirKartTakipTipleri.Lot => new SnapshotGroupKey(row.TasinirKartId, row.StokLotId, null, NormalizeIdentityPart(row.LotNo), null, takipTipi),
+            TasinirKartTakipTipleri.Seri => new SnapshotGroupKey(row.TasinirKartId, null, row.StokSeriId, null, NormalizeIdentityPart(row.SeriNo), takipTipi),
+            _ => new SnapshotGroupKey(row.TasinirKartId, null, null, null, null, TasinirKartTakipTipleri.Yok)
         };
     }
+
+    private static SnapshotKey CreateSnapshotKey(SnapshotRow row)
+        => new(row.TasinirKartId, row.StokLotId, row.StokSeriId, NormalizeIdentityPart(row.LotNo), NormalizeIdentityPart(row.SeriNo));
+
+    private static SnapshotKey CreateSnapshotKey(StokSayimSatir row)
+        => new(row.TasinirKartId, row.StokLotId, row.StokSeriId, NormalizeIdentityPart(row.LotNo), NormalizeIdentityPart(row.SeriNo));
+
+    private static string? NormalizeIdentityPart(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
 
     private static decimal CalculateMovementEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar)
     {
@@ -572,6 +577,6 @@ public class StokSayimService : BaseRdbmsService<StokSayimDto, StokSayim, int>, 
         public decimal SistemMiktari { get; init; }
     }
 
-    private readonly record struct SnapshotGroupKey(int TasinirKartId, int? StokLotId, int? StokSeriId, string TakipTipi);
-    private readonly record struct SnapshotKey(int TasinirKartId, int? StokLotId, int? StokSeriId);
+    private readonly record struct SnapshotGroupKey(int TasinirKartId, int? StokLotId, int? StokSeriId, string? LotNoIdentity, string? SeriNoIdentity, string TakipTipi);
+    private readonly record struct SnapshotKey(int TasinirKartId, int? StokLotId, int? StokSeriId, string? LotNoIdentity, string? SeriNoIdentity);
 }

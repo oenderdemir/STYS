@@ -234,7 +234,7 @@
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Miktar</label>
-            <p-inputnumber [(ngModel)]="model.miktar" [min]="isSeriTrackedSelectedCard() ? 1 : 0.001" [max]="isSeriTrackedSelectedCard() ? 1 : null" [maxFractionDigits]="3" [readonlyInput]="isSeriTrackedSelectedCard()" class="w-full" inputStyleClass="w-full" />
+            <p-inputnumber [(ngModel)]="model.miktar" [min]="isSeriTrackedSelectedCard() ? 1 : 0.001" [max]="isSeriTrackedSelectedCard() ? 1 : null" [maxFractionDigits]="3" class="w-full" inputStyleClass="w-full" />
         </div>
         <div class="col-span-12 md:col-span-6">
             <label class="block font-medium mb-2">Birim Fiyat</label>

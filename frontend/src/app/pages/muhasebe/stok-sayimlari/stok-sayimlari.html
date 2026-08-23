@@ -1,0 +1,148 @@
+<app-muhasebe-tesis-secim-dialog />
+<app-muhasebe-tesis-context-bar />
+
+<p-toast />
+<p-confirmdialog />
+
+<p-toolbar styleClass="mb-4">
+    <ng-template #start>
+        <p-button label="Yeni Sayim" icon="pi pi-plus" (onClick)="openCreate()" />
+        <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
+    </ng-template>
+    <ng-template #end>
+        <p-select styleClass="min-w-18rem" [options]="depoOptions" optionLabel="label" optionValue="value" placeholder="Depo filtrele" [showClear]="true" [(ngModel)]="selectedDepoId" (onChange)="onDepoFilterChange()" appendTo="body" />
+    </ng-template>
+</p-toolbar>
+
+<div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 xl:col-span-4">
+        <p-table [value]="records" [loading]="loading" dataKey="id" selectionMode="single" [paginator]="true" [lazy]="true" (onLazyLoad)="onLazyLoad($event)" [rows]="pageSize" [first]="(pageNumber - 1) * pageSize" [totalRecords]="totalRecords" [rowsPerPageOptions]="[10,20,50]">
+            <ng-template #header>
+                <tr>
+                    <th>Tarih</th>
+                    <th>Depo</th>
+                    <th>Durum</th>
+                </tr>
+            </ng-template>
+            <ng-template #body let-item>
+                <tr (click)="selectSayim(item.id!)" [class.surface-100]="selectedSayim?.id === item.id" style="cursor: pointer;">
+                    <td>{{ item.sayimTarihi | date: 'dd.MM.yyyy HH:mm' }}</td>
+                    <td>{{ depoOptions.find(x => x.value === item.depoId)?.label ?? item.depoId }}</td>
+                    <td><p-tag [value]="item.durum" [severity]="getDurumSeverity(item.durum)" /></td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+
+    <div class="col-span-12 xl:col-span-8">
+        <ng-container *ngIf="selectedSayim; else emptyState">
+            <div class="flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+                <div>
+                    <div class="text-xl font-semibold">Stok Sayimi</div>
+                    <div class="text-color-secondary">
+                        {{ getSelectedDepoLabel() }}
+                        · {{ selectedSayim.sayimTarihi | date: 'dd.MM.yyyy HH:mm' }}
+                    </div>
+                    <small *ngIf="selectedSayim.aciklama">{{ selectedSayim.aciklama }}</small>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                    <p-checkbox [(ngModel)]="showOnlyDifferences" [binary]="true" inputId="onlyDiff" />
+                    <label for="onlyDiff">Sadece fark olanlar</label>
+                    <p-button label="Satir Ekle" icon="pi pi-plus" severity="secondary" [outlined]="true" (onClick)="openAddSatir()" [disabled]="!isDraft(selectedSayim)" />
+                    <p-button label="Snapshot Yenile" icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="refresh()" [disabled]="!isDraft(selectedSayim) || saving" />
+                    <p-button label="Kaydet" icon="pi pi-save" (onClick)="saveSatirlar()" [disabled]="!isDraft(selectedSayim)" [loading]="saving" />
+                    <p-button label="Kesinlestir" icon="pi pi-check" severity="success" (onClick)="kesinlestir()" [disabled]="!isDraft(selectedSayim)" [loading]="saving" />
+                    <p-button label="Iptal" icon="pi pi-times" severity="danger" [outlined]="true" (onClick)="iptal()" [disabled]="!isDraft(selectedSayim) || saving" />
+                </div>
+            </div>
+
+            <p-table [value]="getVisibleSatirlar()" [tableStyle]="{ 'min-width': '64rem' }">
+                <ng-template #header>
+                    <tr>
+                        <th>Kart</th>
+                        <th>Lot / Seri</th>
+                        <th>Sistem</th>
+                        <th>Sayilan</th>
+                        <th>Fark</th>
+                        <th style="width: 5rem"></th>
+                    </tr>
+                </ng-template>
+                <ng-template #body let-item>
+                    <tr>
+                        <td>
+                            <div>{{ item.stokKodu }} - {{ item.tasinirKartAd }}</div>
+                            <small>{{ item.birim }}</small>
+                        </td>
+                        <td>
+                            <div>{{ getTrackingLabel(item) }}</div>
+                            <small *ngIf="item.lotNo && item.sonKullanmaTarihi">{{ item.sonKullanmaTarihi | date: 'dd.MM.yyyy' }}</small>
+                        </td>
+                        <td>{{ item.sistemMiktari }}</td>
+                        <td>
+                            <p-inputnumber [(ngModel)]="item.sayilanMiktar" [min]="0" [max]="item.takipTipi === 'Seri' ? 1 : null" [maxFractionDigits]="3" inputStyleClass="w-8rem" [disabled]="!isDraft(selectedSayim!)" />
+                        </td>
+                        <td>{{ item.sayilanMiktar - item.sistemMiktari }}</td>
+                        <td>
+                            <p-button *ngIf="item.sistemMiktari === 0 && isDraft(selectedSayim!)" icon="pi pi-trash" size="small" severity="danger" [text]="true" (onClick)="deleteSatir(item)" />
+                        </td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </ng-container>
+        <ng-template #emptyState>
+            <div class="surface-100 border-round p-5 text-center text-color-secondary">
+                Görüntülemek için bir stok sayımı seçiniz.
+            </div>
+        </ng-template>
+    </div>
+</div>
+
+<p-dialog [(visible)]="createDialogVisible" [modal]="true" header="Yeni Stok Sayimi" [style]="{ width: '32rem', 'max-width': '95vw' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Depo</label>
+            <p-select class="w-full" [options]="depoOptions" optionLabel="label" optionValue="value" [(ngModel)]="createModel.depoId" appendTo="body" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Sayim Tarihi</label>
+            <p-datepicker [(ngModel)]="createDate" class="w-full" styleClass="w-full" inputStyleClass="w-full" [showTime]="true" hourFormat="24" [showIcon]="true" appendTo="body" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Aciklama</label>
+            <input pInputText class="w-full" [(ngModel)]="createModel.aciklama" />
+        </div>
+    </div>
+    <ng-template #footer>
+        <p-button label="Vazgec" severity="secondary" [outlined]="true" (onClick)="createDialogVisible = false" />
+        <p-button label="Olustur" [loading]="saving" (onClick)="create()" />
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="satirDialogVisible" [modal]="true" header="Sayim Satiri Ekle" [style]="{ width: '36rem', 'max-width': '95vw' }">
+    <div class="grid grid-cols-12 gap-3">
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Tasinir Kart</label>
+            <p-select class="w-full" [options]="tasinirKartOptions" optionLabel="label" optionValue="value" [(ngModel)]="satirModel.tasinirKartId" (onChange)="onSatirKartChange()" appendTo="body" />
+        </div>
+        <div class="col-span-12" *ngIf="isLotTrackedSelectedCard()">
+            <label class="block font-medium mb-2">Lot No</label>
+            <input pInputText class="w-full" [(ngModel)]="satirModel.lotNo" />
+        </div>
+        <div class="col-span-12" *ngIf="isLotTrackedSelectedCard()">
+            <label class="block font-medium mb-2">Son Kullanma Tarihi</label>
+            <p-datepicker [(ngModel)]="satirDate" class="w-full" styleClass="w-full" inputStyleClass="w-full" [showIcon]="true" appendTo="body" />
+        </div>
+        <div class="col-span-12" *ngIf="isSeriTrackedSelectedCard()">
+            <label class="block font-medium mb-2">Seri No</label>
+            <input pInputText class="w-full" [(ngModel)]="satirModel.seriNo" />
+        </div>
+        <div class="col-span-12">
+            <label class="block font-medium mb-2">Sayilan Miktar</label>
+            <p-inputnumber [(ngModel)]="satirModel.sayilanMiktar" [min]="0" [max]="isSeriTrackedSelectedCard() ? 1 : null" [maxFractionDigits]="3" class="w-full" inputStyleClass="w-full" />
+        </div>
+    </div>
+    <ng-template #footer>
+        <p-button label="Vazgec" severity="secondary" [outlined]="true" (onClick)="satirDialogVisible = false" />
+        <p-button label="Ekle" [loading]="saving" (onClick)="addSatir()" />
+    </ng-template>
+</p-dialog>

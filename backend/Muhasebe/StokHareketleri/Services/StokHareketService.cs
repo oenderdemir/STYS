@@ -83,6 +83,20 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
     }
 
+    public async Task<StokHareketDto> AddWithinCurrentTransactionAsync(StokHareketDto dto, CancellationToken cancellationToken = default)
+    {
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
+        {
+            throw new BaseException("Transfer hareketleri yalnizca transfer olusturma akisi ile kaydedilebilir.", 400);
+        }
+
+        await NormalizeAndValidateAsync(dto, null);
+        dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
+        await ApplyKdvAsync(dto);
+        await EnsureCreateDoesNotGoNegativeAsync(dto, cancellationToken);
+        return await base.AddAsync(dto);
+    }
+
     public override async Task<StokHareketDto> UpdateAsync(StokHareketDto dto)
     {
         if (!dto.Id.HasValue)

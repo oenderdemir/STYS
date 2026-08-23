@@ -7,6 +7,7 @@ namespace STYS.Muhasebe.StokHareketleri.Services;
 
 public interface IStokHareketService : IBaseRdbmsService<StokHareketDto, StokHareket, int>
 {
+    Task<StokHareketDto> AddWithinCurrentTransactionAsync(StokHareketDto dto, CancellationToken cancellationToken = default);
     Task<List<StokBakiyeDto>> GetStokBakiyeAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default);
     Task<List<StokKartOzetDto>> GetStokKartOzetAsync(int? tesisId, int? depoId, CancellationToken cancellationToken = default);
     Task<StokDetayDto> GetStokDetayAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken = default);

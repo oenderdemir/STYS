@@ -108,7 +108,7 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
     public async Task<List<FifoBaslangicStoguSatirDto>> GetFifoBaslangicStoguAsync(int tesisId, int maliYil, CancellationToken cancellationToken = default)
     {
         await _tesisScopeService.EnsureCanAccessTesisAsync(tesisId, cancellationToken);
-        await EnsureFifoPolicyAsync(tesisId, maliYil, cancellationToken);
+        await GetLayeredPolicyOrThrowAsync(tesisId, maliYil, cancellationToken);
 
         var allowedDepoIds = await ResolveAllowedDepoIdsAsync(tesisId, cancellationToken);
         if (allowedDepoIds.Count == 0)
@@ -123,7 +123,7 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
     {
         ValidateFifoBaslangicRequest(request);
         await _tesisScopeService.EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
-        await EnsureFifoPolicyAsync(request.TesisId, request.MaliYil, cancellationToken);
+        var politika = await GetLayeredPolicyOrThrowAsync(request.TesisId, request.MaliYil, cancellationToken);
 
         var allowedDepoIds = await ResolveAllowedDepoIdsAsync(request.TesisId, cancellationToken);
         if (allowedDepoIds.Count == 0)
@@ -191,6 +191,7 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
                     TasinirKartId = tasinirKart.Id,
                     KaynakStokHareketId = null,
                     KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.BaslangicStogu,
+                    MaliyetYontemi = politika.MaliyetYontemi,
                     GirisTarihi = maliYilBaslangici,
                     IlkMiktar = katmansizMiktar,
                     KalanMiktar = katmansizMiktar,
@@ -293,33 +294,26 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
 
     private async Task<string?> GetOpenLayerMethodAsync(int tesisId, CancellationToken cancellationToken)
     {
-        var hasOpenLayers = await _dbContext.StokMaliyetKatmanlari
+        var openLayerMethods = await _dbContext.StokMaliyetKatmanlari
             .AsNoTracking()
-            .AnyAsync(x =>
+            .Where(x =>
                 x.TesisId == tesisId &&
-                x.KalanMiktar > 0,
-                cancellationToken);
+                x.KalanMiktar > 0)
+            .Select(x => x.MaliyetYontemi)
+            .Distinct()
+            .ToListAsync(cancellationToken);
 
-        if (!hasOpenLayers)
+        if (openLayerMethods.Count == 0)
         {
             return null;
         }
 
-        var layeredPolicies = await _dbContext.StokMaliyetPolitikalari
-            .AsNoTracking()
-            .Where(x =>
-                x.TesisId == tesisId &&
-                (x.MaliyetYontemi == StokMaliyetYontemleri.FIFO || x.MaliyetYontemi == StokMaliyetYontemleri.LIFO))
-            .OrderByDescending(x => x.MaliYil)
-            .Select(x => x.MaliyetYontemi)
-            .ToListAsync(cancellationToken);
-
-        if (layeredPolicies.Any(x => string.Equals(x, StokMaliyetYontemleri.LIFO, StringComparison.Ordinal)))
+        if (openLayerMethods.Count > 1)
         {
-            return StokMaliyetYontemleri.LIFO;
+            throw new BaseException("Tesiste farklı maliyet yöntemlerine ait açık maliyet katmanları bulunduğu için işlem yapılamaz.", 400);
         }
 
-        return layeredPolicies.FirstOrDefault();
+        return openLayerMethods[0];
     }
 
     private async Task<HashSet<int>> ResolveAllowedDepoIdsAsync(int tesisId, CancellationToken cancellationToken)
@@ -337,7 +331,7 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
         return (await query.Select(x => x.Id).ToListAsync(cancellationToken)).ToHashSet();
     }
 
-    private async Task EnsureFifoPolicyAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
+    private async Task<StokMaliyetPolitikasi> GetLayeredPolicyOrThrowAsync(int tesisId, int maliYil, CancellationToken cancellationToken)
     {
         var politika = await _dbContext.StokMaliyetPolitikalari
             .AsNoTracking()
@@ -349,6 +343,8 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
         {
             throw new BaseException("Maliyet başlangıç stoğu yalnızca FIFO veya LIFO maliyet politikası seçiliyse oluşturulabilir.", 400);
         }
+
+        return politika;
     }
 
     private async Task<DateTime> GetMaliYilBaslangiciAsync(int tesisId, int maliYil, CancellationToken cancellationToken)

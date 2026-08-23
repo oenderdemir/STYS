@@ -1289,6 +1289,137 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task StokMaliyetPolitikasiService_2025LifoTukendi2026FifoAcik2027FifoOlusturabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.AddRange(
+            new MuhasebeDonem
+            {
+                Id = 2,
+                TesisId = 1,
+                MaliYil = 2025,
+                DonemNo = 1,
+                BaslangicTarihi = new DateTime(2025, 1, 1),
+                BitisTarihi = new DateTime(2025, 12, 31),
+                KapaliMi = true
+            },
+            new MuhasebeDonem
+            {
+                Id = 3,
+                TesisId = 1,
+                MaliYil = 2027,
+                DonemNo = 1,
+                BaslangicTarihi = new DateTime(2027, 1, 1),
+                BitisTarihi = new DateTime(2027, 1, 31),
+                KapaliMi = false
+            });
+        dbContext.StokMaliyetPolitikalari.Add(new STYS.Muhasebe.StokMaliyetPolitikalari.Entities.StokMaliyetPolitikasi
+        {
+            TesisId = 1,
+            MaliYil = 2025,
+            MaliyetYontemi = StokMaliyetYontemleri.LIFO
+        });
+        await dbContext.SaveChangesAsync();
+        await SeedFifoKatmanAsync(dbContext, 10, 100, 3, 50, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2025, 6, 1), StokMaliyetYontemleri.LIFO, 0);
+        await SeedFifoKatmanAsync(dbContext, 10, 100, 5, 80, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2026, 8, 1), StokMaliyetYontemleri.FIFO);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var result = await politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2027,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        });
+
+        Assert.Equal(StokMaliyetYontemleri.FIFO, result.MaliyetYontemi);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_2025FifoTukendi2026LifoAcik2027LifoOlusturabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.AddRange(
+            new MuhasebeDonem
+            {
+                Id = 2,
+                TesisId = 1,
+                MaliYil = 2025,
+                DonemNo = 1,
+                BaslangicTarihi = new DateTime(2025, 1, 1),
+                BitisTarihi = new DateTime(2025, 12, 31),
+                KapaliMi = true
+            },
+            new MuhasebeDonem
+            {
+                Id = 3,
+                TesisId = 1,
+                MaliYil = 2027,
+                DonemNo = 1,
+                BaslangicTarihi = new DateTime(2027, 1, 1),
+                BitisTarihi = new DateTime(2027, 1, 31),
+                KapaliMi = false
+            });
+        dbContext.StokMaliyetPolitikalari.Add(new STYS.Muhasebe.StokMaliyetPolitikalari.Entities.StokMaliyetPolitikasi
+        {
+            TesisId = 1,
+            MaliYil = 2025,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        });
+        await dbContext.SaveChangesAsync();
+        await SeedFifoKatmanAsync(dbContext, 10, 100, 3, 50, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2025, 6, 1), StokMaliyetYontemleri.FIFO, 0);
+        await SeedFifoKatmanAsync(dbContext, 10, 100, 5, 80, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2026, 8, 1), StokMaliyetYontemleri.LIFO);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var result = await politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2027,
+            MaliyetYontemi = StokMaliyetYontemleri.LIFO
+        });
+
+        Assert.Equal(StokMaliyetYontemleri.LIFO, result.MaliyetYontemi);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_AcikLifoKatmanVarkenFifoSeciminiReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedFifoKatmanAsync(dbContext, 10, 100, 5, 80, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2026, 8, 1), StokMaliyetYontemleri.LIFO);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        }));
+
+        Assert.Equal("Açık maliyet katmanları bulunduğu için stok maliyet yöntemi değiştirilemez.", ex.Message);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_AcikFifoVeLifoKatmaniBirlikteVarsaTutarsizlikHatasiVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedFifoKatmanAsync(dbContext, 10, 100, 5, 80, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2026, 8, 1), StokMaliyetYontemleri.FIFO);
+        await SeedFifoKatmanAsync(dbContext, 20, 100, 4, 90, StokMaliyetKatmanKaynakTipleri.StokHareketi, new DateTime(2026, 8, 2), StokMaliyetYontemleri.LIFO);
+        var politikaService = CreatePolicyService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.UpsertAsync(new UpsertStokMaliyetPolitikasiRequest
+        {
+            TesisId = 1,
+            MaliYil = 2026,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO
+        }));
+
+        Assert.Equal("Tesiste farklı maliyet yöntemlerine ait açık maliyet katmanları bulunduğu için işlem yapılamaz.", ex.Message);
+    }
+
+    [Fact]
     public async Task StokMaliyetPolitikasiService_2026FifoAcikKatmanVarken2027LifoOlusturmayiReddeder()
     {
         await using var dbContext = CreateDbContext();
@@ -1339,6 +1470,7 @@ public class StokHareketServiceTests
 
         Assert.Equal(10, katman.KalanMiktar);
         Assert.Equal(80m, katman.BirimMaliyet);
+        Assert.Equal(StokMaliyetYontemleri.LIFO, katman.MaliyetYontemi);
     }
 
     [Fact]
@@ -1390,6 +1522,7 @@ public class StokHareketServiceTests
         Assert.Equal(10, katman.IlkMiktar);
         Assert.Equal(10, katman.KalanMiktar);
         Assert.Equal(80m, katman.BirimMaliyet);
+        Assert.Equal(StokMaliyetYontemleri.FIFO, katman.MaliyetYontemi);
     }
 
     [Fact]
@@ -1632,6 +1765,21 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task AddAsync_FIFO_GirisKatmaniMaliyetYontemiFifoOlarakYazar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.FIFO);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+
+        var katman = await dbContext.StokMaliyetKatmanlari.SingleAsync();
+
+        Assert.Equal(StokMaliyetYontemleri.FIFO, katman.MaliyetYontemi);
+    }
+
+    [Fact]
     public async Task AddAsync_LIFO_CikisKatmanlariEnYeniGirislerdenTuketir()
     {
         await using var dbContext = CreateDbContext();
@@ -1653,6 +1801,21 @@ public class StokHareketServiceTests
         Assert.Equal(107.5m, ikinciCikis.MaliyetBirimFiyat);
         Assert.Equal(860m, ikinciCikis.MaliyetTutari);
         Assert.Equal([3m, 0m], katmanlar.Select(x => x.KalanMiktar).ToArray());
+    }
+
+    [Fact]
+    public async Task AddAsync_LIFO_GirisKatmaniMaliyetYontemiLifoOlarakYazar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SetCostPolicyAsync(dbContext, StokMaliyetYontemleri.LIFO);
+        var service = CreateService(dbContext);
+
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Giris, 10, birimFiyat: 100));
+
+        var katman = await dbContext.StokMaliyetKatmanlari.SingleAsync();
+
+        Assert.Equal(StokMaliyetYontemleri.LIFO, katman.MaliyetYontemi);
     }
 
     [Fact]
@@ -1722,6 +1885,7 @@ public class StokHareketServiceTests
         Assert.Equal(2, hedefKatmanlar.Count);
         Assert.Equal([10m, 2m], hedefKatmanlar.Select(x => x.IlkMiktar).ToArray());
         Assert.Equal([100m, 160m], hedefKatmanlar.Select(x => x.BirimMaliyet).ToArray());
+        Assert.All(hedefKatmanlar, x => Assert.Equal(StokMaliyetYontemleri.FIFO, x.MaliyetYontemi));
     }
 
     [Fact]
@@ -1745,6 +1909,7 @@ public class StokHareketServiceTests
         Assert.Equal(2, hedefKatmanlar.Count);
         Assert.Equal([5m, 7m], hedefKatmanlar.Select(x => x.IlkMiktar).ToArray());
         Assert.Equal([160m, 100m], hedefKatmanlar.Select(x => x.BirimMaliyet).ToArray());
+        Assert.All(hedefKatmanlar, x => Assert.Equal(StokMaliyetYontemleri.LIFO, x.MaliyetYontemi));
     }
 
     [Fact]
@@ -1918,6 +2083,18 @@ public class StokHareketServiceTests
         Assert.Contains("defaultValue: \"StokHareketi\"", content);
         Assert.Contains("UPDATE [muhasebe].[StokMaliyetKatmanlari]", content);
         Assert.Contains("SET [KatmanKaynakTipi] = N'StokHareketi'", content);
+    }
+
+    [Fact]
+    public void AddCostMethodToStokMaliyetKatmanlariMigration_MaliyetYonteminiBackfillEder()
+    {
+        var migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations", "20260823220000_AddCostMethodToStokMaliyetKatmanlari.cs");
+        var content = File.ReadAllText(migrationPath);
+
+        Assert.Contains("name: \"MaliyetYontemi\"", content);
+        Assert.Contains("politika.[MaliyetYontemi]", content);
+        Assert.Contains("SET [MaliyetYontemi] = N'FIFO'", content);
+        Assert.Contains("CK_StokMaliyetKatmanlari_MaliyetYontemi", content);
     }
 
     private static StysAppDbContext CreateDbContext(string? databaseName = null)
@@ -2136,7 +2313,9 @@ public class StokHareketServiceTests
         decimal miktar,
         decimal birimMaliyet,
         string kaynakTipi,
-        DateTime? girisTarihi = null)
+        DateTime? girisTarihi = null,
+        string maliyetYontemi = StokMaliyetYontemleri.FIFO,
+        decimal? kalanMiktar = null)
     {
         dbContext.StokMaliyetKatmanlari.Add(new StokMaliyetKatmani
         {
@@ -2145,9 +2324,10 @@ public class StokHareketServiceTests
             TasinirKartId = tasinirKartId,
             KaynakStokHareketId = null,
             KatmanKaynakTipi = kaynakTipi,
+            MaliyetYontemi = maliyetYontemi,
             GirisTarihi = girisTarihi ?? new DateTime(2026, 1, 1),
             IlkMiktar = miktar,
-            KalanMiktar = miktar,
+            KalanMiktar = kalanMiktar ?? miktar,
             BirimMaliyet = birimMaliyet
         });
         await dbContext.SaveChangesAsync();

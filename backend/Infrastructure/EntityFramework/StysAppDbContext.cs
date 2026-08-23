@@ -2830,9 +2830,14 @@ public class StysAppDbContext : DbContext
                 t.HasCheckConstraint("CK_StokMaliyetKatmanlari_IlkMiktar", "[IlkMiktar] > 0");
                 t.HasCheckConstraint("CK_StokMaliyetKatmanlari_KalanMiktar", "[KalanMiktar] >= 0 AND [KalanMiktar] <= [IlkMiktar]");
                 t.HasCheckConstraint("CK_StokMaliyetKatmanlari_BirimMaliyet", "[BirimMaliyet] >= 0");
+                t.HasCheckConstraint("CK_StokMaliyetKatmanlari_MaliyetYontemi", "[MaliyetYontemi] IN (N'FIFO', N'LIFO')");
             });
 
             entity.Property(x => x.KatmanKaynakTipi)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            entity.Property(x => x.MaliyetYontemi)
                 .HasMaxLength(32)
                 .IsRequired();
 

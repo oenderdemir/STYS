@@ -3,6 +3,7 @@ using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
 
 namespace STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 
@@ -13,6 +14,7 @@ public class StokMaliyetKatmani : BaseEntity<int>
     public int TasinirKartId { get; set; }
     public int? KaynakStokHareketId { get; set; }
     public string KatmanKaynakTipi { get; set; } = StokMaliyetKatmanKaynakTipleri.StokHareketi;
+    public string MaliyetYontemi { get; set; } = StokMaliyetYontemleri.FIFO;
     public DateTime GirisTarihi { get; set; }
     public decimal IlkMiktar { get; set; }
     public decimal KalanMiktar { get; set; }

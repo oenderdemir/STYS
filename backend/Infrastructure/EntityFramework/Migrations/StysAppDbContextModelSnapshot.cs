@@ -7689,6 +7689,11 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("MaliyetYontemi")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<int?>("KaynakStokHareketId")
                         .HasColumnType("int");
 
@@ -7723,6 +7728,8 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                             t.HasCheckConstraint("CK_StokMaliyetKatmanlari_IlkMiktar", "[IlkMiktar] > 0");
 
                             t.HasCheckConstraint("CK_StokMaliyetKatmanlari_KalanMiktar", "[KalanMiktar] >= 0 AND [KalanMiktar] <= [IlkMiktar]");
+
+                            t.HasCheckConstraint("CK_StokMaliyetKatmanlari_MaliyetYontemi", "[MaliyetYontemi] IN (N'FIFO', N'LIFO')");
                         });
                 });
 

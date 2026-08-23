@@ -215,6 +215,7 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
             TasinirKartId = tasinirKartId,
             KaynakStokHareketId = kaynakStokHareketId,
             KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi,
+            MaliyetYontemi = MaliyetYontemi,
             GirisTarihi = girisTarihi,
             IlkMiktar = miktar,
             KalanMiktar = miktar,

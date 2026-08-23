@@ -34,6 +34,21 @@ public class MuhasebeDonemRepository
                 cancellationToken);
     }
 
+    public async Task<MuhasebeDonem?> GetDonemByTarihAsync(
+        int tesisId,
+        DateTime tarih,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.MuhasebeDonemler
+            .Include(x => x.Tesis)
+            .FirstOrDefaultAsync(x =>
+                x.TesisId == tesisId
+                && !x.IsDeleted
+                && x.BaslangicTarihi <= tarih
+                && x.BitisTarihi >= tarih,
+                cancellationToken);
+    }
+
     public async Task<MuhasebeDonem?> GetByTesisYilDonemAsync(
         int tesisId,
         int maliYil,

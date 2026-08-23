@@ -10,6 +10,11 @@ public interface IMuhasebeDonemRepository : IBaseRdbmsRepository<MuhasebeDonem, 
         DateTime tarih,
         CancellationToken cancellationToken = default);
 
+    Task<MuhasebeDonem?> GetDonemByTarihAsync(
+        int tesisId,
+        DateTime tarih,
+        CancellationToken cancellationToken = default);
+
     Task<MuhasebeDonem?> GetByTesisYilDonemAsync(
         int tesisId,
         int maliYil,

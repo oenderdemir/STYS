@@ -69,4 +69,32 @@ describe('StokSayimlariPage', () => {
         expect(order).toEqual(['save', 'finalize']);
         expect(page.selectedSayim?.durum).toBe('Kesinlesti');
     });
+
+    it('politika yoksa maliyet secim dialogunu acar', () => {
+        const page = Object.create(StokSayimlariPage.prototype) as any;
+        page.cdr = { detectChanges: () => undefined };
+        page.showError = () => undefined;
+        page.stokMaliyetPolitikasiService = {
+            getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: null, politikaSecildiMi: false })
+        };
+
+        page.loadCurrentMaliyetPolitikasi(1, '2026-08-23T10:00:00');
+
+        expect(page.maliyetPolitikasiDialogVisible).toBeTrue();
+        expect(page.secilenMaliyetYontemi).toBe('AgirlikliOrtalama');
+    });
+
+    it('politika varsa maliyet secim dialogunu acmaz', () => {
+        const page = Object.create(StokSayimlariPage.prototype) as any;
+        page.cdr = { detectChanges: () => undefined };
+        page.showError = () => undefined;
+        page.stokMaliyetPolitikasiService = {
+            getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama', politikaSecildiMi: true })
+        };
+
+        page.loadCurrentMaliyetPolitikasi(1, '2026-08-23T10:00:00');
+
+        expect(page.maliyetPolitikasiDialogVisible).toBeFalse();
+        expect(page.currentMaliyetPolitikasi?.maliYil).toBe(2026);
+    });
 });

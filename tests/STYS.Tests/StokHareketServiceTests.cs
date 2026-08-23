@@ -14,6 +14,8 @@ using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.Kdv.Services;
 using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
+using STYS.Muhasebe.MuhasebeDonemleri.Mapping;
+using STYS.Muhasebe.MuhasebeDonemleri.Repositories;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
@@ -1078,6 +1080,65 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task StokMaliyetPolitikasiService_TarihIcinMuhasebeDonemiYoksaFallbackYapmadanHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.RemoveRange(dbContext.MuhasebeDonemler);
+        await dbContext.SaveChangesAsync();
+        var politikaService = CreatePolicyService(dbContext, CreateRealMuhasebeDonemService(dbContext));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.GetCurrentAsync(1, new DateTime(2027, 1, 15)));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Bu tarih için muhasebe dönemi tanımlanmamıştır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_KapaliDonemdenDeMaliYilCozebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var donem = await dbContext.MuhasebeDonemler.SingleAsync();
+        donem.KapaliMi = true;
+        await dbContext.SaveChangesAsync();
+        var politikaService = CreatePolicyService(dbContext, CreateRealMuhasebeDonemService(dbContext));
+
+        var result = await politikaService.GetCurrentAsync(1, new DateTime(2026, 8, 15));
+
+        Assert.Equal(2026, result.MaliYil);
+        Assert.True(result.PolitikaSecildiMi);
+        Assert.Equal(StokMaliyetYontemleri.AgirlikliOrtalama, result.MaliyetYontemi);
+    }
+
+    [Fact]
+    public async Task StokMaliyetPolitikasiService_2026Politikasini2027IcinOtomatikKullanmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
+        {
+            Id = 2,
+            TesisId = 1,
+            MaliYil = 2027,
+            DonemNo = 1,
+            BaslangicTarihi = new DateTime(2027, 1, 1),
+            BitisTarihi = new DateTime(2027, 1, 31),
+            KapaliMi = false
+        });
+        await dbContext.SaveChangesAsync();
+        var politikaService = CreatePolicyService(dbContext, CreateRealMuhasebeDonemService(dbContext));
+
+        var current = await politikaService.GetCurrentAsync(1, new DateTime(2027, 1, 15));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => politikaService.GetRequiredMaliyetYontemiAsync(1, new DateTime(2027, 1, 15)));
+
+        Assert.Equal(2027, current.MaliYil);
+        Assert.False(current.PolitikaSecildiMi);
+        Assert.Null(current.MaliyetYontemi);
+        Assert.Equal("2027 mali yılı için stok maliyet yöntemi seçilmelidir.", ex.Message);
+    }
+
+    [Fact]
     public async Task StokMaliyetPolitikasiService_SnapshotVarkenYontemDegisikliginiReddeder()
     {
         await using var dbContext = CreateDbContext();
@@ -1210,11 +1271,26 @@ public class StokHareketServiceTests
 
     private static IStokMaliyetPolitikasiService CreatePolicyService(
         StysAppDbContext dbContext,
-        FakeMuhasebeDonemService? muhasebeDonemService = null)
+        IMuhasebeDonemService? muhasebeDonemService = null)
         => new StokMaliyetPolitikasiService(
             dbContext,
             muhasebeDonemService ?? new FakeMuhasebeDonemService(),
             new FakeMuhasebeTesisScopeService());
+
+    private static IMuhasebeDonemService CreateRealMuhasebeDonemService(StysAppDbContext dbContext)
+    {
+        var mapperConfig = new MapperConfiguration(cfg =>
+        {
+            cfg.AddProfile<MuhasebeDonemProfile>();
+        }, NullLoggerFactory.Instance);
+
+        var mapper = mapperConfig.CreateMapper();
+        return new MuhasebeDonemService(
+            new MuhasebeDonemRepository(dbContext, mapper),
+            mapper,
+            dbContext,
+            new FakeMuhasebeTesisScopeService());
+    }
 
     private static StokTransferRequest CreateTransferRequest(int? stokLotId = null, int? stokSeriId = null, string? seriNo = null, decimal miktar = 10, decimal birimFiyat = 1)
     {
@@ -1638,6 +1714,9 @@ public class StokHareketServiceTests
                 KapaliMi = false
             });
         }
+
+        public Task<MuhasebeDonemDto?> GetDonemByTarihAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default)
+            => GetAktifDonemAsync(tesisId, tarih, cancellationToken);
 
         public Task DonemKapatAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DonemAcAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();

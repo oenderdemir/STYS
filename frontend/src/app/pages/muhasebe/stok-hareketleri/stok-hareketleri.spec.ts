@@ -8,6 +8,7 @@ import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
+import { StokMaliyetPolitikasiService } from '../services/stok-maliyet-politikasi.service';
 
 describe('StokHareketleriPage varsayilan depo davranisi', () => {
     function createComponent(): StokHareketleriPage {
@@ -36,6 +37,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                 { provide: CariKartlarService, useValue: { getAll: () => of([]) } },
                 { provide: MuhasebeFisService, useValue: { getByKaynak: () => of([]) } },
                 { provide: KdvIstisnaTanimService, useValue: { filter: () => of([]) } },
+                { provide: StokMaliyetPolitikasiService, useValue: { getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama', politikaSecildiMi: true }), upsert: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }) } },
                 {
                     provide: MuhasebeTesisContextService,
                     useValue: {
@@ -319,6 +321,7 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
                 { provide: CariKartlarService, useValue: { getAll: () => of([]) } },
                 { provide: MuhasebeFisService, useValue: { getByKaynak: () => of([]) } },
                 { provide: KdvIstisnaTanimService, useValue: { filter: () => of([]) } },
+                { provide: StokMaliyetPolitikasiService, useValue: { getCurrent: () => of({ tesisId: 1, maliYil: 2026, maliyetYontemi: null, politikaSecildiMi: false }), upsert: () => of({ id: 1, tesisId: 1, maliYil: 2026, maliyetYontemi: 'AgirlikliOrtalama' }) } },
                 {
                     provide: MuhasebeTesisContextService,
                     useValue: {

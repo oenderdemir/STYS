@@ -22,15 +22,17 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { StokMaliyetPolitikasiDialogComponent } from '../components/stok-maliyet-politikasi-dialog/stok-maliyet-politikasi-dialog.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
 import { DepolarService } from '../depolar/depolar.service';
 import { formatDateForApi, MuhasebeFisDurumlari, parseApiDate } from '../models/muhasebe-fis.model';
 import { MuhasebeFisService } from '../services/muhasebe-fis.service';
+import { StokMaliyetPolitikasiService } from '../services/stok-maliyet-politikasi.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { KdvIstisnaTanimService } from '../services/kdv-istisna-tanim.service';
 import { TasinirMuhasebeFisTaslagiDialogComponent } from '../tasinir-fis-taslagi/tasinir-muhasebe-fis-taslagi-dialog.component';
-import { CurrentStokMaliyetPolitikasiModel, STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_MALIYET_YONTEMI_SECENEKLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
+import { CurrentStokMaliyetPolitikasiModel, STOK_HAREKET_DURUMLARI, STOK_HAREKET_TIPLERI, STOK_SAYIM_FARKI_YONLERI, StokBakiyeModel, StokDegerlemeModel, StokDetayModel, StokHareketModel, StokKartOzetModel, StokLotBakiyeModel, StokSeriBakiyeModel } from './stok-hareketleri.dto';
 import { KdvIstisnaTanimDto, KDV_UYGULAMA_TIPI_SECENEKLERI, KdvUygulamaTipi, KDV_UYGULAMA_TIPI_LABELS } from '../models/kdv-istisna-tanim.model';
 import { StokHareketleriService } from './stok-hareketleri.service';
 
@@ -54,7 +56,8 @@ import { StokHareketleriService } from './stok-hareketleri.service';
         ToolbarModule,
         TooltipModule,
         MuhasebeTesisSecimDialogComponent,
-        MuhasebeTesisContextBarComponent
+        MuhasebeTesisContextBarComponent,
+        StokMaliyetPolitikasiDialogComponent
     ],
     templateUrl: './stok-hareketleri.html',
     providers: [MessageService, ConfirmationService, DialogService]
@@ -66,6 +69,7 @@ export class StokHareketleriPage implements OnInit {
     private readonly cariKartService = inject(CariKartlarService);
     private readonly muhasebeFisService = inject(MuhasebeFisService);
     private readonly kdvIstisnaTanimService = inject(KdvIstisnaTanimService);
+    private readonly stokMaliyetPolitikasiService = inject(StokMaliyetPolitikasiService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
@@ -133,7 +137,6 @@ export class StokHareketleriPage implements OnInit {
     private stokDetayLoadingKeys = new Set<string>();
 
     readonly hareketTipleri = STOK_HAREKET_TIPLERI;
-    readonly maliyetYontemiSecenekleri = STOK_MALIYET_YONTEMI_SECENEKLERI;
     readonly durumlar = STOK_HAREKET_DURUMLARI;
     readonly sayimFarkiYonleri = STOK_SAYIM_FARKI_YONLERI;
     readonly kdvUygulamaTipiLabels = KDV_UYGULAMA_TIPI_LABELS;
@@ -300,7 +303,7 @@ export class StokHareketleriPage implements OnInit {
         }
 
         this.maliyetPolitikasiSaving = true;
-        this.service.upsertMaliyetPolitikasi({
+        this.stokMaliyetPolitikasiService.upsert({
             tesisId,
             maliYil: this.currentMaliyetPolitikasi.maliYil,
             maliyetYontemi: this.secilenMaliyetYontemi
@@ -1339,14 +1342,18 @@ export class StokHareketleriPage implements OnInit {
     }
 
     private loadCurrentMaliyetPolitikasi(tesisId: number): void {
-        this.service.getCurrentMaliyetPolitikasi(tesisId, new Date().toISOString()).subscribe({
+        this.stokMaliyetPolitikasiService.getCurrent(tesisId, new Date().toISOString()).subscribe({
             next: (item) => {
                 this.currentMaliyetPolitikasi = item;
                 this.secilenMaliyetYontemi = item.maliyetYontemi ?? 'AgirlikliOrtalama';
                 this.maliyetPolitikasiDialogVisible = !item.politikaSecildiMi;
                 this.cdr.detectChanges();
             },
-            error: (error: unknown) => this.showError(error)
+            error: (error: unknown) => {
+                this.currentMaliyetPolitikasi = null;
+                this.maliyetPolitikasiDialogVisible = false;
+                this.showError(error);
+            }
         });
     }
 }

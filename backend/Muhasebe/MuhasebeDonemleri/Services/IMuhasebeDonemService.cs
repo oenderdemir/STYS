@@ -11,6 +11,11 @@ public interface IMuhasebeDonemService : IBaseRdbmsService<MuhasebeDonemDto, Muh
         DateTime tarih,
         CancellationToken cancellationToken = default);
 
+    Task<MuhasebeDonemDto?> GetDonemByTarihAsync(
+        int tesisId,
+        DateTime tarih,
+        CancellationToken cancellationToken = default);
+
     Task DonemKapatAsync(
         int id,
         CancellationToken cancellationToken = default);

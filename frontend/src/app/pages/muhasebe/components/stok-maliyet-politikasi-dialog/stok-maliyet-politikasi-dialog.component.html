@@ -1,0 +1,28 @@
+<p-dialog
+    [visible]="visible"
+    [modal]="true"
+    [closable]="false"
+    [draggable]="false"
+    [header]="(currentPolitika?.maliYil ?? '-') + ' Mali Yılı Stok Maliyet Yöntemi'"
+    [style]="{ width: '34rem', 'max-width': '95vw' }">
+    <div class="flex flex-column gap-3">
+        <p>Bu mali yıl için stok maliyet yöntemi seçilmelidir.</p>
+        <div class="flex flex-column gap-2">
+            <button
+                *ngFor="let secenek of maliyetYontemiSecenekleri"
+                pButton
+                type="button"
+                class="w-full justify-content-start"
+                [label]="secenek.label"
+                [disabled]="!!secenek.disabled"
+                [severity]="secilenMaliyetYontemi === secenek.value ? 'primary' : 'secondary'"
+                [outlined]="secilenMaliyetYontemi !== secenek.value"
+                (click)="selectMaliyetYontemi(secenek.value)">
+            </button>
+        </div>
+    </div>
+
+    <ng-template #footer>
+        <p-button label="Kaydet" icon="pi pi-check" [loading]="saving" (onClick)="savePolitika()" />
+    </ng-template>
+</p-dialog>

@@ -308,25 +308,10 @@
     </ng-template>
 </p-dialog>
 
-<p-dialog [(visible)]="maliyetPolitikasiDialogVisible" [modal]="true" [closable]="false" [draggable]="false" [header]="(currentMaliyetPolitikasi?.maliYil ?? '-') + ' Mali Yılı Stok Maliyet Yöntemi'" [style]="{ width: '34rem', 'max-width': '95vw' }">
-    <div class="flex flex-column gap-3">
-        <p>Bu mali yıl için stok maliyet yöntemi seçilmelidir.</p>
-        <div class="flex flex-column gap-2">
-            <button
-                *ngFor="let secenek of maliyetYontemiSecenekleri"
-                pButton
-                type="button"
-                class="w-full justify-content-start"
-                [label]="secenek.label"
-                [disabled]="!!secenek.disabled"
-                [severity]="secilenMaliyetYontemi === secenek.value ? 'primary' : 'secondary'"
-                [outlined]="secilenMaliyetYontemi !== secenek.value"
-                (click)="secilenMaliyetYontemi = secenek.value">
-            </button>
-        </div>
-    </div>
-
-    <ng-template #footer>
-        <p-button label="Kaydet" icon="pi pi-check" [loading]="maliyetPolitikasiSaving" (onClick)="saveMaliyetPolitikasi()" />
-    </ng-template>
-</p-dialog>
+<app-stok-maliyet-politikasi-dialog
+    [visible]="maliyetPolitikasiDialogVisible"
+    [currentPolitika]="currentMaliyetPolitikasi"
+    [secilenMaliyetYontemi]="secilenMaliyetYontemi"
+    [saving]="maliyetPolitikasiSaving"
+    (secilenMaliyetYontemiChange)="secilenMaliyetYontemi = $event"
+    (save)="saveMaliyetPolitikasi()" />

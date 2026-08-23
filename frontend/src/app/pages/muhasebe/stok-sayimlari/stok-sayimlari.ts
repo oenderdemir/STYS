@@ -19,10 +19,13 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { DepolarService } from '../depolar/depolar.service';
+import { StokMaliyetPolitikasiDialogComponent } from '../components/stok-maliyet-politikasi-dialog/stok-maliyet-politikasi-dialog.component';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { parseApiDate } from '../models/muhasebe-fis.model';
+import { CurrentStokMaliyetPolitikasiModel } from '../stok-hareketleri/stok-hareketleri.dto';
+import { StokMaliyetPolitikasiService } from '../services/stok-maliyet-politikasi.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { AddStokSayimSatirRequest, CreateStokSayimRequest, STOK_SAYIM_DURUMLARI, StokSayimModel, StokSayimSatirModel } from './stok-sayimlari.dto';
@@ -46,6 +49,7 @@ import { StokSayimlariService } from './stok-sayimlari.service';
         TagModule,
         ToastModule,
         ToolbarModule,
+        StokMaliyetPolitikasiDialogComponent,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],
@@ -56,6 +60,7 @@ export class StokSayimlariPage implements OnInit {
     private readonly service = inject(StokSayimlariService);
     private readonly depolarService = inject(DepolarService);
     private readonly tasinirKartService = inject(TasinirKartlariService);
+    private readonly stokMaliyetPolitikasiService = inject(StokMaliyetPolitikasiService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
@@ -66,8 +71,10 @@ export class StokSayimlariPage implements OnInit {
 
     loading = false;
     saving = false;
+    maliyetPolitikasiSaving = false;
     createDialogVisible = false;
     satirDialogVisible = false;
+    maliyetPolitikasiDialogVisible = false;
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -78,6 +85,8 @@ export class StokSayimlariPage implements OnInit {
     selectedSayim: StokSayimModel | null = null;
     depoOptions: Array<{ label: string; value: number }> = [];
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
+    currentMaliyetPolitikasi: CurrentStokMaliyetPolitikasiModel | null = null;
+    secilenMaliyetYontemi = 'AgirlikliOrtalama';
 
     createModel: CreateStokSayimRequest = { depoId: 0, sayimTarihi: '', aciklama: null };
     createDate: Date | null = null;
@@ -98,6 +107,9 @@ export class StokSayimlariPage implements OnInit {
         this.selectedDepoId = undefined;
         this.selectedSayim = null;
         this.loadReferences();
+        if (tesisId) {
+            this.loadCurrentMaliyetPolitikasi(tesisId);
+        }
         this.load();
     });
 
@@ -107,6 +119,9 @@ export class StokSayimlariPage implements OnInit {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
                 this.loadReferences();
+                if (this.currentTesisId) {
+                    this.loadCurrentMaliyetPolitikasi(this.currentTesisId);
+                }
                 this.load();
             },
             error: (error: unknown) => this.showError(error)
@@ -388,6 +403,65 @@ export class StokSayimlariPage implements OnInit {
         return '-';
     }
 
+    getMaliyetPolitikasiLabel(): string {
+        if (!this.currentMaliyetPolitikasi) {
+            return 'Maliyet yöntemi yükleniyor';
+        }
+
+        if (!this.currentMaliyetPolitikasi.politikaSecildiMi || !this.currentMaliyetPolitikasi.maliyetYontemi) {
+            return 'Maliyet yöntemi seçilmedi';
+        }
+
+        return `${this.currentMaliyetPolitikasi.maliYil} Maliyet Yöntemi: ${this.getMaliyetYontemiLabel(this.currentMaliyetPolitikasi.maliyetYontemi)}`;
+    }
+
+    getMaliyetYontemiLabel(value: string | null | undefined): string {
+        switch (value) {
+            case 'AgirlikliOrtalama':
+                return 'Ağırlıklı Ortalama';
+            case 'FIFO':
+                return 'FIFO';
+            case 'LIFO':
+                return 'LIFO';
+            default:
+                return value ?? '-';
+        }
+    }
+
+    saveMaliyetPolitikasi(): void {
+        const tesisId = this.requireTesisId();
+        if (tesisId === null || !this.currentMaliyetPolitikasi) {
+            return;
+        }
+
+        this.maliyetPolitikasiSaving = true;
+        this.stokMaliyetPolitikasiService.upsert({
+            tesisId,
+            maliYil: this.currentMaliyetPolitikasi.maliYil,
+            maliyetYontemi: this.secilenMaliyetYontemi
+        }).pipe(finalize(() => {
+            this.maliyetPolitikasiSaving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (result) => {
+                this.currentMaliyetPolitikasi = {
+                    tesisId: result.tesisId,
+                    maliYil: result.maliYil,
+                    maliyetYontemi: result.maliyetYontemi,
+                    politikaSecildiMi: true
+                };
+                this.maliyetPolitikasiDialogVisible = false;
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Maliyet Yöntemi Kaydedildi',
+                    detail: `${result.maliYil} mali yılı için stok maliyet yöntemi kaydedildi.`
+                });
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
     getDurumSeverity(durum: string): 'success' | 'info' | 'danger' {
         switch (durum) {
             case 'Kesinlesti':
@@ -476,5 +550,21 @@ export class StokSayimlariPage implements OnInit {
     private showError(error: unknown): void {
         const message = tryReadApiMessage(error as HttpErrorResponse) ?? 'İşlem başarısız.';
         this.messageService.add({ severity: UiSeverity.Error, summary: 'Hata', detail: message });
+    }
+
+    private loadCurrentMaliyetPolitikasi(tesisId: number, tarih: string = new Date().toISOString()): void {
+        this.stokMaliyetPolitikasiService.getCurrent(tesisId, tarih).subscribe({
+            next: (item) => {
+                this.currentMaliyetPolitikasi = item;
+                this.secilenMaliyetYontemi = item.maliyetYontemi ?? 'AgirlikliOrtalama';
+                this.maliyetPolitikasiDialogVisible = !item.politikaSecildiMi;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.currentMaliyetPolitikasi = null;
+                this.maliyetPolitikasiDialogVisible = false;
+                this.showError(error);
+            }
+        });
     }
 }

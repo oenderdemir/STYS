@@ -56,6 +56,16 @@ public class MuhasebeDonemService
         return Mapper.Map<MuhasebeDonemDto?>(entity);
     }
 
+    public async Task<MuhasebeDonemDto?> GetDonemByTarihAsync(
+        int tesisId,
+        DateTime tarih,
+        CancellationToken cancellationToken = default)
+    {
+        await _tesisScopeService.EnsureCanAccessTesisAsync(tesisId, cancellationToken);
+        var entity = await _repository.GetDonemByTarihAsync(tesisId, tarih, cancellationToken);
+        return Mapper.Map<MuhasebeDonemDto?>(entity);
+    }
+
     public override async Task<MuhasebeDonemDto> AddAsync(MuhasebeDonemDto dto)
     {
         await ValidateCreateAsync(dto, CancellationToken.None);

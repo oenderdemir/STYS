@@ -125,8 +125,13 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
 
     private async Task<int> ResolveMaliYilAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken)
     {
-        var aktifDonem = await _muhasebeDonemService.GetAktifDonemAsync(tesisId, tarih, cancellationToken);
-        return aktifDonem?.MaliYil ?? tarih.Year;
+        var donem = await _muhasebeDonemService.GetDonemByTarihAsync(tesisId, tarih, cancellationToken);
+        if (donem is null)
+        {
+            throw new BaseException("Bu tarih için muhasebe dönemi tanımlanmamıştır.", 400);
+        }
+
+        return donem.MaliYil;
     }
 
     private async Task<bool> HasCostSnapshottedMovementAsync(int tesisId, int maliYil, CancellationToken cancellationToken)

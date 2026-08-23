@@ -51,6 +51,17 @@ public class MuhasebeDonemController : UIController
         return item is null ? NotFound() : Ok(item);
     }
 
+    [HttpGet("tarihe-gore")]
+    [Permission(StructurePermissions.MuhasebeDonemYonetimi.View)]
+    public async Task<ActionResult<MuhasebeDonemDto>> GetByTarih(
+        [FromQuery] int tesisId,
+        [FromQuery] DateTime tarih,
+        CancellationToken cancellationToken)
+    {
+        var item = await _service.GetDonemByTarihAsync(tesisId, tarih, cancellationToken);
+        return item is null ? NotFound() : Ok(item);
+    }
+
     [HttpPost]
     [Permission(StructurePermissions.MuhasebeDonemYonetimi.Manage)]
     public async Task<ActionResult<MuhasebeDonemDto>> Create(

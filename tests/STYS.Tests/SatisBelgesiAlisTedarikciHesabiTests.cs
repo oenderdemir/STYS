@@ -658,6 +658,9 @@ public class SatisBelgesiAlisTedarikciHesabiTests
                 KapaliMi = false
             });
 
+        public Task<MuhasebeDonemDto?> GetDonemByTarihAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default)
+            => GetAktifDonemAsync(tesisId, tarih, cancellationToken);
+
         public Task DonemKapatAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
         public Task DonemAcAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();

@@ -21,6 +21,7 @@ import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
+import { StokMaliyetPolitikasiDialogComponent } from '../components/stok-maliyet-politikasi-dialog/stok-maliyet-politikasi-dialog.component';
 import {
     CreateMuhasebeDonemRequest,
     MuhasebeDonemDto,
@@ -28,6 +29,8 @@ import {
     createDefaultDonemFilter
 } from '../models/muhasebe-donem.model';
 import { MuhasebeDonemService } from '../services/muhasebe-donem.service';
+import { CurrentStokMaliyetPolitikasiModel } from '../stok-hareketleri/stok-hareketleri.dto';
+import { StokMaliyetPolitikasiService } from '../services/stok-maliyet-politikasi.service';
 
 interface DonemDialogModel {
     id: number;
@@ -78,6 +81,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
         TagModule,
         ToastModule,
         TooltipModule,
+        StokMaliyetPolitikasiDialogComponent,
         MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],
@@ -87,6 +91,7 @@ const DURUM_SECENEKLERI: Array<{ label: string; value: boolean | null }> = [
 })
 export class MuhasebeDonemlerComponent implements OnInit {
     private readonly service = inject(MuhasebeDonemService);
+    private readonly stokMaliyetPolitikasiService = inject(StokMaliyetPolitikasiService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly confirmationService = inject(ConfirmationService);
@@ -95,13 +100,17 @@ export class MuhasebeDonemlerComponent implements OnInit {
     loading = false;
     saving = false;
     dialogVisible = false;
+    maliyetPolitikasiDialogVisible = false;
     dialogMode: 'create' | 'edit' = 'create';
+    maliyetPolitikasiSaving = false;
 
     allRecords: MuhasebeDonemDto[] = [];
     filteredRecords: MuhasebeDonemDto[] = [];
 
     filter = createDefaultDonemFilter();
     model: DonemDialogModel = this.createEmpty();
+    currentMaliyetPolitikasi: CurrentStokMaliyetPolitikasiModel | null = null;
+    secilenMaliyetYontemi = 'AgirlikliOrtalama';
 
     readonly maliYilSecenekleri = MALI_YIL_SECENEKLERI;
     readonly durumSecenekleri = DURUM_SECENEKLERI;
@@ -263,10 +272,11 @@ export class MuhasebeDonemlerComponent implements OnInit {
                 this.saving = false;
                 this.cdr.detectChanges();
             })).subscribe({
-                next: () => {
+                next: (created) => {
                     this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Dönem oluşturuldu.' });
                     this.dialogVisible = false;
                     this.loadDonemler();
+                    this.loadCurrentMaliyetPolitikasi(created.tesisId, created.baslangicTarihi);
                 },
                 error: (error: unknown) => {
                     this.showError(error);
@@ -415,6 +425,42 @@ export class MuhasebeDonemlerComponent implements OnInit {
         return kapaliMi ? 'Kapalı' : 'Açık';
     }
 
+    saveMaliyetPolitikasi(): void {
+        const tesisId = this.getSeciliTesisIdOrWarn();
+        if (tesisId === null || !this.currentMaliyetPolitikasi) {
+            return;
+        }
+
+        this.maliyetPolitikasiSaving = true;
+        this.stokMaliyetPolitikasiService.upsert({
+            tesisId,
+            maliYil: this.currentMaliyetPolitikasi.maliYil,
+            maliyetYontemi: this.secilenMaliyetYontemi
+        }).pipe(finalize(() => {
+            this.maliyetPolitikasiSaving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (result) => {
+                this.currentMaliyetPolitikasi = {
+                    tesisId: result.tesisId,
+                    maliYil: result.maliYil,
+                    maliyetYontemi: result.maliyetYontemi,
+                    politikaSecildiMi: true
+                };
+                this.maliyetPolitikasiDialogVisible = false;
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Maliyet Yöntemi Kaydedildi',
+                    detail: `${result.maliYil} mali yılı için stok maliyet yöntemi kaydedildi.`
+                });
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.showError(error);
+            }
+        });
+    }
+
     private createEmpty(): DonemDialogModel {
         const today = new Date();
         return {
@@ -452,5 +498,21 @@ export class MuhasebeDonemlerComponent implements OnInit {
             });
             return null;
         }
+    }
+
+    private loadCurrentMaliyetPolitikasi(tesisId: number, tarih: string): void {
+        this.stokMaliyetPolitikasiService.getCurrent(tesisId, tarih).subscribe({
+            next: (item) => {
+                this.currentMaliyetPolitikasi = item;
+                this.secilenMaliyetYontemi = item.maliyetYontemi ?? 'AgirlikliOrtalama';
+                this.maliyetPolitikasiDialogVisible = !item.politikaSecildiMi;
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => {
+                this.currentMaliyetPolitikasi = null;
+                this.maliyetPolitikasiDialogVisible = false;
+                this.showError(error);
+            }
+        });
     }
 }

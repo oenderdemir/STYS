@@ -406,6 +406,9 @@ public class StokSayimServiceTests
                 DonemNo = tarih.Month
             });
 
+        public Task<MuhasebeDonemDto?> GetDonemByTarihAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default)
+            => GetAktifDonemAsync(tesisId, tarih, cancellationToken);
+
         public Task DonemKapatAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DonemAcAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IEnumerable<MuhasebeDonemDto>> GetAllAsync(Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null) => throw new NotSupportedException();

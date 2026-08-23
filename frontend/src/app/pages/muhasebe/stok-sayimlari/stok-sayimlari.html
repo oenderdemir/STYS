@@ -8,6 +8,7 @@
     <ng-template #start>
         <p-button label="Yeni Sayim" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load()" />
+        <span class="ml-3 text-sm font-medium">{{ getMaliyetPolitikasiLabel() }}</span>
     </ng-template>
     <ng-template #end>
         <p-select styleClass="min-w-18rem" [options]="depoOptions" optionLabel="label" optionValue="value" placeholder="Depo filtrele" [showClear]="true" [(ngModel)]="selectedDepoId" (onChange)="onDepoFilterChange()" appendTo="body" />
@@ -117,6 +118,14 @@
         <p-button label="Olustur" [loading]="saving" (onClick)="create()" />
     </ng-template>
 </p-dialog>
+
+<app-stok-maliyet-politikasi-dialog
+    [visible]="maliyetPolitikasiDialogVisible"
+    [currentPolitika]="currentMaliyetPolitikasi"
+    [secilenMaliyetYontemi]="secilenMaliyetYontemi"
+    [saving]="maliyetPolitikasiSaving"
+    (secilenMaliyetYontemiChange)="secilenMaliyetYontemi = $event"
+    (save)="saveMaliyetPolitikasi()" />
 
 <p-dialog [(visible)]="satirDialogVisible" [modal]="true" header="Sayim Satiri Ekle" [style]="{ width: '36rem', 'max-width': '95vw' }">
     <div class="grid grid-cols-12 gap-3">

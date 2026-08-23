@@ -274,4 +274,11 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(component.isSeriSelectionMode()).toBeTrue();
         expect(component.getPositiveSeriOptions()).toEqual([{ label: 'SN001', value: 7 }]);
     });
+
+    it('lot yoksa seri numarasini listede gosterir', () => {
+        const component = createComponent();
+
+        expect(component.getTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
+        expect(component.getDetayTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
+    });
 });

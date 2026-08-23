@@ -390,6 +390,16 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
                 EnsureNonNegativeBalance(projectedLotBalance, "Seçilen lotta bu işlem için yeterli stok bulunmamaktadır.");
             }
 
+            if (transferGrubu.GirisAyagi.StokSeriId.HasValue)
+            {
+                await EnsureSeriTransferIptalCanProceedAsync(
+                    transferGrubu.CikisAyagi.DepoId,
+                    transferGrubu.GirisAyagi.DepoId,
+                    transferGrubu.GirisAyagi.TasinirKartId,
+                    transferGrubu.GirisAyagi.StokSeriId.Value,
+                    cancellationToken);
+            }
+
             foreach (var item in transferHareketleri)
             {
                 item.Durum = StokHareketDurumlari.Iptal;
@@ -1288,6 +1298,21 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         if (kaynakBalance != 1 || hedefBalance != 0 || toplam != 1)
         {
             throw new BaseException("Seçilen seri kaynak depoda mevcut değil veya hedef depoda zaten bulunuyor.", 400);
+        }
+    }
+
+    private async Task EnsureSeriTransferIptalCanProceedAsync(int kaynakDepoId, int hedefDepoId, int tasinirKartId, int stokSeriId, CancellationToken cancellationToken)
+    {
+        var hedefDepo = await GetDepoOrThrowAsync(hedefDepoId);
+        var seri = await GetValidatedSeriAsync(stokSeriId, tasinirKartId, hedefDepo.TesisId, cancellationToken);
+        var balances = await GetCurrentSeriDepotBalancesAsync(seri.Id, cancellationToken);
+        var kaynakBalance = balances.TryGetValue(kaynakDepoId, out var kaynak) ? kaynak : 0m;
+        var hedefBalance = balances.TryGetValue(hedefDepoId, out var hedef) ? hedef : 0m;
+        var toplam = balances.Values.Sum();
+
+        if (hedefBalance != 1 || kaynakBalance != 0 || toplam != 1)
+        {
+            throw new BaseException("Seri hedef depodan kullanıldığı için transfer iptal edilemez.", 400);
         }
     }
 

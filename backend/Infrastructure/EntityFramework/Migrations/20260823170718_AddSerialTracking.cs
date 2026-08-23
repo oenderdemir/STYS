@@ -20,6 +20,15 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 nullable: false,
                 defaultValue: "Yok");
 
+            migrationBuilder.Sql("""
+                UPDATE [muhasebe].[TasinirKartlar]
+                SET [TakipTipi] = CASE
+                    WHEN [TakipliMi] = 1 THEN 'Lot'
+                    ELSE 'Yok'
+                END
+                WHERE [IsDeleted] = 0
+                """);
+
             migrationBuilder.AddColumn<int>(
                 name: "StokSeriId",
                 schema: "muhasebe",

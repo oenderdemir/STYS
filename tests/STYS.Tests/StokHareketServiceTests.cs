@@ -113,6 +113,26 @@ public class StokHareketServiceTests
     }
 
     [Fact]
+    public async Task TransferIptalAsync_SeriHedefDepodanKullanildiysaReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipliMi: true, takipTipi: TasinirKartTakipTipleri.Seri);
+        var seriId = await CreateSeriAsync(dbContext, "SN001");
+        var baskaSeriId = await CreateSeriAsync(dbContext, "SN002");
+        await SeedMovementAsync(dbContext, 10, 100, StokHareketTipleri.Giris, 1, 1, StokHareketDurumlari.Aktif, stokSeriId: seriId);
+        await SeedMovementAsync(dbContext, 20, 100, StokHareketTipleri.Giris, 1, 1, StokHareketDurumlari.Aktif, stokSeriId: baskaSeriId);
+        var service = CreateService(dbContext);
+
+        var created = await service.CreateTransferAsync(CreateTransferRequest(stokSeriId: seriId, miktar: 1));
+        await service.AddAsync(CreateStokHareketDto(StokHareketTipleri.Cikis, 1, depoId: 20, stokSeriId: seriId));
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.TransferIptalAsync(created[0].Id!.Value));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Equal("Seri hedef depodan kullanıldığı için transfer iptal edilemez.", ex.Message);
+    }
+
+    [Fact]
     public async Task TransferIptalAsync_GrupButunluguBozuksaReddeder()
     {
         await using var dbContext = CreateDbContext();

@@ -1021,6 +1021,30 @@ export class StokHareketleriPage implements OnInit {
         return row.transferYonu === 'Giris' ? 'Transfer / Giriş' : 'Transfer / Çıkış';
     }
 
+    getTrackingLabel(row: Pick<StokHareketModel, 'lotNo' | 'seriNo'>): string {
+        if (row.lotNo?.trim()) {
+            return row.lotNo;
+        }
+
+        if (row.seriNo?.trim()) {
+            return row.seriNo;
+        }
+
+        return '-';
+    }
+
+    getDetayTrackingLabel(row: Pick<StokDetayModel['satirlar'][number], 'lotNo' | 'seriNo'>): string {
+        if (row.lotNo?.trim()) {
+            return row.lotNo;
+        }
+
+        if (row.seriNo?.trim()) {
+            return row.seriNo;
+        }
+
+        return '-';
+    }
+
     onLotSelectionChange(stokLotId: number | null): void {
         this.model.stokLotId = stokLotId;
         const lot = stokLotId ? this.lotBakiyeOptions.find((x) => x.stokLotId === stokLotId) ?? null : null;

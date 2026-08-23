@@ -28,7 +28,7 @@
                         <th>Tarih</th>
                         <th>Depo</th>
                         <th>Tasinir Kart</th>
-                        <th>Lot</th>
+                        <th>Lot / Seri</th>
                         <th>Tip</th>
                         <th>Miktar</th>
                         <th>Birim Fiyat</th>
@@ -49,8 +49,8 @@
                         </td>
                         <td>{{ getTasinirKartLabel(item.tasinirKartId) }}</td>
                         <td>
-                            <div>{{ item.lotNo || '-' }}</div>
-                            <small *ngIf="item.sonKullanmaTarihi">{{ item.sonKullanmaTarihi | date: 'dd.MM.yyyy' }}</small>
+                            <div>{{ getTrackingLabel(item) }}</div>
+                            <small *ngIf="item.lotNo && item.sonKullanmaTarihi">{{ item.sonKullanmaTarihi | date: 'dd.MM.yyyy' }}</small>
                         </td>
                         <td>{{ getHareketTipiLabel(item) }}</td>
                         <td>{{ item.miktar }}</td>
@@ -118,7 +118,7 @@
                                         <ng-template #header>
                                             <tr>
                                                 <th>Tarih</th>
-                                                <th>Lot</th>
+                                                <th>Lot / Seri</th>
                                                 <th>SKT</th>
                                                 <th>Miktar</th>
                                                 <th>Birim</th>
@@ -130,7 +130,7 @@
                                         <ng-template #body let-satir>
                                             <tr>
                                                 <td>{{ satir.hareketTarihi ? (satir.hareketTarihi | date: 'dd.MM.yyyy HH:mm') : '-' }}</td>
-                                                <td>{{ satir.lotNo || '-' }}</td>
+                                                <td>{{ getDetayTrackingLabel(satir) }}</td>
                                                 <td>{{ satir.sonKullanmaTarihi ? (satir.sonKullanmaTarihi | date: 'dd.MM.yyyy') : '-' }}</td>
                                                 <td>{{ satir.miktar | number: '1.3-3' }}</td>
                                                 <td>{{ satir.birim }}</td>

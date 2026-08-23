@@ -19,11 +19,6 @@ public class StokMaliyetStrategyResolver : IStokMaliyetStrategyResolver
             return strategy;
         }
 
-        if (string.Equals(maliyetYontemi, StokMaliyetYontemleri.LIFO, StringComparison.Ordinal))
-        {
-            throw new BaseException("Seçilen stok maliyet yöntemi henüz desteklenmiyor.", 400);
-        }
-
         throw new BaseException("Geçersiz stok maliyet yöntemi seçildi.", 400);
     }
 }

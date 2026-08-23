@@ -351,10 +351,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             }
 
             var kaynakStrategy = await ResolveCostStrategyAsync(request.KaynakDepoId, request.HareketTarihi, cancellationToken);
-            if (kaynakStrategy is FifoMaliyetStrategy fifoStrategy)
+            if (kaynakStrategy is LayeredCostStrategyBase layeredStrategy)
             {
-                var fifoPlan = await fifoStrategy.PlanOutgoingConsumptionAsync(request.KaynakDepoId, request.TasinirKartId, request.Miktar, cancellationToken);
-                var transferMaliyetTutari = fifoPlan.ToplamMaliyet;
+                var transferPlan = await layeredStrategy.PlanOutgoingConsumptionAsync(request.KaynakDepoId, request.TasinirKartId, request.Miktar, cancellationToken);
+                var transferMaliyetTutari = transferPlan.ToplamMaliyet;
                 var transferMaliyetBirimFiyat = request.Miktar <= 0
                     ? 0m
                     : Math.Round(transferMaliyetTutari / request.Miktar, 6, MidpointRounding.AwayFromZero);
@@ -386,7 +386,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
                 await _dbContext.StokHareketleri.AddAsync(hedefHareket, cancellationToken);
                 await _dbContext.SaveChangesAsync(cancellationToken);
-                await fifoStrategy.ApplyTransferAsync(kaynakHareket, hedefHareket, cancellationToken);
+                await layeredStrategy.ApplyTransferAsync(kaynakHareket, hedefHareket, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
                 return [_mapper.Map<StokHareketDto>(kaynakHareket), _mapper.Map<StokHareketDto>(hedefHareket)];
@@ -492,9 +492,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             }
 
             var kaynakStrategy = await ResolveCostStrategyAsync(transferGrubu.CikisAyagi.DepoId, transferGrubu.CikisAyagi.HareketTarihi, cancellationToken);
-            if (kaynakStrategy is FifoMaliyetStrategy)
+            if (kaynakStrategy is LayeredCostStrategyBase)
             {
-                await RollbackFifoTransferAsync(transferGrubu, cancellationToken);
+                await RollbackLayeredTransferAsync(transferGrubu, cancellationToken);
             }
 
             foreach (var item in transferHareketleri)
@@ -936,7 +936,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         return new TransferIptalGrubu(girisAyagi, cikisAyagi);
     }
 
-    private async Task RollbackFifoTransferAsync(TransferIptalGrubu transferGrubu, CancellationToken cancellationToken)
+    private async Task RollbackLayeredTransferAsync(TransferIptalGrubu transferGrubu, CancellationToken cancellationToken)
     {
         var kaynakTuketimler = await _dbContext.StokMaliyetKatmanTuketimleri
             .Where(x => x.CikisStokHareketId == transferGrubu.CikisAyagi.Id && !x.IsDeleted)
@@ -957,7 +957,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
             if (hedefKatmanKullanildi)
             {
-                throw new BaseException("Hedef depodaki FIFO maliyet katmanları kullanıldığı için transfer iptal edilemez.", 400);
+                throw new BaseException("Hedef depodaki maliyet katmanları kullanıldığı için transfer iptal edilemez.", 400);
             }
         }
 
@@ -1095,10 +1095,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         var strategy = await ResolveCostStrategyAsync(existing.DepoId, existing.HareketTarihi, cancellationToken);
-        if (strategy is FifoMaliyetStrategy
+        if (strategy is LayeredCostStrategyBase
             && IsCostSensitiveMovement(existing.HareketTipi, existing.TransferYonu, existing.SayimFarkiYonu))
         {
-            throw new BaseException("FIFO maliyet katmanları oluştuğu için bu stok hareketinde maliyet etkili alanlar güncellenemez.", 400);
+            throw new BaseException("Maliyet katmanları oluştuğu için bu stok hareketinde maliyet etkili alanlar güncellenemez.", 400);
         }
 
         if (!await HasDependentCostSnapshotsAsync(existing, cancellationToken))
@@ -1140,10 +1140,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private async Task EnsureDeleteCostMutationAllowedAsync(StokHareket existing, CancellationToken cancellationToken)
     {
         var strategy = await ResolveCostStrategyAsync(existing.DepoId, existing.HareketTarihi, cancellationToken);
-        if (strategy is FifoMaliyetStrategy
+        if (strategy is LayeredCostStrategyBase
             && IsCostSensitiveMovement(existing.HareketTipi, existing.TransferYonu, existing.SayimFarkiYonu))
         {
-            throw new BaseException("FIFO maliyet katmanları oluştuğu için bu stok hareketi silinemez.", 400);
+            throw new BaseException("Maliyet katmanları oluştuğu için bu stok hareketi silinemez.", 400);
         }
 
         if (!await HasDependentCostSnapshotsAsync(existing, cancellationToken))
@@ -1182,7 +1182,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         }
 
         var strategy = await ResolveCostStrategyAsync(created.DepoId, created.HareketTarihi, cancellationToken);
-        if (strategy is not FifoMaliyetStrategy fifoStrategy)
+        if (strategy is not LayeredCostStrategyBase layeredStrategy)
         {
             return;
         }
@@ -1190,7 +1190,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         var entity = await _dbContext.StokHareketleri
             .AsNoTracking()
             .FirstAsync(x => x.Id == created.Id.Value, cancellationToken);
-        await fifoStrategy.ApplyCreatedMovementAsync(entity, cancellationToken);
+        await layeredStrategy.ApplyCreatedMovementAsync(entity, cancellationToken);
     }
 
     private async Task<bool> HasMissingCostInfoAsync(int depoId, int tasinirKartId, decimal snapshotBakiyeMiktari, CancellationToken cancellationToken)

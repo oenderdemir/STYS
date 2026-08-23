@@ -330,7 +330,7 @@ export class StokHareketleriPage implements OnInit {
                     summary: 'Maliyet Yöntemi Kaydedildi',
                     detail: `${result.maliYil} mali yılı için stok maliyet yöntemi kaydedildi.`
                 });
-                if (result.maliyetYontemi === 'FIFO') {
+                if (result.maliyetYontemi === 'FIFO' || result.maliyetYontemi === 'LIFO') {
                     this.loadFifoBaslangicStogu();
                 } else {
                     this.fifoBaslangicSatirlari = [];
@@ -343,11 +343,13 @@ export class StokHareketleriPage implements OnInit {
     }
 
     showFifoBaslangicAction(): boolean {
-        return this.currentMaliyetPolitikasi?.maliyetYontemi === 'FIFO' && this.fifoBaslangicSatirlari.length > 0;
+        return (this.currentMaliyetPolitikasi?.maliyetYontemi === 'FIFO' || this.currentMaliyetPolitikasi?.maliyetYontemi === 'LIFO')
+            && this.fifoBaslangicSatirlari.length > 0;
     }
 
     openFifoBaslangicDialog(): void {
-        if (!this.currentMaliyetPolitikasi || this.currentMaliyetPolitikasi.maliyetYontemi !== 'FIFO') {
+        if (!this.currentMaliyetPolitikasi
+            || (this.currentMaliyetPolitikasi.maliyetYontemi !== 'FIFO' && this.currentMaliyetPolitikasi.maliyetYontemi !== 'LIFO')) {
             return;
         }
 
@@ -364,7 +366,7 @@ export class StokHareketleriPage implements OnInit {
         }
 
         if (this.fifoBaslangicSatirlari.length === 0) {
-            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gerekli Değil', detail: 'FIFO başlangıç stoğu gerektiren kayıt bulunmuyor.' });
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Gerekli Değil', detail: 'Maliyet başlangıç stoğu gerektiren kayıt bulunmuyor.' });
             return;
         }
 
@@ -400,8 +402,8 @@ export class StokHareketleriPage implements OnInit {
                 this.fifoBaslangicDialogVisible = this.fifoBaslangicSatirlari.length > 0;
                 this.messageService.add({
                     severity: UiSeverity.Success,
-                    summary: 'FIFO Başlangıç Stoğu Oluşturuldu',
-                    detail: 'Katmansız stoklar için FIFO başlangıç katmanları oluşturuldu.'
+                    summary: 'Maliyet Başlangıç Stoğu Oluşturuldu',
+                    detail: 'Katmansız stoklar için başlangıç maliyet katmanları oluşturuldu.'
                 });
                 this.loadSummary();
                 this.cdr.detectChanges();
@@ -1427,7 +1429,7 @@ export class StokHareketleriPage implements OnInit {
                 this.currentMaliyetPolitikasi = item;
                 this.secilenMaliyetYontemi = item.maliyetYontemi ?? 'AgirlikliOrtalama';
                 this.maliyetPolitikasiDialogVisible = !item.politikaSecildiMi;
-                if (item.politikaSecildiMi && item.maliyetYontemi === 'FIFO') {
+                if (item.politikaSecildiMi && (item.maliyetYontemi === 'FIFO' || item.maliyetYontemi === 'LIFO')) {
                     this.loadFifoBaslangicStogu();
                 } else {
                     this.fifoBaslangicSatirlari = [];

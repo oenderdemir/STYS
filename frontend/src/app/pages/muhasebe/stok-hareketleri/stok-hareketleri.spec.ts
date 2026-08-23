@@ -293,12 +293,12 @@ describe('StokHareketleriPage varsayilan depo davranisi', () => {
         expect(component.getDetayTrackingLabel({ lotNo: null, seriNo: 'SN001' } as any)).toBe('SN001');
     });
 
-    it('stok maliyet yontemlerinde FIFO secilebilir ve LIFO disabled kalir', () => {
+    it('stok maliyet yontemlerinde FIFO ve LIFO secilebilir', () => {
         const fifo = STOK_MALIYET_YONTEMI_SECENEKLERI.find(x => x.value === 'FIFO');
         const lifo = STOK_MALIYET_YONTEMI_SECENEKLERI.find(x => x.value === 'LIFO');
 
         expect(fifo?.disabled).toBeUndefined();
-        expect(lifo?.disabled).toBeTrue();
+        expect(lifo?.disabled).toBeUndefined();
     });
 
     it('FIFO ve katmansiz stok varsa FIFO Baslangic Stogu aksiyonu gorunur', () => {

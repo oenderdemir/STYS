@@ -8,8 +8,8 @@
     <ng-template #start>
         <p-button label="Yeni" icon="pi pi-plus" (onClick)="openCreate()" />
         <p-button label="Yenile" icon="pi pi-refresh" class="ml-2" severity="secondary" [outlined]="true" (onClick)="load(); loadSummary()" />
-        <p-button *ngIf="showFifoBaslangicAction()" label="FIFO Başlangıç Stoğu" icon="pi pi-warehouse" class="ml-2" severity="warn" [outlined]="true" (onClick)="openFifoBaslangicDialog()" />
-        <small *ngIf="showFifoBaslangicAction()" class="ml-2 text-orange-600">FIFO başlangıç stoğu oluşturulması gerekiyor.</small>
+        <p-button *ngIf="showFifoBaslangicAction()" label="Maliyet Başlangıç Stoğu" icon="pi pi-warehouse" class="ml-2" severity="warn" [outlined]="true" (onClick)="openFifoBaslangicDialog()" />
+        <small *ngIf="showFifoBaslangicAction()" class="ml-2 text-orange-600">Maliyet başlangıç stoğu oluşturulması gerekiyor.</small>
         <span class="ml-3 text-sm font-medium">{{ getMaliyetPolitikasiLabel() }}</span>
     </ng-template>
     <ng-template #end>
@@ -205,9 +205,9 @@
     </p-tabpanels>
 </p-tabs>
 
-<p-dialog [(visible)]="fifoBaslangicDialogVisible" [modal]="true" header="FIFO Başlangıç Stoğu" [style]="{ width: '78rem', 'max-width': '96vw' }">
+<p-dialog [(visible)]="fifoBaslangicDialogVisible" [modal]="true" header="Maliyet Başlangıç Stoğu" [style]="{ width: '78rem', 'max-width': '96vw' }">
     <div class="mb-3 text-sm text-color-secondary">
-        Katmansız mevcut stoklar için başlangıç FIFO katmanları oluşturulur. Fiziksel stok ledger'ı değişmez.
+        Katmansız mevcut stoklar için başlangıç maliyet katmanları oluşturulur. Fiziksel stok ledger'ı değişmez.
     </div>
 
     <p-table [value]="fifoBaslangicSatirlari" [loading]="fifoBaslangicLoading" [tableStyle]="{ 'min-width': '72rem' }">
@@ -217,7 +217,7 @@
                 <th>Stok Kodu</th>
                 <th>Kart</th>
                 <th>Mevcut Miktar</th>
-                <th>FIFO Katman Miktarı</th>
+                <th>Katman Miktarı</th>
                 <th>Katmansız Miktar</th>
                 <th>Başlangıç Birim Maliyeti</th>
             </tr>

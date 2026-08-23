@@ -4,18 +4,18 @@ using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 
 namespace STYS.Muhasebe.StokMaliyetPolitikalari.Services;
 
-public class FifoMaliyetStrategy : LayeredCostStrategyBase
+public class LifoMaliyetStrategy : LayeredCostStrategyBase
 {
-    public FifoMaliyetStrategy(StysAppDbContext dbContext)
+    public LifoMaliyetStrategy(StysAppDbContext dbContext)
         : base(dbContext)
     {
     }
 
-    public override string MaliyetYontemi => StokMaliyetYontemleri.FIFO;
+    public override string MaliyetYontemi => StokMaliyetYontemleri.LIFO;
 
     protected override IOrderedQueryable<StokMaliyetKatmani> ApplyLayerOrdering(IQueryable<StokMaliyetKatmani> query)
         => query
-            .OrderBy(x => x.GirisTarihi)
-            .ThenBy(x => x.KaynakStokHareketId ?? 0)
-            .ThenBy(x => x.Id);
+            .OrderByDescending(x => x.GirisTarihi)
+            .ThenByDescending(x => x.KaynakStokHareketId ?? 0)
+            .ThenByDescending(x => x.Id);
 }

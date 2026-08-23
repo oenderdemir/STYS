@@ -231,6 +231,7 @@ builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetPolitikasiService, STYS.Muhasebe.StokMaliyetPolitikalari.Services.StokMaliyetPolitikasiService>();
 builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetStrategy, STYS.Muhasebe.StokMaliyetPolitikalari.Services.AgirlikliOrtalamaMaliyetStrategy>();
 builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetStrategy, STYS.Muhasebe.StokMaliyetPolitikalari.Services.FifoMaliyetStrategy>();
+builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetStrategy, STYS.Muhasebe.StokMaliyetPolitikalari.Services.LifoMaliyetStrategy>();
 builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetStrategyResolver, STYS.Muhasebe.StokMaliyetPolitikalari.Services.StokMaliyetStrategyResolver>();
 builder.Services.AddScoped<IMuhasebeDashboardService, MuhasebeDashboardService>();
 builder.Services.AddScoped<IDonemKapanisKontrolService, DonemKapanisKontrolService>();

@@ -65,10 +65,11 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
         ValidateRequest(request);
         await _tesisScopeService.EnsureCanAccessTesisAsync(request.TesisId, cancellationToken);
 
-        if (!string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal)
-            && await HasOpenFifoLayersAsync(request.TesisId, cancellationToken))
+        var openLayerMethod = await GetOpenLayerMethodAsync(request.TesisId, cancellationToken);
+        if (openLayerMethod is not null
+            && !string.Equals(openLayerMethod, request.MaliyetYontemi, StringComparison.Ordinal))
         {
-            throw new BaseException("Devreden FIFO maliyet katmanları bulunduğu için stok maliyet yöntemi değiştirilemez.", 400);
+            throw new BaseException("Açık maliyet katmanları bulunduğu için stok maliyet yöntemi değiştirilemez.", 400);
         }
 
         var politika = await _dbContext.StokMaliyetPolitikalari
@@ -238,7 +239,8 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
         }
 
         if (!string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.AgirlikliOrtalama, StringComparison.Ordinal)
-            && !string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal))
+            && !string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal)
+            && !string.Equals(request.MaliyetYontemi, StokMaliyetYontemleri.LIFO, StringComparison.Ordinal))
         {
             throw new BaseException("Seçilen stok maliyet yöntemi henüz desteklenmiyor.", 400);
         }
@@ -258,7 +260,7 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
 
         if (request.Satirlar.Count == 0)
         {
-            throw new BaseException("FIFO başlangıç stoğu için en az bir satır seçilmelidir.", 400);
+            throw new BaseException("Maliyet başlangıç stoğu için en az bir satır seçilmelidir.", 400);
         }
     }
 
@@ -289,14 +291,35 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
                 cancellationToken);
     }
 
-    private async Task<bool> HasOpenFifoLayersAsync(int tesisId, CancellationToken cancellationToken)
+    private async Task<string?> GetOpenLayerMethodAsync(int tesisId, CancellationToken cancellationToken)
     {
-        return await _dbContext.StokMaliyetKatmanlari
+        var hasOpenLayers = await _dbContext.StokMaliyetKatmanlari
             .AsNoTracking()
             .AnyAsync(x =>
                 x.TesisId == tesisId &&
                 x.KalanMiktar > 0,
                 cancellationToken);
+
+        if (!hasOpenLayers)
+        {
+            return null;
+        }
+
+        var layeredPolicies = await _dbContext.StokMaliyetPolitikalari
+            .AsNoTracking()
+            .Where(x =>
+                x.TesisId == tesisId &&
+                (x.MaliyetYontemi == StokMaliyetYontemleri.FIFO || x.MaliyetYontemi == StokMaliyetYontemleri.LIFO))
+            .OrderByDescending(x => x.MaliYil)
+            .Select(x => x.MaliyetYontemi)
+            .ToListAsync(cancellationToken);
+
+        if (layeredPolicies.Any(x => string.Equals(x, StokMaliyetYontemleri.LIFO, StringComparison.Ordinal)))
+        {
+            return StokMaliyetYontemleri.LIFO;
+        }
+
+        return layeredPolicies.FirstOrDefault();
     }
 
     private async Task<HashSet<int>> ResolveAllowedDepoIdsAsync(int tesisId, CancellationToken cancellationToken)
@@ -320,9 +343,11 @@ public class StokMaliyetPolitikasiService : IStokMaliyetPolitikasiService
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.TesisId == tesisId && x.MaliYil == maliYil, cancellationToken);
 
-        if (politika is null || !string.Equals(politika.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal))
+        if (politika is null
+            || (!string.Equals(politika.MaliyetYontemi, StokMaliyetYontemleri.FIFO, StringComparison.Ordinal)
+                && !string.Equals(politika.MaliyetYontemi, StokMaliyetYontemleri.LIFO, StringComparison.Ordinal)))
         {
-            throw new BaseException("FIFO başlangıç stoğu yalnızca FIFO maliyet politikası seçiliyse oluşturulabilir.", 400);
+            throw new BaseException("Maliyet başlangıç stoğu yalnızca FIFO veya LIFO maliyet politikası seçiliyse oluşturulabilir.", 400);
         }
     }
 

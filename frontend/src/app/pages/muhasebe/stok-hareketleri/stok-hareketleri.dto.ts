@@ -181,7 +181,7 @@ export interface CreateFifoBaslangicStoguSatirRequest {
 export const STOK_MALIYET_YONTEMI_SECENEKLERI: Array<{ label: string; value: string; disabled?: boolean }> = [
     { label: 'Ağırlıklı Ortalama', value: 'AgirlikliOrtalama' },
     { label: 'FIFO', value: 'FIFO' },
-    { label: 'LIFO (Henüz desteklenmiyor)', value: 'LIFO', disabled: true }
+    { label: 'LIFO', value: 'LIFO' }
 ];
 
 export interface StokDetaySatirModel {

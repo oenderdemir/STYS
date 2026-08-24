@@ -13,6 +13,7 @@ using STYS.Fiyatlandirma.Entities;
 using STYS.Iller.Entities;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.Kamp.Entities;
+using STYS.KantinYonetimi.Kantinler.Entities;
 using STYS.Kurumlar.Entities;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Kullanicilar.Entities;
@@ -192,6 +193,8 @@ public class StysAppDbContext : DbContext
     public DbSet<TasinirKart> TasinirKartlar => Set<TasinirKart>();
     public DbSet<Depo> Depolar => Set<Depo>();
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
+    public DbSet<Kantin> Kantinler => Set<Kantin>();
+    public DbSet<KantinUrun> KantinUrunler => Set<KantinUrun>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<StokLot> StokLotlar => Set<StokLot>();
     public DbSet<StokMaliyetKatmani> StokMaliyetKatmanlari => Set<StokMaliyetKatmani>();
@@ -257,6 +260,7 @@ public class StysAppDbContext : DbContext
         modelBuilder.HasDefaultSchema("dbo");
         const string restoranSchema = "restoran";
         const string muhasebeSchema = "muhasebe";
+        const string kantinSchema = "kantin";
         const string entegrasyonSchema = "entegrasyon";
 
         modelBuilder.Entity<Country>(entity =>
@@ -2554,6 +2558,60 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.MuhasebeHesapPlani)
                 .WithMany()
                 .HasForeignKey(x => x.MuhasebeHesapPlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Kantin>(entity =>
+        {
+            entity.ToTable("Kantinler", kantinSchema);
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.TesisId, x.Kod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.DepoId)
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.VarsayilanNakitKasaId)
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanNakitKasaId] IS NOT NULL");
+
+            entity.HasOne(x => x.Tesis)
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Depo)
+                .WithMany()
+                .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.VarsayilanNakitKasa)
+                .WithMany()
+                .HasForeignKey(x => x.VarsayilanNakitKasaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KantinUrun>(entity =>
+        {
+            entity.ToTable("KantinUrunleri", kantinSchema);
+            entity.Property(x => x.Barkod).HasMaxLength(128);
+            entity.Property(x => x.SatisFiyati).HasPrecision(18, 2);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.KantinId, x.TasinirKartId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.KantinId, x.Barkod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [Barkod] IS NOT NULL");
+
+            entity.HasOne(x => x.Kantin)
+                .WithMany(x => x.Urunler)
+                .HasForeignKey(x => x.KantinId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany()
+                .HasForeignKey(x => x.TasinirKartId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

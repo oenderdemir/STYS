@@ -103,6 +103,7 @@ import { KurumYonetimi } from './app/pages/kurum-yonetimi/kurum-yonetimi';
 import { UlkeYonetimi } from './app/pages/ulke-yonetimi/ulke-yonetimi';
 import { AgentYonetimiComponent } from './app/pages/agent-yonetimi/agent-yonetimi';
 import { PosYonetimiComponent } from './app/pages/pos-yonetimi/pos-yonetimi';
+import { KantinlerPage } from './app/pages/kantin-yonetimi/kantinler';
 
 export const appRoutes: Routes = [
     { path: 'auth', canActivate: [guestGuard], loadChildren: () => import('./app/pages/auth/auth.routes') },
@@ -181,6 +182,7 @@ export const appRoutes: Routes = [
             { path: 'restoran-menu-yonetimi', component: RestoranMenuYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Menu Yonetimi'] } },
             { path: 'restoran-siparis-yonetimi', component: RestoranSiparisYonetimi, data: { breadcrumb: ['Isletme', 'Restoran', 'Siparis Yonetimi'] } },
             { path: 'garson-servis', component: GarsonServisPage, data: { breadcrumb: ['Isletme', 'Restoran', 'Garson Servis'] } },
+            { path: 'kantinler', component: KantinlerPage, data: { breadcrumb: ['Kantin Yönetimi', 'Kantinler'] } },
             { path: 'muhasebe/dashboard', component: MuhasebeDashboardComponent, data: { breadcrumb: ['Finans Yönetimi', 'Muhasebe Özet'] } },
             { path: 'muhasebe/cari-kartlar', component: CariKartlarPage, data: { breadcrumb: ['Cari Yönetim', 'Cari Kartlar'] } },
             { path: 'muhasebe/cari-hareketler', component: CariHareketlerPage, data: { breadcrumb: ['Cari Yönetim', 'Cari Hareketler'] } },

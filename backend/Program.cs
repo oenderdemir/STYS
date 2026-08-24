@@ -19,6 +19,8 @@ using STYS.Entegrasyonlar.Pos.Options;
 using STYS.GarsonServis.Services;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Kamp.Services;
+using STYS.KantinYonetimi.Kantinler.Services;
+using STYS.KantinYonetimi.Kantinler.Repositories;
 using STYS.Kullanicilar.Services;
 using STYS.Licensing.Services;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
@@ -195,6 +197,9 @@ builder.Services.AddScoped<IRezervasyonDurumDagilimiRaporService, RezervasyonDur
 builder.Services.AddScoped<IRezervasyonDurumDagilimiRaporExcelService, RezervasyonDurumDagilimiRaporExcelService>();
 builder.Services.AddScoped<IGecikenCheckInRaporService, GecikenCheckInRaporService>();
 builder.Services.AddScoped<IGecikenCheckInRaporExcelService, GecikenCheckInRaporExcelService>();
+builder.Services.AddScoped<IKantinRepository, KantinRepository>();
+builder.Services.AddScoped<IKantinUrunRepository, KantinUrunRepository>();
+builder.Services.AddScoped<IKantinService, KantinService>();
 builder.Services.AddScoped<IRestoranService, RestoranService>();
 builder.Services.AddScoped<IRestoranMasaService, RestoranMasaService>();
 builder.Services.AddScoped<IRestoranMenuKategoriService, RestoranMenuKategoriService>();

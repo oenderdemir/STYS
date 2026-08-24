@@ -67,7 +67,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     public override async Task<StokHareketDto> AddAsync(StokHareketDto dto)
     {
-        EnsureRestrictedWorkflowMovesUseDedicatedFlow(dto);
+        EnsurePublicCreateAllowed(dto);
 
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
         {
@@ -97,7 +97,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     public async Task<StokHareketDto> AddWithinCurrentTransactionAsync(StokHareketDto dto, CancellationToken cancellationToken = default)
     {
-        EnsureRestrictedWorkflowMovesUseDedicatedFlow(dto);
+        EnsureInternalCreateAllowed(dto);
 
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
         {
@@ -137,6 +137,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             throw new BaseException("Transfer kayitlari dogrudan guncellenemez. Transferi iptal edip yeniden olusturunuz.", 400);
         }
+
+        EnsureWorkflowManagedMovementIsImmutable(existing);
 
         var existingDepo = await GetDepoOrThrowAsync(existing.DepoId);
         await EnsureOpenPeriodAsync(existingDepo.TesisId, existing.HareketTarihi, CancellationToken.None);
@@ -190,6 +192,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         {
             throw new BaseException("Transfer kayitlari dogrudan silinemez. Transferi iptal etme akisini kullaniniz.", 400);
         }
+
+        EnsureWorkflowManagedMovementIsImmutable(existing);
 
         var existingDepo = await GetDepoOrThrowAsync(existing.DepoId);
         await EnsureOpenPeriodAsync(existingDepo.TesisId, existing.HareketTarihi, CancellationToken.None);
@@ -1761,12 +1765,28 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         => StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu)
            || StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu);
 
-    private static void EnsureRestrictedWorkflowMovesUseDedicatedFlow(StokHareketDto dto)
+    private static void EnsurePublicCreateAllowed(StokHareketDto dto)
+    {
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal))
+        {
+            throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
+        }
+    }
+
+    private static void EnsureInternalCreateAllowed(StokHareketDto dto)
     {
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal)
             && !string.Equals(dto.KaynakModul, "SarfFisiSatir", StringComparison.Ordinal))
         {
             throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
+        }
+    }
+
+    private static void EnsureWorkflowManagedMovementIsImmutable(StokHareket hareket)
+    {
+        if (string.Equals(hareket.KaynakModul, "SarfFisiSatir", StringComparison.Ordinal))
+        {
+            throw new BaseException("Sarf fişi kaynaklı stok hareketleri doğrudan değiştirilemez. Sarf fişi akışını kullanınız.", 400);
         }
     }
 

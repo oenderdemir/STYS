@@ -49,17 +49,27 @@ public class AddStokTalepSatirRequest
     public string? Aciklama { get; set; }
 }
 
-public class UpdateStokTalepSatirlarRequest
+public class UpdateTalepSatirlariRequest
 {
-    public List<UpdateStokTalepSatirRequest> Satirlar { get; set; } = [];
+    public List<UpdateTalepSatirRequest> Satirlar { get; set; } = [];
 }
 
-public class UpdateStokTalepSatirRequest
+public class UpdateTalepSatirRequest
 {
     public int Id { get; set; }
     public decimal TalepMiktari { get; set; }
-    public decimal OnaylananMiktar { get; set; }
     public string? Aciklama { get; set; }
+}
+
+public class OnayMiktarlariniGuncelleRequest
+{
+    public List<OnayMiktariGuncelleSatirRequest> Satirlar { get; set; } = [];
+}
+
+public class OnayMiktariGuncelleSatirRequest
+{
+    public int Id { get; set; }
+    public decimal OnaylananMiktar { get; set; }
 }
 
 public class TeslimEtStokTalepRequest

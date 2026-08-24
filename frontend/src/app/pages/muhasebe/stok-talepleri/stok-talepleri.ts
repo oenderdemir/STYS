@@ -351,11 +351,10 @@ export class StokTalepleriPage implements OnInit {
         }
 
         this.saving = true;
-        this.service.updateSatirlar(this.selectedTalep.id, {
+        this.service.updateTalepSatirlari(this.selectedTalep.id, {
             satirlar: this.selectedTalep.satirlar.filter((x) => x.id).map((x) => ({
                 id: x.id!,
                 talepMiktari: x.talepMiktari,
-                onaylananMiktar: x.onaylananMiktar,
                 aciklama: x.aciklama
             }))
         }).pipe(finalize(() => {
@@ -391,7 +390,27 @@ export class StokTalepleriPage implements OnInit {
     }
 
     onayDurumunuKaydet(): void {
-        this.saveSatirlar();
+        if (!this.selectedTalep?.id || !this.canApprove(this.selectedTalep)) {
+            return;
+        }
+
+        this.saving = true;
+        this.service.onayMiktarlariniGuncelle(this.selectedTalep.id, {
+            satirlar: this.selectedTalep.satirlar.filter((x) => x.id).map((x) => ({
+                id: x.id!,
+                onaylananMiktar: x.onaylananMiktar
+            }))
+        }).pipe(finalize(() => {
+            this.saving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: (item) => {
+                this.selectedTalep = item;
+                this.load(this.pageNumber, this.pageSize);
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Onay durumu kaydedildi.' });
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     reddet(): void {

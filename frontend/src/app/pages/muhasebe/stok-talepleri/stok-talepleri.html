@@ -84,7 +84,7 @@
                 <p-button *ngIf="canTalepCreate" label="Satır Ekle" icon="pi pi-plus" (onClick)="openAddSatir()" [disabled]="!isDraft(talep) || saving"></p-button>
                 <p-button *ngIf="canTalepCreate" label="Satırları Kaydet" icon="pi pi-save" severity="secondary" (onClick)="saveSatirlar()" [disabled]="!canEditLines(talep) || saving"></p-button>
                 <p-button *ngIf="canTalepCreate" label="Beklemeye Gönder" icon="pi pi-send" (onClick)="gonder()" [disabled]="!isDraft(talep) || saving"></p-button>
-                <p-button *ngIf="canTalepApprove" [label]="getOnayActionLabel()" icon="pi pi-check" severity="info" (onClick)="onayDurumunuKaydet()" [disabled]="!canApprove(talep) || saving"></p-button>
+                <p-button *ngIf="canTalepApprove" label="Onay Durumunu Kaydet" icon="pi pi-check" severity="info" (onClick)="onayDurumunuKaydet()" [disabled]="!canApprove(talep) || saving"></p-button>
                 <p-button *ngIf="canTalepApprove" label="Reddet" icon="pi pi-times" severity="danger" (onClick)="reddet()" [disabled]="!canApprove(talep) || saving"></p-button>
                 <p-button *ngIf="canTalepDeliver" label="Teslim Et" icon="pi pi-truck" severity="success" (onClick)="teslimEt()" [disabled]="!canDeliver(talep) || saving"></p-button>
                 <p-button *ngIf="canTalepCancel" label="İptal" icon="pi pi-ban" severity="contrast" (onClick)="iptal()" [disabled]="!canCancel(talep) || saving"></p-button>

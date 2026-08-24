@@ -36,6 +36,11 @@ using STYS.Muhasebe.StokHareketleri.Services;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
+using STYS.Muhasebe.StokTalepleri.Dtos;
+using STYS.Muhasebe.StokTalepleri.Entities;
+using STYS.Muhasebe.StokTalepleri.Mapping;
+using STYS.Muhasebe.StokTalepleri.Repositories;
+using STYS.Muhasebe.StokTalepleri.Services;
 using STYS.Muhasebe.StokTalepleri.Controllers;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Mapping;
@@ -55,13 +60,115 @@ public class SarfFisiServiceTests
     public void PermissionAyrimi_ControllerAttributelerindeTanimlidir()
     {
         AssertPermission(typeof(StokTalepleriController), "Create", StructurePermissions.StokTalepYonetimi.Create);
-        AssertPermission(typeof(StokTalepleriController), "UpdateSatirlar", StructurePermissions.StokTalepYonetimi.Approve);
+        AssertPermission(typeof(StokTalepleriController), "UpdateTalepSatirlari", StructurePermissions.StokTalepYonetimi.Create);
+        AssertPermission(typeof(StokTalepleriController), "OnayMiktarlariniGuncelle", StructurePermissions.StokTalepYonetimi.Approve);
         AssertPermission(typeof(StokTalepleriController), "TeslimEt", StructurePermissions.StokTalepYonetimi.Deliver);
         AssertPermission(typeof(StokTalepleriController), "Iptal", StructurePermissions.StokTalepYonetimi.Cancel);
         AssertPermission(typeof(StokHareketleriController), "CreateTransfer", StructurePermissions.StokDepoCikisYonetimi.Create);
         AssertPermission(typeof(SarfFisleriController), "Create", StructurePermissions.SarfYonetimi.Create);
         AssertPermission(typeof(SarfFisleriController), "Kesinlestir", StructurePermissions.SarfYonetimi.Finalize);
         AssertPermission(typeof(SarfFisleriController), "Iptal", StructurePermissions.SarfYonetimi.Cancel);
+    }
+
+    [Fact]
+    public async Task CreateYetkili_Kullanici_TalepMiktariVeAciklamaGuncelleyebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateTalepService(dbContext);
+        var talep = await CreateDraftTalepWithLineAsync(service, 5, "ilk");
+
+        var updated = await service.UpdateTalepSatirlariAsync(talep.Id!.Value, new UpdateTalepSatirlariRequest
+        {
+            Satirlar =
+            [
+                new UpdateTalepSatirRequest
+                {
+                    Id = talep.Satirlar[0].Id!.Value,
+                    TalepMiktari = 7,
+                    Aciklama = "guncel"
+                }
+            ]
+        });
+
+        Assert.Equal(7, updated.Satirlar[0].TalepMiktari);
+        Assert.Equal("guncel", updated.Satirlar[0].Aciklama);
+        Assert.Equal(0, updated.Satirlar[0].OnaylananMiktar);
+    }
+
+    [Fact]
+    public async Task CreateYetkili_Kullanici_OnayMiktariniDegistiremez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateTalepService(dbContext);
+        var talep = await CreateDraftTalepWithLineAsync(service, 5, "ilk");
+
+        var updated = await service.UpdateTalepSatirlariAsync(talep.Id!.Value, new UpdateTalepSatirlariRequest
+        {
+            Satirlar =
+            [
+                new UpdateTalepSatirRequest
+                {
+                    Id = talep.Satirlar[0].Id!.Value,
+                    TalepMiktari = 5,
+                    Aciklama = "ilk"
+                }
+            ]
+        });
+
+        Assert.Equal(0, updated.Satirlar[0].OnaylananMiktar);
+    }
+
+    [Fact]
+    public async Task ApproveYetkili_Kullanici_OnayMiktariniDegistirebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateTalepService(dbContext);
+        var talep = await CreateDraftTalepWithLineAsync(service, 5, "ilk");
+        await service.GonderAsync(talep.Id!.Value);
+
+        var updated = await service.OnayMiktarlariniGuncelleAsync(talep.Id!.Value, new OnayMiktarlariniGuncelleRequest
+        {
+            Satirlar =
+            [
+                new OnayMiktariGuncelleSatirRequest
+                {
+                    Id = talep.Satirlar[0].Id!.Value,
+                    OnaylananMiktar = 3
+                }
+            ]
+        });
+
+        Assert.Equal(5, updated.Satirlar[0].TalepMiktari);
+        Assert.Equal(3, updated.Satirlar[0].OnaylananMiktar);
+        Assert.Equal(StokTalepDurumlari.KismiOnaylandi, updated.Durum);
+    }
+
+    [Fact]
+    public async Task ApproveYetkili_Kullanici_TalepMiktariniDegistiremez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateTalepService(dbContext);
+        var talep = await CreateDraftTalepWithLineAsync(service, 5, "ilk");
+        await service.GonderAsync(talep.Id!.Value);
+
+        var updated = await service.OnayMiktarlariniGuncelleAsync(talep.Id!.Value, new OnayMiktarlariniGuncelleRequest
+        {
+            Satirlar =
+            [
+                new OnayMiktariGuncelleSatirRequest
+                {
+                    Id = talep.Satirlar[0].Id!.Value,
+                    OnaylananMiktar = 2
+                }
+            ]
+        });
+
+        Assert.Equal(5, updated.Satirlar[0].TalepMiktari);
+        Assert.Equal("ilk", updated.Satirlar[0].Aciklama);
     }
 
     [Fact]
@@ -199,6 +306,118 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public async Task FinalizeYetkili_CreateYetkisizGibi_KayitliSarfFisiniKesinlestirebilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 30
+        });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest
+        {
+            TasinirKartId = 100,
+            Miktar = 2
+        });
+
+        var result = await service.KesinlestirAsync(created.Id!.Value);
+
+        Assert.Equal(SarfFisiDurumlari.Kesinlesti, result.Durum);
+        Assert.Equal(2, (await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiSatir")).Miktar);
+    }
+
+    [Fact]
+    public async Task PublicStokHareketCreate_Ile_SarfOlusturulamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var stokHareketService = CreateStokHareketService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.AddAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            DepoId = 10,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 24, 10, 0, 0),
+            HareketTipi = StokHareketTipleri.Sarf,
+            Miktar = 1,
+            BirimFiyat = 0,
+            Durum = StokHareketDurumlari.Aktif
+        }));
+
+        Assert.Equal("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task KaynakModul_SarfFisiSatir_Gondererek_Bypass_Yapilamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var stokHareketService = CreateStokHareketService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.AddAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            DepoId = 10,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 24, 10, 0, 0),
+            HareketTipi = StokHareketTipleri.Sarf,
+            Miktar = 1,
+            BirimFiyat = 0,
+            KaynakModul = "SarfFisiSatir",
+            KaynakId = 999,
+            Durum = StokHareketDurumlari.Aktif
+        }));
+
+        Assert.Equal("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SarfFisiSatir_Kaynakli_StokHareket_GenericUpdateDelete_Ile_Degistirilemez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+        var stokHareketService = CreateStokHareketService(dbContext);
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 30
+        });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest
+        {
+            TasinirKartId = 100,
+            Miktar = 1
+        });
+        await service.KesinlestirAsync(created.Id!.Value);
+        var hareket = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiSatir");
+
+        var updateEx = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.UpdateAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            Id = hareket.Id,
+            DepoId = hareket.DepoId,
+            TasinirKartId = hareket.TasinirKartId,
+            HareketTarihi = hareket.HareketTarihi,
+            HareketTipi = hareket.HareketTipi,
+            Miktar = 2,
+            BirimFiyat = hareket.BirimFiyat,
+            Durum = hareket.Durum
+        }));
+
+        var deleteEx = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.DeleteAsync(hareket.Id));
+
+        Assert.Equal("Sarf fişi kaynaklı stok hareketleri doğrudan değiştirilemez. Sarf fişi akışını kullanınız.", updateEx.Message);
+        Assert.Equal("Sarf fişi kaynaklı stok hareketleri doğrudan değiştirilemez. Sarf fişi akışını kullanınız.", deleteEx.Message);
+    }
+
+    [Fact]
     public async Task TesisScopeDisindakiSarfFisineErisimReddedilir()
     {
         await using var dbContext = CreateDbContext();
@@ -246,10 +465,52 @@ public class SarfFisiServiceTests
             cfg.AddProfile<StokHareketProfile>();
             cfg.AddProfile<TasinirKartProfile>();
             cfg.AddProfile<SarfFisiProfile>();
+            cfg.AddProfile<StokTalepProfile>();
         }, NullLoggerFactory.Instance).CreateMapper();
         var muhasebeDonemService = new FakeMuhasebeDonemService();
+        var stokHareketService = CreateStokHareketService(dbContext, mapper, muhasebeDonemService, scope);
 
-        var stokHareketService = new StokHareketService(
+        return new SarfFisiService(
+            dbContext,
+            new SarfFisiRepository(dbContext, mapper),
+            new DepoRepository(dbContext, mapper),
+            new TasinirKartRepository(dbContext, mapper),
+            new FakeUserAccessScopeService(scope ?? DomainAccessScope.Scoped([], [1], [])),
+            new FakeCurrentUserAccessor(),
+            stokHareketService,
+            mapper);
+    }
+
+    private static StokTalepService CreateTalepService(StysAppDbContext dbContext, DomainAccessScope? scope = null)
+    {
+        var mapper = new MapperConfiguration(cfg =>
+        {
+            cfg.AddProfile<StokHareketProfile>();
+            cfg.AddProfile<TasinirKartProfile>();
+            cfg.AddProfile<StokTalepProfile>();
+        }, NullLoggerFactory.Instance).CreateMapper();
+
+        return new StokTalepService(
+            dbContext,
+            new StokTalepRepository(dbContext, mapper),
+            new DepoRepository(dbContext, mapper),
+            new TasinirKartRepository(dbContext, mapper),
+            new FakeUserAccessScopeService(scope ?? DomainAccessScope.Scoped([], [1], [])),
+            new FakeCurrentUserAccessor(),
+            CreateStokHareketService(dbContext, mapper, new FakeMuhasebeDonemService(), scope),
+            mapper);
+    }
+
+    private static StokHareketService CreateStokHareketService(StysAppDbContext dbContext, IMapper? mapper = null, IMuhasebeDonemService? muhasebeDonemService = null, DomainAccessScope? scope = null)
+    {
+        mapper ??= new MapperConfiguration(cfg =>
+        {
+            cfg.AddProfile<StokHareketProfile>();
+            cfg.AddProfile<TasinirKartProfile>();
+        }, NullLoggerFactory.Instance).CreateMapper();
+        muhasebeDonemService ??= new FakeMuhasebeDonemService();
+
+        return new StokHareketService(
             dbContext,
             new StokHareketRepository(dbContext, mapper),
             new DepoRepository(dbContext, mapper),
@@ -260,16 +521,6 @@ public class SarfFisiServiceTests
             new FakeKdvUygulamaService(),
             CreatePolicyService(dbContext, muhasebeDonemService, scope),
             new StokMaliyetStrategyResolver([new AgirlikliOrtalamaMaliyetStrategy(dbContext), new FifoMaliyetStrategy(dbContext), new LifoMaliyetStrategy(dbContext)]),
-            mapper);
-
-        return new SarfFisiService(
-            dbContext,
-            new SarfFisiRepository(dbContext, mapper),
-            new DepoRepository(dbContext, mapper),
-            new TasinirKartRepository(dbContext, mapper),
-            new FakeUserAccessScopeService(scope ?? DomainAccessScope.Scoped([], [1], [])),
-            new FakeCurrentUserAccessor(),
-            stokHareketService,
             mapper);
     }
 
@@ -337,6 +588,16 @@ public class SarfFisiServiceTests
             TesisId = tesisId,
             Kod = "TEM",
             Ad = "Temizlik Depo",
+            AktifMi = true,
+            MuhasebeHesapPlaniId = 1,
+            MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
+        });
+        dbContext.Depolar.Add(new Depo
+        {
+            Id = 11,
+            TesisId = tesisId,
+            Kod = "MRK",
+            Ad = "Merkez Depo",
             AktifMi = true,
             MuhasebeHesapPlaniId = 1,
             MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
@@ -428,6 +689,24 @@ public class SarfFisiServiceTests
         });
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<StokTalepDto> CreateDraftTalepWithLineAsync(StokTalepService service, decimal talepMiktari, string? aciklama)
+    {
+        var talep = await service.AddAsync(new StokTalepDto
+        {
+            TalepEdenDepoId = 10,
+            KarsilayanDepoId = 11,
+            TalepTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            Aciklama = "talep"
+        });
+
+        return await service.AddSatirAsync(talep.Id!.Value, new AddStokTalepSatirRequest
+        {
+            TasinirKartId = 100,
+            TalepMiktari = talepMiktari,
+            Aciklama = aciklama
+        });
     }
 
     private sealed class FakeUserAccessScopeService : IUserAccessScopeService

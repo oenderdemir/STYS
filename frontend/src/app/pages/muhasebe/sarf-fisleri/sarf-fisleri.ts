@@ -347,28 +347,14 @@ export class SarfFisleriPage implements OnInit {
         }
 
         this.saving = true;
-        this.service.updateSatirlar(this.selectedFisi.id, {
-            satirlar: this.selectedFisi.satirlar.filter((x) => x.id).map((x) => ({
-                id: x.id!,
-                miktar: x.miktar,
-                stokLotId: x.stokLotId,
-                stokSeriId: x.stokSeriId,
-                aciklama: x.aciklama
-            }))
-        }).pipe(finalize(() => {
+        this.service.kesinlestir(this.selectedFisi.id).pipe(finalize(() => {
             this.saving = false;
             this.cdr.detectChanges();
         })).subscribe({
-            next: (saved) => {
-                this.selectedFisi = saved;
-                this.service.kesinlestir(saved.id!).subscribe({
-                    next: (item) => {
-                        this.selectedFisi = item;
-                        this.load(this.pageNumber, this.pageSize);
-                        this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Sarf fişi kesinleştirildi.' });
-                    },
-                    error: (error: unknown) => this.showError(error)
-                });
+            next: (item) => {
+                this.selectedFisi = item;
+                this.load(this.pageNumber, this.pageSize);
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Sarf fişi kesinleştirildi.' });
             },
             error: (error: unknown) => this.showError(error)
         });

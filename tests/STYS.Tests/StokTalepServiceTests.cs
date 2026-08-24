@@ -72,7 +72,7 @@ public class StokTalepServiceTests
     }
 
     [Fact]
-    public async Task UpdateSatirlarAsync_BekleyenTalepteKismiOnayDurumunuYazar()
+    public async Task OnayMiktarlariniGuncelleAsync_BekleyenTalepteKismiOnayDurumunuYazar()
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
@@ -81,14 +81,13 @@ public class StokTalepServiceTests
         var created = await CreateBekleyenTalepAsync(service);
         var satir = Assert.Single(created.Satirlar);
 
-        var updated = await service.UpdateSatirlarAsync(created.Id!.Value, new UpdateStokTalepSatirlarRequest
+        var updated = await service.OnayMiktarlariniGuncelleAsync(created.Id!.Value, new OnayMiktarlariniGuncelleRequest
         {
             Satirlar =
             [
-                new UpdateStokTalepSatirRequest
+                new OnayMiktariGuncelleSatirRequest
                 {
                     Id = satir.Id!.Value,
-                    TalepMiktari = 50,
                     OnaylananMiktar = 40
                 }
             ]
@@ -108,14 +107,13 @@ public class StokTalepServiceTests
 
         var created = await CreateBekleyenTalepAsync(service);
         var satir = Assert.Single(created.Satirlar);
-        var approved = await service.UpdateSatirlarAsync(created.Id!.Value, new UpdateStokTalepSatirlarRequest
+        var approved = await service.OnayMiktarlariniGuncelleAsync(created.Id!.Value, new OnayMiktarlariniGuncelleRequest
         {
             Satirlar =
             [
-                new UpdateStokTalepSatirRequest
+                new OnayMiktariGuncelleSatirRequest
                 {
                     Id = satir.Id!.Value,
-                    TalepMiktari = 50,
                     OnaylananMiktar = 40
                 }
             ]
@@ -148,14 +146,13 @@ public class StokTalepServiceTests
 
         var created = await CreateBekleyenTalepAsync(service);
         var satir = Assert.Single(created.Satirlar);
-        var approved = await service.UpdateSatirlarAsync(created.Id!.Value, new UpdateStokTalepSatirlarRequest
+        var approved = await service.OnayMiktarlariniGuncelleAsync(created.Id!.Value, new OnayMiktarlariniGuncelleRequest
         {
             Satirlar =
             [
-                new UpdateStokTalepSatirRequest
+                new OnayMiktariGuncelleSatirRequest
                 {
                     Id = satir.Id!.Value,
-                    TalepMiktari = 50,
                     OnaylananMiktar = 40
                 }
             ]
@@ -189,14 +186,13 @@ public class StokTalepServiceTests
 
         var created = await CreateBekleyenTalepAsync(service);
         var satir = Assert.Single(created.Satirlar);
-        var approved = await service.UpdateSatirlarAsync(created.Id!.Value, new UpdateStokTalepSatirlarRequest
+        var approved = await service.OnayMiktarlariniGuncelleAsync(created.Id!.Value, new OnayMiktarlariniGuncelleRequest
         {
             Satirlar =
             [
-                new UpdateStokTalepSatirRequest
+                new OnayMiktariGuncelleSatirRequest
                 {
                     Id = satir.Id!.Value,
-                    TalepMiktari = 50,
                     OnaylananMiktar = 40
                 }
             ]
@@ -226,14 +222,13 @@ public class StokTalepServiceTests
 
         var created = await CreateBekleyenTalepAsync(service);
         var satir = Assert.Single(created.Satirlar);
-        var approved = await service.UpdateSatirlarAsync(created.Id!.Value, new UpdateStokTalepSatirlarRequest
+        var approved = await service.OnayMiktarlariniGuncelleAsync(created.Id!.Value, new OnayMiktarlariniGuncelleRequest
         {
             Satirlar =
             [
-                new UpdateStokTalepSatirRequest
+                new OnayMiktariGuncelleSatirRequest
                 {
                     Id = satir.Id!.Value,
-                    TalepMiktari = 50,
                     OnaylananMiktar = 40
                 }
             ]

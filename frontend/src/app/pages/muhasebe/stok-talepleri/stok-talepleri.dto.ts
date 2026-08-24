@@ -43,8 +43,12 @@ export interface AddStokTalepSatirRequest {
     aciklama?: string | null;
 }
 
-export interface UpdateStokTalepSatirlarRequest {
-    satirlar: Array<{ id: number; talepMiktari: number; onaylananMiktar: number; aciklama?: string | null }>;
+export interface UpdateTalepSatirlariRequest {
+    satirlar: Array<{ id: number; talepMiktari: number; aciklama?: string | null }>;
+}
+
+export interface OnayMiktarlariniGuncelleRequest {
+    satirlar: Array<{ id: number; onaylananMiktar: number }>;
 }
 
 export interface TeslimEtStokTalepRequest {

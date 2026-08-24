@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { AddStokTalepSatirRequest, CreateStokTalepRequest, StokTalepModel, TeslimEtStokTalepRequest, UpdateStokTalepSatirlarRequest } from './stok-talepleri.dto';
+import { AddStokTalepSatirRequest, CreateStokTalepRequest, OnayMiktarlariniGuncelleRequest, StokTalepModel, TeslimEtStokTalepRequest, UpdateTalepSatirlariRequest } from './stok-talepleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class StokTalepleriService {
@@ -41,9 +41,14 @@ export class StokTalepleriService {
             .pipe(map(this.unwrap<StokTalepModel>('Stok talebi guncellenemedi.')));
     }
 
-    updateSatirlar(id: number, payload: UpdateStokTalepSatirlarRequest): Observable<StokTalepModel> {
-        return this.http.put<ApiResponse<StokTalepModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-talepleri/${id}/satirlar`, payload)
+    updateTalepSatirlari(id: number, payload: UpdateTalepSatirlariRequest): Observable<StokTalepModel> {
+        return this.http.put<ApiResponse<StokTalepModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-talepleri/${id}/talep-satirlari`, payload)
             .pipe(map(this.unwrap<StokTalepModel>('Talep satirlari kaydedilemedi.')));
+    }
+
+    onayMiktarlariniGuncelle(id: number, payload: OnayMiktarlariniGuncelleRequest): Observable<StokTalepModel> {
+        return this.http.put<ApiResponse<StokTalepModel>>(`${this.apiBaseUrl}/ui/muhasebe/stok-talepleri/${id}/onay-miktarlari`, payload)
+            .pipe(map(this.unwrap<StokTalepModel>('Onay miktarlari kaydedilemedi.')));
     }
 
     addSatir(id: number, payload: AddStokTalepSatirRequest): Observable<StokTalepModel> {

@@ -54,10 +54,15 @@ public class StokTalepleriController : UIController
         return Ok(await _service.UpdateAsync(dto));
     }
 
-    [HttpPut("{id:int}/satirlar")]
+    [HttpPut("{id:int}/talep-satirlari")]
+    [Permission(StructurePermissions.StokTalepYonetimi.Create)]
+    public async Task<ActionResult<StokTalepDto>> UpdateTalepSatirlari(int id, [FromBody] UpdateTalepSatirlariRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.UpdateTalepSatirlariAsync(id, request, cancellationToken));
+
+    [HttpPut("{id:int}/onay-miktarlari")]
     [Permission(StructurePermissions.StokTalepYonetimi.Approve)]
-    public async Task<ActionResult<StokTalepDto>> UpdateSatirlar(int id, [FromBody] UpdateStokTalepSatirlarRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.UpdateSatirlarAsync(id, request, cancellationToken));
+    public async Task<ActionResult<StokTalepDto>> OnayMiktarlariniGuncelle(int id, [FromBody] OnayMiktarlariniGuncelleRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.OnayMiktarlariniGuncelleAsync(id, request, cancellationToken));
 
     [HttpPost("{id:int}/satirlar")]
     [Permission(StructurePermissions.StokTalepYonetimi.Create)]

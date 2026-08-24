@@ -140,9 +140,9 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
         return new PagedResult<StokTalepDto>(_mapper.Map<List<StokTalepDto>>(items), request.PageNumber, request.PageSize, totalCount);
     }
 
-    public async Task<StokTalepDto> UpdateSatirlarAsync(int id, UpdateStokTalepSatirlarRequest request, CancellationToken cancellationToken = default)
+    public async Task<StokTalepDto> UpdateTalepSatirlariAsync(int id, UpdateTalepSatirlariRequest request, CancellationToken cancellationToken = default)
     {
-        var entity = await GetSatirGuncellenebilirEntityAsync(id, cancellationToken);
+        var entity = await GetEditableEntityAsync(id, cancellationToken);
         var incomingMap = request.Satirlar.ToDictionary(x => x.Id);
 
         foreach (var satir in entity.Satirlar)
@@ -153,12 +153,31 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
             }
 
             ValidateRequestedQuantity(incoming.TalepMiktari);
-            ValidateApprovedQuantity(incoming.OnaylananMiktar, incoming.TalepMiktari);
-            ValidateTrackedQuantity(satir.TakipTipi, incoming.TalepMiktari, incoming.OnaylananMiktar);
+            ValidateTrackedQuantity(satir.TakipTipi, incoming.TalepMiktari, satir.OnaylananMiktar);
 
             satir.TalepMiktari = incoming.TalepMiktari;
-            satir.OnaylananMiktar = incoming.OnaylananMiktar;
             satir.Aciklama = NormalizeOptional(incoming.Aciklama);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredDtoAsync(entity.Id, cancellationToken);
+    }
+
+    public async Task<StokTalepDto> OnayMiktarlariniGuncelleAsync(int id, OnayMiktarlariniGuncelleRequest request, CancellationToken cancellationToken = default)
+    {
+        var entity = await GetSatirOnayGuncellenebilirEntityAsync(id, cancellationToken);
+        var incomingMap = request.Satirlar.ToDictionary(x => x.Id);
+
+        foreach (var satir in entity.Satirlar)
+        {
+            if (!incomingMap.TryGetValue(satir.Id, out var incoming))
+            {
+                continue;
+            }
+
+            ValidateApprovedQuantity(incoming.OnaylananMiktar, satir.TalepMiktari);
+            ValidateTrackedQuantity(satir.TakipTipi, satir.TalepMiktari, incoming.OnaylananMiktar);
+            satir.OnaylananMiktar = incoming.OnaylananMiktar;
         }
 
         entity.Durum = DetermineApprovalStatus(entity.Satirlar.Where(x => !x.IsDeleted).ToList(), entity.Durum);
@@ -349,7 +368,7 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
         return entity;
     }
 
-    private async Task<StokTalep> GetSatirGuncellenebilirEntityAsync(int id, CancellationToken cancellationToken)
+    private async Task<StokTalep> GetSatirOnayGuncellenebilirEntityAsync(int id, CancellationToken cancellationToken)
     {
         var entity = await _dbContext.StokTalepler
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))

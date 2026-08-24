@@ -52,6 +52,21 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task Barkodla_SoftDeleteKantinUrun_Bulunmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var urun = await dbContext.KantinUrunler.SingleAsync(x => x.Id == 1);
+        urun.IsDeleted = true;
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var result = await service.GetAktifUrunByBarkodAsync(1, "ABC123");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
     public async Task SatirFiyati_ClienttanDegil_KantinUrundenSnapshotAlinir()
     {
         await using var dbContext = CreateDbContext();
@@ -106,6 +121,73 @@ public class KantinSatisServiceTests
         var ex = await Assert.ThrowsAsync<BaseException>(() => service.KesinlestirAsync(satis.Id!.Value));
 
         Assert.Equal("Ödeme toplamı satış toplamına eşit olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task NakitOdeme_DefaultVeRequestHesapYoksa_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
+        kantin.VarsayilanNakitKasaId = null;
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            Tutar = 50
+        }));
+
+        Assert.Equal("Nakit ödeme için kasa seçimi zorunludur.", ex.Message);
+    }
+
+    [Fact]
+    public async Task NakitOdeme_RequestHesapYoksa_DefaultKasaCozulur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var result = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            Tutar = 50
+        });
+
+        var odeme = Assert.Single(result.Odemeler);
+        Assert.Equal(100, odeme.KasaBankaHesapId);
+    }
+
+    [Fact]
+    public async Task NakitOdeme_GecerliRequestHesabi_DefaultKasayiEzer()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.KasaBankaHesaplari.Add(new KasaBankaHesap
+        {
+            Id = 103,
+            TesisId = 1,
+            Tip = KasaBankaHesapTipleri.NakitKasa,
+            Kod = "KASA-B",
+            Ad = "Alternatif Nakit Kasa",
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var result = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            KasaBankaHesapId = 103,
+            Tutar = 50
+        });
+
+        var odeme = Assert.Single(result.Odemeler);
+        Assert.Equal(103, odeme.KasaBankaHesapId);
     }
 
     [Fact]

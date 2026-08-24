@@ -281,7 +281,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         var urun = await _dbContext.KantinUrunler
             .AsNoTracking()
             .Include(x => x.TasinirKart)
-            .FirstOrDefaultAsync(x => x.KantinId == kantin.Id && x.AktifMi && x.Barkod == normalizedBarkod, cancellationToken);
+            .FirstOrDefaultAsync(x => x.KantinId == kantin.Id && !x.IsDeleted && x.AktifMi && x.Barkod == normalizedBarkod, cancellationToken);
 
         if (urun is null || urun.TasinirKart is null)
         {
@@ -567,10 +567,12 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         if (string.Equals(normalizedYontem, OdemeYontemleri.Nakit, StringComparison.Ordinal))
         {
             var effectiveHesapId = kasaBankaHesapId ?? kantin.VarsayilanNakitKasaId;
-            if (effectiveHesapId.HasValue)
+            if (!effectiveHesapId.HasValue)
             {
-                hesap = await ResolveValidHesapAsync(kantin.TesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.NakitKasa, "Nakit", cancellationToken);
+                throw new BaseException("Nakit ödeme için kasa seçimi zorunludur.", 400);
             }
+
+            hesap = await ResolveValidHesapAsync(kantin.TesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.NakitKasa, "Nakit", cancellationToken);
         }
         else
         {

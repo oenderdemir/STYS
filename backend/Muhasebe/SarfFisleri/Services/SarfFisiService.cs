@@ -83,6 +83,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         var entity = await GetEditableEntityAsync(dto.Id.Value, CancellationToken.None);
         var depo = await ResolveAndValidateDepoAsync(dto.DepoId);
         await PopulateUsageMetadataAsync(dto, depo.TesisId!.Value, CancellationToken.None);
+        await EnsureExistingSatirlarMatchTargetTesisAsync(entity, depo.TesisId!.Value, CancellationToken.None);
 
         entity.DepoId = depo.Id;
         entity.TesisId = depo.TesisId!.Value;
@@ -603,6 +604,28 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
                     ?? throw new BaseException("Seçilen seri bulunamadı.", 400);
                 satir.SeriNo = seri.SeriNo;
             }
+        }
+    }
+
+    private async Task EnsureExistingSatirlarMatchTargetTesisAsync(SarfFisi entity, int hedefTesisId, CancellationToken cancellationToken)
+    {
+        if (entity.TesisId == hedefTesisId || !entity.Satirlar.Any(x => !x.IsDeleted))
+        {
+            return;
+        }
+
+        var uyumsuzSatirVar = await (
+                from satir in _dbContext.SarfFisiSatirlari.AsNoTracking()
+                join kart in _dbContext.TasinirKartlar.AsNoTracking() on satir.TasinirKartId equals kart.Id
+                where satir.SarfFisiId == entity.Id
+                      && !satir.IsDeleted
+                      && kart.TesisId != hedefTesisId
+                select satir.Id)
+            .AnyAsync(cancellationToken);
+
+        if (uyumsuzSatirVar)
+        {
+            throw new BaseException("Mevcut sarf satırları seçilen depo ile aynı tesise ait olmalıdır.", 400);
         }
     }
 

@@ -497,6 +497,150 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public void Migration_AddSarfFisiUsageMetadata_IsletmeAlaniSnapshotBackfillSqlIcerir()
+    {
+        var migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations", "20260824144639_AddSarfFisiUsageMetadata.cs");
+        var migrationCode = File.ReadAllText(Path.GetFullPath(migrationPath));
+
+        Assert.Contains("UPDATE sf", migrationCode);
+        Assert.Contains("sf.IsletmeAlaniId IS NOT NULL", migrationCode);
+        Assert.Contains("sf.IsletmeAlaniAdSnapshot IS NULL", migrationCode);
+        Assert.Contains("COALESCE(NULLIF(LTRIM(RTRIM(ia.OzelAd)), N''), ias.Ad)", migrationCode);
+    }
+
+    [Fact]
+    public void Migration_AddSarfFisiUsageMetadata_MevcutSnapshotiOverwriteEtmez()
+    {
+        var migrationPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "backend", "Infrastructure", "EntityFramework", "Migrations", "20260824144639_AddSarfFisiUsageMetadata.cs");
+        var migrationCode = File.ReadAllText(Path.GetFullPath(migrationPath));
+
+        Assert.Contains("sf.IsletmeAlaniAdSnapshot IS NULL", migrationCode);
+    }
+
+    [Fact]
+    public async Task SnapshotNullIse_Mapping_NavigationFallbackIleAdiDondurur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<SarfFisiProfile>(), NullLoggerFactory.Instance).CreateMapper();
+
+        dbContext.SarfFisleri.Add(new SarfFisi
+        {
+            Id = 900,
+            TesisId = 1,
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            Durum = SarfFisiDurumlari.Taslak,
+            IsletmeAlaniId = 30,
+            IsletmeAlaniAdSnapshot = null
+        });
+        await dbContext.SaveChangesAsync();
+
+        var entity = await dbContext.SarfFisleri
+            .AsNoTracking()
+            .Include(x => x.IsletmeAlani)
+                .ThenInclude(x => x!.IsletmeAlaniSinifi)
+            .SingleAsync(x => x.Id == 900);
+
+        var dto = mapper.Map<SarfFisiDto>(entity);
+
+        Assert.Equal("Temizlik Birimi", dto.IsletmeAlaniAd);
+        Assert.Equal("Temizlik Birimi", dto.BirimAd);
+    }
+
+    [Fact]
+    public async Task SnapshotVarsa_NavigationDegisseBile_SnapshotGosterilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<SarfFisiProfile>(), NullLoggerFactory.Instance).CreateMapper();
+
+        dbContext.SarfFisleri.Add(new SarfFisi
+        {
+            Id = 901,
+            TesisId = 1,
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            Durum = SarfFisiDurumlari.Taslak,
+            IsletmeAlaniId = 30,
+            IsletmeAlaniAdSnapshot = "Eski Birim Adi"
+        });
+        await dbContext.SaveChangesAsync();
+
+        var isletmeAlani = await dbContext.IsletmeAlanlari.SingleAsync(x => x.Id == 30);
+        isletmeAlani.OzelAd = "Yeni Birim Adi";
+        await dbContext.SaveChangesAsync();
+
+        var entity = await dbContext.SarfFisleri
+            .AsNoTracking()
+            .Include(x => x.IsletmeAlani)
+                .ThenInclude(x => x!.IsletmeAlaniSinifi)
+            .SingleAsync(x => x.Id == 901);
+
+        var dto = mapper.Map<SarfFisiDto>(entity);
+
+        Assert.Equal("Eski Birim Adi", dto.IsletmeAlaniAd);
+        Assert.Equal("Eski Birim Adi", dto.BirimAd);
+    }
+
+    [Fact]
+    public async Task BaskaTesisDeposuna_Gecerken_MevcutSatirUyumsuzsa_UpdateReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSecondTesisUsageDataAsync(dbContext);
+        var service = CreateService(dbContext, DomainAccessScope.Scoped([], [1, 2], []));
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0)
+        });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest
+        {
+            TasinirKartId = 100,
+            Miktar = 1
+        });
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(new SarfFisiDto
+        {
+            Id = created.Id,
+            DepoId = 210,
+            SarfTarihi = created.SarfTarihi
+        }));
+
+        Assert.Equal("Mevcut sarf satırları seçilen depo ile aynı tesise ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AyniTesisDepoDegisimi_Calisir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0)
+        });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest
+        {
+            TasinirKartId = 100,
+            Miktar = 1
+        });
+
+        var updated = await service.UpdateAsync(new SarfFisiDto
+        {
+            Id = created.Id,
+            DepoId = 11,
+            SarfTarihi = created.SarfTarihi
+        });
+
+        Assert.Equal(11, updated.DepoId);
+    }
+
+    [Fact]
     public async Task KesinlesmisSarfIptalinde_TersHareket_AyniLotuKorur()
     {
         await using var dbContext = CreateDbContext();
@@ -1366,6 +1510,29 @@ public class SarfFisiServiceTests
             KatNo = 2,
             AktifMi = true,
             TemizlikDurumu = STYS.Odalar.OdaTemizlikDurumlari.Hazir
+        });
+        dbContext.MuhasebeHesapPlanlari.Add(new MuhasebeHesapPlani
+        {
+            Id = 201,
+            Kod = "150",
+            TamKod = "150.02",
+            Ad = "Stok Ek",
+            SeviyeNo = 2,
+            HesapTipi = HesapTipi.DetayHesap,
+            AktifMi = true,
+            DetayHesapMi = true,
+            HareketGorebilirMi = true,
+            TesisId = 2
+        });
+        dbContext.Depolar.Add(new Depo
+        {
+            Id = 210,
+            TesisId = 2,
+            Kod = "EK",
+            Ad = "Ek Depo",
+            AktifMi = true,
+            MuhasebeHesapPlaniId = 201,
+            MalzemeKayitTipi = DepoMalzemeKayitTipleri.MalzemeleriAyriKayittaTut
         });
 
         await dbContext.SaveChangesAsync();

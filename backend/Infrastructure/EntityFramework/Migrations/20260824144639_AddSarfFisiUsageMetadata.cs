@@ -49,6 +49,18 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 maxLength: 512,
                 nullable: true);
 
+            migrationBuilder.Sql(
+                """
+                UPDATE sf
+                SET sf.IsletmeAlaniAdSnapshot = COALESCE(NULLIF(LTRIM(RTRIM(ia.OzelAd)), N''), ias.Ad)
+                FROM [muhasebe].[SarfFisleri] sf
+                LEFT JOIN [dbo].[IsletmeAlanlari] ia ON ia.Id = sf.IsletmeAlaniId
+                LEFT JOIN [dbo].[IsletmeAlaniSiniflari] ias ON ias.Id = ia.IsletmeAlaniSinifiId
+                WHERE sf.IsDeleted = 0
+                  AND sf.IsletmeAlaniId IS NOT NULL
+                  AND sf.IsletmeAlaniAdSnapshot IS NULL;
+                """);
+
             migrationBuilder.CreateIndex(
                 name: "IX_SarfFisleri_OdaId",
                 schema: "muhasebe",

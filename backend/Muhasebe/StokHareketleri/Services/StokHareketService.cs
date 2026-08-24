@@ -148,6 +148,7 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             existing = await GetExistingMovementSnapshotAsync(dto.Id.Value, CancellationToken.None)
                 ?? throw new BaseException("Stok hareket bulunamadı.", 404);
 
+            EnsurePublicUpdateAllowed(existing, dto);
             await NormalizeAndValidateAsync(dto, dto.Id);
             var hasCostSensitiveChange = HasCostSensitiveChange(existing, dto);
             await EnsureCostMutationAllowedAsync(existing, dto, hasCostSensitiveChange, CancellationToken.None);
@@ -1768,6 +1769,15 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static void EnsurePublicCreateAllowed(StokHareketDto dto)
     {
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal))
+        {
+            throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
+        }
+    }
+
+    private static void EnsurePublicUpdateAllowed(StokHareket existing, StokHareketDto dto)
+    {
+        if (!string.Equals(existing.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal)
+            && string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal))
         {
             throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
         }

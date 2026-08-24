@@ -377,6 +377,105 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public async Task NormalHareket_GenericUpdate_Ile_Sarfa_Cevrilemez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var stokHareketService = CreateStokHareketService(dbContext);
+        var mevcut = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.Id == 1);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.UpdateAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            Id = mevcut.Id,
+            DepoId = mevcut.DepoId,
+            TasinirKartId = mevcut.TasinirKartId,
+            HareketTarihi = mevcut.HareketTarihi,
+            HareketTipi = StokHareketTipleri.Sarf,
+            Miktar = mevcut.Miktar,
+            BirimFiyat = mevcut.BirimFiyat,
+            Durum = mevcut.Durum
+        }));
+
+        Assert.Equal("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task MevcutNormalUpdateDavranisi_Bozulmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var stokHareketService = CreateStokHareketService(dbContext);
+        var mevcut = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.Id == 1);
+
+        var updated = await stokHareketService.UpdateAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            Id = mevcut.Id,
+            DepoId = mevcut.DepoId,
+            TasinirKartId = mevcut.TasinirKartId,
+            HareketTarihi = mevcut.HareketTarihi,
+            HareketTipi = mevcut.HareketTipi,
+            Miktar = 8,
+            BirimFiyat = mevcut.BirimFiyat,
+            Durum = mevcut.Durum
+        });
+
+        Assert.Equal(8, updated.Miktar);
+        Assert.Equal(StokHareketTipleri.Giris, updated.HareketTipi);
+    }
+
+    [Fact]
+    public async Task TaslakTalepte_OnayMiktarlariGuncelle_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateTalepService(dbContext);
+        var talep = await CreateDraftTalepWithLineAsync(service, 5, "ilk");
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.OnayMiktarlariniGuncelleAsync(talep.Id!.Value, new OnayMiktarlariniGuncelleRequest
+        {
+            Satirlar =
+            [
+                new OnayMiktariGuncelleSatirRequest
+                {
+                    Id = talep.Satirlar[0].Id!.Value,
+                    OnaylananMiktar = 2
+                }
+            ]
+        }));
+
+        Assert.Equal("Bu durumdaki stok talebinin satirlari guncellenemez.", ex.Message);
+    }
+
+    [Fact]
+    public async Task OnaylananMiktar_YeniTalepMiktarini_Asarsa_TalepSatiriGuncellemesi_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateTalepService(dbContext);
+        var talep = await CreateDraftTalepWithLineAsync(service, 5, "ilk");
+        var entity = await dbContext.StokTalepler.Include(x => x.Satirlar).SingleAsync(x => x.Id == talep.Id!.Value);
+        entity.Satirlar.First().OnaylananMiktar = 4;
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateTalepSatirlariAsync(talep.Id!.Value, new UpdateTalepSatirlariRequest
+        {
+            Satirlar =
+            [
+                new UpdateTalepSatirRequest
+                {
+                    Id = talep.Satirlar[0].Id!.Value,
+                    TalepMiktari = 3,
+                    Aciklama = "dusur"
+                }
+            ]
+        }));
+
+        Assert.Equal("Onaylanan miktar 0 ile talep miktari arasinda olmalidir.", ex.Message);
+    }
+
+    [Fact]
     public async Task SarfFisiSatir_Kaynakli_StokHareket_GenericUpdateDelete_Ile_Degistirilemez()
     {
         await using var dbContext = CreateDbContext();

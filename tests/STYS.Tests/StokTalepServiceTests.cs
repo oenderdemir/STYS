@@ -98,6 +98,42 @@ public class StokTalepServiceTests
     }
 
     [Fact]
+    public async Task OnayMiktarlariniGuncelleAsync_TaslakTalepteReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(new StokTalepDto
+        {
+            TalepEdenDepoId = 20,
+            KarsilayanDepoId = 10,
+            TalepTarihi = new DateTime(2026, 8, 23, 9, 0, 0),
+            Aciklama = "Deterjan talebi"
+        });
+
+        var withRow = await service.AddSatirAsync(created.Id!.Value, new AddStokTalepSatirRequest
+        {
+            TasinirKartId = 100,
+            TalepMiktari = 50
+        });
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.OnayMiktarlariniGuncelleAsync(withRow.Id!.Value, new OnayMiktarlariniGuncelleRequest
+        {
+            Satirlar =
+            [
+                new OnayMiktariGuncelleSatirRequest
+                {
+                    Id = withRow.Satirlar[0].Id!.Value,
+                    OnaylananMiktar = 10
+                }
+            ]
+        }));
+
+        Assert.Equal("Bu durumdaki stok talebinin satirlari guncellenemez.", ex.Message);
+    }
+
+    [Fact]
     public async Task TeslimEtAsync_OnayliTalepTransferOlustururVeTeslimEdildiYapar()
     {
         await using var dbContext = CreateDbContext();

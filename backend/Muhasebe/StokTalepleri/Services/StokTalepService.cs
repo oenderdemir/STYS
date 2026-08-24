@@ -153,6 +153,7 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
             }
 
             ValidateRequestedQuantity(incoming.TalepMiktari);
+            ValidateApprovedQuantity(satir.OnaylananMiktar, incoming.TalepMiktari);
             ValidateTrackedQuantity(satir.TakipTipi, incoming.TalepMiktari, satir.OnaylananMiktar);
 
             satir.TalepMiktari = incoming.TalepMiktari;
@@ -377,8 +378,7 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
 
         await EnsureDepoAccessAsync(entity.TesisId);
 
-        if (!string.Equals(entity.Durum, StokTalepDurumlari.Taslak, StringComparison.Ordinal)
-            && !string.Equals(entity.Durum, StokTalepDurumlari.Bekliyor, StringComparison.Ordinal)
+        if (!string.Equals(entity.Durum, StokTalepDurumlari.Bekliyor, StringComparison.Ordinal)
             && !string.Equals(entity.Durum, StokTalepDurumlari.Onaylandi, StringComparison.Ordinal)
             && !string.Equals(entity.Durum, StokTalepDurumlari.KismiOnaylandi, StringComparison.Ordinal))
         {

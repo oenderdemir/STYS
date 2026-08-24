@@ -42,6 +42,11 @@ public class SarfFisleriController : UIController
     public async Task<ActionResult<List<SarfBirimSecenekDto>>> GetBirimler([FromQuery] int tesisId, CancellationToken cancellationToken)
         => Ok(await _service.GetBirimlerAsync(tesisId, cancellationToken));
 
+    [HttpGet("odalar")]
+    [Permission(StructurePermissions.SarfYonetimi.View)]
+    public async Task<ActionResult<List<SarfOdaSecenekDto>>> GetOdalar([FromQuery] int tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetOdalarAsync(tesisId, cancellationToken));
+
     [HttpPost]
     [Permission(StructurePermissions.SarfYonetimi.Create)]
     public async Task<ActionResult<SarfFisiDto>> Create([FromBody] CreateSarfFisiRequest request, CancellationToken cancellationToken)

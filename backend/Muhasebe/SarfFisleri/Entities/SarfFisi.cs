@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.IsletmeAlanlari.Entities;
 using STYS.Muhasebe.Depolar.Entities;
+using STYS.Odalar.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
 namespace STYS.Muhasebe.SarfFisleri.Entities;
@@ -11,6 +12,19 @@ public class SarfFisi : BaseEntity<int>
     public int DepoId { get; set; }
     public DateTime SarfTarihi { get; set; }
     public int? IsletmeAlaniId { get; set; }
+    public int? OdaId { get; set; }
+
+    [MaxLength(256)]
+    public string? IsletmeAlaniAdSnapshot { get; set; }
+
+    [MaxLength(64)]
+    public string? OdaNoSnapshot { get; set; }
+
+    [MaxLength(200)]
+    public string? OdaBinaAdiSnapshot { get; set; }
+
+    [MaxLength(512)]
+    public string? SarfNedeni { get; set; }
 
     [Required]
     [MaxLength(16)]
@@ -28,5 +42,6 @@ public class SarfFisi : BaseEntity<int>
 
     public Depo? Depo { get; set; }
     public IsletmeAlani? IsletmeAlani { get; set; }
+    public Oda? Oda { get; set; }
     public ICollection<SarfFisiSatir> Satirlar { get; set; } = [];
 }

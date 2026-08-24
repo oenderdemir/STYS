@@ -35,7 +35,8 @@
                     <th>Fiş No</th>
                     <th>Tarih</th>
                     <th>Depo</th>
-                    <th>Birim</th>
+                    <th>İşletme Alanı</th>
+                    <th>Sarf Nedeni</th>
                     <th>Durum</th>
                 </tr>
             </ng-template>
@@ -44,7 +45,8 @@
                     <td>{{ item.id }}</td>
                     <td>{{ item.sarfTarihi | date:'dd.MM.yyyy HH:mm' }}</td>
                     <td>{{ depoOptions.find(x => x.value === item.depoId)?.label ?? item.depoId }}</td>
-                    <td>{{ item.birimAd || '-' }}</td>
+                    <td>{{ item.isletmeAlaniAd || item.birimAd || '-' }}</td>
+                    <td>{{ item.sarfNedeni || '-' }}</td>
                     <td><p-tag [value]="item.durum"></p-tag></td>
                 </tr>
             </ng-template>
@@ -55,15 +57,22 @@
         <div class="flex justify-content-between align-items-center mb-3">
             <div>
                 <h3 class="m-0">Sarf Fişi #{{ selectedFisi.id }}</h3>
-                <small>{{ getSelectedDepoLabel() }} | {{ selectedFisi.birimAd || '-' }}</small>
+                <small>{{ getSelectedDepoLabel() }} | {{ selectedFisi.isletmeAlaniAd || selectedFisi.birimAd || '-' }}</small>
             </div>
             <div class="flex gap-2">
+                <p-button label="Fiş Bilgileri" icon="pi pi-pencil" severity="secondary" (onClick)="openEdit()" [disabled]="!canCreate || !isDraft(selectedFisi) || saving"></p-button>
                 <p-button label="Satır Ekle" icon="pi pi-plus" (onClick)="openAddSatir()" [disabled]="!canCreate || !isDraft(selectedFisi)"></p-button>
                 <p-button label="Kaydet" icon="pi pi-save" severity="secondary" (onClick)="saveSatirlar()" [disabled]="!canCreate || !isDraft(selectedFisi) || saving"></p-button>
                 <p-button label="Kesinleştir" icon="pi pi-check" severity="success" (onClick)="kesinlestir()" [disabled]="!canFinalize || !isDraft(selectedFisi) || saving"></p-button>
                 <p-button label="İptal" icon="pi pi-times" severity="danger" (onClick)="openIptal()" [disabled]="!canCancel || !isDraft(selectedFisi) || saving"></p-button>
                 <p-button label="Sarfı Geri Al" icon="pi pi-undo" severity="warn" (onClick)="openIptal()" [disabled]="!canCancel || !isKesinlesti(selectedFisi) || saving"></p-button>
             </div>
+        </div>
+
+        <div class="mb-3 grid">
+            <div class="col-12 md:col-6"><strong>İşletme Alanı:</strong> {{ selectedFisi.isletmeAlaniAd || selectedFisi.birimAd || '-' }}</div>
+            <div class="col-12 md:col-6"><strong>Oda:</strong> {{ selectedFisi.odaAd || '-' }}</div>
+            <div class="col-12"><strong>Sarf Nedeni:</strong> {{ selectedFisi.sarfNedeni || '-' }}</div>
         </div>
 
         <p-table [value]="selectedFisi.satirlar">
@@ -95,7 +104,7 @@
     </div>
 </div>
 
-<p-dialog header="Yeni Sarf Fişi" [(visible)]="createDialogVisible" [modal]="true" [style]="{ width: '36rem' }">
+<p-dialog [header]="createDialogMode === 'edit' ? 'Sarf Fişi Bilgileri' : 'Yeni Sarf Fişi'" [(visible)]="createDialogVisible" [modal]="true" [style]="{ width: '36rem' }">
     <div class="fluid grid">
         <div class="col-12">
             <label class="block mb-2">Depo</label>
@@ -106,8 +115,16 @@
             <p-datepicker [(ngModel)]="createDate" [showTime]="true" hourFormat="24"></p-datepicker>
         </div>
         <div class="col-12">
-            <label class="block mb-2">Birim</label>
+            <label class="block mb-2">İşletme Alanı</label>
             <p-select [options]="birimOptions" [(ngModel)]="createModel.isletmeAlaniId" optionLabel="label" optionValue="value" [showClear]="true"></p-select>
+        </div>
+        <div class="col-12">
+            <label class="block mb-2">Oda</label>
+            <p-select [options]="odaOptions" [(ngModel)]="createModel.odaId" optionLabel="label" optionValue="value" [showClear]="true"></p-select>
+        </div>
+        <div class="col-12">
+            <label class="block mb-2">Sarf Nedeni</label>
+            <input pInputText [(ngModel)]="createModel.sarfNedeni" maxlength="512" />
         </div>
         <div class="col-12">
             <label class="block mb-2">Açıklama</label>
@@ -116,7 +133,7 @@
     </div>
     <ng-template pTemplate="footer">
         <p-button label="Vazgeç" severity="secondary" (onClick)="createDialogVisible=false"></p-button>
-        <p-button label="Kaydet" (onClick)="create()" [loading]="saving"></p-button>
+        <p-button [label]="createDialogMode === 'edit' ? 'Güncelle' : 'Kaydet'" (onClick)="create()" [loading]="saving"></p-button>
     </ng-template>
 </p-dialog>
 

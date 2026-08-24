@@ -3062,8 +3062,14 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
             entity.Property(x => x.IptalAciklamasi).HasMaxLength(1024);
+            entity.Property(x => x.IsletmeAlaniAdSnapshot).HasMaxLength(256);
+            entity.Property(x => x.OdaNoSnapshot).HasMaxLength(64);
+            entity.Property(x => x.OdaBinaAdiSnapshot).HasMaxLength(200);
+            entity.Property(x => x.SarfNedeni).HasMaxLength(512);
             entity.HasIndex(x => new { x.TesisId, x.DepoId, x.SarfTarihi })
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.OdaId)
+                .HasFilter("[IsDeleted] = 0 AND [OdaId] IS NOT NULL");
 
             entity.HasOne<Tesis>()
                 .WithMany()
@@ -3078,6 +3084,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.IsletmeAlani)
                 .WithMany()
                 .HasForeignKey(x => x.IsletmeAlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Oda)
+                .WithMany()
+                .HasForeignKey(x => x.OdaId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

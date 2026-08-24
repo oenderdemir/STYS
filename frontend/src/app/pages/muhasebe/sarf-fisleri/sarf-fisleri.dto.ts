@@ -23,7 +23,11 @@ export interface SarfFisiModel {
     depoId: number;
     sarfTarihi: string;
     isletmeAlaniId?: number | null;
+    isletmeAlaniAd?: string | null;
     birimAd?: string | null;
+    odaId?: number | null;
+    odaAd?: string | null;
+    sarfNedeni?: string | null;
     durum: string;
     aciklama?: string | null;
     olusturanKullaniciId?: string | null;
@@ -37,6 +41,8 @@ export interface CreateSarfFisiRequest {
     depoId: number;
     sarfTarihi: string;
     isletmeAlaniId?: number | null;
+    odaId?: number | null;
+    sarfNedeni?: string | null;
     aciklama?: string | null;
 }
 
@@ -57,6 +63,11 @@ export interface IptalSarfFisiRequest {
 }
 
 export interface SarfBirimSecenekModel {
+    id: number;
+    ad: string;
+}
+
+export interface SarfOdaSecenekModel {
     id: number;
     ad: string;
 }

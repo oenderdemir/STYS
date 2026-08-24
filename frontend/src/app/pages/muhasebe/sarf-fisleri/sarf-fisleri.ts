@@ -26,7 +26,7 @@ import { StokLotBakiyeModel, StokSeriBakiyeModel } from '../stok-hareketleri/sto
 import { StokHareketleriService } from '../stok-hareketleri/stok-hareketleri.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
-import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, IptalSarfFisiRequest, SARF_FISI_DURUMLARI, SarfBirimSecenekModel, SarfFisiModel, SarfFisiSatirModel } from './sarf-fisleri.dto';
+import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, IptalSarfFisiRequest, SARF_FISI_DURUMLARI, SarfBirimSecenekModel, SarfFisiModel, SarfFisiSatirModel, SarfOdaSecenekModel } from './sarf-fisleri.dto';
 import { SarfFisleriService } from './sarf-fisleri.service';
 
 @Component({
@@ -70,6 +70,7 @@ export class SarfFisleriPage implements OnInit {
     createDialogVisible = false;
     satirDialogVisible = false;
     iptalDialogVisible = false;
+    createDialogMode: 'create' | 'edit' = 'create';
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -80,8 +81,9 @@ export class SarfFisleriPage implements OnInit {
     depoOptions: Array<{ label: string; value: number }> = [];
     tasinirKartOptions: Array<{ label: string; value: number }> = [];
     birimOptions: Array<{ label: string; value: number }> = [];
+    odaOptions: Array<{ label: string; value: number }> = [];
 
-    createModel: CreateSarfFisiRequest = { depoId: 0, sarfTarihi: '', isletmeAlaniId: null, aciklama: null };
+    createModel: CreateSarfFisiRequest = { depoId: 0, sarfTarihi: '', isletmeAlaniId: null, odaId: null, sarfNedeni: null, aciklama: null };
     createDate: Date | null = null;
     satirModel: AddSarfFisiSatirRequest = { tasinirKartId: 0, miktar: 1, stokLotId: null, stokSeriId: null, aciklama: null };
     iptalModel: IptalSarfFisiRequest = { iptalAciklamasi: null };
@@ -159,6 +161,13 @@ export class SarfFisleriPage implements OnInit {
                 this.cdr.detectChanges();
             }
         });
+
+        this.service.getOdalar(tesisId).subscribe({
+            next: (items: SarfOdaSecenekModel[]) => {
+                this.odaOptions = items.map((x) => ({ label: x.ad, value: x.id }));
+                this.cdr.detectChanges();
+            }
+        });
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
@@ -213,12 +222,33 @@ export class SarfFisleriPage implements OnInit {
             return;
         }
 
+        this.createDialogMode = 'create';
         this.createDate = new Date();
         this.createModel = {
             depoId: this.selectedDepoId ?? 0,
             sarfTarihi: this.formatDateTimeForApi(this.createDate) ?? '',
             isletmeAlaniId: null,
+            odaId: null,
+            sarfNedeni: null,
             aciklama: null
+        };
+        this.createDialogVisible = true;
+    }
+
+    openEdit(): void {
+        if (!this.selectedFisi || !this.canCreate || !this.isDraft(this.selectedFisi)) {
+            return;
+        }
+
+        this.createDialogMode = 'edit';
+        this.createDate = this.selectedFisi.sarfTarihi ? new Date(this.selectedFisi.sarfTarihi) : new Date();
+        this.createModel = {
+            depoId: this.selectedFisi.depoId,
+            sarfTarihi: this.selectedFisi.sarfTarihi,
+            isletmeAlaniId: this.selectedFisi.isletmeAlaniId ?? null,
+            odaId: this.selectedFisi.odaId ?? null,
+            sarfNedeni: this.selectedFisi.sarfNedeni ?? null,
+            aciklama: this.selectedFisi.aciklama ?? null
         };
         this.createDialogVisible = true;
     }
@@ -226,7 +256,10 @@ export class SarfFisleriPage implements OnInit {
     create(): void {
         this.createModel.sarfTarihi = this.formatDateTimeForApi(this.createDate) ?? '';
         this.saving = true;
-        this.service.create(this.createModel).pipe(finalize(() => {
+        const request$ = this.createDialogMode === 'edit' && this.selectedFisi?.id
+            ? this.service.update(this.selectedFisi.id, this.createModel)
+            : this.service.create(this.createModel);
+        request$.pipe(finalize(() => {
             this.saving = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -235,7 +268,11 @@ export class SarfFisleriPage implements OnInit {
                 this.selectedFisi = item;
                 this.load();
                 this.selectFisi(item.id!);
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Sarf fişi oluşturuldu.' });
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Başarılı',
+                    detail: this.createDialogMode === 'edit' ? 'Sarf fişi güncellendi.' : 'Sarf fişi oluşturuldu.'
+                });
             },
             error: (error: unknown) => this.showError(error)
         });

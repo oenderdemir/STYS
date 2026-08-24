@@ -8,7 +8,11 @@ public class SarfFisiDto : BaseRdbmsDto<int>
     public int DepoId { get; set; }
     public DateTime SarfTarihi { get; set; }
     public int? IsletmeAlaniId { get; set; }
+    public string? IsletmeAlaniAd { get; set; }
     public string? BirimAd { get; set; }
+    public int? OdaId { get; set; }
+    public string? OdaAd { get; set; }
+    public string? SarfNedeni { get; set; }
     public string Durum { get; set; } = string.Empty;
     public string? Aciklama { get; set; }
     public Guid? OlusturanKullaniciId { get; set; }
@@ -42,6 +46,8 @@ public class CreateSarfFisiRequest
     public int DepoId { get; set; }
     public DateTime SarfTarihi { get; set; }
     public int? IsletmeAlaniId { get; set; }
+    public int? OdaId { get; set; }
+    public string? SarfNedeni { get; set; }
     public string? Aciklama { get; set; }
 }
 
@@ -74,6 +80,12 @@ public class IptalSarfFisiRequest
 }
 
 public class SarfBirimSecenekDto
+{
+    public int Id { get; set; }
+    public string Ad { get; set; } = string.Empty;
+}
+
+public class SarfOdaSecenekDto
 {
     public int Id { get; set; }
     public string Ad { get; set; } = string.Empty;

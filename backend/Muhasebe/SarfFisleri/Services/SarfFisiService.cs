@@ -58,7 +58,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
     public override async Task<SarfFisiDto> AddAsync(SarfFisiDto dto)
     {
         var depo = await ResolveAndValidateDepoAsync(dto.DepoId);
-        await ValidateIsletmeAlaniAsync(dto.IsletmeAlaniId, depo.TesisId!.Value, CancellationToken.None);
+        await PopulateUsageMetadataAsync(dto, depo.TesisId!.Value, CancellationToken.None);
 
         dto.TesisId = depo.TesisId!.Value;
         dto.SarfTarihi = dto.SarfTarihi == default ? DateTime.UtcNow : dto.SarfTarihi;
@@ -67,6 +67,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         dto.Aciklama = NormalizeOptional(dto.Aciklama);
 
         var entity = _mapper.Map<SarfFisi>(dto);
+        ApplyUsageMetadata(entity, dto);
         await _repository.AddAsync(entity);
         await _repository.SaveChangesAsync();
         return await GetRequiredDtoAsync(entity.Id, CancellationToken.None);
@@ -81,12 +82,12 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
 
         var entity = await GetEditableEntityAsync(dto.Id.Value, CancellationToken.None);
         var depo = await ResolveAndValidateDepoAsync(dto.DepoId);
-        await ValidateIsletmeAlaniAsync(dto.IsletmeAlaniId, depo.TesisId!.Value, CancellationToken.None);
+        await PopulateUsageMetadataAsync(dto, depo.TesisId!.Value, CancellationToken.None);
 
         entity.DepoId = depo.Id;
         entity.TesisId = depo.TesisId!.Value;
         entity.SarfTarihi = dto.SarfTarihi == default ? entity.SarfTarihi : dto.SarfTarihi;
-        entity.IsletmeAlaniId = dto.IsletmeAlaniId;
+        ApplyUsageMetadata(entity, dto);
         entity.Aciklama = NormalizeOptional(dto.Aciklama);
         await _dbContext.SaveChangesAsync();
         return await GetRequiredDtoAsync(entity.Id, CancellationToken.None);
@@ -355,6 +356,28 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<SarfOdaSecenekDto>> GetOdalarAsync(int tesisId, CancellationToken cancellationToken = default)
+    {
+        await EnsureTesisAccessAsync(tesisId, cancellationToken);
+
+        return await (
+                from oda in _dbContext.Odalar
+                join bina in _dbContext.Binalar on oda.BinaId equals bina.Id
+                join odaTipi in _dbContext.OdaTipleri on oda.TesisOdaTipiId equals odaTipi.Id
+                where oda.AktifMi
+                      && bina.AktifMi
+                      && odaTipi.AktifMi
+                      && bina.TesisId == tesisId
+                select new SarfOdaSecenekDto
+                {
+                    Id = oda.Id,
+                    Ad = $"{oda.OdaNo} - {bina.Ad} ({odaTipi.Ad})"
+                })
+            .OrderBy(x => x.Ad)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     private IQueryable<SarfFisi> BuildScopedQuery(DomainAccessScope scope)
     {
         var query = _dbContext.SarfFisleri
@@ -505,21 +528,56 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         }
     }
 
-    private async Task ValidateIsletmeAlaniAsync(int? isletmeAlaniId, int tesisId, CancellationToken cancellationToken)
+    private async Task PopulateUsageMetadataAsync(SarfFisiDto dto, int tesisId, CancellationToken cancellationToken)
     {
-        if (!isletmeAlaniId.HasValue)
+        dto.SarfNedeni = NormalizeOptional(dto.SarfNedeni);
+        if (dto.SarfNedeni is not null && dto.SarfNedeni.Length > 512)
         {
-            return;
+            throw new BaseException("Sarf nedeni en fazla 512 karakter olabilir.", 400);
         }
 
-        var exists = await _dbContext.IsletmeAlanlari
-            .AsNoTracking()
-            .Include(x => x.Bina)
-            .AnyAsync(x => x.Id == isletmeAlaniId.Value && x.Bina != null && x.Bina.TesisId == tesisId, cancellationToken);
-
-        if (!exists)
+        dto.IsletmeAlaniAd = null;
+        if (dto.IsletmeAlaniId.HasValue)
         {
-            throw new BaseException("Seçilen birim sarf fişi deposu ile aynı tesise ait olmalıdır.", 400);
+            var birim = await _dbContext.IsletmeAlanlari
+                .AsNoTracking()
+                .Include(x => x.Bina)
+                .Include(x => x.IsletmeAlaniSinifi)
+                .FirstOrDefaultAsync(x => x.Id == dto.IsletmeAlaniId.Value, cancellationToken)
+                ?? throw new BaseException("Seçilen işletme alanı bulunamadı.", 400);
+
+            if (birim.Bina is null || birim.Bina.TesisId != tesisId)
+            {
+                throw new BaseException("Seçilen işletme alanı sarf fişi deposu ile aynı tesise ait olmalıdır.", 400);
+            }
+
+            dto.IsletmeAlaniAd = BuildIsletmeAlaniAdi(birim);
+        }
+
+        dto.OdaAd = null;
+        if (dto.OdaId.HasValue)
+        {
+            var oda = await (
+                    from room in _dbContext.Odalar.AsNoTracking()
+                    join bina in _dbContext.Binalar.AsNoTracking() on room.BinaId equals bina.Id
+                    join odaTipi in _dbContext.OdaTipleri.AsNoTracking() on room.TesisOdaTipiId equals odaTipi.Id
+                    where room.Id == dto.OdaId.Value && room.AktifMi && bina.AktifMi && odaTipi.AktifMi
+                    select new
+                    {
+                        room.OdaNo,
+                        BinaAdi = bina.Ad,
+                        TesisId = bina.TesisId,
+                        OdaTipiAdi = odaTipi.Ad
+                    })
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new BaseException("Seçilen oda bulunamadı.", 400);
+
+            if (oda.TesisId != tesisId)
+            {
+                throw new BaseException("Seçilen oda sarf fişi deposu ile aynı tesise ait olmalıdır.", 400);
+            }
+
+            dto.OdaAd = $"{oda.OdaNo} - {oda.BinaAdi}";
         }
     }
 
@@ -577,8 +635,34 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
     private static string ResolveTakipTipi(TasinirKart kart)
         => TasinirKartServiceHelpers.ResolveTakipTipi(kart.TakipTipi, kart.TakipliMi);
 
+    private static void ApplyUsageMetadata(SarfFisi entity, SarfFisiDto dto)
+    {
+        entity.IsletmeAlaniId = dto.IsletmeAlaniId;
+        entity.IsletmeAlaniAdSnapshot = dto.IsletmeAlaniAd;
+        entity.OdaId = dto.OdaId;
+        entity.OdaNoSnapshot = dto.OdaAd is null ? null : ExtractOdaNo(dto.OdaAd);
+        entity.OdaBinaAdiSnapshot = dto.OdaAd is null ? null : ExtractOdaBinaAdi(dto.OdaAd);
+        entity.SarfNedeni = dto.SarfNedeni;
+    }
+
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string BuildIsletmeAlaniAdi(STYS.IsletmeAlanlari.Entities.IsletmeAlani isletmeAlani)
+    {
+        if (!string.IsNullOrWhiteSpace(isletmeAlani.OzelAd))
+        {
+            return isletmeAlani.OzelAd.Trim();
+        }
+
+        return isletmeAlani.IsletmeAlaniSinifi?.Ad ?? "İşletme Alanı";
+    }
+
+    private static string ExtractOdaNo(string odaAd)
+        => odaAd.Split(" - ", 2, StringSplitOptions.None)[0];
+
+    private static string? ExtractOdaBinaAdi(string odaAd)
+        => odaAd.Split(" - ", 2, StringSplitOptions.None) is [_, var binaAdi] ? binaAdi : null;
 
     private static decimal CalculateMovementEffect(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu, decimal miktar)
     {

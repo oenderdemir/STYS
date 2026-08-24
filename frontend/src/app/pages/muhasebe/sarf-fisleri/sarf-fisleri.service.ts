@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, IptalSarfFisiRequest, SarfBirimSecenekModel, SarfFisiModel, UpdateSarfFisiSatirlarRequest } from './sarf-fisleri.dto';
+import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, IptalSarfFisiRequest, SarfBirimSecenekModel, SarfFisiModel, SarfOdaSecenekModel, UpdateSarfFisiSatirlarRequest } from './sarf-fisleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class SarfFisleriService {
@@ -32,6 +32,12 @@ export class SarfFisleriService {
         const params = new HttpParams().set('tesisId', tesisId);
         return this.http.get<ApiResponse<SarfBirimSecenekModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/sarf-fisleri/birimler`, { params })
             .pipe(map(this.unwrap<SarfBirimSecenekModel[]>('Birimler alınamadı.')));
+    }
+
+    getOdalar(tesisId: number): Observable<SarfOdaSecenekModel[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<SarfOdaSecenekModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/sarf-fisleri/odalar`, { params })
+            .pipe(map(this.unwrap<SarfOdaSecenekModel[]>('Odalar alınamadı.')));
     }
 
     create(payload: CreateSarfFisiRequest): Observable<SarfFisiModel> {

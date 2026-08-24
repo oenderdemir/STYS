@@ -12,4 +12,5 @@ public interface ISarfFisiService : IBaseRdbmsService<SarfFisiDto, SarfFisi, int
     Task<SarfFisiDto> KesinlestirAsync(int id, CancellationToken cancellationToken = default);
     Task<SarfFisiDto> IptalAsync(int id, string? iptalAciklamasi = null, CancellationToken cancellationToken = default);
     Task<List<SarfBirimSecenekDto>> GetBirimlerAsync(int tesisId, CancellationToken cancellationToken = default);
+    Task<List<SarfOdaSecenekDto>> GetOdalarAsync(int tesisId, CancellationToken cancellationToken = default);
 }

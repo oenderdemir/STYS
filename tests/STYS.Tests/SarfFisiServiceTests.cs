@@ -357,6 +357,146 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public async Task TaslakFise_AyniTesiseAit_KullanimDetaylari_Atanabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 30,
+            OdaId = 40,
+            SarfNedeni = "  Oda temizliği  ",
+            Aciklama = "detay"
+        });
+
+        Assert.Equal(30, created.IsletmeAlaniId);
+        Assert.Equal("Temizlik Birimi", created.IsletmeAlaniAd);
+        Assert.Equal(40, created.OdaId);
+        Assert.Equal("101 - Ana Bina", created.OdaAd);
+        Assert.Equal("Oda temizliği", created.SarfNedeni);
+    }
+
+    [Fact]
+    public async Task BaskaTesiseAit_IsletmeAlani_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSecondTesisUsageDataAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 130
+        }));
+
+        Assert.Equal("Seçilen işletme alanı sarf fişi deposu ile aynı tesise ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task BaskaTesiseAit_Oda_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSecondTesisUsageDataAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            OdaId = 140
+        }));
+
+        Assert.Equal("Seçilen oda sarf fişi deposu ile aynı tesise ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task KesinlesmisFiste_KullanimDetaylari_Degistirilemez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 5);
+        var service = CreateService(dbContext);
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 2);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(new SarfFisiDto
+        {
+            Id = fis.Id,
+            DepoId = fis.DepoId,
+            SarfTarihi = fis.SarfTarihi,
+            IsletmeAlaniId = 30,
+            OdaId = 40,
+            SarfNedeni = "Genel alan temizliği"
+        }));
+
+        Assert.Equal("Sadece taslak sarf fişleri değiştirilebilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SarfNedeni_NormalizeEdilir_ve_MaxLength_Korunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            SarfNedeni = "  Teknik bakım  "
+        });
+
+        Assert.Equal("Teknik bakım", created.SarfNedeni);
+
+        var tooLong = new string('x', 513);
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            SarfNedeni = tooLong
+        }));
+
+        Assert.Equal("Sarf nedeni en fazla 512 karakter olabilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SarfKesinlestirmeVeGeriAlma_KullanimDetaylarindan_Etkilenmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 5, birimFiyat: 4);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 30,
+            OdaId = 40,
+            SarfNedeni = "Genel alan temizliği"
+        });
+
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest
+        {
+            TasinirKartId = 100,
+            Miktar = 2
+        });
+
+        var finalized = await service.KesinlestirAsync(created.Id.Value);
+        var reversed = await service.IptalAsync(finalized.Id!.Value, "yanlis sarf");
+
+        Assert.Equal(SarfFisiDurumlari.IptalEdildi, reversed.Durum);
+        Assert.Equal(5, await GetCurrentStockAsync(dbContext, 10, 100));
+        Assert.Equal(2, await dbContext.StokHareketleri.AsNoTracking().CountAsync(x => x.KaynakModul == "SarfFisiSatir" || x.KaynakModul == "SarfFisiIptal"));
+    }
+
+    [Fact]
     public async Task KesinlesmisSarfIptalinde_TersHareket_AyniLotuKorur()
     {
         await using var dbContext = CreateDbContext();
@@ -895,6 +1035,22 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public async Task ScopeDisi_ReferansLookupu_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext, DomainAccessScope.Scoped([], [2], []));
+
+        var birimEx = await Assert.ThrowsAsync<BaseException>(() => service.GetBirimlerAsync(1));
+        var odaEx = await Assert.ThrowsAsync<BaseException>(() => service.GetOdalarAsync(1));
+
+        Assert.Equal(403, birimEx.ErrorCode);
+        Assert.Equal("Bu tesis için yetkiniz bulunmuyor.", birimEx.Message);
+        Assert.Equal(403, odaEx.ErrorCode);
+        Assert.Equal("Bu tesis için yetkiniz bulunmuyor.", odaEx.Message);
+    }
+
+    [Fact]
     public void MigrationAssembly_AddSarfFisleriAndStockPermissionSplit_DiscoverEdilir()
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -906,6 +1062,7 @@ public class SarfFisiServiceTests
 
         Assert.Contains("20260824125241_AddSarfFisleriAndStockPermissionSplit", migrationsAssembly.Migrations.Keys);
         Assert.Contains("20260824135925_AddSarfFisiReversal", migrationsAssembly.Migrations.Keys);
+        Assert.Contains("20260824144639_AddSarfFisiUsageMetadata", migrationsAssembly.Migrations.Keys);
     }
 
     private static void AssertPermission(Type controllerType, string methodName, string expectedPermission)
@@ -1043,6 +1200,31 @@ public class SarfFisiServiceTests
             OzelAd = "Temizlik Birimi",
             AktifMi = true
         });
+        dbContext.OdaSiniflari.Add(new STYS.OdaSiniflari.Entities.OdaSinifi
+        {
+            Id = 1,
+            Ad = "Standart",
+            AktifMi = true
+        });
+        dbContext.OdaTipleri.Add(new STYS.OdaTipleri.Entities.OdaTipi
+        {
+            Id = 35,
+            TesisId = tesisId,
+            OdaSinifiId = 1,
+            Ad = "Standart Oda",
+            Kapasite = 2,
+            AktifMi = true
+        });
+        dbContext.Odalar.Add(new STYS.Odalar.Entities.Oda
+        {
+            Id = 40,
+            BinaId = 20,
+            TesisOdaTipiId = 35,
+            OdaNo = "101",
+            KatNo = 1,
+            AktifMi = true,
+            TemizlikDurumu = STYS.Odalar.OdaTemizlikDurumlari.Hazir
+        });
         dbContext.Depolar.Add(new Depo
         {
             Id = 10,
@@ -1126,6 +1308,64 @@ public class SarfFisiServiceTests
             TesisId = tesisId,
             MaliYil = 2026,
             MaliyetYontemi = StokMaliyetYontemleri.AgirlikliOrtalama
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedSecondTesisUsageDataAsync(StysAppDbContext dbContext)
+    {
+        dbContext.Iller.Add(new Il { Id = 2, Ad = "Istanbul", AktifMi = true });
+        dbContext.Tesisler.Add(new Tesis
+        {
+            Id = 2,
+            KurumId = 1,
+            IlId = 2,
+            Ad = "Ek Tesis",
+            Telefon = "111",
+            Adres = "Ek Adres",
+            AktifMi = true
+        });
+        dbContext.Binalar.Add(new Bina
+        {
+            Id = 120,
+            TesisId = 2,
+            Ad = "Ek Bina",
+            KatSayisi = 2,
+            AktifMi = true
+        });
+        dbContext.IsletmeAlanlari.Add(new IsletmeAlani
+        {
+            Id = 130,
+            BinaId = 120,
+            IsletmeAlaniSinifiId = 25,
+            OzelAd = "Ek Birim",
+            AktifMi = true
+        });
+        dbContext.OdaSiniflari.Add(new STYS.OdaSiniflari.Entities.OdaSinifi
+        {
+            Id = 2,
+            Ad = "Ek Sinif",
+            AktifMi = true
+        });
+        dbContext.OdaTipleri.Add(new STYS.OdaTipleri.Entities.OdaTipi
+        {
+            Id = 135,
+            TesisId = 2,
+            OdaSinifiId = 2,
+            Ad = "Ek Oda Tipi",
+            Kapasite = 1,
+            AktifMi = true
+        });
+        dbContext.Odalar.Add(new STYS.Odalar.Entities.Oda
+        {
+            Id = 140,
+            BinaId = 120,
+            TesisOdaTipiId = 135,
+            OdaNo = "201",
+            KatNo = 2,
+            AktifMi = true,
+            TemizlikDurumu = STYS.Odalar.OdaTemizlikDurumlari.Hazir
         });
 
         await dbContext.SaveChangesAsync();

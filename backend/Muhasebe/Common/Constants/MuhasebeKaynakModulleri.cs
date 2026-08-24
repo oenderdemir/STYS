@@ -13,6 +13,7 @@ public static class MuhasebeKaynakModulleri
     public const string CariKart = "CariKart";
     public const string CariKartAcilisDuzeltme = "CariKartAcilisDuzeltme";
     public const string Rezervasyon = "Rezervasyon";
+    public const string KantinSatis = "KantinSatis";
     public const string KantinSatisOdeme = "KantinSatisOdeme";
     public const string PosTahsilatValorTransferi = "PosTahsilatValorTransferi";
 
@@ -29,6 +30,7 @@ public static class MuhasebeKaynakModulleri
         CariKart,
         CariKartAcilisDuzeltme,
         Rezervasyon,
+        KantinSatis,
         KantinSatisOdeme,
         PosTahsilatValorTransferi
     ];

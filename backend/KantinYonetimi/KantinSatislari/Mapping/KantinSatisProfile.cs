@@ -11,6 +11,7 @@ public class KantinSatisProfile : Profile
         CreateMap<KantinSatis, KantinSatisDto>();
         CreateMap<KantinSatisDto, KantinSatis>()
             .ForMember(x => x.Kantin, opt => opt.Ignore())
+            .ForMember(x => x.MuhasebeFis, opt => opt.Ignore())
             .ForMember(x => x.Satirlar, opt => opt.Ignore())
             .ForMember(x => x.Odemeler, opt => opt.Ignore());
 

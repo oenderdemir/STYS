@@ -2641,9 +2641,18 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.KantinId)
                 .HasFilter("[IsDeleted] = 0");
 
+            entity.HasIndex(x => x.MuhasebeFisId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [MuhasebeFisId] IS NOT NULL");
+
             entity.HasOne(x => x.Kantin)
                 .WithMany()
                 .HasForeignKey(x => x.KantinId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.MuhasebeFis)
+                .WithMany()
+                .HasForeignKey(x => x.MuhasebeFisId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

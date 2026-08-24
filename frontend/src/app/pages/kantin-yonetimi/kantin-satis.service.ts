@@ -84,6 +84,12 @@ export class KantinSatisService {
             .pipe(map(this.unwrap<KantinSatisModel>('Satış kesinleştirilemedi.')));
     }
 
+    muhasebeFisiOlustur(satisId: number): Observable<KantinSatisModel> {
+        return this.http
+            .post<ApiResponse<KantinSatisModel>>(`${this.apiBaseUrl}/ui/kantin-satis/${satisId}/muhasebe-fisi-olustur`, {})
+            .pipe(map(this.unwrap<KantinSatisModel>('Muhasebe fişi oluşturulamadı.')));
+    }
+
     private unwrap<T>(fallback: string) {
         return (envelope: ApiResponse<T>): T => {
             if (envelope.success && envelope.data) {

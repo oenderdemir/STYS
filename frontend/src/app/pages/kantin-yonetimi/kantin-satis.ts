@@ -126,6 +126,13 @@ export class KantinSatisPage implements OnInit {
         return !!this.currentDraft?.id && this.currentDraft.satirlar.length > 0 && this.currentDraft.odemeler.length > 0 && !this.saving;
     }
 
+    canMuhasebelestir(satis: KantinSatisModel | null | undefined): boolean {
+        return !!satis?.id
+            && satis.durum === 'Kesinlesti'
+            && !satis.muhasebeFisId
+            && !this.saving;
+    }
+
     loadKantinler(): void {
         const tesisId = this.currentTesisId;
         if (!tesisId) {
@@ -345,6 +352,27 @@ export class KantinSatisPage implements OnInit {
             },
             error: (error: unknown) => this.showError(error)
         });
+    }
+
+    muhasebelestir(satis: KantinSatisModel | null | undefined): void {
+        if (!satis?.id || !this.canMuhasebelestir(satis)) {
+            return;
+        }
+
+        this.saving = true;
+        this.satisService.muhasebeFisiOlustur(satis.id)
+            .pipe(finalize(() => {
+                this.saving = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (result) => {
+                    this.selectedHistory = result;
+                    this.showSuccess(`Muhasebe fişi oluşturuldu: ${result.muhasebeFisNo ?? '#' + result.muhasebeFisId}`);
+                    this.loadSatisHistory();
+                },
+                error: (error: unknown) => this.showError(error)
+            });
     }
 
     onYeniOdemeYontemiChange(): void {

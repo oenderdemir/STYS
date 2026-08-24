@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.KantinYonetimi.Kantinler.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
@@ -34,8 +35,11 @@ public class KantinSatis : BaseEntity<int>
     public string? Aciklama { get; set; }
 
     public DateTime? KesinlesmeTarihi { get; set; }
+    public int? MuhasebeFisId { get; set; }
+    public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
 
     public Kantin? Kantin { get; set; }
+    public MuhasebeFis? MuhasebeFis { get; set; }
     public ICollection<KantinSatisSatir> Satirlar { get; set; } = [];
     public ICollection<KantinSatisOdeme> Odemeler { get; set; } = [];
 }

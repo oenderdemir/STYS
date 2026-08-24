@@ -14,6 +14,10 @@ public class KantinSatisDto : BaseRdbmsDto<int>
     public decimal KdvToplami { get; set; }
     public string? Aciklama { get; set; }
     public DateTime? KesinlesmeTarihi { get; set; }
+    public int? MuhasebeFisId { get; set; }
+    public string? MuhasebeFisNo { get; set; }
+    public string? MuhasebeFisDurumu { get; set; }
+    public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
     public string? KantinKod { get; set; }
     public string? KantinAd { get; set; }
     public string? OdemeOzeti { get; set; }

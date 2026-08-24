@@ -16,10 +16,16 @@ using STYS.KantinYonetimi.Kantinler.Mapping;
 using STYS.Kurumlar.Entities;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.KasaHareketleri.Entities;
+using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
+using STYS.Muhasebe.MuhasebeDonemleri.Entities;
+using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
@@ -31,6 +37,9 @@ using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
 using STYS.Muhasebe.TasinirKartlari.Entities;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Dtos;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
+using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Paging;
@@ -594,6 +603,118 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task K3B_SplitPaymentVeMaliyet_Icin_DengeliMuhasebeFisiOlusur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var muhasebeService = CreateMuhasebeFisService(dbContext);
+
+        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 1 });
+        await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 2, Miktar = 1, StokLotId = 1 });
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 40, KasaBankaHesapId = 100 });
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 30, KasaBankaHesapId = 102 });
+        await satisService.KesinlestirAsync(satis.Id!.Value);
+
+        var result = await muhasebeService.MuhasebeFisiOlusturAsync(satis.Id.Value);
+
+        Assert.NotNull(result.MuhasebeFisId);
+        Assert.NotNull(result.MuhasebeFisNo);
+
+        var fis = await dbContext.MuhasebeFisler.Include(x => x.Satirlar).SingleAsync(x => x.Id == result.MuhasebeFisId);
+        Assert.Equal(85m, fis.ToplamBorc);
+        Assert.Equal(85m, fis.ToplamAlacak);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1000 && x.Borc == 40m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1001 && x.Borc == 30m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1200 && x.Alacak == 64.48m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1308 && x.Alacak == 3.70m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1310 && x.Alacak == 1.82m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1400 && x.Borc == 15m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1100 && x.Alacak == 10m);
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1101 && x.Alacak == 5m);
+    }
+
+    [Fact]
+    public async Task K3B_KrediKartiSatisinda_BorcBankayaDegil_PosHesabinaYazar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var muhasebeService = CreateMuhasebeFisService(dbContext);
+
+        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 75, KasaBankaHesapId = 102 });
+        await satisService.KesinlestirAsync(satis.Id!.Value);
+
+        var result = await muhasebeService.MuhasebeFisiOlusturAsync(satis.Id.Value);
+        var fis = await dbContext.MuhasebeFisler.Include(x => x.Satirlar).SingleAsync(x => x.Id == result.MuhasebeFisId);
+
+        Assert.Contains(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1001 && x.Borc == 75m);
+        Assert.DoesNotContain(fis.Satirlar, x => x.MuhasebeHesapPlaniId == 1002 && x.Borc > 0);
+    }
+
+    [Fact]
+    public async Task K3B_OdemeHesabiMuhasebeBaglantisiYoksa_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var pos = await dbContext.KasaBankaHesaplari.SingleAsync(x => x.Id == 102);
+        pos.MuhasebeHesapPlaniId = null;
+        await dbContext.SaveChangesAsync();
+
+        var satisService = CreateService(dbContext);
+        var muhasebeService = CreateMuhasebeFisService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(satisService);
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50, KasaBankaHesapId = 100 });
+        await satisService.KesinlestirAsync(satis.Id!.Value);
+
+        var kasa = await dbContext.KasaBankaHesaplari.SingleAsync(x => x.Id == 100);
+        kasa.MuhasebeHesapPlaniId = null;
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => muhasebeService.MuhasebeFisiOlusturAsync(satis.Id.Value));
+        Assert.Equal("Ödeme hesabı için muhasebe hesap planı bağlantısı zorunludur.", ex.Message);
+    }
+
+    [Fact]
+    public async Task K3B_KdvMappingYoksa_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeVergiHesapEslemeleri.RemoveRange(dbContext.MuhasebeVergiHesapEslemeleri.Where(x => x.Oran == 8));
+        await dbContext.SaveChangesAsync();
+
+        var satisService = CreateService(dbContext);
+        var muhasebeService = CreateMuhasebeFisService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(satisService);
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50, KasaBankaHesapId = 100 });
+        await satisService.KesinlestirAsync(satis.Id!.Value);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => muhasebeService.MuhasebeFisiOlusturAsync(satis.Id.Value));
+        Assert.Equal("8% KDV oranı için satış KDV hesabı bulunamadı.", ex.Message);
+    }
+
+    [Fact]
+    public async Task K3B_IkinciCagri_DuplicateMuhasebeFisiUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var muhasebeService = CreateMuhasebeFisService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(satisService);
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50, KasaBankaHesapId = 100 });
+        await satisService.KesinlestirAsync(satis.Id!.Value);
+
+        await muhasebeService.MuhasebeFisiOlusturAsync(satis.Id.Value);
+        var ex = await Assert.ThrowsAsync<BaseException>(() => muhasebeService.MuhasebeFisiOlusturAsync(satis.Id.Value));
+
+        Assert.Equal("Bu kantin satışı için daha önce muhasebe fişi oluşturulmuş.", ex.Message);
+        Assert.Equal(1, await dbContext.MuhasebeFisler.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatis && x.KaynakId == satis.Id));
+    }
+
+    [Fact]
     public void AddKantinSalesK2Migration_MigrationsAssemblydeDiscoverEdilir()
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -607,6 +728,22 @@ public class KantinSatisServiceTests
 
         var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
         Assert.True(migrationsAssembly.Migrations.ContainsKey("20260824194650_AddKantinSalesK2"));
+    }
+
+    [Fact]
+    public void AddKantinSalesK3BAccountingMigration_MigrationsAssemblydeDiscoverEdilir()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=StysMigrationDiscoveryKantinSatisK3B;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+
+        using var dbContext = new StysAppDbContext(options, new FakeCurrentUserAccessor(), new FakeCurrentTenantAccessor())
+        {
+            AllowExplicitTenantWritesWithoutAmbientTenant = true
+        };
+
+        var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+        Assert.True(migrationsAssembly.Migrations.ContainsKey("20260824212438_AddKantinSalesK3BAccounting"));
     }
 
     private static async Task<KantinSatisDto> CreateDraftWithSingleLineAsync(KantinSatisService service)
@@ -637,9 +774,9 @@ public class KantinSatisServiceTests
             new Depo { Id = 20, TesisId = 2, Kod = "DEP-B", Ad = "Yan Depo", AktifMi = true });
 
         dbContext.KasaBankaHesaplari.AddRange(
-            new KasaBankaHesap { Id = 100, TesisId = 1, Tip = KasaBankaHesapTipleri.NakitKasa, Kod = "KASA-A", Ad = "Nakit Kasa", AktifMi = true },
-            new KasaBankaHesap { Id = 101, TesisId = 1, Tip = KasaBankaHesapTipleri.Banka, Kod = "BANKA-A", Ad = "Banka", AktifMi = true },
-            new KasaBankaHesap { Id = 102, TesisId = 1, Tip = KasaBankaHesapTipleri.KrediKarti, Kod = "POS-A", Ad = "POS", AktifMi = true, ValorGunSayisi = 1, ValorGunTuru = "Gun", ValorGunundeOtomatikHesabaAktarMi = false },
+            new KasaBankaHesap { Id = 100, TesisId = 1, Tip = KasaBankaHesapTipleri.NakitKasa, Kod = "KASA-A", Ad = "Nakit Kasa", AktifMi = true, MuhasebeHesapPlaniId = 1000 },
+            new KasaBankaHesap { Id = 101, TesisId = 1, Tip = KasaBankaHesapTipleri.Banka, Kod = "BANKA-A", Ad = "Banka", AktifMi = true, MuhasebeHesapPlaniId = 1002 },
+            new KasaBankaHesap { Id = 102, TesisId = 1, Tip = KasaBankaHesapTipleri.KrediKarti, Kod = "POS-A", Ad = "POS", AktifMi = true, MuhasebeHesapPlaniId = 1001, ValorGunSayisi = 1, ValorGunTuru = "Gun", ValorGunundeOtomatikHesabaAktarMi = false },
             new KasaBankaHesap { Id = 300, TesisId = 2, Tip = KasaBankaHesapTipleri.KrediKarti, Kod = "POS-B", Ad = "POS B", AktifMi = true });
 
         dbContext.CariKartlar.AddRange(
@@ -662,7 +799,8 @@ public class KantinSatisServiceTests
                 KdvOrani = 8,
                 AktifMi = true,
                 TakipliMi = false,
-                TakipTipi = TasinirKartTakipTipleri.Yok
+                TakipTipi = TasinirKartTakipTipleri.Yok,
+                MuhasebeHesapPlaniId = 1100
             },
             new TasinirKart
             {
@@ -676,7 +814,8 @@ public class KantinSatisServiceTests
                 KdvOrani = 10,
                 AktifMi = true,
                 TakipliMi = true,
-                TakipTipi = TasinirKartTakipTipleri.Lot
+                TakipTipi = TasinirKartTakipTipleri.Lot,
+                MuhasebeHesapPlaniId = 1101
             },
             new TasinirKart
             {
@@ -690,8 +829,37 @@ public class KantinSatisServiceTests
                 KdvOrani = 20,
                 AktifMi = true,
                 TakipliMi = true,
-                TakipTipi = TasinirKartTakipTipleri.Seri
+                TakipTipi = TasinirKartTakipTipleri.Seri,
+                MuhasebeHesapPlaniId = 1100
             });
+
+        dbContext.MuhasebeHesapPlanlari.AddRange(
+            new MuhasebeHesapPlani { Id = 1000, TesisId = 1, Kod = "100.01", TamKod = "1.10.100.TEST-NAKIT", AnaHesapKodu = MuhasebeAnaHesapKodlari.FinansalKasa, Ad = "Nakit Kasa Hesabı", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1001, TesisId = 1, Kod = "109.01", TamKod = "1.10.109.TEST-POS", AnaHesapKodu = MuhasebeAnaHesapKodlari.FinansalKrediKarti, Ad = "POS Hesabı", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1002, TesisId = 1, Kod = "102.01", TamKod = "1.10.102.TEST-BANKA", AnaHesapKodu = MuhasebeAnaHesapKodlari.FinansalBanka, Ad = "Banka Hesabı", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1100, TesisId = 1, Kod = "153.01", TamKod = "1.53.153.TEST-STOK-A", AnaHesapKodu = MuhasebeAnaHesapKodlari.StokTicariMal, Ad = "Stok Hesabı A", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1101, TesisId = 1, Kod = "153.02", TamKod = "1.53.153.TEST-STOK-B", AnaHesapKodu = MuhasebeAnaHesapKodlari.StokTicariMal, Ad = "Stok Hesabı B", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1200, TesisId = 1, Kod = "600.01", TamKod = "6.60.600.TEST-GELIR", AnaHesapKodu = MuhasebeAnaHesapKodlari.GelirSatis, Ad = "Satış Gelir Hesabı", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1308, TesisId = 1, Kod = "391.08", TamKod = "3.39.391.TEST-KDV8", AnaHesapKodu = MuhasebeAnaHesapKodlari.KDVHesaplanan, Ad = "%8 Hesaplanan KDV", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1310, TesisId = 1, Kod = "391.10", TamKod = "3.39.391.TEST-KDV10", AnaHesapKodu = MuhasebeAnaHesapKodlari.KDVHesaplanan, Ad = "%10 Hesaplanan KDV", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1320, TesisId = 1, Kod = "391.20", TamKod = "3.39.391.TEST-KDV20", AnaHesapKodu = MuhasebeAnaHesapKodlari.KDVHesaplanan, Ad = "%20 Hesaplanan KDV", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap },
+            new MuhasebeHesapPlani { Id = 1400, TesisId = 1, Kod = "621.01", TamKod = "6.62.621.TEST-SMM", AnaHesapKodu = MuhasebeAnaHesapKodlari.SatilanTicariMallarMaliyeti, Ad = "Satılan Mallar Maliyeti", AktifMi = true, DetayHesapMi = true, HareketGorebilirMi = true, HesapTipi = HesapTipi.DetayHesap });
+
+        dbContext.MuhasebeVergiHesapEslemeleri.AddRange(
+            new MuhasebeVergiHesapEsleme { Id = 1, TesisId = 1, VergiTipi = "KDV", Oran = 8, SatisKdvHesapId = 1308, AlisKdvHesapId = 1308, AktifMi = true },
+            new MuhasebeVergiHesapEsleme { Id = 2, TesisId = 1, VergiTipi = "KDV", Oran = 10, SatisKdvHesapId = 1310, AlisKdvHesapId = 1310, AktifMi = true },
+            new MuhasebeVergiHesapEsleme { Id = 3, TesisId = 1, VergiTipi = "KDV", Oran = 20, SatisKdvHesapId = 1320, AlisKdvHesapId = 1320, AktifMi = true });
+
+        dbContext.MuhasebeDonemler.Add(new MuhasebeDonem
+        {
+            Id = 1,
+            TesisId = 1,
+            MaliYil = 2026,
+            DonemNo = 8,
+            BaslangicTarihi = new DateTime(2026, 8, 1),
+            BitisTarihi = new DateTime(2026, 8, 31),
+            KapaliMi = false
+        });
 
         dbContext.Kantinler.Add(new Kantin
         {
@@ -796,6 +964,14 @@ public class KantinSatisServiceTests
             mapper);
     }
 
+    private static IKantinSatisMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext)
+        => new KantinSatisMuhasebeFisService(
+            dbContext,
+            CreateService(dbContext),
+            new FakeMuhasebeDonemService(),
+            new FakeTasinirKodMuhasebeHesapEslemeService(dbContext),
+            NullLogger<KantinSatisMuhasebeFisService>.Instance);
+
     private sealed class FakeStokHareketService(StysAppDbContext dbContext) : IStokHareketService
     {
         private int _nextId = 1000;
@@ -822,6 +998,30 @@ public class KantinSatisServiceTests
                 throw new BaseException("Yetersiz stok.", 400);
             }
 
+            var maliyetBirimFiyat = dto.MaliyetBirimFiyat;
+            var maliyetTutari = dto.MaliyetTutari;
+            if (StokHareketTipleri.IsCikisEtkisi(dto.HareketTipi, dto.TransferYonu, dto.SayimFarkiYonu))
+            {
+                var giris = await dbContext.StokHareketleri
+                    .AsNoTracking()
+                    .Where(x => !x.IsDeleted
+                        && x.Durum == StokHareketDurumlari.Aktif
+                        && x.DepoId == dto.DepoId
+                        && x.TasinirKartId == dto.TasinirKartId
+                        && x.StokLotId == dto.StokLotId
+                        && x.StokSeriId == dto.StokSeriId
+                        && StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu))
+                    .OrderByDescending(x => x.HareketTarihi)
+                    .ThenByDescending(x => x.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (giris is not null && giris.Miktar > 0)
+                {
+                    maliyetBirimFiyat ??= giris.BirimFiyat;
+                    maliyetTutari ??= ParaTutarYuvarlamaHelper.Yuvarla(dto.Miktar * giris.BirimFiyat);
+                }
+            }
+
             var entity = new StokHareket
             {
                 Id = _nextId++,
@@ -842,8 +1042,8 @@ public class KantinSatisServiceTests
                 KdvTutari = dto.KdvTutari,
                 StokLotId = dto.StokLotId,
                 StokSeriId = dto.StokSeriId,
-                MaliyetBirimFiyat = dto.MaliyetBirimFiyat,
-                MaliyetTutari = dto.MaliyetTutari
+                MaliyetBirimFiyat = maliyetBirimFiyat,
+                MaliyetTutari = maliyetTutari
             };
 
             dbContext.StokHareketleri.Add(entity);
@@ -888,6 +1088,67 @@ public class KantinSatisServiceTests
     private sealed class FakeUserAccessScopeService(DomainAccessScope scope) : IUserAccessScopeService
     {
         public Task<DomainAccessScope> GetCurrentScopeAsync(CancellationToken cancellationToken = default) => Task.FromResult(scope);
+    }
+
+    private sealed class FakeMuhasebeDonemService : IMuhasebeDonemService
+    {
+        public Task<MuhasebeDonemDto?> GetAktifDonemAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default)
+            => Task.FromResult<MuhasebeDonemDto?>(new MuhasebeDonemDto
+            {
+                Id = 1,
+                TesisId = tesisId,
+                MaliYil = 2026,
+                DonemNo = 8,
+                BaslangicTarihi = new DateTime(2026, 8, 1),
+                BitisTarihi = new DateTime(2026, 8, 31),
+                KapaliMi = false
+            });
+
+        public Task<MuhasebeDonemDto?> GetDonemByTarihAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default) => GetAktifDonemAsync(tesisId, tarih, cancellationToken);
+        public Task DonemKapatAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task DonemAcAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IEnumerable<MuhasebeDonemDto>> GetAllAsync(Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null) => throw new NotImplementedException();
+        public Task<MuhasebeDonemDto?> GetByIdAsync(int id, Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null) => throw new NotImplementedException();
+        public Task<PagedResult<MuhasebeDonemDto>> GetPagedAsync(PagedRequest request, System.Linq.Expressions.Expression<Func<MuhasebeDonem, bool>>? predicate = null, Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null, Func<IQueryable<MuhasebeDonem>, IOrderedQueryable<MuhasebeDonem>>? orderBy = null) => throw new NotImplementedException();
+        public Task<MuhasebeDonemDto> AddAsync(MuhasebeDonemDto dto) => throw new NotImplementedException();
+        public Task<MuhasebeDonemDto> UpdateAsync(MuhasebeDonemDto dto) => throw new NotImplementedException();
+        public Task DeleteAsync(int id) => throw new NotImplementedException();
+        public Task<IEnumerable<MuhasebeDonemDto>> WhereAsync(System.Linq.Expressions.Expression<Func<MuhasebeDonem, bool>> predicate, Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null) => throw new NotImplementedException();
+        public Task<bool> AnyAsync(System.Linq.Expressions.Expression<Func<MuhasebeDonem, bool>> predicate, Func<IQueryable<MuhasebeDonem>, IQueryable<MuhasebeDonem>>? include = null) => throw new NotImplementedException();
+    }
+
+    private sealed class FakeTasinirKodMuhasebeHesapEslemeService(StysAppDbContext dbContext) : ITasinirKodMuhasebeHesapEslemeService
+    {
+        public Task<TasinirKodMuhasebeHesapEslemeDto?> GetVarsayilanAsync(int tasinirKodId, string malzemeTipi, string hareketTipi, CancellationToken cancellationToken = default)
+            => dbContext.TasinirKodMuhasebeHesapEslemeleri
+                .AsNoTracking()
+                .Where(x => !x.IsDeleted
+                    && x.TasinirKodId == tasinirKodId
+                    && x.MalzemeTipi == malzemeTipi
+                    && x.HareketTipi == hareketTipi
+                    && x.VarsayilanMi
+                    && x.AktifMi)
+                .Select(x => new TasinirKodMuhasebeHesapEslemeDto
+                {
+                    Id = x.Id,
+                    TasinirKodId = x.TasinirKodId,
+                    MuhasebeHesapPlaniId = x.MuhasebeHesapPlaniId,
+                    MalzemeTipi = x.MalzemeTipi,
+                    HareketTipi = x.HareketTipi,
+                    AktifMi = x.AktifMi,
+                    VarsayilanMi = x.VarsayilanMi
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+        public Task<List<TasinirKodMuhasebeHesapEslemeDto>> GetByTasinirKodIdAsync(int tasinirKodId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IEnumerable<TasinirKodMuhasebeHesapEslemeDto>> GetAllAsync(Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null) => throw new NotImplementedException();
+        public Task<TasinirKodMuhasebeHesapEslemeDto?> GetByIdAsync(int id, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null) => throw new NotImplementedException();
+        public Task<PagedResult<TasinirKodMuhasebeHesapEslemeDto>> GetPagedAsync(PagedRequest request, System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>>? predicate = null, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IOrderedQueryable<TasinirKodMuhasebeHesapEsleme>>? orderBy = null) => throw new NotImplementedException();
+        public Task<TasinirKodMuhasebeHesapEslemeDto> AddAsync(TasinirKodMuhasebeHesapEslemeDto dto) => throw new NotImplementedException();
+        public Task<TasinirKodMuhasebeHesapEslemeDto> UpdateAsync(TasinirKodMuhasebeHesapEslemeDto dto) => throw new NotImplementedException();
+        public Task DeleteAsync(int id) => throw new NotImplementedException();
+        public Task<IEnumerable<TasinirKodMuhasebeHesapEslemeDto>> WhereAsync(System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>> predicate, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null) => throw new NotImplementedException();
+        public Task<bool> AnyAsync(System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>> predicate, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null) => throw new NotImplementedException();
     }
 
     private sealed class FakeTahsilatOdemeBelgesiService(StysAppDbContext dbContext) : ITahsilatOdemeBelgesiService

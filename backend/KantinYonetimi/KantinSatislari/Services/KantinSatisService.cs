@@ -392,6 +392,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         var query = _dbContext.KantinSatislar
             .AsNoTracking()
             .Include(x => x.Kantin)
+            .Include(x => x.MuhasebeFis)
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
                 .ThenInclude(x => x.TahsilatOdemeBelgesi)
@@ -409,6 +410,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
     {
         var entity = await _dbContext.KantinSatislar
             .Include(x => x.Kantin)
+            .Include(x => x.MuhasebeFis)
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
                 .ThenInclude(x => x.TahsilatOdemeBelgesi)
@@ -882,6 +884,10 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             KdvToplami = entity.KdvToplami,
             Aciklama = entity.Aciklama,
             KesinlesmeTarihi = entity.KesinlesmeTarihi,
+            MuhasebeFisId = entity.MuhasebeFisId,
+            MuhasebeFisNo = entity.MuhasebeFis?.FisNo,
+            MuhasebeFisDurumu = entity.MuhasebeFis?.Durum,
+            MuhasebeFisOlusturmaTarihi = entity.MuhasebeFisOlusturmaTarihi,
             KantinKod = entity.Kantin?.Kod,
             KantinAd = entity.Kantin?.Ad,
             Satirlar = entity.Satirlar

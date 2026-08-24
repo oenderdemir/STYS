@@ -10,10 +10,12 @@ namespace STYS.KantinYonetimi.KantinSatislari.Controllers;
 public class KantinSatisController : UIController
 {
     private readonly IKantinSatisService _service;
+    private readonly IKantinSatisMuhasebeFisService _muhasebeFisService;
 
-    public KantinSatisController(IKantinSatisService service)
+    public KantinSatisController(IKantinSatisService service, IKantinSatisMuhasebeFisService muhasebeFisService)
     {
         _service = service;
+        _muhasebeFisService = muhasebeFisService;
     }
 
     [HttpGet]
@@ -97,4 +99,9 @@ public class KantinSatisController : UIController
     [Permission(StructurePermissions.KantinSatisYonetimi.Create)]
     public async Task<ActionResult<KantinSatisDto>> Kesinlestir(int id, CancellationToken cancellationToken)
         => Ok(await _service.KesinlestirAsync(id, cancellationToken));
+
+    [HttpPost("{id:int}/muhasebe-fisi-olustur")]
+    [Permission(StructurePermissions.KantinSatisYonetimi.Create)]
+    public async Task<ActionResult<KantinSatisDto>> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)
+        => Ok(await _muhasebeFisService.MuhasebeFisiOlusturAsync(id, cancellationToken));
 }

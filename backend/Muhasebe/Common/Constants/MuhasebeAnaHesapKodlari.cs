@@ -26,6 +26,7 @@ public static class MuhasebeAnaHesapKodlari
     public const string GelirSatis = "6.60.600";
     public const string IndirimIade = "6.61.610";
     public const string SatisIade = "6.61.610";
+    public const string SatilanTicariMallarMaliyeti = "6.62.621";
 
     // Gider
     public const string GiderHizmetMaliyet = "7.40.740";

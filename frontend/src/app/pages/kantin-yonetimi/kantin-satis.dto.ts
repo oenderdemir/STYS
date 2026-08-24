@@ -9,6 +9,10 @@ export interface KantinSatisModel {
     kdvToplami: number;
     aciklama?: string | null;
     kesinlesmeTarihi?: string | null;
+    muhasebeFisId?: number | null;
+    muhasebeFisNo?: string | null;
+    muhasebeFisDurumu?: string | null;
+    muhasebeFisOlusturmaTarihi?: string | null;
     kantinKod?: string | null;
     kantinAd?: string | null;
     odemeOzeti?: string | null;

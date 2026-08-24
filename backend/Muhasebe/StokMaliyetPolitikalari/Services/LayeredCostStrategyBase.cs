@@ -115,18 +115,30 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
         }
     }
 
-    public async Task ReverseOutgoingConsumptionAsync(int cikisStokHareketId, CancellationToken cancellationToken = default)
+    public async Task RestoreOutgoingConsumptionAsIncomingLayersAsync(
+        int originalCikisStokHareketId,
+        int reversalStokHareketId,
+        int depoId,
+        int tasinirKartId,
+        DateTime girisTarihi,
+        CancellationToken cancellationToken = default)
     {
         var tuketimler = await DbContext.StokMaliyetKatmanTuketimleri
-            .Where(x => x.CikisStokHareketId == cikisStokHareketId && !x.IsDeleted)
+            .AsNoTracking()
+            .Where(x => x.CikisStokHareketId == originalCikisStokHareketId && !x.IsDeleted)
+            .OrderBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
         foreach (var tuketim in tuketimler)
         {
-            var katman = await DbContext.StokMaliyetKatmanlari
-                .FirstAsync(x => x.Id == tuketim.StokMaliyetKatmaniId, cancellationToken);
-
-            katman.KalanMiktar += tuketim.Miktar;
+            AddIncomingLayer(
+                reversalStokHareketId,
+                depoId,
+                tasinirKartId,
+                girisTarihi,
+                tuketim.Miktar,
+                tuketim.BirimMaliyet,
+                MaliyetYontemi);
         }
 
         await DbContext.SaveChangesAsync(cancellationToken);
@@ -225,20 +237,49 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
             .AsNoTracking()
             .FirstAsync(x => x.Id == depoId, cancellationToken);
 
+        AddIncomingLayer(
+            kaynakStokHareketId,
+            depoId,
+            tasinirKartId,
+            girisTarihi,
+            miktar,
+            birimMaliyet,
+            MaliyetYontemi,
+            depo.TesisId!.Value);
+        await DbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private void AddIncomingLayer(
+        int kaynakStokHareketId,
+        int depoId,
+        int tasinirKartId,
+        DateTime girisTarihi,
+        decimal miktar,
+        decimal birimMaliyet,
+        string maliyetYontemi,
+        int? tesisId = null)
+    {
+        var effectiveTesisId = tesisId
+            ?? DbContext.Depolar
+                .AsNoTracking()
+                .Where(x => x.Id == depoId)
+                .Select(x => x.TesisId)
+                .FirstOrDefault()
+            ?? throw new BaseException("Depo tesis bilgisi bulunamadı.", 400);
+
         DbContext.StokMaliyetKatmanlari.Add(new StokMaliyetKatmani
         {
-            TesisId = depo.TesisId!.Value,
+            TesisId = effectiveTesisId,
             DepoId = depoId,
             TasinirKartId = tasinirKartId,
             KaynakStokHareketId = kaynakStokHareketId,
             KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi,
-            MaliyetYontemi = MaliyetYontemi,
+            MaliyetYontemi = maliyetYontemi,
             GirisTarihi = girisTarihi,
             IlkMiktar = miktar,
             KalanMiktar = miktar,
             BirimMaliyet = birimMaliyet
         });
-        await DbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<decimal> GetCurrentStockBalanceAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)

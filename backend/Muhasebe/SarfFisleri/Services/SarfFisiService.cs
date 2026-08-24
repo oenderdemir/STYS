@@ -250,6 +250,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
 
     public async Task<SarfFisiDto> IptalAsync(int id, string? iptalAciklamasi = null, CancellationToken cancellationToken = default)
     {
+        var normalizedIptalAciklamasi = NormalizeOptional(iptalAciklamasi);
         var entity = await _dbContext.SarfFisleri
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
@@ -262,7 +263,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
             entity.Durum = SarfFisiDurumlari.Iptal;
             entity.IptalTarihi = DateTime.UtcNow;
             entity.IptalEdenKullaniciId = _currentUserAccessor.GetCurrentUserId();
-            entity.IptalAciklamasi = NormalizeOptional(iptalAciklamasi);
+            entity.IptalAciklamasi = normalizedIptalAciklamasi;
             await _dbContext.SaveChangesAsync(cancellationToken);
             return await GetRequiredDtoAsync(entity.Id, cancellationToken);
         }
@@ -270,6 +271,11 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         if (!string.Equals(entity.Durum, SarfFisiDurumlari.Kesinlesti, StringComparison.Ordinal))
         {
             throw new BaseException("Bu durumdaki sarf fişi için geri alma işlemi yapılamaz.", 400);
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedIptalAciklamasi))
+        {
+            throw new BaseException("Kesinleşmiş sarf fişi geri alma açıklaması zorunludur.", 400);
         }
 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -308,14 +314,14 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
                     BuildIptalHareketDto(entity, satir, originalMovement, iptalZamani),
                     cancellationToken);
 
-                await RestoreLayeredCostIfNeededAsync(originalMovement.Id, cancellationToken);
+                await RestoreLayeredCostIfNeededAsync(originalMovement, reversal, cancellationToken);
                 satir.IptalStokHareketId = reversal.Id;
             }
 
             entity.Durum = SarfFisiDurumlari.IptalEdildi;
             entity.IptalTarihi = iptalZamani;
             entity.IptalEdenKullaniciId = _currentUserAccessor.GetCurrentUserId();
-            entity.IptalAciklamasi = NormalizeOptional(iptalAciklamasi);
+            entity.IptalAciklamasi = normalizedIptalAciklamasi;
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return await GetRequiredDtoAsync(entity.Id, cancellationToken);
@@ -385,6 +391,8 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
 
     private async Task EnsureSarfIptalCanProceedAsync(SarfFisi fis, SarfFisiSatir satir, StokHareket originalMovement, CancellationToken cancellationToken)
     {
+        EnsureOriginalMovementMatchesSarfSatir(fis, satir, originalMovement);
+
         if (satir.StokSeriId.HasValue)
         {
             var balances = await GetCurrentSeriDepotBalancesAsync(satir.StokSeriId.Value, cancellationToken);
@@ -399,23 +407,25 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         await EnsureOpenPeriodAsync(fis.TesisId, DateTime.UtcNow, cancellationToken);
     }
 
-    private async Task RestoreLayeredCostIfNeededAsync(int originalStokHareketId, CancellationToken cancellationToken)
+    private async Task RestoreLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto reversalMovement, CancellationToken cancellationToken)
     {
         var hasConsumptions = await _dbContext.StokMaliyetKatmanTuketimleri
             .AsNoTracking()
-            .AnyAsync(x => x.CikisStokHareketId == originalStokHareketId && !x.IsDeleted, cancellationToken);
+            .AnyAsync(x => x.CikisStokHareketId == originalMovement.Id && !x.IsDeleted, cancellationToken);
 
         if (!hasConsumptions)
         {
             return;
         }
 
-        var originalMovement = await _dbContext.StokHareketleri
-            .AsNoTracking()
-            .FirstAsync(x => x.Id == originalStokHareketId, cancellationToken);
-
-        var strategy = await ResolveLayeredCostStrategyAsync(originalStokHareketId, cancellationToken);
-        await strategy.ReverseOutgoingConsumptionAsync(originalStokHareketId, cancellationToken);
+        var strategy = await ResolveLayeredCostStrategyAsync(originalMovement.Id, cancellationToken);
+        await strategy.RestoreOutgoingConsumptionAsIncomingLayersAsync(
+            originalMovement.Id,
+            reversalMovement.Id!.Value,
+            reversalMovement.DepoId,
+            reversalMovement.TasinirKartId,
+            reversalMovement.HareketTarihi,
+            cancellationToken);
     }
 
     private async Task<LayeredCostStrategyBase> ResolveLayeredCostStrategyAsync(int originalStokHareketId, CancellationToken cancellationToken)
@@ -583,6 +593,22 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         }
 
         return 0m;
+    }
+
+    private static void EnsureOriginalMovementMatchesSarfSatir(SarfFisi fis, SarfFisiSatir satir, StokHareket originalMovement)
+    {
+        var matches =
+            string.Equals(originalMovement.KaynakModul, "SarfFisiSatir", StringComparison.Ordinal)
+            && originalMovement.KaynakId == satir.Id
+            && originalMovement.DepoId == fis.DepoId
+            && originalMovement.TasinirKartId == satir.TasinirKartId
+            && originalMovement.StokLotId == satir.StokLotId
+            && originalMovement.StokSeriId == satir.StokSeriId;
+
+        if (!matches)
+        {
+            throw new BaseException("Sarf fişi geri alma için kaynak stok hareketi bütünlüğü bozuk.", 400);
+        }
     }
 
     private static StokHareketDto BuildSarfHareketDto(SarfFisi fis, SarfFisiSatir satir)

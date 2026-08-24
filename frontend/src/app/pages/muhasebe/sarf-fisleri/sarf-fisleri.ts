@@ -376,6 +376,10 @@ export class SarfFisleriPage implements OnInit {
             return;
         }
 
+        if (this.isKesinlesti(this.selectedFisi) && !this.hasFinalizeCancelExplanation()) {
+            return;
+        }
+
         const wasDraft = this.isDraft(this.selectedFisi);
         this.saving = true;
         this.service.iptal(this.selectedFisi.id, this.iptalModel).pipe(finalize(() => {
@@ -422,6 +426,10 @@ export class SarfFisleriPage implements OnInit {
 
     isKesinlesti(row: Pick<SarfFisiModel, 'durum'>): boolean {
         return row.durum === 'Kesinlesti';
+    }
+
+    hasFinalizeCancelExplanation(): boolean {
+        return !!this.iptalModel.iptalAciklamasi?.trim();
     }
 
     getSelectedKart(): TasinirKartModel | undefined {

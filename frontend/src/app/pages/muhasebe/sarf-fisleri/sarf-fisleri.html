@@ -132,7 +132,11 @@
     </div>
     <ng-template pTemplate="footer">
         <p-button label="Vazgeç" severity="secondary" (onClick)="iptalDialogVisible=false"></p-button>
-        <p-button [label]="isKesinlesti(selectedFisi!) ? 'Sarfı Geri Al' : 'İptal Et'" (onClick)="iptal()" [loading]="saving"></p-button>
+        <p-button
+            [label]="isKesinlesti(selectedFisi!) ? 'Sarfı Geri Al' : 'İptal Et'"
+            (onClick)="iptal()"
+            [loading]="saving"
+            [disabled]="isKesinlesti(selectedFisi!) && !hasFinalizeCancelExplanation()"></p-button>
     </ng-template>
 </p-dialog>
 

@@ -3,6 +3,7 @@ export interface KantinModel {
     tesisId: number;
     depoId: number;
     varsayilanNakitKasaId?: number | null;
+    perakendeCariKartId?: number | null;
     kod: string;
     ad: string;
     aktifMi: boolean;
@@ -10,6 +11,7 @@ export interface KantinModel {
     depoKod?: string | null;
     depoAd?: string | null;
     varsayilanNakitKasaAd?: string | null;
+    perakendeCariKartAd?: string | null;
 }
 
 export interface KantinUrunModel {
@@ -39,6 +41,12 @@ export interface KantinKasaOption {
     id: number;
     kod: string;
     ad: string;
+}
+
+export interface KantinCariKartOption {
+    id: number;
+    cariKodu: string;
+    unvanAdSoyad: string;
 }
 
 export interface KantinOdemeHesapOption {

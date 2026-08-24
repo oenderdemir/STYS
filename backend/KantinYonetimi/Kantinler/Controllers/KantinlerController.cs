@@ -37,6 +37,7 @@ public class KantinlerController : UIController
             TesisId = request.TesisId,
             DepoId = request.DepoId,
             VarsayilanNakitKasaId = request.VarsayilanNakitKasaId,
+            PerakendeCariKartId = request.PerakendeCariKartId,
             Kod = request.Kod,
             Ad = request.Ad,
             AktifMi = request.AktifMi,
@@ -52,6 +53,7 @@ public class KantinlerController : UIController
             TesisId = request.TesisId,
             DepoId = request.DepoId,
             VarsayilanNakitKasaId = request.VarsayilanNakitKasaId,
+            PerakendeCariKartId = request.PerakendeCariKartId,
             Kod = request.Kod,
             Ad = request.Ad,
             AktifMi = request.AktifMi,
@@ -99,6 +101,11 @@ public class KantinlerController : UIController
     [Permission(StructurePermissions.KantinYonetimi.View)]
     public async Task<ActionResult<List<KantinKasaSecenekDto>>> GetNakitKasalar([FromQuery] int tesisId, CancellationToken cancellationToken)
         => Ok(await _service.GetNakitKasalarAsync(tesisId, cancellationToken));
+
+    [HttpGet("perakende-cari-kartlar")]
+    [Permission(StructurePermissions.KantinYonetimi.View)]
+    public async Task<ActionResult<List<KantinCariKartSecenekDto>>> GetPerakendeCariKartlar([FromQuery] int tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPerakendeCariKartlarAsync(tesisId, cancellationToken));
 
     [HttpGet("odeme-hesaplari")]
     [Permission(StructurePermissions.KantinYonetimi.View)]

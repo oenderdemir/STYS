@@ -27,4 +27,9 @@ public interface ITahsilatOdemeBelgesiService : IBaseRdbmsService<TahsilatOdemeB
         int? kapatilacakCariHareketId,
         bool requireCariMuhasebeHesabi,
         CancellationToken cancellationToken = default);
+
+    Task<TahsilatOdemeBelgesiDto> AddWithinCurrentTransactionAsync(
+        TahsilatOdemeBelgesiDto dto,
+        bool requireCariMuhasebeHesabi,
+        CancellationToken cancellationToken = default);
 }

@@ -19,7 +19,7 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextBarComponent } from '../muhasebe/components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
-import { KantinDepoOption, KantinKasaOption, KantinModel, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
+import { KantinCariKartOption, KantinDepoOption, KantinKasaOption, KantinModel, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
 import { KantinlerService } from './kantinler.service';
 
 @Component({
@@ -61,6 +61,7 @@ export class KantinlerPage implements OnInit {
 
     depoOptions: KantinDepoOption[] = [];
     kasaOptions: KantinKasaOption[] = [];
+    cariKartOptions: KantinCariKartOption[] = [];
     tasinirKartOptions: KantinTasinirKartOption[] = [];
 
     showKantinDialog = false;
@@ -142,6 +143,13 @@ export class KantinlerPage implements OnInit {
         this.service.getNakitKasalar(tesisId).subscribe({
             next: (items) => {
                 this.kasaOptions = items;
+                this.cdr.detectChanges();
+            }
+        });
+
+        this.service.getPerakendeCariKartlar(tesisId).subscribe({
+            next: (items) => {
+                this.cariKartOptions = items;
                 this.cdr.detectChanges();
             }
         });
@@ -268,6 +276,11 @@ export class KantinlerPage implements OnInit {
         return kasa ? `${kasa.kod} - ${kasa.ad}` : '';
     }
 
+    getCariKartLabel(cariKartId?: number | null): string {
+        const cari = this.cariKartOptions.find((x) => x.id === cariKartId);
+        return cari ? `${cari.cariKodu} - ${cari.unvanAdSoyad}` : '';
+    }
+
     getKartLabel(tasinirKartId?: number | null): string {
         const kart = this.tasinirKartOptions.find((x) => x.id === tasinirKartId);
         return kart ? `${kart.stokKodu} - ${kart.ad}` : '';
@@ -278,6 +291,7 @@ export class KantinlerPage implements OnInit {
             tesisId: this.currentTesisId ?? 0,
             depoId: 0,
             varsayilanNakitKasaId: null,
+            perakendeCariKartId: null,
             kod: '',
             ad: '',
             aktifMi: true,

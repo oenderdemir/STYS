@@ -5,6 +5,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.KantinYonetimi.Kantinler.Dtos;
 using STYS.KantinYonetimi.Kantinler.Entities;
 using STYS.KantinYonetimi.Kantinler.Repositories;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using TOD.Platform.Persistence.Rdbms.Services;
@@ -249,6 +250,27 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<KantinCariKartSecenekDto>> GetPerakendeCariKartlarAsync(int tesisId, CancellationToken cancellationToken = default)
+    {
+        await EnsureTesisAccessAsync(tesisId, cancellationToken);
+        return await _dbContext.CariKartlar
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted &&
+                x.TesisId == tesisId &&
+                x.AktifMi &&
+                (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri))
+            .OrderBy(x => x.CariKodu)
+            .ThenBy(x => x.UnvanAdSoyad)
+            .Select(x => new KantinCariKartSecenekDto
+            {
+                Id = x.Id,
+                CariKodu = x.CariKodu,
+                UnvanAdSoyad = x.UnvanAdSoyad
+            })
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<List<KantinOdemeHesapSecenekDto>> GetOdemeHesaplariAsync(int tesisId, string odemeYontemi, CancellationToken cancellationToken = default)
     {
         await EnsureTesisAccessAsync(tesisId, cancellationToken);
@@ -297,6 +319,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             .AsNoTracking()
             .Include(x => x.Depo)
             .Include(x => x.VarsayilanNakitKasa)
+            .Include(x => x.PerakendeCariKart)
             .Where(x => !x.IsDeleted);
 
         if (scope.IsScoped)
@@ -354,6 +377,30 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             if (!string.Equals(kasa.Tip, KasaBankaHesapTipleri.NakitKasa, StringComparison.Ordinal))
             {
                 throw new BaseException("Varsayılan kasa yalnızca nakit kasa tipinde olabilir.", 400);
+            }
+        }
+
+        if (dto.PerakendeCariKartId.HasValue)
+        {
+            var cari = await _dbContext.CariKartlar
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == dto.PerakendeCariKartId.Value && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Seçilen perakende cari bulunamadı.", 400);
+
+            if (cari.TesisId != dto.TesisId)
+            {
+                throw new BaseException("Seçilen perakende cari kantin ile aynı tesise ait olmalıdır.", 400);
+            }
+
+            if (!cari.AktifMi)
+            {
+                throw new BaseException("Seçilen perakende cari aktif olmalıdır.", 400);
+            }
+
+            if (!string.Equals(cari.CariTipi, CariKartTipleri.Musteri, StringComparison.Ordinal)
+                && !string.Equals(cari.CariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.Ordinal))
+            {
+                throw new BaseException("Perakende cari yalnızca müşteri veya kurumsal müşteri tipinde olabilir.", 400);
             }
         }
 
@@ -444,13 +491,17 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             TesisId = entity.TesisId,
             DepoId = entity.DepoId,
             VarsayilanNakitKasaId = entity.VarsayilanNakitKasaId,
+            PerakendeCariKartId = entity.PerakendeCariKartId,
             Kod = entity.Kod,
             Ad = entity.Ad,
             AktifMi = entity.AktifMi,
             Aciklama = entity.Aciklama,
             DepoKod = entity.Depo?.Kod,
             DepoAd = entity.Depo?.Ad,
-            VarsayilanNakitKasaAd = entity.VarsayilanNakitKasa?.Ad
+            VarsayilanNakitKasaAd = entity.VarsayilanNakitKasa?.Ad,
+            PerakendeCariKartAd = entity.PerakendeCariKart is null
+                ? null
+                : $"{entity.PerakendeCariKart.CariKodu} - {entity.PerakendeCariKart.UnvanAdSoyad}"
         };
 
     private static string NormalizeRequired(string? value, string errorMessage, int maxLength)

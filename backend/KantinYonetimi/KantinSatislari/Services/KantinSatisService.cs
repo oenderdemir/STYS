@@ -6,13 +6,17 @@ using STYS.KantinYonetimi.KantinSatislari.Dtos;
 using STYS.KantinYonetimi.KantinSatislari.Entities;
 using STYS.KantinYonetimi.KantinSatislari.Repositories;
 using STYS.KantinYonetimi.Kantinler.Entities;
+using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Services;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Services;
 using TOD.Platform.Persistence.Rdbms.Services;
@@ -29,6 +33,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
     private readonly IKantinSatisRepository _repository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IStokHareketService _stokHareketService;
+    private readonly ITahsilatOdemeBelgesiService _tahsilatOdemeBelgesiService;
     private readonly IMapper _mapper;
 
     public KantinSatisService(
@@ -36,6 +41,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         IKantinSatisRepository repository,
         IUserAccessScopeService userAccessScopeService,
         IStokHareketService stokHareketService,
+        ITahsilatOdemeBelgesiService tahsilatOdemeBelgesiService,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -43,6 +49,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         _repository = repository;
         _userAccessScopeService = userAccessScopeService;
         _stokHareketService = stokHareketService;
+        _tahsilatOdemeBelgesiService = tahsilatOdemeBelgesiService;
         _mapper = mapper;
     }
 
@@ -330,6 +337,11 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             }
 
             var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+            if (!kantin.PerakendeCariKartId.HasValue)
+            {
+                throw new BaseException("Kantin satışının kesinleşmesi için Perakende Cari seçimi zorunludur.", 400);
+            }
+
             ValidateDraftConsistency(satis);
             await ValidateOdemelerAsync(kantin, satis, assignResolvedAccounts: true, cancellationToken);
 
@@ -358,6 +370,8 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
 
             RecalculateTotals(satis);
             ValidatePaymentSum(satis);
+            await EnsurePerakendeCariIsValidAsync(kantin, cancellationToken);
+            await EnsureTahsilatlarAsync(kantin, satis, cancellationToken);
 
             satis.Durum = KantinSatisDurumlari.Kesinlesti;
             satis.KesinlesmeTarihi = DateTime.UtcNow;
@@ -379,6 +393,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             .Include(x => x.Kantin)
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+                .ThenInclude(x => x.TahsilatOdemeBelgesi)
             .Where(x => !x.IsDeleted);
 
         if (scope.IsScoped)
@@ -395,6 +410,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             .Include(x => x.Kantin)
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+                .ThenInclude(x => x.TahsilatOdemeBelgesi)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
             ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
 
@@ -617,6 +633,73 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         return hesap;
     }
 
+    private async Task EnsurePerakendeCariIsValidAsync(Kantin kantin, CancellationToken cancellationToken)
+    {
+        var perakendeCariKartId = kantin.PerakendeCariKartId
+            ?? throw new BaseException("Kantin satışının kesinleşmesi için Perakende Cari seçimi zorunludur.", 400);
+
+        var cari = await _dbContext.CariKartlar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == perakendeCariKartId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Seçilen perakende cari bulunamadı.", 400);
+
+        if (cari.TesisId != kantin.TesisId)
+        {
+            throw new BaseException("Seçilen perakende cari kantin ile aynı tesise ait olmalıdır.", 400);
+        }
+
+        if (!cari.AktifMi)
+        {
+            throw new BaseException("Seçilen perakende cari aktif olmalıdır.", 400);
+        }
+    }
+
+    private async Task EnsureTahsilatlarAsync(Kantin kantin, KantinSatis satis, CancellationToken cancellationToken)
+    {
+        foreach (var odeme in satis.Odemeler.Where(x => !x.IsDeleted).OrderBy(x => x.Id))
+        {
+            if (odeme.TahsilatOdemeBelgesiId.HasValue)
+            {
+                continue;
+            }
+
+            var existingBelge = await _dbContext.TahsilatOdemeBelgeleri
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    !x.IsDeleted &&
+                    x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme &&
+                    x.KaynakId == odeme.Id,
+                    cancellationToken);
+            if (existingBelge is not null)
+            {
+                odeme.TahsilatOdemeBelgesiId = existingBelge.Id;
+                continue;
+            }
+
+            var belge = await _tahsilatOdemeBelgesiService.AddWithinCurrentTransactionAsync(
+                new TahsilatOdemeBelgesiDto
+                {
+                    BelgeNo = BuildTahsilatBelgeNo(kantin.TesisId, satis.Id, odeme.Id),
+                    BelgeTarihi = satis.SatisTarihi,
+                    BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+                    CariKartId = kantin.PerakendeCariKartId!.Value,
+                    Tutar = odeme.Tutar,
+                    ParaBirimi = "TRY",
+                    OdemeYontemi = odeme.OdemeYontemi,
+                    Aciklama = $"Kantin satış tahsilatı #{satis.Id}",
+                    KaynakModul = MuhasebeKaynakModulleri.KantinSatisOdeme,
+                    KaynakId = odeme.Id,
+                    KapatilacakCariHareketId = null,
+                    Durum = TahsilatOdemeBelgeDurumlari.Aktif,
+                    KasaBankaHesapId = odeme.KasaBankaHesapId
+                },
+                requireCariMuhasebeHesabi: false,
+                cancellationToken);
+
+            odeme.TahsilatOdemeBelgesiId = belge.Id;
+        }
+    }
+
     private async Task ValidateOdemelerAsync(Kantin kantin, KantinSatis satis, bool assignResolvedAccounts, CancellationToken cancellationToken)
     {
         if (satis.Odemeler.Count == 0)
@@ -760,6 +843,9 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             : 0m);
     }
 
+    private static string BuildTahsilatBelgeNo(int tesisId, int satisId, int odemeId)
+        => $"KNT-{tesisId}-{satisId}-{odemeId}";
+
     private static KantinSatisDto MapDto(KantinSatis entity)
     {
         var dto = new KantinSatisDto
@@ -813,9 +899,11 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
                     KantinSatisId = x.KantinSatisId,
                     OdemeYontemi = x.OdemeYontemi,
                     KasaBankaHesapId = x.KasaBankaHesapId,
+                    TahsilatOdemeBelgesiId = x.TahsilatOdemeBelgesiId,
                     Tutar = x.Tutar,
                     HesapKodSnapshot = x.HesapKodSnapshot,
-                    HesapAdSnapshot = x.HesapAdSnapshot
+                    HesapAdSnapshot = x.HesapAdSnapshot,
+                    TahsilatBelgeNo = x.TahsilatOdemeBelgesi?.BelgeNo
                 })
                 .ToList()
         };

@@ -50,9 +50,13 @@ public class KantinSatisOdemeDto : BaseRdbmsDto<int>
     public int KantinSatisId { get; set; }
     public string OdemeYontemi { get; set; } = string.Empty;
     public int? KasaBankaHesapId { get; set; }
+    public int? TahsilatOdemeBelgesiId { get; set; }
     public decimal Tutar { get; set; }
     public string? HesapKodSnapshot { get; set; }
     public string? HesapAdSnapshot { get; set; }
+    public string? TahsilatBelgeNo { get; set; }
+    public DateTime? PosBeklenenValorTarihi { get; set; }
+    public string? PosValorDurumu { get; set; }
 }
 
 public class CreateKantinSatisRequest

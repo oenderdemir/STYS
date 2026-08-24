@@ -135,6 +135,22 @@
                 <ng-template let-item pTemplate="selectedItem">{{ item ? getKasaLabel(item.id) : 'Kasa seçin' }}</ng-template>
             </p-select>
         </div>
+        <div class="field col-12 md:col-6">
+            <label for="kantinPerakendeCari">Perakende Cari</label>
+            <p-select
+                inputId="kantinPerakendeCari"
+                [options]="cariKartOptions"
+                [(ngModel)]="kantinForm.perakendeCariKartId"
+                optionValue="id"
+                [optionLabel]="'unvanAdSoyad'"
+                placeholder="Perakende cari seçin"
+                [showClear]="true"
+                appendTo="body"
+                class="w-full">
+                <ng-template let-item pTemplate="item">{{ item.cariKodu }} - {{ item.unvanAdSoyad }}</ng-template>
+                <ng-template let-item pTemplate="selectedItem">{{ item ? getCariKartLabel(item.id) : 'Perakende cari seçin' }}</ng-template>
+            </p-select>
+        </div>
         <div class="field col-12">
             <label for="kantinAciklama">Açıklama</label>
             <textarea id="kantinAciklama" pTextarea [(ngModel)]="kantinForm.aciklama" rows="3" class="w-full"></textarea>

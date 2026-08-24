@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using STYS.KantinYonetimi.Kantinler.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.PosTahsilatValorleri.Entities;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokLotlari.Entities;
 using STYS.Muhasebe.StokSerileri.Entities;
@@ -96,6 +98,7 @@ public class KantinSatisOdeme : BaseEntity<int>
     public string OdemeYontemi { get; set; } = string.Empty;
 
     public int? KasaBankaHesapId { get; set; }
+    public int? TahsilatOdemeBelgesiId { get; set; }
     public decimal Tutar { get; set; }
 
     [MaxLength(64)]
@@ -106,4 +109,5 @@ public class KantinSatisOdeme : BaseEntity<int>
 
     public KantinSatis? KantinSatis { get; set; }
     public KasaBankaHesap? KasaBankaHesap { get; set; }
+    public TahsilatOdemeBelgesi? TahsilatOdemeBelgesi { get; set; }
 }

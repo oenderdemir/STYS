@@ -45,9 +45,13 @@ export interface KantinSatisOdemeModel {
     kantinSatisId: number;
     odemeYontemi: string;
     kasaBankaHesapId?: number | null;
+    tahsilatOdemeBelgesiId?: number | null;
     tutar: number;
     hesapKodSnapshot?: string | null;
     hesapAdSnapshot?: string | null;
+    tahsilatBelgeNo?: string | null;
+    posBeklenenValorTarihi?: string | null;
+    posValorDurumu?: string | null;
 }
 
 export interface CreateKantinSatisRequest {

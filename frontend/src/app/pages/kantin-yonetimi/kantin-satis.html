@@ -214,6 +214,15 @@
 
                 <p-divider></p-divider>
 
+                <div *ngFor="let odeme of selectedHistory.odemeler" class="border-1 surface-border border-round p-2">
+                    <div class="font-semibold">{{ odeme.odemeYontemi }}</div>
+                    <div *ngIf="odeme.hesapKodSnapshot || odeme.hesapAdSnapshot">Hesap: {{ odeme.hesapKodSnapshot }} {{ odeme.hesapAdSnapshot }}</div>
+                    <div>Tutar: {{ odeme.tutar | number:'1.2-2' }} TL</div>
+                    <div *ngIf="odeme.tahsilatOdemeBelgesiId">Tahsilat: #{{ odeme.tahsilatOdemeBelgesiId }} <span *ngIf="odeme.tahsilatBelgeNo">({{ odeme.tahsilatBelgeNo }})</span></div>
+                </div>
+
+                <p-divider></p-divider>
+
                 <div *ngFor="let satir of selectedHistory.satirlar" class="border-1 surface-border border-round p-2">
                     <div class="font-semibold">{{ satir.stokKodu }} - {{ satir.urunAdi }}</div>
                     <div>{{ satir.miktar }} {{ satir.birim }} x {{ satir.birimSatisFiyati | number:'1.2-2' }} TL</div>

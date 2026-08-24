@@ -124,6 +124,34 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         }
     }
 
+    public async Task<TahsilatOdemeBelgesiDto> AddWithinCurrentTransactionAsync(
+        TahsilatOdemeBelgesiDto dto,
+        bool requireCariMuhasebeHesabi,
+        CancellationToken cancellationToken = default)
+    {
+        await ValidateOlusturmaAsync(
+            dto.CariKartId,
+            dto.BelgeTipi,
+            dto.OdemeYontemi,
+            dto.Durum,
+            dto.BelgeTarihi,
+            dto.KapatilacakCariHareketId,
+            requireCariMuhasebeHesabi,
+            cancellationToken);
+
+        var entity = Mapper.Map<TahsilatOdemeBelgesi>(dto);
+        await _repository.AddAsync(entity);
+        await _repository.SaveChangesAsync();
+
+        if (dto.KapatilacakCariHareketId.HasValue)
+        {
+            await _cariHareketKapamaService.TahsilatOdemeIcinCariHareketOlusturVeKapatAsync(entity.Id, cancellationToken);
+        }
+
+        await _posTahsilatValorSnapshotService.OlusturSnapshotAsync(entity, cancellationToken);
+        return Mapper.Map<TahsilatOdemeBelgesiDto>(entity);
+    }
+
     public override async Task<TahsilatOdemeBelgesiDto> UpdateAsync(TahsilatOdemeBelgesiDto dto)
     {
         if (!dto.Id.HasValue)

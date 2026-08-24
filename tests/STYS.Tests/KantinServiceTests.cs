@@ -13,6 +13,7 @@ using STYS.KantinYonetimi.Kantinler.Repositories;
 using STYS.KantinYonetimi.Kantinler.Services;
 using STYS.Kurumlar.Entities;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Depolar.Entities;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
@@ -107,6 +108,25 @@ public class KantinServiceTests
         }));
 
         Assert.Equal("Varsayılan kasa yalnızca nakit kasa tipinde olabilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Kantin_CrossTesisPerakendeCariReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
+        {
+            TesisId = 1,
+            DepoId = 10,
+            PerakendeCariKartId = 200,
+            Kod = "KNT-01",
+            Ad = "Merkez Kantin"
+        }));
+
+        Assert.Equal("Seçilen perakende cari kantin ile aynı tesise ait olmalıdır.", ex.Message);
     }
 
     [Fact]
@@ -378,6 +398,26 @@ public class KantinServiceTests
                 Tip = KasaBankaHesapTipleri.NakitKasa,
                 Kod = "KASA-B",
                 Ad = "Yan Nakit Kasa",
+                AktifMi = true
+            });
+
+        dbContext.CariKartlar.AddRange(
+            new CariKart
+            {
+                Id = 100,
+                TesisId = 1,
+                CariTipi = CariKartTipleri.Musteri,
+                CariKodu = "PRK-A",
+                UnvanAdSoyad = "Perakende Müşteri A",
+                AktifMi = true
+            },
+            new CariKart
+            {
+                Id = 200,
+                TesisId = 2,
+                CariTipi = CariKartTipleri.Musteri,
+                CariKodu = "PRK-B",
+                UnvanAdSoyad = "Perakende Müşteri B",
                 AktifMi = true
             });
 

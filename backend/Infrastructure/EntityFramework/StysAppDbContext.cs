@@ -2578,6 +2578,8 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.VarsayilanNakitKasaId)
                 .HasFilter("[IsDeleted] = 0 AND [VarsayilanNakitKasaId] IS NOT NULL");
+            entity.HasIndex(x => x.PerakendeCariKartId)
+                .HasFilter("[IsDeleted] = 0 AND [PerakendeCariKartId] IS NOT NULL");
 
             entity.HasOne(x => x.Tesis)
                 .WithMany()
@@ -2592,6 +2594,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.VarsayilanNakitKasa)
                 .WithMany()
                 .HasForeignKey(x => x.VarsayilanNakitKasaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.PerakendeCariKart)
+                .WithMany()
+                .HasForeignKey(x => x.PerakendeCariKartId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -2718,6 +2725,10 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.KasaBankaHesapId)
                 .HasFilter("[IsDeleted] = 0 AND [KasaBankaHesapId] IS NOT NULL");
 
+            entity.HasIndex(x => x.TahsilatOdemeBelgesiId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [TahsilatOdemeBelgesiId] IS NOT NULL");
+
             entity.HasOne(x => x.KantinSatis)
                 .WithMany(x => x.Odemeler)
                 .HasForeignKey(x => x.KantinSatisId)
@@ -2726,6 +2737,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.KasaBankaHesap)
                 .WithMany()
                 .HasForeignKey(x => x.KasaBankaHesapId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.TahsilatOdemeBelgesi)
+                .WithMany()
+                .HasForeignKey(x => x.TahsilatOdemeBelgesiId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

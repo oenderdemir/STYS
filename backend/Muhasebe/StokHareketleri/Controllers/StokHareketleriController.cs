@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
+using STYS.Muhasebe.StokCikis.Services;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Services;
 using STYS.Muhasebe.StokLotlari.Dtos;
@@ -13,11 +14,13 @@ namespace STYS.Muhasebe.StokHareketleri.Controllers;
 public class StokHareketleriController : UIController
 {
     private readonly IStokHareketService _service;
+    private readonly IStokCikisService _stokCikisService;
     private readonly IMapper _mapper;
 
-    public StokHareketleriController(IStokHareketService service, IMapper mapper)
+    public StokHareketleriController(IStokHareketService service, IStokCikisService stokCikisService, IMapper mapper)
     {
         _service = service;
+        _stokCikisService = stokCikisService;
         _mapper = mapper;
     }
 
@@ -92,7 +95,7 @@ public class StokHareketleriController : UIController
     [HttpPost("transfer")]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
     public async Task<ActionResult<IReadOnlyList<StokHareketDto>>> CreateTransfer([FromBody] StokTransferRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.CreateTransferAsync(request, cancellationToken));
+        => Ok(await _stokCikisService.DogrudanTransferBaslatAsync(request, cancellationToken));
 
     [HttpPut("{id:int}")]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]

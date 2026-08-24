@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
+using STYS.Muhasebe.StokCikis.Services;
 using STYS.Muhasebe.StokTalepleri.Dtos;
 using STYS.Muhasebe.StokTalepleri.Entities;
 using STYS.Muhasebe.StokTalepleri.Services;
@@ -13,11 +14,13 @@ namespace STYS.Muhasebe.StokTalepleri.Controllers;
 public class StokTalepleriController : UIController
 {
     private readonly IStokTalepService _service;
+    private readonly IStokCikisService _stokCikisService;
     private readonly IMapper _mapper;
 
-    public StokTalepleriController(IStokTalepService service, IMapper mapper)
+    public StokTalepleriController(IStokTalepService service, IStokCikisService stokCikisService, IMapper mapper)
     {
         _service = service;
+        _stokCikisService = stokCikisService;
         _mapper = mapper;
     }
 
@@ -40,7 +43,7 @@ public class StokTalepleriController : UIController
     [HttpPost]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
     public async Task<ActionResult<StokTalepDto>> Create([FromBody] CreateStokTalepRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.AddAsync(_mapper.Map<StokTalepDto>(request)));
+        => Ok(await _stokCikisService.TalepBaslatAsync(request, cancellationToken));
 
     [HttpPut("{id:int}")]
     [Permission(StructurePermissions.StokHareketYonetimi.Manage)]

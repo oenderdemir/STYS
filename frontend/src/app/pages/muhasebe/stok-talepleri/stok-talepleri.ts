@@ -15,6 +15,7 @@ import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { AuthService } from '../../auth';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { DepolarService } from '../depolar/depolar.service';
@@ -59,6 +60,7 @@ export class StokTalepleriPage implements OnInit {
     private readonly tasinirKartService = inject(TasinirKartlariService);
     private readonly stokHareketleriService = inject(StokHareketleriService);
     private readonly tesisService = inject(TesisYonetimiService);
+    private readonly authService = inject(AuthService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -128,6 +130,30 @@ export class StokTalepleriPage implements OnInit {
             },
             error: (error: unknown) => this.showError(error)
         });
+    }
+
+    get canTalepView(): boolean {
+        return this.authService.hasPermission('StokTalepYonetimi.View');
+    }
+
+    get canTalepCreate(): boolean {
+        return this.authService.hasPermission('StokTalepYonetimi.Create');
+    }
+
+    get canTalepApprove(): boolean {
+        return this.authService.hasPermission('StokTalepYonetimi.Approve');
+    }
+
+    get canTalepDeliver(): boolean {
+        return this.authService.hasPermission('StokTalepYonetimi.Deliver');
+    }
+
+    get canTalepCancel(): boolean {
+        return this.authService.hasPermission('StokTalepYonetimi.Cancel');
+    }
+
+    get canDirectTransferCreate(): boolean {
+        return this.authService.hasPermission('StokDepoCikisYonetimi.Create');
     }
 
     loadReferences(): void {

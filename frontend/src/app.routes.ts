@@ -72,6 +72,7 @@ import { StokHareketleriPage } from './app/pages/muhasebe/stok-hareketleri/stok-
 import { StokLotlariSktUyarilariPage } from './app/pages/muhasebe/stok-lotlari-skt-uyarilari/stok-lotlari-skt-uyarilari';
 import { StokUyarilariPage } from './app/pages/muhasebe/stok-uyarilari/stok-uyarilari';
 import { StokSayimlariPage } from './app/pages/muhasebe/stok-sayimlari/stok-sayimlari';
+import { SarfFisleriPage } from './app/pages/muhasebe/sarf-fisleri/sarf-fisleri';
 import { StokTalepleriPage } from './app/pages/muhasebe/stok-talepleri/stok-talepleri';
 import { MuhasebeHesapPlaniPage } from './app/pages/muhasebe/muhasebe-hesap-plani/muhasebe-hesap-plani';
 import { KasaBankaHesaplariPage } from './app/pages/muhasebe/kasa-banka-hesaplari/kasa-banka-hesaplari';
@@ -198,6 +199,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/stok-uyarilari', component: StokUyarilariPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'Kritik Stok Uyarıları'] } },
             { path: 'muhasebe/stok-lotlari/skt-uyarilari', component: StokLotlariSktUyarilariPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'SKT Uyarıları'] } },
             { path: 'muhasebe/stok-sayimlari', component: StokSayimlariPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'Stok Sayimlari'] } },
+            { path: 'muhasebe/sarf-fisleri', component: SarfFisleriPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'Sarf Fişleri'] } },
             { path: 'muhasebe/hesap-plani', component: MuhasebeHesapPlaniPage, data: { breadcrumb: ['Muhasebe Yönetimi', 'Hesap Plani'] } },
             { path: 'muhasebe/paket-turleri', component: PaketTurleriPage, data: { breadcrumb: ['Stok & Depo Yönetimi', 'Paket Turleri'] } },
             { path: 'muhasebe/hizli-mizan', component: HizliMizanComponent, data: { breadcrumb: ['Finans Yönetimi', 'Hızlı Mizan'] } },

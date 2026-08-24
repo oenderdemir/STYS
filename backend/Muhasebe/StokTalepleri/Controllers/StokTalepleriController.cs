@@ -25,7 +25,7 @@ public class StokTalepleriController : UIController
     }
 
     [HttpGet("paged")]
-    [Permission(StructurePermissions.StokHareketYonetimi.View)]
+    [Permission(StructurePermissions.StokTalepYonetimi.View)]
     public async Task<ActionResult<PagedResult<StokTalepDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, [FromQuery] int? talepEdenDepoId, [FromQuery] int? karsilayanDepoId, CancellationToken cancellationToken)
         => Ok(await _service.GetPagedAsync(
             request,
@@ -33,7 +33,7 @@ public class StokTalepleriController : UIController
             orderBy: q => q.OrderByDescending(x => x.TalepTarihi).ThenByDescending(x => x.Id)));
 
     [HttpGet("{id:int}")]
-    [Permission(StructurePermissions.StokHareketYonetimi.View)]
+    [Permission(StructurePermissions.StokTalepYonetimi.View)]
     public async Task<ActionResult<StokTalepDto>> GetById(int id, CancellationToken cancellationToken)
     {
         var item = await _service.GetByIdAsync(id);
@@ -41,12 +41,12 @@ public class StokTalepleriController : UIController
     }
 
     [HttpPost]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Create)]
     public async Task<ActionResult<StokTalepDto>> Create([FromBody] CreateStokTalepRequest request, CancellationToken cancellationToken)
         => Ok(await _stokCikisService.TalepBaslatAsync(request, cancellationToken));
 
     [HttpPut("{id:int}")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Create)]
     public async Task<ActionResult<StokTalepDto>> Update(int id, [FromBody] CreateStokTalepRequest request, CancellationToken cancellationToken)
     {
         var dto = _mapper.Map<StokTalepDto>(request);
@@ -55,17 +55,17 @@ public class StokTalepleriController : UIController
     }
 
     [HttpPut("{id:int}/satirlar")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Approve)]
     public async Task<ActionResult<StokTalepDto>> UpdateSatirlar(int id, [FromBody] UpdateStokTalepSatirlarRequest request, CancellationToken cancellationToken)
         => Ok(await _service.UpdateSatirlarAsync(id, request, cancellationToken));
 
     [HttpPost("{id:int}/satirlar")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Create)]
     public async Task<ActionResult<StokTalepDto>> AddSatir(int id, [FromBody] AddStokTalepSatirRequest request, CancellationToken cancellationToken)
         => Ok(await _service.AddSatirAsync(id, request, cancellationToken));
 
     [HttpDelete("{id:int}/satirlar/{satirId:int}")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Create)]
     public async Task<IActionResult> DeleteSatir(int id, int satirId, CancellationToken cancellationToken)
     {
         await _service.DeleteSatirAsync(id, satirId, cancellationToken);
@@ -73,27 +73,27 @@ public class StokTalepleriController : UIController
     }
 
     [HttpPost("{id:int}/gonder")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Create)]
     public async Task<ActionResult<StokTalepDto>> Gonder(int id, CancellationToken cancellationToken)
         => Ok(await _service.GonderAsync(id, cancellationToken));
 
     [HttpPost("{id:int}/reddet")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Approve)]
     public async Task<ActionResult<StokTalepDto>> Reddet(int id, CancellationToken cancellationToken)
         => Ok(await _service.ReddetAsync(id, cancellationToken));
 
     [HttpPost("{id:int}/teslim-et")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Deliver)]
     public async Task<ActionResult<StokTalepDto>> TeslimEt(int id, [FromBody] TeslimEtStokTalepRequest request, CancellationToken cancellationToken)
         => Ok(await _service.TeslimEtAsync(id, request, cancellationToken));
 
     [HttpPost("{id:int}/iptal")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Cancel)]
     public async Task<ActionResult<StokTalepDto>> Iptal(int id, CancellationToken cancellationToken)
         => Ok(await _service.IptalAsync(id, cancellationToken));
 
     [HttpDelete("{id:int}")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokTalepYonetimi.Cancel)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         await _service.DeleteAsync(id);

@@ -35,6 +35,7 @@ using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
 using STYS.Muhasebe.StokSayimlari.Entities;
 using STYS.Muhasebe.StokTalepleri.Entities;
 using STYS.Muhasebe.StokSerileri.Entities;
+using STYS.Muhasebe.SarfFisleri.Entities;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
@@ -201,6 +202,8 @@ public class StysAppDbContext : DbContext
     public DbSet<StokTalep> StokTalepler => Set<StokTalep>();
     public DbSet<StokTalepSatir> StokTalepSatirlari => Set<StokTalepSatir>();
     public DbSet<StokSeri> StokSeriler => Set<StokSeri>();
+    public DbSet<SarfFisi> SarfFisleri => Set<SarfFisi>();
+    public DbSet<SarfFisiSatir> SarfFisiSatirlari => Set<SarfFisiSatir>();
     public DbSet<TasinirKodMuhasebeHesapEsleme> TasinirKodMuhasebeHesapEslemeleri => Set<TasinirKodMuhasebeHesapEsleme>();
     public DbSet<MuhasebeVergiHesapEsleme> MuhasebeVergiHesapEslemeleri => Set<MuhasebeVergiHesapEsleme>();
     public DbSet<TevkifatHesapEsleme> TevkifatHesapEslemeleri => Set<TevkifatHesapEsleme>();
@@ -3050,6 +3053,72 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.StokSeri)
                 .WithMany()
                 .HasForeignKey(x => x.StokSeriId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SarfFisi>(entity =>
+        {
+            entity.ToTable("SarfFisleri", muhasebeSchema);
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.HasIndex(x => new { x.TesisId, x.DepoId, x.SarfTarihi })
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne<Tesis>()
+                .WithMany()
+                .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Depo)
+                .WithMany()
+                .HasForeignKey(x => x.DepoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IsletmeAlani)
+                .WithMany()
+                .HasForeignKey(x => x.IsletmeAlaniId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SarfFisiSatir>(entity =>
+        {
+            entity.ToTable("SarfFisiSatirlari", muhasebeSchema);
+            entity.Property(x => x.TakipTipi).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.StokKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.TasinirKartAd).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Birim).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.LotNo).HasMaxLength(64);
+            entity.Property(x => x.SeriNo).HasMaxLength(128);
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.Miktar).HasPrecision(18, 3);
+            entity.HasIndex(x => new { x.SarfFisiId, x.TasinirKartId, x.StokLotId, x.StokSeriId })
+                .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => x.StokHareketId)
+                .HasFilter("[IsDeleted] = 0 AND [StokHareketId] IS NOT NULL");
+
+            entity.HasOne(x => x.SarfFisi)
+                .WithMany(x => x.Satirlar)
+                .HasForeignKey(x => x.SarfFisiId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.TasinirKart)
+                .WithMany()
+                .HasForeignKey(x => x.TasinirKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokLot)
+                .WithMany()
+                .HasForeignKey(x => x.StokLotId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokSeri)
+                .WithMany()
+                .HasForeignKey(x => x.StokSeriId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokHareket)
+                .WithMany()
+                .HasForeignKey(x => x.StokHareketId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

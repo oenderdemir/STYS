@@ -428,6 +428,32 @@ public static class StructurePermissions
         public const string Manage = "StokHareketYonetimi.Manage";
     }
 
+    public static class StokTalepYonetimi
+    {
+        public const string Menu = "StokTalepYonetimi.Menu";
+        public const string View = "StokTalepYonetimi.View";
+        public const string Create = "StokTalepYonetimi.Create";
+        public const string Approve = "StokTalepYonetimi.Approve";
+        public const string Deliver = "StokTalepYonetimi.Deliver";
+        public const string Cancel = "StokTalepYonetimi.Cancel";
+    }
+
+    public static class StokDepoCikisYonetimi
+    {
+        public const string Menu = "StokDepoCikisYonetimi.Menu";
+        public const string View = "StokDepoCikisYonetimi.View";
+        public const string Create = "StokDepoCikisYonetimi.Create";
+    }
+
+    public static class SarfYonetimi
+    {
+        public const string Menu = "SarfYonetimi.Menu";
+        public const string View = "SarfYonetimi.View";
+        public const string Create = "SarfYonetimi.Create";
+        public const string Finalize = "SarfYonetimi.Finalize";
+        public const string Cancel = "SarfYonetimi.Cancel";
+    }
+
     public static class MuhasebeHesapPlaniYonetimi
     {
         public const string Menu = "MuhasebeHesapPlaniYonetimi.Menu";

@@ -67,6 +67,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     public override async Task<StokHareketDto> AddAsync(StokHareketDto dto)
     {
+        EnsureRestrictedWorkflowMovesUseDedicatedFlow(dto);
+
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
         {
             throw new BaseException("Transfer hareketleri yalnizca transfer olusturma akisi ile kaydedilebilir.", 400);
@@ -95,6 +97,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     public async Task<StokHareketDto> AddWithinCurrentTransactionAsync(StokHareketDto dto, CancellationToken cancellationToken = default)
     {
+        EnsureRestrictedWorkflowMovesUseDedicatedFlow(dto);
+
         if (string.Equals(dto.HareketTipi, StokHareketTipleri.Transfer, StringComparison.Ordinal))
         {
             throw new BaseException("Transfer hareketleri yalnizca transfer olusturma akisi ile kaydedilebilir.", 400);
@@ -1756,6 +1760,15 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static bool IsCostSensitiveMovement(string? hareketTipi, string? transferYonu, string? sayimFarkiYonu)
         => StokHareketTipleri.IsGirisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu)
            || StokHareketTipleri.IsCikisEtkisi(hareketTipi, transferYonu, sayimFarkiYonu);
+
+    private static void EnsureRestrictedWorkflowMovesUseDedicatedFlow(StokHareketDto dto)
+    {
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal)
+            && !string.Equals(dto.KaynakModul, "SarfFisiSatir", StringComparison.Ordinal))
+        {
+            throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
+        }
+    }
 
     private void DetachTrackedStokHareket(int id)
     {

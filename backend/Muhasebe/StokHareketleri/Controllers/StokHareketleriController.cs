@@ -93,7 +93,7 @@ public class StokHareketleriController : UIController
         => Ok(await _service.AddAsync(_mapper.Map<StokHareketDto>(request)));
 
     [HttpPost("transfer")]
-    [Permission(StructurePermissions.StokHareketYonetimi.Manage)]
+    [Permission(StructurePermissions.StokDepoCikisYonetimi.Create)]
     public async Task<ActionResult<IReadOnlyList<StokHareketDto>>> CreateTransfer([FromBody] StokTransferRequest request, CancellationToken cancellationToken)
         => Ok(await _stokCikisService.DogrudanTransferBaslatAsync(request, cancellationToken));
 

@@ -42,6 +42,18 @@ export class TesisYonetimiService {
         );
     }
 
+    getTesis(id: number): Observable<TesisDto> {
+        return this.http.get<ApiResponse<TesisDto>>(`${this.apiBaseUrl}/ui/tesis/${id}`).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Tesis bilgisi alinamadi.');
+            })
+        );
+    }
+
     getIller(): Observable<IlDto[]> {
         return this.http.get<ApiResponse<IlDto[]>>(`${this.apiBaseUrl}/ui/il`).pipe(
             map((responseEnvelope) => {

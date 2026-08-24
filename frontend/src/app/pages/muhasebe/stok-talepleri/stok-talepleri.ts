@@ -27,6 +27,9 @@ import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { AddStokTalepSatirRequest, CreateStokTalepRequest, STOK_TALEP_DURUMLARI, StokTalepModel, StokTalepSatirModel } from './stok-talepleri.dto';
 import { StokTalepleriService } from './stok-talepleri.service';
+import { TesisYonetimiService } from '../../tesis-yonetimi/tesis-yonetimi.service';
+
+type StokCikisYontemi = 'TalepVeOnay' | 'DogrudanDepoCikisi';
 
 @Component({
     selector: 'app-stok-talepleri-page',
@@ -55,6 +58,7 @@ export class StokTalepleriPage implements OnInit {
     private readonly depolarService = inject(DepolarService);
     private readonly tasinirKartService = inject(TasinirKartlariService);
     private readonly stokHareketleriService = inject(StokHareketleriService);
+    private readonly tesisService = inject(TesisYonetimiService);
     readonly tesisContext = inject(MuhasebeTesisContextService);
     private readonly messageService = inject(MessageService);
     private readonly cdr = inject(ChangeDetectorRef);
@@ -83,6 +87,19 @@ export class StokTalepleriPage implements OnInit {
     satirModel: AddStokTalepSatirRequest = { tasinirKartId: 0, talepMiktari: 1, aciklama: null };
     lotOptionsByLine: Record<number, Array<{ label: string; value: number }>> = {};
     seriOptionsByLine: Record<number, Array<{ label: string; value: number }>> = {};
+    stokCikisYontemi: StokCikisYontemi = 'TalepVeOnay';
+    directTransferDate: Date | null = new Date();
+    directTransferModel = {
+        kaynakDepoId: 0,
+        hedefDepoId: 0,
+        tasinirKartId: 0,
+        miktar: 1,
+        aciklama: null as string | null,
+        stokLotId: null as number | null,
+        stokSeriId: null as number | null
+    };
+    directLotOptions: Array<{ label: string; value: number }> = [];
+    directSeriOptions: Array<{ label: string; value: number }> = [];
 
     readonly durumlar = STOK_TALEP_DURUMLARI;
 
@@ -98,7 +115,7 @@ export class StokTalepleriPage implements OnInit {
         this.selectedTalepEdenDepoId = undefined;
         this.selectedKarsilayanDepoId = undefined;
         this.loadReferences();
-        this.load();
+        this.loadStokCikisYontemi();
     });
 
     ngOnInit(): void {
@@ -107,7 +124,7 @@ export class StokTalepleriPage implements OnInit {
                 this.contextInitialized = true;
                 this.currentTesisId = this.tesisContext.seciliTesis()?.id ?? null;
                 this.loadReferences();
-                this.load();
+                this.loadStokCikisYontemi();
             },
             error: (error: unknown) => this.showError(error)
         });
@@ -137,6 +154,14 @@ export class StokTalepleriPage implements OnInit {
     }
 
     load(pageNumber = this.pageNumber, pageSize = this.pageSize): void {
+        if (!this.isTalepVeOnayMode()) {
+            this.loading = false;
+            this.records = [];
+            this.selectedTalep = null;
+            this.totalRecords = 0;
+            return;
+        }
+
         const tesisId = this.requireTesisId();
         if (!tesisId) {
             return;
@@ -191,6 +216,10 @@ export class StokTalepleriPage implements OnInit {
     }
 
     openCreate(): void {
+        if (!this.isTalepVeOnayMode()) {
+            return;
+        }
+
         if (!this.requireTesisId()) {
             return;
         }
@@ -407,6 +436,83 @@ export class StokTalepleriPage implements OnInit {
         this.router.navigate(['/muhasebe/stok-hareketleri']);
     }
 
+    isTalepVeOnayMode(): boolean {
+        return this.stokCikisYontemi === 'TalepVeOnay';
+    }
+
+    onDirectKartChange(tasinirKartId: number | null | undefined): void {
+        this.directTransferModel.tasinirKartId = tasinirKartId ?? 0;
+        this.directTransferModel.stokLotId = null;
+        this.directTransferModel.stokSeriId = null;
+        this.directLotOptions = [];
+        this.directSeriOptions = [];
+
+        const kart = this.getDirectSelectedKart();
+        if (kart?.takipTipi === 'Seri') {
+            this.directTransferModel.miktar = 1;
+        }
+
+        this.loadDirectTrackingSelections();
+    }
+
+    onDirectSourceDepotChange(): void {
+        this.directTransferModel.stokLotId = null;
+        this.directTransferModel.stokSeriId = null;
+        this.directLotOptions = [];
+        this.directSeriOptions = [];
+        this.loadDirectTrackingSelections();
+    }
+
+    createDirectTransfer(): void {
+        const tesisId = this.requireTesisId();
+        if (!tesisId) {
+            return;
+        }
+
+        if (!this.directTransferModel.kaynakDepoId || !this.directTransferModel.hedefDepoId || !this.directTransferModel.tasinirKartId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Uyari', detail: 'Kaynak depo, hedef depo ve taşınır kart seçimi zorunludur.' });
+            return;
+        }
+
+        const kart = this.getDirectSelectedKart();
+        if (kart?.takipTipi === 'Lot' && !this.directTransferModel.stokLotId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Uyari', detail: 'Lot takipli kartta lot seçimi zorunludur.' });
+            return;
+        }
+
+        if (kart?.takipTipi === 'Seri' && !this.directTransferModel.stokSeriId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Uyari', detail: 'Seri takipli kartta seri seçimi zorunludur.' });
+            return;
+        }
+
+        const hareketTarihi = this.formatDateTimeForApi(this.directTransferDate ?? new Date()) ?? this.formatDateTimeForApi(new Date())!;
+        const miktar = kart?.takipTipi === 'Seri' ? 1 : this.directTransferModel.miktar;
+
+        this.saving = true;
+        this.stokHareketleriService.createTransfer({
+            kaynakDepoId: this.directTransferModel.kaynakDepoId,
+            hedefDepoId: this.directTransferModel.hedefDepoId,
+            tasinirKartId: this.directTransferModel.tasinirKartId,
+            stokLotId: this.directTransferModel.stokLotId,
+            stokSeriId: this.directTransferModel.stokSeriId,
+            hareketTarihi,
+            belgeTarihi: hareketTarihi,
+            miktar,
+            birimFiyat: 0,
+            aciklama: this.directTransferModel.aciklama
+        }).pipe(finalize(() => {
+            this.saving = false;
+            this.cdr.detectChanges();
+        })).subscribe({
+            next: () => {
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Depolar arasi transfer olusturuldu.' });
+                this.resetDirectTransferForm();
+                this.loadReferences();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
     getOnayActionLabel(): string {
         if (!this.selectedTalep) {
             return 'Onay Durumunu Kaydet';
@@ -529,6 +635,86 @@ export class StokTalepleriPage implements OnInit {
 
     private requireTesisId(): number | null {
         return this.currentTesisId ?? this.tesisContext.seciliTesis()?.id ?? null;
+    }
+
+    private loadStokCikisYontemi(): void {
+        const tesisId = this.requireTesisId();
+        if (!tesisId) {
+            return;
+        }
+
+        this.tesisService.getTesis(tesisId).subscribe({
+            next: (tesis) => {
+                this.stokCikisYontemi = tesis.stokCikisYontemi === 'DogrudanDepoCikisi' ? 'DogrudanDepoCikisi' : 'TalepVeOnay';
+                if (this.isTalepVeOnayMode()) {
+                    this.load();
+                } else {
+                    this.records = [];
+                    this.selectedTalep = null;
+                    this.totalRecords = 0;
+                    this.resetDirectTransferForm();
+                }
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    private resetDirectTransferForm(): void {
+        this.directTransferDate = new Date();
+        this.directTransferModel = {
+            kaynakDepoId: this.selectedKarsilayanDepoId ?? 0,
+            hedefDepoId: this.selectedTalepEdenDepoId ?? 0,
+            tasinirKartId: 0,
+            miktar: 1,
+            aciklama: null,
+            stokLotId: null,
+            stokSeriId: null
+        };
+        this.directLotOptions = [];
+        this.directSeriOptions = [];
+    }
+
+    getDirectSelectedKart(): TasinirKartModel | undefined {
+        return this.tasinirKartMap.get(this.directTransferModel.tasinirKartId);
+    }
+
+    private loadDirectTrackingSelections(): void {
+        const kart = this.getDirectSelectedKart();
+        if (!kart || !this.directTransferModel.kaynakDepoId) {
+            return;
+        }
+
+        if (kart.takipTipi === 'Lot') {
+            this.stokHareketleriService.getLotBakiyeleri(this.directTransferModel.kaynakDepoId, kart.id!).subscribe({
+                next: (items) => {
+                    this.directLotOptions = items.map((x: StokLotBakiyeModel) => ({
+                        label: `${x.lotNo} (${x.bakiyeMiktari})`,
+                        value: x.stokLotId
+                    }));
+                    if (!this.directTransferModel.stokLotId && items.length === 1) {
+                        this.directTransferModel.stokLotId = items[0].stokLotId;
+                    }
+                    this.cdr.detectChanges();
+                }
+            });
+            return;
+        }
+
+        if (kart.takipTipi === 'Seri') {
+            this.stokHareketleriService.getSeriBakiyeleri(this.directTransferModel.kaynakDepoId, kart.id!).subscribe({
+                next: (items) => {
+                    this.directSeriOptions = items.map((x: StokSeriBakiyeModel) => ({
+                        label: x.seriNo,
+                        value: x.stokSeriId
+                    }));
+                    if (!this.directTransferModel.stokSeriId && items.length === 1) {
+                        this.directTransferModel.stokSeriId = items[0].stokSeriId;
+                    }
+                    this.cdr.detectChanges();
+                }
+            });
+        }
     }
 
     private formatDateTimeForApi(value: Date | null): string | null {

@@ -1,5 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
@@ -104,6 +106,52 @@ public class TesisServiceTests
 
         Assert.Equal(403, ex.ErrorCode);
         Assert.Equal("Bu tesis aktif kuruma ait degil.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AddAsync_StokCikisYontemiVerilmezseTalepVeOnayVarsayilaniniKullanir()
+    {
+        var tenant = new MutableCurrentTenantAccessor
+        {
+            IsSuperAdminValue = true,
+            CurrentKurumIdValue = null
+        };
+        await using var dbContext = CreateDbContext(tenant);
+        await SeedTesislerAsync(dbContext);
+        tenant.CurrentKurumIdValue = 100;
+        var service = CreateService(dbContext, tenant, DomainAccessScope.Unscoped());
+
+        var created = await service.AddAsync(new STYS.Tesisler.Dto.TesisDto
+        {
+            Ad = "Yeni Tesis",
+            IlId = 1,
+            Telefon = "222",
+            Adres = "Adres",
+            Eposta = null,
+            GirisSaati = "14:00",
+            CikisSaati = "10:00",
+            EkHizmetPaketCakismaPolitikasi = "OnayIste",
+            StokCikisYontemi = "",
+            AktifMi = true
+        });
+
+        Assert.Equal("TalepVeOnay", created.StokCikisYontemi);
+        Assert.Equal("TalepVeOnay", await dbContext.Tesisler.Where(x => x.Id == created.Id).Select(x => x.StokCikisYontemi).SingleAsync());
+    }
+
+    [Fact]
+    public void MigrationAssembly_AddTesisStokCikisYontemi_DiscoverEdilir()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=StysMigrationDiscovery2;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+        using var dbContext = new StysAppDbContext(options, new FakeCurrentUserAccessor(), new MutableCurrentTenantAccessor())
+        {
+            AllowExplicitTenantWritesWithoutAmbientTenant = true
+        };
+        var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+
+        Assert.True(migrationsAssembly.Migrations.ContainsKey("20260824095705_AddTesisStokCikisYontemi"));
     }
 
     private static StysAppDbContext CreateDbContext(MutableCurrentTenantAccessor tenantAccessor)

@@ -428,6 +428,7 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         existingEntity.GirisSaati = ParseSaat(dto.GirisSaati, "Giris saati", new TimeSpan(14, 0, 0));
         existingEntity.CikisSaati = ParseSaat(dto.CikisSaati, "Cikis saati", new TimeSpan(10, 0, 0));
         existingEntity.EkHizmetPaketCakismaPolitikasi = dto.EkHizmetPaketCakismaPolitikasi;
+        existingEntity.StokCikisYontemi = dto.StokCikisYontemi;
         existingEntity.AktifMi = dto.AktifMi;
 
         if (managerIds is not null)
@@ -590,10 +591,18 @@ public class TesisService : BaseRdbmsService<TesisDto, Tesis, int>, ITesisServic
         dto.EkHizmetPaketCakismaPolitikasi = string.IsNullOrWhiteSpace(dto.EkHizmetPaketCakismaPolitikasi)
             ? EkHizmetPaketCakismaPolitikalari.OnayIste
             : dto.EkHizmetPaketCakismaPolitikasi.Trim();
+        dto.StokCikisYontemi = string.IsNullOrWhiteSpace(dto.StokCikisYontemi)
+            ? StokCikisYontemleri.TalepVeOnay
+            : dto.StokCikisYontemi.Trim();
 
         if (!EkHizmetPaketCakismaPolitikalari.IsValid(dto.EkHizmetPaketCakismaPolitikasi))
         {
             throw new BaseException("Ek hizmet paket cakisma politikasi gecersiz.", 400);
+        }
+
+        if (!StokCikisYontemleri.IsValid(dto.StokCikisYontemi))
+        {
+            throw new BaseException("Stok cikis yontemi gecersiz.", 400);
         }
     }
 

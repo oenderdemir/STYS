@@ -52,6 +52,10 @@ public class Tesis : BaseEntity<int>, ITenantEntity
     [MaxLength(16)]
     public string RezervasyonTahsilatAlacakHesapTipi { get; set; } = RezervasyonTahsilatAlacakHesapTipleri.Cari;
 
+    [Required]
+    [MaxLength(32)]
+    public string StokCikisYontemi { get; set; } = StokCikisYontemleri.TalepVeOnay;
+
     public bool AktifMi { get; set; } = true;
 
     public Kurum? Kurum { get; set; }

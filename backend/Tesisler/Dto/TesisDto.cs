@@ -31,6 +31,9 @@ public class TesisDto : BaseRdbmsDto<int>
     [Required]
     public string EkHizmetPaketCakismaPolitikasi { get; set; } = EkHizmetPaketCakismaPolitikalari.OnayIste;
 
+    [Required]
+    public string StokCikisYontemi { get; set; } = StokCikisYontemleri.TalepVeOnay;
+
     public bool AktifMi { get; set; } = true;
 
     public ICollection<Guid>? YoneticiUserIds { get; set; }

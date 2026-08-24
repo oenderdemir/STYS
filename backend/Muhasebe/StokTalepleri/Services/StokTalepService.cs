@@ -239,6 +239,7 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
         try
         {
+            var teslimZamani = DateTime.UtcNow;
             var entity = await _dbContext.StokTalepler
                 .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
                 .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
@@ -263,15 +264,15 @@ public class StokTalepService : BaseRdbmsService<StokTalepDto, StokTalep, int>, 
                 teslimMap.TryGetValue(satir.Id, out var satirTeslimBilgisi);
                 ValidateTrackedDeliverySelection(satir, satirTeslimBilgisi);
 
-                var transfer = await _stokHareketService.CreateTransferAsync(new StokTransferRequest
+                var transfer = await _stokHareketService.CreateTransferWithinCurrentTransactionAsync(new StokTransferRequest
                 {
                     KaynakDepoId = entity.KarsilayanDepoId,
                     HedefDepoId = entity.TalepEdenDepoId,
                     TasinirKartId = satir.TasinirKartId,
-                    HareketTarihi = entity.TalepTarihi,
+                    HareketTarihi = teslimZamani,
                     Miktar = satir.OnaylananMiktar,
                     BirimFiyat = 0,
-                    BelgeTarihi = entity.TalepTarihi,
+                    BelgeTarihi = teslimZamani,
                     Aciklama = BuildTransferDescription(entity, satir),
                     KaynakModul = "StokTalepSatir",
                     KaynakId = satir.Id,

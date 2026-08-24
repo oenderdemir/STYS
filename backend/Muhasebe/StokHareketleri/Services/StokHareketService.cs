@@ -210,6 +210,22 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     public async Task<IReadOnlyList<StokHareketDto>> CreateTransferAsync(StokTransferRequest request, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            var created = await CreateTransferWithinCurrentTransactionAsync(request, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return created;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<IReadOnlyList<StokHareketDto>> CreateTransferWithinCurrentTransactionAsync(StokTransferRequest request, CancellationToken cancellationToken = default)
+    {
         NormalizeTransferRequest(request);
 
         if (request.KaynakDepoId <= 0 || request.HedefDepoId <= 0)
@@ -316,119 +332,106 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         await EnsureDepoAccessAsync(kaynakDepo.Id, kaynakDepo.TesisId, "Kaynak depo", cancellationToken);
         await EnsureDepoAccessAsync(hedefDepo.Id, hedefDepo.TesisId, "Hedef depo", cancellationToken);
         await EnsureOpenPeriodAsync(kaynakDepo.TesisId, request.HareketTarihi, cancellationToken);
-
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-
-        try
+        await EnsureBackdatedCostCreateAllowedAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
+        await EnsureBackdatedCostCreateAllowedAsync(request.HedefDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
+        var kaynakBakiye = await _repository.GetBakiyeMiktariAsync(request.KaynakDepoId, request.TasinirKartId, cancellationToken);
+        if (kaynakBakiye < request.Miktar)
         {
-            await EnsureBackdatedCostCreateAllowedAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
-            await EnsureBackdatedCostCreateAllowedAsync(request.HedefDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
-            var kaynakBakiye = await _repository.GetBakiyeMiktariAsync(request.KaynakDepoId, request.TasinirKartId, cancellationToken);
-            if (kaynakBakiye < request.Miktar)
+            throw new BaseException("Kaynak depoda transfer için yeterli stok bulunmamaktadır.", 400);
+        }
+
+        if (request.StokLotId.HasValue)
+        {
+            await EnsureLegacyUnallocatedTrackedStockNotConsumedAsync(
+                request.KaynakDepoId,
+                request.TasinirKartId,
+                request.StokLotId,
+                CreateTransferValidationDto(request),
+                cancellationToken);
+
+            var kaynakLotBakiye = await GetCurrentLotBalanceAsync(request.KaynakDepoId, request.TasinirKartId, request.StokLotId.Value, cancellationToken);
+            if (kaynakLotBakiye < request.Miktar)
             {
-                throw new BaseException("Kaynak depoda transfer için yeterli stok bulunmamaktadır.", 400);
+                throw new BaseException("Seçilen lotta bu işlem için yeterli stok bulunmamaktadır.", 400);
             }
+        }
 
-            if (request.StokLotId.HasValue)
-            {
-                await EnsureLegacyUnallocatedTrackedStockNotConsumedAsync(
-                    request.KaynakDepoId,
-                    request.TasinirKartId,
-                    request.StokLotId,
-                    CreateTransferValidationDto(request),
-                    cancellationToken);
+        if (request.StokSeriId.HasValue)
+        {
+            await EnsureSeriTransferCanProceedAsync(request.KaynakDepoId, request.HedefDepoId, request.TasinirKartId, request.StokSeriId.Value, cancellationToken);
+        }
 
-                var kaynakLotBakiye = await GetCurrentLotBalanceAsync(request.KaynakDepoId, request.TasinirKartId, request.StokLotId.Value, cancellationToken);
-                if (kaynakLotBakiye < request.Miktar)
-                {
-                    throw new BaseException("Seçilen lotta bu işlem için yeterli stok bulunmamaktadır.", 400);
-                }
-            }
+        var kaynakStrategy = await ResolveCostStrategyAsync(request.KaynakDepoId, request.HareketTarihi, cancellationToken);
+        if (kaynakStrategy is LayeredCostStrategyBase layeredStrategy)
+        {
+            var transferPlan = await layeredStrategy.PlanOutgoingConsumptionAsync(request.KaynakDepoId, request.TasinirKartId, request.Miktar, cancellationToken);
+            var transferMaliyetTutari = transferPlan.ToplamMaliyet;
+            var transferMaliyetBirimFiyat = request.Miktar <= 0
+                ? 0m
+                : Math.Round(transferMaliyetTutari / request.Miktar, 6, MidpointRounding.AwayFromZero);
+            var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
+            var transferGrupId = Guid.NewGuid();
 
-            if (request.StokSeriId.HasValue)
-            {
-                await EnsureSeriTransferCanProceedAsync(request.KaynakDepoId, request.HedefDepoId, request.TasinirKartId, request.StokSeriId.Value, cancellationToken);
-            }
-
-            var kaynakStrategy = await ResolveCostStrategyAsync(request.KaynakDepoId, request.HareketTarihi, cancellationToken);
-            if (kaynakStrategy is LayeredCostStrategyBase layeredStrategy)
-            {
-                var transferPlan = await layeredStrategy.PlanOutgoingConsumptionAsync(request.KaynakDepoId, request.TasinirKartId, request.Miktar, cancellationToken);
-                var transferMaliyetTutari = transferPlan.ToplamMaliyet;
-                var transferMaliyetBirimFiyat = request.Miktar <= 0
-                    ? 0m
-                    : Math.Round(transferMaliyetTutari / request.Miktar, 6, MidpointRounding.AwayFromZero);
-                var tutar = CalculateTutar(request.Miktar, request.BirimFiyat);
-                var transferGrupId = Guid.NewGuid();
-
-                var kaynakHareket = CreateTransferLeg(
-                    request,
-                    transferGrupId,
-                    request.KaynakDepoId,
-                    request.HedefDepoId,
-                    StokTransferYonleri.Cikis,
-                    tutar,
-                    transferMaliyetBirimFiyat,
-                    transferMaliyetTutari);
-
-                await _dbContext.StokHareketleri.AddAsync(kaynakHareket, cancellationToken);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-
-                var hedefHareket = CreateTransferLeg(
-                    request,
-                    transferGrupId,
-                    request.HedefDepoId,
-                    request.KaynakDepoId,
-                    StokTransferYonleri.Giris,
-                    tutar,
-                    transferMaliyetBirimFiyat,
-                    transferMaliyetTutari);
-
-                await _dbContext.StokHareketleri.AddAsync(hedefHareket, cancellationToken);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                await layeredStrategy.ApplyTransferAsync(kaynakHareket, hedefHareket, cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
-
-                return [_mapper.Map<StokHareketDto>(kaynakHareket), _mapper.Map<StokHareketDto>(hedefHareket)];
-            }
-
-            var weightedTransferGrupId = Guid.NewGuid();
-            var weightedTutar = CalculateTutar(request.Miktar, request.BirimFiyat);
-            var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
-            var weightedTransferMaliyetBirimFiyat = kaynakMaliyetSnapshot.OrtalamaMaliyet;
-            var weightedTransferMaliyetTutari = CalculateCostAmount(request.Miktar, weightedTransferMaliyetBirimFiyat);
-
-            var weightedKaynakHareket = CreateTransferLeg(
+            var kaynakHareket = CreateTransferLeg(
                 request,
-                weightedTransferGrupId,
+                transferGrupId,
                 request.KaynakDepoId,
                 request.HedefDepoId,
                 StokTransferYonleri.Cikis,
-                weightedTutar,
-                weightedTransferMaliyetBirimFiyat,
-                weightedTransferMaliyetTutari);
+                tutar,
+                transferMaliyetBirimFiyat,
+                transferMaliyetTutari);
 
-            var weightedHedefHareket = CreateTransferLeg(
+            await _dbContext.StokHareketleri.AddAsync(kaynakHareket, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var hedefHareket = CreateTransferLeg(
                 request,
-                weightedTransferGrupId,
+                transferGrupId,
                 request.HedefDepoId,
                 request.KaynakDepoId,
                 StokTransferYonleri.Giris,
-                weightedTutar,
-                weightedTransferMaliyetBirimFiyat,
-                weightedTransferMaliyetTutari);
+                tutar,
+                transferMaliyetBirimFiyat,
+                transferMaliyetTutari);
 
-            await _dbContext.StokHareketleri.AddRangeAsync([weightedKaynakHareket, weightedHedefHareket], cancellationToken);
+            await _dbContext.StokHareketleri.AddAsync(hedefHareket, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            await layeredStrategy.ApplyTransferAsync(kaynakHareket, hedefHareket, cancellationToken);
 
-            return [_mapper.Map<StokHareketDto>(weightedKaynakHareket), _mapper.Map<StokHareketDto>(weightedHedefHareket)];
+            return [_mapper.Map<StokHareketDto>(kaynakHareket), _mapper.Map<StokHareketDto>(hedefHareket)];
         }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+
+        var weightedTransferGrupId = Guid.NewGuid();
+        var weightedTutar = CalculateTutar(request.Miktar, request.BirimFiyat);
+        var kaynakMaliyetSnapshot = await GetCurrentCostSnapshotAsync(request.KaynakDepoId, request.TasinirKartId, request.HareketTarihi, cancellationToken);
+        var weightedTransferMaliyetBirimFiyat = kaynakMaliyetSnapshot.OrtalamaMaliyet;
+        var weightedTransferMaliyetTutari = CalculateCostAmount(request.Miktar, weightedTransferMaliyetBirimFiyat);
+
+        var weightedKaynakHareket = CreateTransferLeg(
+            request,
+            weightedTransferGrupId,
+            request.KaynakDepoId,
+            request.HedefDepoId,
+            StokTransferYonleri.Cikis,
+            weightedTutar,
+            weightedTransferMaliyetBirimFiyat,
+            weightedTransferMaliyetTutari);
+
+        var weightedHedefHareket = CreateTransferLeg(
+            request,
+            weightedTransferGrupId,
+            request.HedefDepoId,
+            request.KaynakDepoId,
+            StokTransferYonleri.Giris,
+            weightedTutar,
+            weightedTransferMaliyetBirimFiyat,
+            weightedTransferMaliyetTutari);
+
+        await _dbContext.StokHareketleri.AddRangeAsync([weightedKaynakHareket, weightedHedefHareket], cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return [_mapper.Map<StokHareketDto>(weightedKaynakHareket), _mapper.Map<StokHareketDto>(weightedHedefHareket)];
     }
 
     public async Task TransferIptalAsync(int id, CancellationToken cancellationToken = default)

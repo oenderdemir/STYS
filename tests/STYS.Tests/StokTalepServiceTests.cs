@@ -19,6 +19,7 @@ using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.StokHareketleri.Entities;
+using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Mapping;
 using STYS.Muhasebe.StokHareketleri.Repositories;
 using STYS.Muhasebe.StokHareketleri.Services;
@@ -138,6 +139,47 @@ public class StokTalepServiceTests
     }
 
     [Fact]
+    public async Task TeslimEtAsync_TransferTarihiniTeslimAnindanYazar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, 80);
+        var service = CreateService(dbContext);
+
+        var created = await CreateBekleyenTalepAsync(service);
+        var satir = Assert.Single(created.Satirlar);
+        var approved = await service.UpdateSatirlarAsync(created.Id!.Value, new UpdateStokTalepSatirlarRequest
+        {
+            Satirlar =
+            [
+                new UpdateStokTalepSatirRequest
+                {
+                    Id = satir.Id!.Value,
+                    TalepMiktari = 50,
+                    OnaylananMiktar = 40
+                }
+            ]
+        });
+
+        var beforeDelivery = DateTime.UtcNow;
+        await service.TeslimEtAsync(approved.Id!.Value, new TeslimEtStokTalepRequest());
+        var afterDelivery = DateTime.UtcNow;
+
+        var hareketler = await dbContext.StokHareketleri
+            .Where(x => x.KaynakModul == "StokTalepSatir" && x.KaynakId == satir.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, hareketler.Count);
+        Assert.All(hareketler, hareket =>
+        {
+            Assert.NotEqual(created.TalepTarihi, hareket.HareketTarihi);
+            Assert.NotEqual(created.TalepTarihi, hareket.BelgeTarihi);
+            Assert.InRange(hareket.HareketTarihi, beforeDelivery.AddSeconds(-1), afterDelivery.AddSeconds(1));
+            Assert.Equal(hareket.HareketTarihi, hareket.BelgeTarihi);
+        });
+    }
+
+    [Fact]
     public async Task TeslimEtAsync_KaynakStokYetersizseRollbackYapar()
     {
         await using var dbContext = CreateDbContext();
@@ -220,6 +262,32 @@ public class StokTalepServiceTests
         Assert.True(migrationsAssembly.Migrations.ContainsKey("20260823225839_AddStockRequests"));
     }
 
+    [Fact]
+    public async Task CreateTransferWithinCurrentTransactionAsync_MevcutTransactionIcindeCalisir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, 20);
+        var stokHareketService = CreateStokHareketService(dbContext);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        var created = await stokHareketService.CreateTransferWithinCurrentTransactionAsync(new StokTransferRequest
+        {
+            KaynakDepoId = 10,
+            HedefDepoId = 20,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 24, 9, 30, 0),
+            BelgeTarihi = new DateTime(2026, 8, 24, 9, 30, 0),
+            Miktar = 5,
+            BirimFiyat = 0,
+            Aciklama = "Transaction ici transfer"
+        });
+        await transaction.CommitAsync();
+
+        Assert.Equal(2, created.Count);
+        Assert.Equal(3, await dbContext.StokHareketleri.CountAsync());
+    }
+
     private static async Task<StokTalepDto> CreateBekleyenTalepAsync(StokTalepService service)
     {
         var created = await service.AddAsync(new StokTalepDto
@@ -270,20 +338,33 @@ public class StokTalepServiceTests
             new TasinirKartRepository(dbContext, mapper),
             new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
             new FakeCurrentUserAccessor(),
-            new StokHareketService(
-                dbContext,
-                new StokHareketRepository(dbContext, mapper),
-                new DepoRepository(dbContext, mapper),
-                new TasinirKartRepository(dbContext, mapper),
-                new CariKartRepository(dbContext, mapper),
-                muhasebeDonemService,
-                new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
-                new FakeKdvUygulamaService(),
-                CreatePolicyService(dbContext, muhasebeDonemService),
-                new StokMaliyetStrategyResolver([new AgirlikliOrtalamaMaliyetStrategy(dbContext), new FifoMaliyetStrategy(dbContext), new LifoMaliyetStrategy(dbContext)]),
-                mapper),
+            CreateStokHareketService(dbContext, mapper, muhasebeDonemService),
             mapper);
     }
+
+    private static StokHareketService CreateStokHareketService(StysAppDbContext dbContext)
+    {
+        var mapper = new MapperConfiguration(cfg =>
+        {
+            cfg.AddProfile<StokHareketProfile>();
+        }, NullLoggerFactory.Instance).CreateMapper();
+
+        return CreateStokHareketService(dbContext, mapper, new FakeMuhasebeDonemService());
+    }
+
+    private static StokHareketService CreateStokHareketService(StysAppDbContext dbContext, IMapper mapper, IMuhasebeDonemService muhasebeDonemService)
+        => new(
+            dbContext,
+            new StokHareketRepository(dbContext, mapper),
+            new DepoRepository(dbContext, mapper),
+            new TasinirKartRepository(dbContext, mapper),
+            new CariKartRepository(dbContext, mapper),
+            muhasebeDonemService,
+            new FakeUserAccessScopeService(DomainAccessScope.Scoped([], [1], [])),
+            new FakeKdvUygulamaService(),
+            CreatePolicyService(dbContext, muhasebeDonemService),
+            new StokMaliyetStrategyResolver([new AgirlikliOrtalamaMaliyetStrategy(dbContext), new FifoMaliyetStrategy(dbContext), new LifoMaliyetStrategy(dbContext)]),
+            mapper);
 
     private static IStokMaliyetPolitikasiService CreatePolicyService(StysAppDbContext dbContext, IMuhasebeDonemService muhasebeDonemService)
         => new StokMaliyetPolitikasiService(

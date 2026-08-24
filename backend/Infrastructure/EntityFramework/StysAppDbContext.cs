@@ -338,6 +338,8 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.CikisSaati).HasColumnType("time(0)").HasDefaultValue(new TimeSpan(10, 0, 0));
             entity.Property(x => x.EkHizmetPaketCakismaPolitikasi).HasMaxLength(16).IsRequired().HasDefaultValue(EkHizmetPaketCakismaPolitikalari.OnayIste);
             entity.Property(x => x.RezervasyonTahsilatAlacakHesapTipi).HasMaxLength(16).IsRequired().HasDefaultValue(RezervasyonTahsilatAlacakHesapTipleri.Cari);
+            entity.Property(x => x.StokCikisYontemi).HasMaxLength(32).IsRequired().HasDefaultValue(StokCikisYontemleri.TalepVeOnay);
+            entity.HasCheckConstraint("CK_Tesis_StokCikisYontemi", "[StokCikisYontemi] IN (N'TalepVeOnay', N'DogrudanDepoCikisi')");
 
             entity.HasIndex(x => new { x.KurumId, x.IlId, x.Ad })
                 .IsUnique()

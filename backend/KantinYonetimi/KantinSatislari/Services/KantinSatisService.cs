@@ -6,6 +6,7 @@ using STYS.KantinYonetimi.KantinSatislari.Dtos;
 using STYS.KantinYonetimi.KantinSatislari.Entities;
 using STYS.KantinYonetimi.KantinSatislari.Repositories;
 using STYS.KantinYonetimi.Kantinler.Entities;
+using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
@@ -652,6 +653,12 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         {
             throw new BaseException("Seçilen perakende cari aktif olmalıdır.", 400);
         }
+
+        if (!string.Equals(cari.CariTipi, CariKartTipleri.Musteri, StringComparison.Ordinal)
+            && !string.Equals(cari.CariTipi, CariKartTipleri.KurumsalMusteri, StringComparison.Ordinal))
+        {
+            throw new BaseException("Perakende cari yalnızca müşteri veya kurumsal müşteri tipinde olabilir.", 400);
+        }
     }
 
     private async Task EnsureTahsilatlarAsync(Kantin kantin, KantinSatis satis, CancellationToken cancellationToken)
@@ -672,6 +679,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
                     cancellationToken);
             if (existingBelge is not null)
             {
+                ValidateExistingKantinTahsilati(existingBelge, kantin.PerakendeCariKartId!.Value, odeme);
                 odeme.TahsilatOdemeBelgesiId = existingBelge.Id;
                 continue;
             }
@@ -697,6 +705,20 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
                 cancellationToken);
 
             odeme.TahsilatOdemeBelgesiId = belge.Id;
+        }
+    }
+
+    private static void ValidateExistingKantinTahsilati(TahsilatOdemeBelgesi existingBelge, int perakendeCariKartId, KantinSatisOdeme odeme)
+    {
+        if (!string.Equals(existingBelge.Durum, TahsilatOdemeBelgeDurumlari.Aktif, StringComparison.Ordinal)
+            || !string.Equals(existingBelge.BelgeTipi, TahsilatOdemeBelgeTipleri.Tahsilat, StringComparison.Ordinal)
+            || existingBelge.CariKartId != perakendeCariKartId
+            || existingBelge.Tutar != odeme.Tutar
+            || !string.Equals(existingBelge.OdemeYontemi, odeme.OdemeYontemi, StringComparison.Ordinal)
+            || existingBelge.KasaBankaHesapId != odeme.KasaBankaHesapId
+            || !string.Equals(existingBelge.ParaBirimi, "TRY", StringComparison.Ordinal))
+        {
+            throw new BaseException("Mevcut kantin tahsilat belgesi ödeme bilgileriyle uyumsuz.", 400);
         }
     }
 

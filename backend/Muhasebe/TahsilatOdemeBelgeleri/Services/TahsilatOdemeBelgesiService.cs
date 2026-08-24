@@ -88,6 +88,8 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
     public override async Task<TahsilatOdemeBelgesiDto> AddAsync(TahsilatOdemeBelgesiDto dto)
     {
+        ThrowIfKantinOwnedSourceSpoofing(dto.KaynakModul);
+
         // Genel TahsilatOdemeBelgesi ekrani (Muhasebe > Tahsilat/Odeme Belgeleri) her zaman cari
         // hesap uzerinden calisir; alacak/borc hesabi CariKart.MuhasebeHesapPlaniId'den cozulur —
         // bu yuzden burada requireCariMuhasebeHesabi hep true'dur. Rezervasyon gibi Tesis bazinda
@@ -159,6 +161,8 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             throw new BaseException("Tahsilat/odeme belgesi id zorunludur.", 400);
         }
 
+        ThrowIfKantinOwnedSourceSpoofing(dto.KaynakModul);
+
         var visible = await GetByIdAsync(dto.Id.Value);
         if (visible is null)
         {
@@ -167,6 +171,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
         var existing = await _repository.GetByIdAsync(dto.Id.Value)
             ?? throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
+        ThrowIfManagedByKantinWorkflow(existing.KaynakModul);
 
         if (existing.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
         {
@@ -212,6 +217,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
             var existing = await _repository.GetByIdAsync(id, q => q.Include(x => x.CariKart))
                 ?? throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+            ThrowIfManagedByKantinWorkflow(existing.KaynakModul);
 
             if (existing.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
             {
@@ -263,6 +269,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
 
             var existing = await _repository.GetByIdAsync(id, q => q.Include(x => x.CariKart))
                 ?? throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+            ThrowIfManagedByKantinWorkflow(existing.KaynakModul);
 
             if (existing.Durum != TahsilatOdemeBelgeDurumlari.Iptal)
             {
@@ -466,6 +473,19 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             && x.Durum == CariHareketDurumlari.Aktif
             && x.KaynakModul == MuhasebeKaynakModulleri.TahsilatOdemeBelgesi
             && x.KaynakId == tahsilatOdemeBelgesiId);
+    }
+
+    private static void ThrowIfKantinOwnedSourceSpoofing(string? kaynakModul)
+    {
+        ThrowIfManagedByKantinWorkflow(kaynakModul);
+    }
+
+    private static void ThrowIfManagedByKantinWorkflow(string? kaynakModul)
+    {
+        if (string.Equals(kaynakModul, MuhasebeKaynakModulleri.KantinSatisOdeme, StringComparison.Ordinal))
+        {
+            throw new BaseException("Bu tahsilat belgesi Kantin Satış workflow'u tarafından yönetilmektedir.", 400);
+        }
     }
 
     private static Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>> BuildScopedIncludeQuery(

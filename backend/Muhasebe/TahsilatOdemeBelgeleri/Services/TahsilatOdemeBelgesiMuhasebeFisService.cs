@@ -51,6 +51,9 @@ public class TahsilatOdemeBelgesiMuhasebeFisService : ITahsilatOdemeBelgesiMuhas
         if (belgeOnOkuma is null)
             throw new BaseException("Tahsilat/odeme belgesi bulunamadi.", 404);
 
+        if (string.Equals(belgeOnOkuma.KaynakModul, MuhasebeKaynakModulleri.KantinSatisOdeme, StringComparison.Ordinal))
+            throw new BaseException("Bu tahsilat belgesi Kantin Satış workflow'u tarafından yönetilmektedir.", 400);
+
         if (belgeOnOkuma.Durum != TahsilatOdemeBelgeDurumlari.Aktif)
             throw new BaseException($"Belge 'Aktif' durumda degil. Mevcut durum: {belgeOnOkuma.Durum}", 400);
 

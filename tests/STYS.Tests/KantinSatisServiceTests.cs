@@ -478,6 +478,122 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task MevcutTahsilatTutariUyusmazsa_KesinlestirmeRollbackOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+        satis = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50 });
+        var odemeId = Assert.Single(satis.Odemeler).Id!.Value;
+
+        dbContext.TahsilatOdemeBelgeleri.Add(new TahsilatOdemeBelgesi
+        {
+            Id = 900,
+            BelgeNo = "KNT-1-1-1",
+            BelgeTarihi = satis.SatisTarihi,
+            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = 100,
+            Tutar = 49,
+            ParaBirimi = "TRY",
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            Durum = TahsilatOdemeBelgeDurumlari.Aktif,
+            KasaBankaHesapId = 100,
+            KaynakModul = MuhasebeKaynakModulleri.KantinSatisOdeme,
+            KaynakId = odemeId
+        });
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.KesinlestirAsync(satis.Id!.Value));
+
+        Assert.Equal("Mevcut kantin tahsilat belgesi ödeme bilgileriyle uyumsuz.", ex.Message);
+        Assert.Equal("Taslak", (await service.GetByIdAsync(satis.Id!.Value))!.Durum);
+    }
+
+    [Fact]
+    public async Task MevcutTahsilatCariUyusmazsa_KesinlestirmeRollbackOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+        satis = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50 });
+        var odemeId = Assert.Single(satis.Odemeler).Id!.Value;
+
+        dbContext.TahsilatOdemeBelgeleri.Add(new TahsilatOdemeBelgesi
+        {
+            Id = 901,
+            BelgeNo = "KNT-1-1-2",
+            BelgeTarihi = satis.SatisTarihi,
+            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = 101,
+            Tutar = 50,
+            ParaBirimi = "TRY",
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            Durum = TahsilatOdemeBelgeDurumlari.Aktif,
+            KasaBankaHesapId = 100,
+            KaynakModul = MuhasebeKaynakModulleri.KantinSatisOdeme,
+            KaynakId = odemeId
+        });
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.KesinlestirAsync(satis.Id!.Value));
+
+        Assert.Equal("Mevcut kantin tahsilat belgesi ödeme bilgileriyle uyumsuz.", ex.Message);
+        Assert.Equal("Taslak", (await service.GetByIdAsync(satis.Id!.Value))!.Durum);
+    }
+
+    [Fact]
+    public async Task MevcutTahsilatOdemeYontemiVeyaHesabiUyusmazsa_KesinlestirmeRollbackOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+        satis = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50 });
+        var odemeId = Assert.Single(satis.Odemeler).Id!.Value;
+
+        dbContext.TahsilatOdemeBelgeleri.Add(new TahsilatOdemeBelgesi
+        {
+            Id = 902,
+            BelgeNo = "KNT-1-1-3",
+            BelgeTarihi = satis.SatisTarihi,
+            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = 100,
+            Tutar = 50,
+            ParaBirimi = "TRY",
+            OdemeYontemi = OdemeYontemleri.KrediKarti,
+            Durum = TahsilatOdemeBelgeDurumlari.Aktif,
+            KasaBankaHesapId = 102,
+            KaynakModul = MuhasebeKaynakModulleri.KantinSatisOdeme,
+            KaynakId = odemeId
+        });
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.KesinlestirAsync(satis.Id!.Value));
+
+        Assert.Equal("Mevcut kantin tahsilat belgesi ödeme bilgileriyle uyumsuz.", ex.Message);
+        Assert.Equal("Taslak", (await service.GetByIdAsync(satis.Id!.Value))!.Durum);
+    }
+
+    [Fact]
+    public async Task PerakendeCariSonradanTedarikciYapildiysa_KesinlestirmeReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var cari = await dbContext.CariKartlar.SingleAsync(x => x.Id == 100);
+        cari.CariTipi = CariKartTipleri.Tedarikci;
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50 });
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.KesinlestirAsync(satis.Id!.Value));
+
+        Assert.Equal("Perakende cari yalnızca müşteri veya kurumsal müşteri tipinde olabilir.", ex.Message);
+    }
+
+    [Fact]
     public void AddKantinSalesK2Migration_MigrationsAssemblydeDiscoverEdilir()
     {
         var options = new DbContextOptionsBuilder<StysAppDbContext>()
@@ -528,6 +644,7 @@ public class KantinSatisServiceTests
 
         dbContext.CariKartlar.AddRange(
             new CariKart { Id = 100, TesisId = 1, CariTipi = CariKartTipleri.Musteri, CariKodu = "PRK-A", UnvanAdSoyad = "Perakende Müşteri A", AktifMi = true },
+            new CariKart { Id = 101, TesisId = 1, CariTipi = CariKartTipleri.Musteri, CariKodu = "PRK-A2", UnvanAdSoyad = "Perakende Müşteri A2", AktifMi = true },
             new CariKart { Id = 300, TesisId = 2, CariTipi = CariKartTipleri.Musteri, CariKodu = "PRK-B", UnvanAdSoyad = "Perakende Müşteri B", AktifMi = true });
 
         dbContext.TasinirKodlar.Add(new TasinirKod { Id = 1, Kod = "150.01", Ad = "Tüketim", AktifMi = true });

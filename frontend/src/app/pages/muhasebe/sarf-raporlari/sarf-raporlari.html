@@ -1,0 +1,208 @@
+<p-toast></p-toast>
+
+<app-muhasebe-tesis-context-bar />
+
+<p-toolbar styleClass="mb-3">
+    <ng-template pTemplate="start">
+        <div class="flex flex-wrap gap-2 align-items-center">
+            <p-datepicker [(ngModel)]="selectedBaslangic" dateFormat="dd.mm.yy" appendTo="body" placeholder="Başlangıç"></p-datepicker>
+            <p-datepicker [(ngModel)]="selectedBitis" dateFormat="dd.mm.yy" appendTo="body" placeholder="Bitiş"></p-datepicker>
+
+            <p-select
+                [options]="depoOptions"
+                [(ngModel)]="selectedDepoId"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Depo"
+                appendTo="body"
+                [showClear]="true"
+                styleClass="w-15rem" />
+
+            <p-select
+                [options]="tasinirKartOptions"
+                [(ngModel)]="selectedTasinirKartId"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Malzeme"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterBy="label"
+                styleClass="w-18rem" />
+
+            <p-select
+                [options]="birimOptions"
+                [(ngModel)]="selectedIsletmeAlaniId"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="İşletme Alanı"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterBy="label"
+                styleClass="w-16rem" />
+
+            <p-select
+                [options]="odaOptions"
+                [(ngModel)]="selectedOdaId"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Oda"
+                appendTo="body"
+                [showClear]="true"
+                [filter]="true"
+                filterBy="label"
+                styleClass="w-16rem" />
+
+            <p-select
+                [options]="durumOptions"
+                [(ngModel)]="selectedDurum"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="Durum"
+                appendTo="body"
+                styleClass="w-12rem" />
+
+            <input
+                pInputText
+                [(ngModel)]="sarfNedeni"
+                placeholder="Sarf nedeni"
+                class="w-14rem" />
+        </div>
+    </ng-template>
+    <ng-template pTemplate="end">
+        <div class="flex gap-2">
+            <p-button label="Temizle" icon="pi pi-filter-slash" severity="secondary" text (onClick)="clearFilters()"></p-button>
+            <p-button label="Listele" icon="pi pi-search" (onClick)="loadAll()"></p-button>
+            <p-button label="Excel'e Aktar" icon="pi pi-file-excel" severity="success" [loading]="exporting" (onClick)="exportActiveTab()"></p-button>
+        </div>
+    </ng-template>
+</p-toolbar>
+
+<p-tabs [value]="activeTab" (valueChange)="onTabChange($event)">
+    <p-tablist>
+        <p-tab value="detay">Detay</p-tab>
+        <p-tab value="malzeme">Malzeme Bazlı</p-tab>
+        <p-tab value="kullanim">Kullanım Yeri Bazlı</p-tab>
+    </p-tablist>
+    <p-tabpanels>
+        <p-tabpanel value="detay">
+            <p-table
+                [value]="detayRows"
+                [loading]="detailLoading"
+                [lazy]="true"
+                (onLazyLoad)="onLazyLoad($event)"
+                [paginator]="true"
+                [rows]="pageSize"
+                [first]="(pageNumber - 1) * pageSize"
+                [totalRecords]="totalRecords"
+                responsiveLayout="scroll"
+                styleClass="p-datatable-sm">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Fiş</th>
+                        <th>Depo</th>
+                        <th>Kullanım Yeri</th>
+                        <th>Malzeme</th>
+                        <th>Miktar</th>
+                        <th>Maliyet</th>
+                        <th>Durum</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-row>
+                    <tr>
+                        <td>{{ row.tarih | date: 'dd.MM.yyyy' }}</td>
+                        <td>#{{ row.fisNo }}</td>
+                        <td>{{ row.depoKod }} - {{ row.depoAd }}</td>
+                        <td>
+                            <div>{{ formatKullanimYeri(row) }}</div>
+                            @if (row.sarfNedeni) {
+                                <small class="text-color-secondary">{{ row.sarfNedeni }}</small>
+                            }
+                        </td>
+                        <td>
+                            <div>{{ row.stokKodu }}</div>
+                            <small class="text-color-secondary">{{ row.malzemeAd }}</small>
+                        </td>
+                        <td>
+                            <div>{{ row.miktar | number:'1.0-2' }} {{ row.birim }}</div>
+                            @if (row.lotNo || row.seriNo) {
+                                <small class="text-color-secondary">
+                                    {{ row.lotNo ? ('Lot: ' + row.lotNo) : '' }}{{ row.lotNo && row.seriNo ? ' | ' : '' }}{{ row.seriNo ? ('Seri: ' + row.seriNo) : '' }}
+                                </small>
+                            }
+                        </td>
+                        <td>{{ row.toplamMaliyet ?? 0 | number:'1.2-2' }}</td>
+                        <td><p-tag [value]="row.durum" [severity]="getDurumSeverity(row.durum)"></p-tag></td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="8" class="text-center py-4">Filtreye uygun sarf detayı bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-tabpanel>
+
+        <p-tabpanel value="malzeme">
+            <p-table [value]="malzemeRows" [loading]="loading" responsiveLayout="scroll" styleClass="p-datatable-sm">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>Stok Kodu</th>
+                        <th>Malzeme</th>
+                        <th>Birim</th>
+                        <th>Toplam Tüketim</th>
+                        <th>Sarf Fişi Sayısı</th>
+                        <th>Toplam Tüketim Maliyeti</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-row>
+                    <tr>
+                        <td>{{ row.stokKodu }}</td>
+                        <td>{{ row.malzemeAd }}</td>
+                        <td>{{ row.birim }}</td>
+                        <td>{{ row.toplamTuketimMiktari | number:'1.0-2' }}</td>
+                        <td>{{ row.sarfFisiSayisi }}</td>
+                        <td>{{ row.toplamTuketimMaliyeti | number:'1.2-2' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="6" class="text-center py-4">Filtreye uygun malzeme özeti bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-tabpanel>
+
+        <p-tabpanel value="kullanim">
+            <p-table [value]="kullanimRows" [loading]="loading" responsiveLayout="scroll" styleClass="p-datatable-sm">
+                <ng-template pTemplate="header">
+                    <tr>
+                        <th>İşletme Alanı</th>
+                        <th>Oda</th>
+                        <th>Farklı Malzeme</th>
+                        <th>Sarf Satırı</th>
+                        <th>Toplam Miktar</th>
+                        <th>Toplam Tüketim Maliyeti</th>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="body" let-row>
+                    <tr>
+                        <td>{{ row.isletmeAlaniAd || '-' }}</td>
+                        <td>{{ row.odaAd || '-' }}</td>
+                        <td>{{ row.farkliMalzemeSayisi }}</td>
+                        <td>{{ row.toplamSarfSatiriSayisi }}</td>
+                        <td>{{ row.toplamMiktarOzeti || '-' }}</td>
+                        <td>{{ row.toplamTuketimMaliyeti | number:'1.2-2' }}</td>
+                    </tr>
+                </ng-template>
+                <ng-template pTemplate="emptymessage">
+                    <tr>
+                        <td colspan="6" class="text-center py-4">Filtreye uygun kullanım yeri özeti bulunamadı.</td>
+                    </tr>
+                </ng-template>
+            </p-table>
+        </p-tabpanel>
+    </p-tabpanels>
+</p-tabs>

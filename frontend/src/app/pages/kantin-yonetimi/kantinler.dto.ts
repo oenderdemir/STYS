@@ -26,6 +26,7 @@ export interface KantinUrunModel {
     birim?: string | null;
     kdvOrani: number;
     mevcutStok: number;
+    takipTipi?: string | null;
 }
 
 export interface KantinDepoOption {
@@ -38,6 +39,13 @@ export interface KantinKasaOption {
     id: number;
     kod: string;
     ad: string;
+}
+
+export interface KantinOdemeHesapOption {
+    id: number;
+    kod: string;
+    ad: string;
+    tip: string;
 }
 
 export interface KantinTasinirKartOption {

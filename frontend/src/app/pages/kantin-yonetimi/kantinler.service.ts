@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KantinDepoOption, KantinKasaOption, KantinModel, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
+import { KantinDepoOption, KantinKasaOption, KantinModel, KantinOdemeHesapOption, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KantinlerService {
@@ -61,6 +61,16 @@ export class KantinlerService {
         return this.http
             .get<ApiResponse<KantinKasaOption[]>>(`${this.apiBaseUrl}/ui/kantinler/nakit-kasalar`, { params: new HttpParams().set('tesisId', tesisId) })
             .pipe(map(this.unwrap<KantinKasaOption[]>('Kasalar alınamadı.')));
+    }
+
+    getOdemeHesaplari(tesisId: number, odemeYontemi: string): Observable<KantinOdemeHesapOption[]> {
+        const params = new HttpParams()
+            .set('tesisId', tesisId)
+            .set('odemeYontemi', odemeYontemi);
+
+        return this.http
+            .get<ApiResponse<KantinOdemeHesapOption[]>>(`${this.apiBaseUrl}/ui/kantinler/odeme-hesaplari`, { params })
+            .pipe(map(this.unwrap<KantinOdemeHesapOption[]>('Ödeme hesapları alınamadı.')));
     }
 
     getTasinirKartlar(tesisId: number): Observable<KantinTasinirKartOption[]> {

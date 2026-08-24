@@ -435,6 +435,13 @@ public static class StructurePermissions
         public const string Manage = "KantinYonetimi.Manage";
     }
 
+    public static class KantinSatisYonetimi
+    {
+        public const string Menu = "KantinSatisYonetimi.Menu";
+        public const string View = "KantinSatisYonetimi.View";
+        public const string Create = "KantinSatisYonetimi.Create";
+    }
+
     public static class StokTalepYonetimi
     {
         public const string Menu = "StokTalepYonetimi.Menu";

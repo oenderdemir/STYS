@@ -100,6 +100,11 @@ public class KantinlerController : UIController
     public async Task<ActionResult<List<KantinKasaSecenekDto>>> GetNakitKasalar([FromQuery] int tesisId, CancellationToken cancellationToken)
         => Ok(await _service.GetNakitKasalarAsync(tesisId, cancellationToken));
 
+    [HttpGet("odeme-hesaplari")]
+    [Permission(StructurePermissions.KantinYonetimi.View)]
+    public async Task<ActionResult<List<KantinOdemeHesapSecenekDto>>> GetOdemeHesaplari([FromQuery] int tesisId, [FromQuery] string odemeYontemi, CancellationToken cancellationToken)
+        => Ok(await _service.GetOdemeHesaplariAsync(tesisId, odemeYontemi, cancellationToken));
+
     [HttpGet("tasinir-kartlar")]
     [Permission(StructurePermissions.KantinYonetimi.View)]
     public async Task<ActionResult<List<KantinTasinirKartSecenekDto>>> GetTasinirKartlar([FromQuery] int tesisId, CancellationToken cancellationToken)

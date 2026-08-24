@@ -1,0 +1,854 @@
+using AutoMapper;
+using Microsoft.EntityFrameworkCore;
+using STYS.AccessScope;
+using STYS.Infrastructure.EntityFramework;
+using STYS.KantinYonetimi.KantinSatislari.Dtos;
+using STYS.KantinYonetimi.KantinSatislari.Entities;
+using STYS.KantinYonetimi.KantinSatislari.Repositories;
+using STYS.KantinYonetimi.Kantinler.Entities;
+using STYS.Muhasebe.Common.Services;
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
+using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.StokHareketleri.Dtos;
+using STYS.Muhasebe.StokHareketleri.Entities;
+using STYS.Muhasebe.StokHareketleri.Services;
+using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using STYS.Muhasebe.TasinirKartlari.Entities;
+using STYS.Muhasebe.TasinirKartlari.Services;
+using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.SharedKernel.Exceptions;
+using System.Data;
+
+namespace STYS.KantinYonetimi.KantinSatislari.Services;
+
+public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, int>, IKantinSatisService
+{
+    private const string KantinSatisKaynakModulu = "KantinSatisSatir";
+
+    private readonly StysAppDbContext _dbContext;
+    private readonly IKantinSatisRepository _repository;
+    private readonly IUserAccessScopeService _userAccessScopeService;
+    private readonly IStokHareketService _stokHareketService;
+    private readonly IMapper _mapper;
+
+    public KantinSatisService(
+        StysAppDbContext dbContext,
+        IKantinSatisRepository repository,
+        IUserAccessScopeService userAccessScopeService,
+        IStokHareketService stokHareketService,
+        IMapper mapper)
+        : base(repository, mapper)
+    {
+        _dbContext = dbContext;
+        _repository = repository;
+        _userAccessScopeService = userAccessScopeService;
+        _stokHareketService = stokHareketService;
+        _mapper = mapper;
+    }
+
+    public async Task<List<KantinSatisDto>> GetListAsync(int? tesisId, int? kantinId, CancellationToken cancellationToken = default)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var query = BuildScopedQuery(scope);
+
+        if (tesisId.HasValue && tesisId.Value > 0)
+        {
+            query = query.Where(x => x.TesisId == tesisId.Value);
+        }
+
+        if (kantinId.HasValue && kantinId.Value > 0)
+        {
+            query = query.Where(x => x.KantinId == kantinId.Value);
+        }
+
+        var items = await query
+            .OrderByDescending(x => x.SatisTarihi)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return items.Select(MapDto).ToList();
+    }
+
+    public Task<KantinSatisDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+        => GetByIdAsync(id, include: null, cancellationToken);
+
+    public override Task<KantinSatisDto?> GetByIdAsync(int id, Func<IQueryable<KantinSatis>, IQueryable<KantinSatis>>? include = null)
+        => GetByIdAsync(id, include, CancellationToken.None);
+
+    public async Task<KantinSatisDto?> GetByIdAsync(int id, Func<IQueryable<KantinSatis>, IQueryable<KantinSatis>>? include, CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var query = BuildScopedQuery(scope);
+        if (include is not null)
+        {
+            query = include(query);
+        }
+
+        var entity = await query.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        return entity is null ? null : MapDto(entity);
+    }
+
+    public override async Task<IEnumerable<KantinSatisDto>> GetAllAsync(Func<IQueryable<KantinSatis>, IQueryable<KantinSatis>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var items = await BuildScopedQuery(scope)
+            .OrderByDescending(x => x.SatisTarihi)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync();
+        return items.Select(MapDto).ToList();
+    }
+
+    public override async Task<IEnumerable<KantinSatisDto>> WhereAsync(System.Linq.Expressions.Expression<Func<KantinSatis, bool>> predicate, Func<IQueryable<KantinSatis>, IQueryable<KantinSatis>>? include = null)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync();
+        var items = await BuildScopedQuery(scope)
+            .Where(predicate)
+            .OrderByDescending(x => x.SatisTarihi)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync();
+        return items.Select(MapDto).ToList();
+    }
+
+    public override Task<KantinSatisDto> AddAsync(KantinSatisDto dto)
+        => AddAsync(dto, CancellationToken.None);
+
+    public async Task<KantinSatisDto> AddAsync(KantinSatisDto dto, CancellationToken cancellationToken = default)
+    {
+        var kantin = await GetRequiredActiveKantinAsync(dto.KantinId, cancellationToken);
+        dto.TesisId = kantin.TesisId;
+        dto.SatisTarihi = dto.SatisTarihi == default ? DateTime.UtcNow : dto.SatisTarihi;
+        dto.Durum = KantinSatisDurumlari.Taslak;
+        dto.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+        RecalculateTotals(dto);
+
+        var entity = _mapper.Map<KantinSatis>(dto);
+        await _repository.AddAsync(entity);
+        await _repository.SaveChangesAsync();
+        return await GetRequiredDtoAsync(entity.Id, cancellationToken);
+    }
+
+    public override Task<KantinSatisDto> UpdateAsync(KantinSatisDto dto)
+        => UpdateAsync(dto, CancellationToken.None);
+
+    public async Task<KantinSatisDto> UpdateAsync(KantinSatisDto dto, CancellationToken cancellationToken = default)
+    {
+        if (!dto.Id.HasValue)
+        {
+            throw new BaseException("Kantin satış id zorunludur.", 400);
+        }
+
+        var entity = await GetEditableEntityAsync(dto.Id.Value, cancellationToken);
+        entity.SatisTarihi = dto.SatisTarihi == default ? entity.SatisTarihi : dto.SatisTarihi;
+        entity.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredDtoAsync(entity.Id, cancellationToken);
+    }
+
+    public async Task<KantinSatisDto> AddSatirAsync(int satisId, AddKantinSatisSatirRequest request, CancellationToken cancellationToken = default)
+    {
+        var satis = await GetEditableEntityAsync(satisId, cancellationToken);
+        var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+        var projection = await BuildSatirProjectionAsync(kantin, request.KantinUrunId, request.Miktar, request.StokLotId, request.StokSeriId, cancellationToken);
+
+        satis.Satirlar.Add(new KantinSatisSatir
+        {
+            KantinSatisId = satis.Id,
+            KantinUrunId = projection.KantinUrun.Id,
+            TasinirKartId = projection.KantinUrun.TasinirKartId,
+            Miktar = projection.Miktar,
+            BirimSatisFiyati = projection.BirimSatisFiyati,
+            KdvOrani = projection.KdvOrani,
+            Matrah = projection.Matrah,
+            KdvTutari = projection.KdvTutari,
+            ToplamTutar = projection.ToplamTutar,
+            StokLotId = projection.StokLotId,
+            StokSeriId = projection.StokSeriId,
+            Barkod = projection.Barkod,
+            StokKodu = projection.StokKodu,
+            UrunAdi = projection.UrunAdi,
+            Birim = projection.Birim,
+            TakipTipi = projection.TakipTipi,
+            LotNo = projection.LotNo,
+            SonKullanmaTarihi = projection.SonKullanmaTarihi,
+            SeriNo = projection.SeriNo
+        });
+
+        RecalculateTotals(satis);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+    }
+
+    public async Task<KantinSatisDto> UpdateSatirAsync(int satisId, int satirId, UpdateKantinSatisSatirRequest request, CancellationToken cancellationToken = default)
+    {
+        var satis = await GetEditableEntityAsync(satisId, cancellationToken);
+        var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+        var satir = satis.Satirlar.FirstOrDefault(x => x.Id == satirId)
+            ?? throw new BaseException("Kantin satış satırı bulunamadı.", 404);
+
+        var projection = await BuildSatirProjectionAsync(kantin, request.KantinUrunId, request.Miktar, request.StokLotId, request.StokSeriId, cancellationToken);
+        satir.KantinUrunId = projection.KantinUrun.Id;
+        satir.TasinirKartId = projection.KantinUrun.TasinirKartId;
+        satir.Miktar = projection.Miktar;
+        satir.BirimSatisFiyati = projection.BirimSatisFiyati;
+        satir.KdvOrani = projection.KdvOrani;
+        satir.Matrah = projection.Matrah;
+        satir.KdvTutari = projection.KdvTutari;
+        satir.ToplamTutar = projection.ToplamTutar;
+        satir.StokLotId = projection.StokLotId;
+        satir.StokSeriId = projection.StokSeriId;
+        satir.Barkod = projection.Barkod;
+        satir.StokKodu = projection.StokKodu;
+        satir.UrunAdi = projection.UrunAdi;
+        satir.Birim = projection.Birim;
+        satir.TakipTipi = projection.TakipTipi;
+        satir.LotNo = projection.LotNo;
+        satir.SonKullanmaTarihi = projection.SonKullanmaTarihi;
+        satir.SeriNo = projection.SeriNo;
+
+        RecalculateTotals(satis);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+    }
+
+    public async Task DeleteSatirAsync(int satisId, int satirId, CancellationToken cancellationToken = default)
+    {
+        var satis = await GetEditableEntityAsync(satisId, cancellationToken);
+        var satir = satis.Satirlar.FirstOrDefault(x => x.Id == satirId)
+            ?? throw new BaseException("Kantin satış satırı bulunamadı.", 404);
+
+        satir.IsDeleted = true;
+        RecalculateTotals(satis);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<KantinSatisDto> AddOdemeAsync(int satisId, AddKantinSatisOdemeRequest request, CancellationToken cancellationToken = default)
+    {
+        var satis = await GetEditableEntityAsync(satisId, cancellationToken);
+        var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+        var projection = await BuildOdemeProjectionAsync(kantin, request.OdemeYontemi, request.KasaBankaHesapId, request.Tutar, cancellationToken);
+
+        satis.Odemeler.Add(new KantinSatisOdeme
+        {
+            KantinSatisId = satis.Id,
+            OdemeYontemi = projection.OdemeYontemi,
+            KasaBankaHesapId = projection.KasaBankaHesapId,
+            Tutar = projection.Tutar,
+            HesapKodSnapshot = projection.HesapKodSnapshot,
+            HesapAdSnapshot = projection.HesapAdSnapshot
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+    }
+
+    public async Task<KantinSatisDto> UpdateOdemeAsync(int satisId, int odemeId, UpdateKantinSatisOdemeRequest request, CancellationToken cancellationToken = default)
+    {
+        var satis = await GetEditableEntityAsync(satisId, cancellationToken);
+        var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+        var odeme = satis.Odemeler.FirstOrDefault(x => x.Id == odemeId)
+            ?? throw new BaseException("Kantin satış ödeme satırı bulunamadı.", 404);
+
+        var projection = await BuildOdemeProjectionAsync(kantin, request.OdemeYontemi, request.KasaBankaHesapId, request.Tutar, cancellationToken);
+        odeme.OdemeYontemi = projection.OdemeYontemi;
+        odeme.KasaBankaHesapId = projection.KasaBankaHesapId;
+        odeme.Tutar = projection.Tutar;
+        odeme.HesapKodSnapshot = projection.HesapKodSnapshot;
+        odeme.HesapAdSnapshot = projection.HesapAdSnapshot;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+    }
+
+    public async Task DeleteOdemeAsync(int satisId, int odemeId, CancellationToken cancellationToken = default)
+    {
+        var satis = await GetEditableEntityAsync(satisId, cancellationToken);
+        var odeme = satis.Odemeler.FirstOrDefault(x => x.Id == odemeId)
+            ?? throw new BaseException("Kantin satış ödeme satırı bulunamadı.", 404);
+
+        odeme.IsDeleted = true;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<KantinSatisBarkodUrunDto?> GetAktifUrunByBarkodAsync(int kantinId, string barkod, CancellationToken cancellationToken = default)
+    {
+        var normalizedBarkod = NormalizeBarcode(barkod);
+        if (string.IsNullOrWhiteSpace(normalizedBarkod))
+        {
+            return null;
+        }
+
+        var kantin = await GetRequiredActiveKantinAsync(kantinId, cancellationToken);
+        var urun = await _dbContext.KantinUrunler
+            .AsNoTracking()
+            .Include(x => x.TasinirKart)
+            .FirstOrDefaultAsync(x => x.KantinId == kantin.Id && x.AktifMi && x.Barkod == normalizedBarkod, cancellationToken);
+
+        if (urun is null || urun.TasinirKart is null)
+        {
+            return null;
+        }
+
+        var stok = await GetCurrentStockAsync(kantin.DepoId, urun.TasinirKartId, cancellationToken);
+        return new KantinSatisBarkodUrunDto
+        {
+            KantinUrunId = urun.Id,
+            TasinirKartId = urun.TasinirKartId,
+            StokKodu = urun.TasinirKart.StokKodu,
+            UrunAdi = urun.TasinirKart.Ad,
+            Birim = urun.TasinirKart.Birim,
+            Barkod = urun.Barkod,
+            SatisFiyati = urun.SatisFiyati,
+            KdvOrani = urun.TasinirKart.KdvOrani,
+            MevcutStok = stok,
+            TakipTipi = ResolveTakipTipi(urun.TasinirKart)
+        };
+    }
+
+    public async Task<KantinSatisDto> KesinlestirAsync(int satisId, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            var satis = await _dbContext.KantinSatislar
+                .Include(x => x.Kantin)
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+                .FirstOrDefaultAsync(x => x.Id == satisId && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
+
+            await EnsureTesisAccessAsync(satis.TesisId, cancellationToken);
+
+            if (string.Equals(satis.Durum, KantinSatisDurumlari.Kesinlesti, StringComparison.Ordinal))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+            }
+
+            if (satis.Satirlar.Count == 0)
+            {
+                throw new BaseException("Kesinleştirme için en az bir satış satırı olmalıdır.", 400);
+            }
+
+            var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+            ValidateDraftConsistency(satis);
+            await ValidateOdemelerAsync(kantin, satis, assignResolvedAccounts: true, cancellationToken);
+
+            foreach (var satir in satis.Satirlar)
+            {
+                var projection = await BuildSatirProjectionAsync(kantin, satir.KantinUrunId, satir.Miktar, satir.StokLotId, satir.StokSeriId, cancellationToken);
+                ApplySatirProjection(satir, projection);
+
+                var existingLinkedMovement = await _dbContext.StokHareketleri
+                    .AsNoTracking()
+                    .AnyAsync(x =>
+                        !x.IsDeleted &&
+                        x.Durum == StokHareketDurumlari.Aktif &&
+                        x.KaynakModul == KantinSatisKaynakModulu &&
+                        x.KaynakId == satir.Id,
+                        cancellationToken);
+
+                if (existingLinkedMovement)
+                {
+                    throw new BaseException("Bu satış satırı için daha önce stok çıkışı oluşturulmuş.", 400);
+                }
+
+                var hareket = await _stokHareketService.AddWithinCurrentTransactionAsync(BuildStokHareketDto(kantin, satis, satir), cancellationToken);
+                satir.StokHareketId = hareket.Id;
+            }
+
+            RecalculateTotals(satis);
+            ValidatePaymentSum(satis);
+
+            satis.Durum = KantinSatisDurumlari.Kesinlesti;
+            satis.KesinlesmeTarihi = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private IQueryable<KantinSatis> BuildScopedQuery(DomainAccessScope scope)
+    {
+        var query = _dbContext.KantinSatislar
+            .AsNoTracking()
+            .Include(x => x.Kantin)
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+            .Where(x => !x.IsDeleted);
+
+        if (scope.IsScoped)
+        {
+            query = query.Where(x => scope.TesisIds.Contains(x.TesisId));
+        }
+
+        return query;
+    }
+
+    private async Task<KantinSatis> GetEditableEntityAsync(int id, CancellationToken cancellationToken)
+    {
+        var entity = await _dbContext.KantinSatislar
+            .Include(x => x.Kantin)
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
+
+        await EnsureTesisAccessAsync(entity.TesisId, cancellationToken);
+
+        if (!string.Equals(entity.Durum, KantinSatisDurumlari.Taslak, StringComparison.Ordinal))
+        {
+            throw new BaseException("Kesinleşmiş kantin satışları değiştirilemez.", 400);
+        }
+
+        return entity;
+    }
+
+    private async Task<Kantin> GetRequiredActiveKantinAsync(int kantinId, CancellationToken cancellationToken)
+    {
+        var kantin = await _dbContext.Kantinler
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == kantinId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Kantin bulunamadı.", 404);
+
+        await EnsureTesisAccessAsync(kantin.TesisId, cancellationToken);
+        if (!kantin.AktifMi)
+        {
+            throw new BaseException("Satış için kantin aktif olmalıdır.", 400);
+        }
+
+        return kantin;
+    }
+
+    private async Task<KantinSatisDto> GetRequiredDtoAsync(int id, CancellationToken cancellationToken)
+        => await GetByIdAsync(id, cancellationToken) ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
+
+    private async Task EnsureTesisAccessAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        if (scope.IsScoped && !scope.TesisIds.Contains(tesisId))
+        {
+            throw new BaseException("Bu tesis için yetkiniz bulunmuyor.", 403);
+        }
+    }
+
+    private async Task<SatirProjection> BuildSatirProjectionAsync(Kantin kantin, int kantinUrunId, decimal miktar, int? stokLotId, int? stokSeriId, CancellationToken cancellationToken)
+    {
+        if (miktar <= 0)
+        {
+            throw new BaseException("Satış miktarı 0'dan büyük olmalıdır.", 400);
+        }
+
+        var urun = await _dbContext.KantinUrunler
+            .AsNoTracking()
+            .Include(x => x.TasinirKart)
+            .FirstOrDefaultAsync(x => x.Id == kantinUrunId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Kantin ürünü bulunamadı.", 404);
+
+        if (urun.KantinId != kantin.Id)
+        {
+            throw new BaseException("Seçilen ürün satış yapılan kantine ait olmalıdır.", 400);
+        }
+
+        if (!urun.AktifMi)
+        {
+            throw new BaseException("Seçilen kantin ürünü aktif olmalıdır.", 400);
+        }
+
+        var kart = urun.TasinirKart ?? throw new BaseException("Kantin ürünü taşınır kartı bulunamadı.", 400);
+        if (!kart.TesisId.HasValue || kart.TesisId.Value != kantin.TesisId || !kart.AktifMi)
+        {
+            throw new BaseException("Seçilen ürün taşınır kartı satış için geçerli değil.", 400);
+        }
+
+        var takipTipi = ResolveTakipTipi(kart);
+        string? lotNo = null;
+        DateTime? sonKullanmaTarihi = null;
+        string? seriNo = null;
+
+        if (string.Equals(takipTipi, TasinirKartTakipTipleri.Lot, StringComparison.Ordinal))
+        {
+            if (!stokLotId.HasValue)
+            {
+                throw new BaseException("Lot takipli ürünlerde lot seçimi zorunludur.", 400);
+            }
+
+            var lot = await _dbContext.StokLotlar
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == stokLotId.Value && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Seçilen lot bulunamadı.", 400);
+
+            if (lot.TesisId != kantin.TesisId || lot.TasinirKartId != kart.Id)
+            {
+                throw new BaseException("Seçilen lot ürün ile uyumlu değil.", 400);
+            }
+
+            lotNo = lot.LotNo;
+            sonKullanmaTarihi = lot.SonKullanmaTarihi;
+        }
+        else if (stokLotId.HasValue)
+        {
+            throw new BaseException("Takipsiz veya seri takipli üründe lot seçimi yapılamaz.", 400);
+        }
+
+        if (string.Equals(takipTipi, TasinirKartTakipTipleri.Seri, StringComparison.Ordinal))
+        {
+            if (!stokSeriId.HasValue)
+            {
+                throw new BaseException("Seri takipli ürünlerde seri seçimi zorunludur.", 400);
+            }
+
+            if (miktar != 1)
+            {
+                throw new BaseException("Seri takipli ürünlerde miktar 1 olmalıdır.", 400);
+            }
+
+            var seri = await _dbContext.StokSeriler
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == stokSeriId.Value && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Seçilen seri bulunamadı.", 400);
+
+            if (seri.TesisId != kantin.TesisId || seri.TasinirKartId != kart.Id)
+            {
+                throw new BaseException("Seçilen seri ürün ile uyumlu değil.", 400);
+            }
+
+            seriNo = seri.SeriNo;
+        }
+        else if (stokSeriId.HasValue)
+        {
+            throw new BaseException("Takipsiz veya lot takipli üründe seri seçimi yapılamaz.", 400);
+        }
+
+        var birimSatisFiyati = ParaTutarYuvarlamaHelper.Yuvarla(urun.SatisFiyati);
+        var toplamTutar = ParaTutarYuvarlamaHelper.Yuvarla(miktar * birimSatisFiyati);
+        var kdvTutari = ParaTutarYuvarlamaHelper.Yuvarla(toplamTutar * kart.KdvOrani / (100m + kart.KdvOrani));
+        var matrah = ParaTutarYuvarlamaHelper.Yuvarla(toplamTutar - kdvTutari);
+
+        return new SatirProjection(
+            urun,
+            miktar,
+            birimSatisFiyati,
+            kart.KdvOrani,
+            matrah,
+            kdvTutari,
+            toplamTutar,
+            stokLotId,
+            stokSeriId,
+            urun.Barkod,
+            kart.StokKodu,
+            kart.Ad,
+            kart.Birim,
+            takipTipi,
+            lotNo,
+            sonKullanmaTarihi,
+            seriNo);
+    }
+
+    private async Task<OdemeProjection> BuildOdemeProjectionAsync(Kantin kantin, string odemeYontemi, int? kasaBankaHesapId, decimal tutar, CancellationToken cancellationToken)
+    {
+        if (tutar <= 0)
+        {
+            throw new BaseException("Ödeme tutarı 0'dan büyük olmalıdır.", 400);
+        }
+
+        var normalizedYontem = NormalizeRequired(odemeYontemi, "Ödeme yöntemi zorunludur.", 32);
+        if (!string.Equals(normalizedYontem, OdemeYontemleri.Nakit, StringComparison.Ordinal)
+            && !string.Equals(normalizedYontem, OdemeYontemleri.KrediKarti, StringComparison.Ordinal))
+        {
+            throw new BaseException("Kantin satışında yalnızca Nakit veya KrediKarti ödeme yöntemi kullanılabilir.", 400);
+        }
+
+        KasaBankaHesap? hesap = null;
+        if (string.Equals(normalizedYontem, OdemeYontemleri.Nakit, StringComparison.Ordinal))
+        {
+            var effectiveHesapId = kasaBankaHesapId ?? kantin.VarsayilanNakitKasaId;
+            if (effectiveHesapId.HasValue)
+            {
+                hesap = await ResolveValidHesapAsync(kantin.TesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.NakitKasa, "Nakit", cancellationToken);
+            }
+        }
+        else
+        {
+            if (!kasaBankaHesapId.HasValue)
+            {
+                throw new BaseException("Kredi kartı ödemesinde hesap seçimi zorunludur.", 400);
+            }
+
+            hesap = await ResolveValidHesapAsync(kantin.TesisId, kasaBankaHesapId.Value, KasaBankaHesapTipleri.KrediKarti, "Kredi kartı", cancellationToken);
+        }
+
+        return new OdemeProjection(
+            normalizedYontem,
+            hesap?.Id,
+            ParaTutarYuvarlamaHelper.Yuvarla(tutar),
+            hesap?.Kod,
+            hesap?.Ad);
+    }
+
+    private async Task<KasaBankaHesap> ResolveValidHesapAsync(int tesisId, int hesapId, string beklenenTip, string odemeLabel, CancellationToken cancellationToken)
+    {
+        var hesap = await _dbContext.KasaBankaHesaplari
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == hesapId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Seçilen ödeme hesabı bulunamadı.", 400);
+
+        if (hesap.TesisId != tesisId)
+        {
+            throw new BaseException("Seçilen ödeme hesabı satış ile aynı tesise ait olmalıdır.", 400);
+        }
+
+        if (!hesap.AktifMi)
+        {
+            throw new BaseException("Seçilen ödeme hesabı aktif olmalıdır.", 400);
+        }
+
+        if (!string.Equals(hesap.Tip, beklenenTip, StringComparison.Ordinal))
+        {
+            throw new BaseException($"{odemeLabel} ödeme hesabı tipi geçersiz.", 400);
+        }
+
+        return hesap;
+    }
+
+    private async Task ValidateOdemelerAsync(Kantin kantin, KantinSatis satis, bool assignResolvedAccounts, CancellationToken cancellationToken)
+    {
+        if (satis.Odemeler.Count == 0)
+        {
+            throw new BaseException("Kesinleştirme için en az bir ödeme satırı olmalıdır.", 400);
+        }
+
+        foreach (var odeme in satis.Odemeler)
+        {
+            var projection = await BuildOdemeProjectionAsync(kantin, odeme.OdemeYontemi, odeme.KasaBankaHesapId, odeme.Tutar, cancellationToken);
+            odeme.OdemeYontemi = projection.OdemeYontemi;
+            odeme.Tutar = projection.Tutar;
+            if (assignResolvedAccounts)
+            {
+                odeme.KasaBankaHesapId = projection.KasaBankaHesapId;
+                odeme.HesapKodSnapshot = projection.HesapKodSnapshot;
+                odeme.HesapAdSnapshot = projection.HesapAdSnapshot;
+            }
+        }
+    }
+
+    private static void ValidateDraftConsistency(KantinSatis satis)
+    {
+        if (satis.Satirlar.Any(x => x.Miktar <= 0))
+        {
+            throw new BaseException("Satış satır miktarı 0'dan büyük olmalıdır.", 400);
+        }
+
+        if (satis.Satirlar.Any(x => x.StokHareketId.HasValue))
+        {
+            throw new BaseException("Taslak satış tutarsız stok hareketi bağlantısına sahip.", 400);
+        }
+    }
+
+    private static void ValidatePaymentSum(KantinSatis satis)
+    {
+        var toplamOdeme = ParaTutarYuvarlamaHelper.Yuvarla(satis.Odemeler.Where(x => !x.IsDeleted).Sum(x => x.Tutar));
+        var toplamSatis = ParaTutarYuvarlamaHelper.Yuvarla(satis.ToplamTutar);
+        if (toplamOdeme != toplamSatis)
+        {
+            throw new BaseException("Ödeme toplamı satış toplamına eşit olmalıdır.", 400);
+        }
+    }
+
+    private static void RecalculateTotals(KantinSatisDto dto)
+    {
+        dto.ToplamTutar = ParaTutarYuvarlamaHelper.Yuvarla(dto.Satirlar.Sum(x => x.ToplamTutar));
+        dto.KdvToplami = ParaTutarYuvarlamaHelper.Yuvarla(dto.Satirlar.Sum(x => x.KdvTutari));
+        dto.MatrahToplami = ParaTutarYuvarlamaHelper.Yuvarla(dto.Satirlar.Sum(x => x.Matrah));
+    }
+
+    private static void RecalculateTotals(KantinSatis entity)
+    {
+        entity.ToplamTutar = ParaTutarYuvarlamaHelper.Yuvarla(entity.Satirlar.Where(x => !x.IsDeleted).Sum(x => x.ToplamTutar));
+        entity.KdvToplami = ParaTutarYuvarlamaHelper.Yuvarla(entity.Satirlar.Where(x => !x.IsDeleted).Sum(x => x.KdvTutari));
+        entity.MatrahToplami = ParaTutarYuvarlamaHelper.Yuvarla(entity.Satirlar.Where(x => !x.IsDeleted).Sum(x => x.Matrah));
+    }
+
+    private static void ApplySatirProjection(KantinSatisSatir satir, SatirProjection projection)
+    {
+        satir.KantinUrunId = projection.KantinUrun.Id;
+        satir.TasinirKartId = projection.KantinUrun.TasinirKartId;
+        satir.Miktar = projection.Miktar;
+        satir.BirimSatisFiyati = projection.BirimSatisFiyati;
+        satir.KdvOrani = projection.KdvOrani;
+        satir.Matrah = projection.Matrah;
+        satir.KdvTutari = projection.KdvTutari;
+        satir.ToplamTutar = projection.ToplamTutar;
+        satir.StokLotId = projection.StokLotId;
+        satir.StokSeriId = projection.StokSeriId;
+        satir.Barkod = projection.Barkod;
+        satir.StokKodu = projection.StokKodu;
+        satir.UrunAdi = projection.UrunAdi;
+        satir.Birim = projection.Birim;
+        satir.TakipTipi = projection.TakipTipi;
+        satir.LotNo = projection.LotNo;
+        satir.SonKullanmaTarihi = projection.SonKullanmaTarihi;
+        satir.SeriNo = projection.SeriNo;
+    }
+
+    private static StokHareketDto BuildStokHareketDto(Kantin kantin, KantinSatis satis, KantinSatisSatir satir)
+        => new()
+        {
+            DepoId = kantin.DepoId,
+            TasinirKartId = satir.TasinirKartId,
+            HareketTarihi = satis.SatisTarihi,
+            HareketTipi = StokHareketTipleri.Cikis,
+            Miktar = satir.Miktar,
+            BirimFiyat = 0,
+            Tutar = 0,
+            BelgeTarihi = satis.SatisTarihi,
+            Aciklama = $"Kantin Satışı #{satis.Id} - {satir.StokKodu} {satir.UrunAdi}",
+            KaynakModul = KantinSatisKaynakModulu,
+            KaynakId = satir.Id,
+            Durum = StokHareketDurumlari.Aktif,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
+            KdvOrani = 0,
+            KdvTutari = 0,
+            StokLotId = satir.StokLotId,
+            StokSeriId = satir.StokSeriId
+        };
+
+    private static string ResolveTakipTipi(TasinirKart kart)
+        => TasinirKartServiceHelpers.ResolveTakipTipi(kart.TakipTipi, kart.TakipliMi);
+
+    private static string NormalizeRequired(string? value, string errorMessage, int maxLength)
+    {
+        var normalized = NormalizeOptional(value, maxLength);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new BaseException(errorMessage, 400);
+        }
+
+        return normalized;
+    }
+
+    private static string? NormalizeOptional(string? value, int maxLength)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        return normalized.Length > maxLength ? normalized[..maxLength] : normalized;
+    }
+
+    private static string? NormalizeBarcode(string? barkod)
+        => NormalizeOptional(barkod, 128)?.ToUpperInvariant();
+
+    private async Task<decimal> GetCurrentStockAsync(int depoId, int tasinirKartId, CancellationToken cancellationToken)
+    {
+        var rows = await _dbContext.StokHareketleri
+            .AsNoTracking()
+            .Where(x => x.DepoId == depoId && x.TasinirKartId == tasinirKartId && !x.IsDeleted && x.Durum == StokHareketDurumlari.Aktif)
+            .Select(x => new { x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar })
+            .ToListAsync(cancellationToken);
+
+        return rows.Sum(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar
+            : StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? -x.Miktar
+            : 0m);
+    }
+
+    private static KantinSatisDto MapDto(KantinSatis entity)
+    {
+        var dto = new KantinSatisDto
+        {
+            Id = entity.Id,
+            TesisId = entity.TesisId,
+            KantinId = entity.KantinId,
+            SatisTarihi = entity.SatisTarihi,
+            Durum = entity.Durum,
+            ToplamTutar = entity.ToplamTutar,
+            MatrahToplami = entity.MatrahToplami,
+            KdvToplami = entity.KdvToplami,
+            Aciklama = entity.Aciklama,
+            KesinlesmeTarihi = entity.KesinlesmeTarihi,
+            KantinKod = entity.Kantin?.Kod,
+            KantinAd = entity.Kantin?.Ad,
+            Satirlar = entity.Satirlar
+                .Where(x => !x.IsDeleted)
+                .OrderBy(x => x.Id)
+                .Select(x => new KantinSatisSatirDto
+                {
+                    Id = x.Id,
+                    KantinSatisId = x.KantinSatisId,
+                    KantinUrunId = x.KantinUrunId,
+                    TasinirKartId = x.TasinirKartId,
+                    Miktar = x.Miktar,
+                    BirimSatisFiyati = x.BirimSatisFiyati,
+                    KdvOrani = x.KdvOrani,
+                    Matrah = x.Matrah,
+                    KdvTutari = x.KdvTutari,
+                    ToplamTutar = x.ToplamTutar,
+                    StokLotId = x.StokLotId,
+                    StokSeriId = x.StokSeriId,
+                    StokHareketId = x.StokHareketId,
+                    Barkod = x.Barkod,
+                    StokKodu = x.StokKodu,
+                    UrunAdi = x.UrunAdi,
+                    Birim = x.Birim,
+                    TakipTipi = x.TakipTipi,
+                    LotNo = x.LotNo,
+                    SonKullanmaTarihi = x.SonKullanmaTarihi,
+                    SeriNo = x.SeriNo
+                })
+                .ToList(),
+            Odemeler = entity.Odemeler
+                .Where(x => !x.IsDeleted)
+                .OrderBy(x => x.Id)
+                .Select(x => new KantinSatisOdemeDto
+                {
+                    Id = x.Id,
+                    KantinSatisId = x.KantinSatisId,
+                    OdemeYontemi = x.OdemeYontemi,
+                    KasaBankaHesapId = x.KasaBankaHesapId,
+                    Tutar = x.Tutar,
+                    HesapKodSnapshot = x.HesapKodSnapshot,
+                    HesapAdSnapshot = x.HesapAdSnapshot
+                })
+                .ToList()
+        };
+
+        dto.OdemeOzeti = string.Join(" + ",
+            dto.Odemeler
+                .GroupBy(x => x.OdemeYontemi)
+                .Select(g => $"{g.Key}: {ParaTutarYuvarlamaHelper.Yuvarla(g.Sum(x => x.Tutar)):0.00}"));
+
+        return dto;
+    }
+
+    private sealed record SatirProjection(
+        KantinUrun KantinUrun,
+        decimal Miktar,
+        decimal BirimSatisFiyati,
+        decimal KdvOrani,
+        decimal Matrah,
+        decimal KdvTutari,
+        decimal ToplamTutar,
+        int? StokLotId,
+        int? StokSeriId,
+        string? Barkod,
+        string StokKodu,
+        string UrunAdi,
+        string Birim,
+        string TakipTipi,
+        string? LotNo,
+        DateTime? SonKullanmaTarihi,
+        string? SeriNo);
+
+    private sealed record OdemeProjection(
+        string OdemeYontemi,
+        int? KasaBankaHesapId,
+        decimal Tutar,
+        string? HesapKodSnapshot,
+        string? HesapAdSnapshot);
+}

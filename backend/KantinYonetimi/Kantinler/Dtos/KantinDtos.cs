@@ -31,6 +31,7 @@ public class KantinUrunDto : BaseRdbmsDto<int>
     public string? Birim { get; set; }
     public decimal KdvOrani { get; set; }
     public decimal MevcutStok { get; set; }
+    public string? TakipTipi { get; set; }
 }
 
 public class KantinDepoSecenekDto
@@ -45,6 +46,14 @@ public class KantinKasaSecenekDto
     public int Id { get; set; }
     public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
+}
+
+public class KantinOdemeHesapSecenekDto
+{
+    public int Id { get; set; }
+    public string Kod { get; set; } = string.Empty;
+    public string Ad { get; set; } = string.Empty;
+    public string Tip { get; set; } = string.Empty;
 }
 
 public class KantinTasinirKartSecenekDto

@@ -161,7 +161,8 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             UrunAdi = x.TasinirKart?.Ad,
             Birim = x.TasinirKart?.Birim,
             KdvOrani = x.TasinirKart?.KdvOrani ?? 0,
-            MevcutStok = bakiyeMap.TryGetValue(x.TasinirKartId, out var bakiye) ? bakiye : 0
+            MevcutStok = bakiyeMap.TryGetValue(x.TasinirKartId, out var bakiye) ? bakiye : 0,
+            TakipTipi = x.TasinirKart is null ? null : ResolveTakipTipi(x.TasinirKart.TakipTipi, x.TasinirKart.TakipliMi)
         }).ToList();
     }
 
@@ -244,6 +245,29 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
                 Id = x.Id,
                 Kod = x.Kod,
                 Ad = x.Ad
+            })
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<KantinOdemeHesapSecenekDto>> GetOdemeHesaplariAsync(int tesisId, string odemeYontemi, CancellationToken cancellationToken = default)
+    {
+        await EnsureTesisAccessAsync(tesisId, cancellationToken);
+        var normalizedYontem = NormalizeRequired(odemeYontemi, "Ödeme yöntemi zorunludur.", 32);
+        var hesapTipi = string.Equals(normalizedYontem, STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities.OdemeYontemleri.KrediKarti, StringComparison.Ordinal)
+            ? KasaBankaHesapTipleri.KrediKarti
+            : KasaBankaHesapTipleri.NakitKasa;
+
+        return await _dbContext.KasaBankaHesaplari
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted && x.TesisId == tesisId && x.AktifMi && x.Tip == hesapTipi)
+            .OrderBy(x => x.Kod)
+            .ThenBy(x => x.Ad)
+            .Select(x => new KantinOdemeHesapSecenekDto
+            {
+                Id = x.Id,
+                Kod = x.Kod,
+                Ad = x.Ad,
+                Tip = x.Tip
             })
             .ToListAsync(cancellationToken);
     }
@@ -453,6 +477,13 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
 
     private static string? NormalizeBarcode(string? barkod)
         => NormalizeOptional(barkod, 128)?.ToUpperInvariant();
+
+    private static string ResolveTakipTipi(string? takipTipi, bool takipliMi)
+        => !string.IsNullOrWhiteSpace(takipTipi)
+            ? takipTipi
+            : takipliMi
+                ? STYS.Muhasebe.TasinirKartlari.Entities.TasinirKartTakipTipleri.Lot
+                : STYS.Muhasebe.TasinirKartlari.Entities.TasinirKartTakipTipleri.Yok;
 
     private static void NormalizeKantinDto(KantinDto dto)
     {

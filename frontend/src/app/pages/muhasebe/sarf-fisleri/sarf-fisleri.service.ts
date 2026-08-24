@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, SarfBirimSecenekModel, SarfFisiModel, UpdateSarfFisiSatirlarRequest } from './sarf-fisleri.dto';
+import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, IptalSarfFisiRequest, SarfBirimSecenekModel, SarfFisiModel, UpdateSarfFisiSatirlarRequest } from './sarf-fisleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class SarfFisleriService {
@@ -69,8 +69,8 @@ export class SarfFisleriService {
             .pipe(map(this.unwrap<SarfFisiModel>('Sarf fişi kesinleştirilemedi.')));
     }
 
-    iptal(id: number): Observable<SarfFisiModel> {
-        return this.http.post<ApiResponse<SarfFisiModel>>(`${this.apiBaseUrl}/ui/muhasebe/sarf-fisleri/${id}/iptal`, {})
+    iptal(id: number, payload?: IptalSarfFisiRequest): Observable<SarfFisiModel> {
+        return this.http.post<ApiResponse<SarfFisiModel>>(`${this.apiBaseUrl}/ui/muhasebe/sarf-fisleri/${id}/iptal`, payload ?? {})
             .pipe(map(this.unwrap<SarfFisiModel>('Sarf fişi iptal edilemedi.')));
     }
 

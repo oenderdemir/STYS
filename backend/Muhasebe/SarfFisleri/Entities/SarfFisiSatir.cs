@@ -14,6 +14,7 @@ public class SarfFisiSatir : BaseEntity<int>
     public int? StokLotId { get; set; }
     public int? StokSeriId { get; set; }
     public int? StokHareketId { get; set; }
+    public int? IptalStokHareketId { get; set; }
 
     [Required]
     [MaxLength(16)]
@@ -49,4 +50,5 @@ public class SarfFisiSatir : BaseEntity<int>
     public StokLot? StokLot { get; set; }
     public StokSeri? StokSeri { get; set; }
     public StokHareket? StokHareket { get; set; }
+    public StokHareket? IptalStokHareket { get; set; }
 }

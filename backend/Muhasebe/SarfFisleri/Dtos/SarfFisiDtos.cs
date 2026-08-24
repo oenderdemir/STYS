@@ -12,6 +12,9 @@ public class SarfFisiDto : BaseRdbmsDto<int>
     public string Durum { get; set; } = string.Empty;
     public string? Aciklama { get; set; }
     public Guid? OlusturanKullaniciId { get; set; }
+    public DateTime? IptalTarihi { get; set; }
+    public Guid? IptalEdenKullaniciId { get; set; }
+    public string? IptalAciklamasi { get; set; }
     public List<SarfFisiSatirDto> Satirlar { get; set; } = [];
 }
 
@@ -22,6 +25,7 @@ public class SarfFisiSatirDto : BaseRdbmsDto<int>
     public int? StokLotId { get; set; }
     public int? StokSeriId { get; set; }
     public int? StokHareketId { get; set; }
+    public int? IptalStokHareketId { get; set; }
     public string TakipTipi { get; set; } = string.Empty;
     public string StokKodu { get; set; } = string.Empty;
     public string TasinirKartAd { get; set; } = string.Empty;
@@ -62,6 +66,11 @@ public class AddSarfFisiSatirRequest
     public int? StokLotId { get; set; }
     public int? StokSeriId { get; set; }
     public string? Aciklama { get; set; }
+}
+
+public class IptalSarfFisiRequest
+{
+    public string? IptalAciklamasi { get; set; }
 }
 
 public class SarfBirimSecenekDto

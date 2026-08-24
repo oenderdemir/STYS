@@ -331,6 +331,144 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public async Task KesinlesmisSarfIptalinde_StokGeriGelir_ve_OrijinalHareketKorunur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10, birimFiyat: 5);
+        var service = CreateService(dbContext);
+
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 3);
+
+        var result = await service.IptalAsync(fis.Id!.Value, "yanlis giris");
+
+        Assert.Equal(SarfFisiDurumlari.IptalEdildi, result.Durum);
+        Assert.Equal("yanlis giris", result.IptalAciklamasi);
+        Assert.Equal(10, await GetCurrentStockAsync(dbContext, 10, 100));
+
+        var original = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiSatir");
+        var reversal = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiIptal");
+
+        Assert.Equal(StokHareketTipleri.Sarf, original.HareketTipi);
+        Assert.Equal(StokHareketDurumlari.Aktif, original.Durum);
+        Assert.Equal(StokHareketTipleri.Giris, reversal.HareketTipi);
+        Assert.Equal(3, reversal.Miktar);
+        Assert.Equal(3, await dbContext.StokHareketleri.AsNoTracking().CountAsync());
+    }
+
+    [Fact]
+    public async Task KesinlesmisSarfIptalinde_TersHareket_AyniLotuKorur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipTipi: TasinirKartTakipTipleri.Lot);
+        await SeedLotAsync(dbContext, lotId: 700, lotNo: "LOT-A");
+        await SeedSourceStockAsync(dbContext, miktar: 10, stokLotId: 700);
+        var service = CreateService(dbContext);
+
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 2, stokLotId: 700);
+        await service.IptalAsync(fis.Id!.Value, "lot iadesi");
+
+        var reversal = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiIptal");
+        Assert.Equal(700, reversal.StokLotId);
+    }
+
+    [Fact]
+    public async Task KesinlesmisSarfIptalinde_Seri_TekrarStogaDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipTipi: TasinirKartTakipTipleri.Seri);
+        await SeedSourceStockAsync(dbContext, miktar: 1, stokSeriId: 500);
+        var service = CreateService(dbContext);
+
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 1, stokSeriId: 500);
+        await service.IptalAsync(fis.Id!.Value, "seri iadesi");
+
+        Assert.Equal(1, await GetCurrentStockAsync(dbContext, 10, 100, stokSeriId: 500));
+        var reversal = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiIptal");
+        Assert.Equal(500, reversal.StokSeriId);
+    }
+
+    [Fact]
+    public async Task KesinlesmisSarfIptalinde_MaliyetSnapshot_OrijinalSarfiKorur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10, birimFiyat: 5);
+        var service = CreateService(dbContext);
+
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 2);
+        var original = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiSatir");
+
+        await service.IptalAsync(fis.Id!.Value, "maliyet iadesi");
+
+        var reversal = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiIptal");
+        Assert.Equal(original.MaliyetBirimFiyat, reversal.MaliyetBirimFiyat);
+        Assert.Equal(original.MaliyetTutari, reversal.MaliyetTutari);
+    }
+
+    [Fact]
+    public async Task CokSatirliFis_GeriAlma_HataAldiginda_AtomikKalir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext, takipTipi: TasinirKartTakipTipleri.Seri);
+        await SeedSourceStockAsync(dbContext, miktar: 1, stokSeriId: 500);
+        await SeedSeriAsync(dbContext, 501, "SN002");
+        await SeedSourceStockAsync(dbContext, miktar: 1, stokSeriId: 501, hareketId: 2);
+        var service = CreateService(dbContext);
+
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 30
+        });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest { TasinirKartId = 100, Miktar = 1, StokSeriId = 500 });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest { TasinirKartId = 100, Miktar = 1, StokSeriId = 501 });
+        await service.KesinlestirAsync(created.Id!.Value);
+
+        dbContext.StokHareketleri.Add(new StokHareket
+        {
+            Id = 99,
+            DepoId = 10,
+            TasinirKartId = 100,
+            StokSeriId = 501,
+            HareketTarihi = new DateTime(2026, 8, 24, 11, 0, 0),
+            HareketTipi = StokHareketTipleri.Giris,
+            Miktar = 1,
+            BirimFiyat = 1,
+            Tutar = 1,
+            Durum = StokHareketDurumlari.Aktif,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
+            KdvOrani = 0,
+            KdvTutari = 0
+        });
+        await dbContext.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.IptalAsync(created.Id!.Value, "atomik iptal"));
+
+        Assert.Equal("Seri mevcut stok durumu geri alma işlemi için uygun değildir.", ex.Message);
+        var fis = await dbContext.SarfFisleri.AsNoTracking().Include(x => x.Satirlar).SingleAsync(x => x.Id == created.Id!.Value);
+        Assert.Equal(SarfFisiDurumlari.Kesinlesti, fis.Durum);
+        Assert.All(fis.Satirlar, x => Assert.Null(x.IptalStokHareketId));
+    }
+
+    [Fact]
+    public async Task IkinciGeriAlma_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 1);
+        await service.IptalAsync(fis.Id!.Value, "ilk iptal");
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.IptalAsync(fis.Id!.Value, "ikinci iptal"));
+
+        Assert.Equal("Bu durumdaki sarf fişi için geri alma işlemi yapılamaz.", ex.Message);
+    }
+
+    [Fact]
     public async Task PublicStokHareketCreate_Ile_SarfOlusturulamaz()
     {
         await using var dbContext = CreateDbContext();
@@ -346,6 +484,30 @@ public class SarfFisiServiceTests
             HareketTipi = StokHareketTipleri.Sarf,
             Miktar = 1,
             BirimFiyat = 0,
+            Durum = StokHareketDurumlari.Aktif
+        }));
+
+        Assert.Equal("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task PublicStokHareketCreate_Ile_SahteSarfFisiIptalOlusturulamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var stokHareketService = CreateStokHareketService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.AddAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            DepoId = 10,
+            TasinirKartId = 100,
+            HareketTarihi = new DateTime(2026, 8, 24, 10, 0, 0),
+            HareketTipi = StokHareketTipleri.Giris,
+            Miktar = 1,
+            BirimFiyat = 1,
+            KaynakModul = "SarfFisiIptal",
+            KaynakId = 999,
             Durum = StokHareketDurumlari.Aktif
         }));
 
@@ -517,6 +679,37 @@ public class SarfFisiServiceTests
     }
 
     [Fact]
+    public async Task SarfFisiIptal_Kaynakli_StokHareket_GenericUpdateDelete_Ile_Degistirilemez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        await SeedSourceStockAsync(dbContext, miktar: 10);
+        var service = CreateService(dbContext);
+        var stokHareketService = CreateStokHareketService(dbContext);
+
+        var fis = await CreateFinalizedSarfAsync(service, miktar: 1);
+        await service.IptalAsync(fis.Id!.Value, "geri al");
+        var hareket = await dbContext.StokHareketleri.AsNoTracking().SingleAsync(x => x.KaynakModul == "SarfFisiIptal");
+
+        var updateEx = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.UpdateAsync(new STYS.Muhasebe.StokHareketleri.Dtos.StokHareketDto
+        {
+            Id = hareket.Id,
+            DepoId = hareket.DepoId,
+            TasinirKartId = hareket.TasinirKartId,
+            HareketTarihi = hareket.HareketTarihi,
+            HareketTipi = hareket.HareketTipi,
+            Miktar = 2,
+            BirimFiyat = hareket.BirimFiyat,
+            Durum = hareket.Durum
+        }));
+
+        var deleteEx = await Assert.ThrowsAsync<BaseException>(() => stokHareketService.DeleteAsync(hareket.Id));
+
+        Assert.Equal("Sarf fişi kaynaklı stok hareketleri doğrudan değiştirilemez. Sarf fişi akışını kullanınız.", updateEx.Message);
+        Assert.Equal("Sarf fişi kaynaklı stok hareketleri doğrudan değiştirilemez. Sarf fişi akışını kullanınız.", deleteEx.Message);
+    }
+
+    [Fact]
     public async Task TesisScopeDisindakiSarfFisineErisimReddedilir()
     {
         await using var dbContext = CreateDbContext();
@@ -544,6 +737,7 @@ public class SarfFisiServiceTests
         var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
 
         Assert.Contains("20260824125241_AddSarfFisleriAndStockPermissionSplit", migrationsAssembly.Migrations.Keys);
+        Assert.Contains("20260824135925_AddSarfFisiReversal", migrationsAssembly.Migrations.Keys);
     }
 
     private static void AssertPermission(Type controllerType, string methodName, string expectedPermission)
@@ -769,25 +963,91 @@ public class SarfFisiServiceTests
         await dbContext.SaveChangesAsync();
     }
 
-    private static async Task SeedSourceStockAsync(StysAppDbContext dbContext, decimal miktar)
+    private static async Task SeedSourceStockAsync(StysAppDbContext dbContext, decimal miktar, decimal birimFiyat = 1, int hareketId = 1, int? stokLotId = null, int? stokSeriId = null)
     {
         dbContext.StokHareketleri.Add(new StokHareket
         {
-            Id = 1,
+            Id = hareketId,
             DepoId = 10,
             TasinirKartId = 100,
             HareketTarihi = new DateTime(2026, 8, 23, 8, 0, 0),
             HareketTipi = StokHareketTipleri.Giris,
             Miktar = miktar,
-            BirimFiyat = 1,
-            Tutar = miktar,
+            BirimFiyat = birimFiyat,
+            Tutar = miktar * birimFiyat,
             Durum = StokHareketDurumlari.Aktif,
             KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
             KdvOrani = 0,
-            KdvTutari = 0
+            KdvTutari = 0,
+            StokLotId = stokLotId,
+            StokSeriId = stokSeriId
         });
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedLotAsync(StysAppDbContext dbContext, int lotId, string lotNo)
+    {
+        dbContext.StokLotlar.Add(new STYS.Muhasebe.StokLotlari.Entities.StokLot
+        {
+            Id = lotId,
+            TesisId = 1,
+            TasinirKartId = 100,
+            LotNo = lotNo,
+            SonKullanmaTarihi = new DateTime(2027, 1, 1),
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedSeriAsync(StysAppDbContext dbContext, int seriId, string seriNo)
+    {
+        dbContext.StokSeriler.Add(new STYS.Muhasebe.StokSerileri.Entities.StokSeri
+        {
+            Id = seriId,
+            TesisId = 1,
+            TasinirKartId = 100,
+            SeriNo = seriNo,
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<SarfFisiDto> CreateFinalizedSarfAsync(SarfFisiService service, decimal miktar, int? stokLotId = null, int? stokSeriId = null)
+    {
+        var created = await service.AddAsync(new SarfFisiDto
+        {
+            DepoId = 10,
+            SarfTarihi = new DateTime(2026, 8, 24, 9, 0, 0),
+            IsletmeAlaniId = 30
+        });
+        await service.AddSatirAsync(created.Id!.Value, new AddSarfFisiSatirRequest
+        {
+            TasinirKartId = 100,
+            Miktar = miktar,
+            StokLotId = stokLotId,
+            StokSeriId = stokSeriId
+        });
+
+        return await service.KesinlestirAsync(created.Id!.Value);
+    }
+
+    private static async Task<decimal> GetCurrentStockAsync(StysAppDbContext dbContext, int depoId, int tasinirKartId, int? stokLotId = null, int? stokSeriId = null)
+    {
+        var rows = await dbContext.StokHareketleri
+            .AsNoTracking()
+            .Where(x => x.DepoId == depoId
+                && x.TasinirKartId == tasinirKartId
+                && x.Durum == StokHareketDurumlari.Aktif
+                && x.StokLotId == stokLotId
+                && x.StokSeriId == stokSeriId)
+            .Select(x => new { x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar })
+            .ToListAsync();
+
+        return rows.Sum(x =>
+            StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar :
+            StokHareketTipleri.IsCikisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? -x.Miktar :
+            0m);
     }
 
     private static async Task<StokTalepDto> CreateDraftTalepWithLineAsync(StokTalepService service, decimal talepMiktari, string? aciklama)

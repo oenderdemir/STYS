@@ -108,7 +108,10 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
         await EnsureBackdatedCostCreateAllowedAsync(dto, cancellationToken);
         dto.Tutar = CalculateTutar(dto.Miktar, dto.BirimFiyat);
         await ApplyKdvAsync(dto);
-        await ApplyCostSnapshotAsync(dto, null, cancellationToken);
+        if (!IsSarfIptalWorkflow(dto.KaynakModul))
+        {
+            await ApplyCostSnapshotAsync(dto, null, cancellationToken);
+        }
         await EnsureCreateDoesNotGoNegativeAsync(dto, cancellationToken);
         var created = await base.AddAsync(dto);
         await ApplyPostCreateCostStateAsync(created, cancellationToken);
@@ -1193,6 +1196,11 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
             return;
         }
 
+        if (IsSarfIptalWorkflow(created.KaynakModul))
+        {
+            return;
+        }
+
         var strategy = await ResolveCostStrategyAsync(created.DepoId, created.HareketTarihi, cancellationToken);
         if (strategy is not LayeredCostStrategyBase layeredStrategy)
         {
@@ -1768,7 +1776,8 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private static void EnsurePublicCreateAllowed(StokHareketDto dto)
     {
-        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal))
+        if (string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal)
+            || IsWorkflowManagedSourceModule(dto.KaynakModul))
         {
             throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
         }
@@ -1776,8 +1785,9 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private static void EnsurePublicUpdateAllowed(StokHareket existing, StokHareketDto dto)
     {
-        if (!string.Equals(existing.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal)
+        if ((!string.Equals(existing.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal)
             && string.Equals(dto.HareketTipi, StokHareketTipleri.Sarf, StringComparison.Ordinal))
+            || IsWorkflowManagedSourceModule(dto.KaynakModul))
         {
             throw new BaseException("Sarf hareketleri yalnizca Sarf Fişi akışı ile kaydedilebilir.", 400);
         }
@@ -1794,11 +1804,18 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
 
     private static void EnsureWorkflowManagedMovementIsImmutable(StokHareket hareket)
     {
-        if (string.Equals(hareket.KaynakModul, "SarfFisiSatir", StringComparison.Ordinal))
+        if (IsWorkflowManagedSourceModule(hareket.KaynakModul))
         {
             throw new BaseException("Sarf fişi kaynaklı stok hareketleri doğrudan değiştirilemez. Sarf fişi akışını kullanınız.", 400);
         }
     }
+
+    private static bool IsWorkflowManagedSourceModule(string? kaynakModul)
+        => string.Equals(kaynakModul, "SarfFisiSatir", StringComparison.Ordinal)
+           || string.Equals(kaynakModul, "SarfFisiIptal", StringComparison.Ordinal);
+
+    private static bool IsSarfIptalWorkflow(string? kaynakModul)
+        => string.Equals(kaynakModul, "SarfFisiIptal", StringComparison.Ordinal);
 
     private void DetachTrackedStokHareket(int id)
     {

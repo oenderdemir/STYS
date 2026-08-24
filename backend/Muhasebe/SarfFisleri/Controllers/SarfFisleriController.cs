@@ -81,8 +81,8 @@ public class SarfFisleriController : UIController
 
     [HttpPost("{id:int}/iptal")]
     [Permission(StructurePermissions.SarfYonetimi.Cancel)]
-    public async Task<ActionResult<SarfFisiDto>> Iptal(int id, CancellationToken cancellationToken)
-        => Ok(await _service.IptalAsync(id, cancellationToken));
+    public async Task<ActionResult<SarfFisiDto>> Iptal(int id, [FromBody] IptalSarfFisiRequest? request, CancellationToken cancellationToken)
+        => Ok(await _service.IptalAsync(id, request?.IptalAciklamasi, cancellationToken));
 
     [HttpDelete("{id:int}")]
     [Permission(StructurePermissions.SarfYonetimi.Cancel)]

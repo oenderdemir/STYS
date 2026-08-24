@@ -115,6 +115,23 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
         }
     }
 
+    public async Task ReverseOutgoingConsumptionAsync(int cikisStokHareketId, CancellationToken cancellationToken = default)
+    {
+        var tuketimler = await DbContext.StokMaliyetKatmanTuketimleri
+            .Where(x => x.CikisStokHareketId == cikisStokHareketId && !x.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        foreach (var tuketim in tuketimler)
+        {
+            var katman = await DbContext.StokMaliyetKatmanlari
+                .FirstAsync(x => x.Id == tuketim.StokMaliyetKatmaniId, cancellationToken);
+
+            katman.KalanMiktar += tuketim.Miktar;
+        }
+
+        await DbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<LayeredConsumptionPlan> PlanOutgoingConsumptionAsync(int depoId, int tasinirKartId, decimal miktar, CancellationToken cancellationToken = default)
     {
         if (miktar <= 0)

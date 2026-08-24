@@ -61,7 +61,8 @@
                 <p-button label="Satır Ekle" icon="pi pi-plus" (onClick)="openAddSatir()" [disabled]="!canCreate || !isDraft(selectedFisi)"></p-button>
                 <p-button label="Kaydet" icon="pi pi-save" severity="secondary" (onClick)="saveSatirlar()" [disabled]="!canCreate || !isDraft(selectedFisi) || saving"></p-button>
                 <p-button label="Kesinleştir" icon="pi pi-check" severity="success" (onClick)="kesinlestir()" [disabled]="!canFinalize || !isDraft(selectedFisi) || saving"></p-button>
-                <p-button label="İptal" icon="pi pi-times" severity="danger" (onClick)="iptal()" [disabled]="!canCancel || !isDraft(selectedFisi) || saving"></p-button>
+                <p-button label="İptal" icon="pi pi-times" severity="danger" (onClick)="openIptal()" [disabled]="!canCancel || !isDraft(selectedFisi) || saving"></p-button>
+                <p-button label="Sarfı Geri Al" icon="pi pi-undo" severity="warn" (onClick)="openIptal()" [disabled]="!canCancel || !isKesinlesti(selectedFisi) || saving"></p-button>
             </div>
         </div>
 
@@ -116,6 +117,22 @@
     <ng-template pTemplate="footer">
         <p-button label="Vazgeç" severity="secondary" (onClick)="createDialogVisible=false"></p-button>
         <p-button label="Kaydet" (onClick)="create()" [loading]="saving"></p-button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog header="Sarfı Geri Al / İptal" [(visible)]="iptalDialogVisible" [modal]="true" [style]="{ width: '34rem' }">
+    <div class="mb-3 text-color-secondary">
+        Bu işlem mevcut sarf hareketlerini silmez; stoğu ters hareketlerle geri yükler.
+    </div>
+    <div class="fluid grid">
+        <div class="col-12">
+            <label class="block mb-2">Açıklama</label>
+            <textarea pInputTextarea [(ngModel)]="iptalModel.iptalAciklamasi" rows="4"></textarea>
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <p-button label="Vazgeç" severity="secondary" (onClick)="iptalDialogVisible=false"></p-button>
+        <p-button [label]="isKesinlesti(selectedFisi!) ? 'Sarfı Geri Al' : 'İptal Et'" (onClick)="iptal()" [loading]="saving"></p-button>
     </ng-template>
 </p-dialog>
 

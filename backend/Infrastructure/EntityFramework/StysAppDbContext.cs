@@ -3061,6 +3061,7 @@ public class StysAppDbContext : DbContext
             entity.ToTable("SarfFisleri", muhasebeSchema);
             entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
             entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.IptalAciklamasi).HasMaxLength(1024);
             entity.HasIndex(x => new { x.TesisId, x.DepoId, x.SarfTarihi })
                 .HasFilter("[IsDeleted] = 0");
 
@@ -3095,6 +3096,8 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.StokHareketId)
                 .HasFilter("[IsDeleted] = 0 AND [StokHareketId] IS NOT NULL");
+            entity.HasIndex(x => x.IptalStokHareketId)
+                .HasFilter("[IsDeleted] = 0 AND [IptalStokHareketId] IS NOT NULL");
 
             entity.HasOne(x => x.SarfFisi)
                 .WithMany(x => x.Satirlar)
@@ -3119,6 +3122,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.StokHareket)
                 .WithMany()
                 .HasForeignKey(x => x.StokHareketId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IptalStokHareket)
+                .WithMany()
+                .HasForeignKey(x => x.IptalStokHareketId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

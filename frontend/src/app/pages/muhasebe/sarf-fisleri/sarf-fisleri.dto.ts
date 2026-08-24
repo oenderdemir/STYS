@@ -5,6 +5,7 @@ export interface SarfFisiSatirModel {
     stokLotId?: number | null;
     stokSeriId?: number | null;
     stokHareketId?: number | null;
+    iptalStokHareketId?: number | null;
     takipTipi: string;
     stokKodu: string;
     tasinirKartAd: string;
@@ -26,6 +27,9 @@ export interface SarfFisiModel {
     durum: string;
     aciklama?: string | null;
     olusturanKullaniciId?: string | null;
+    iptalTarihi?: string | null;
+    iptalEdenKullaniciId?: string | null;
+    iptalAciklamasi?: string | null;
     satirlar: SarfFisiSatirModel[];
 }
 
@@ -48,6 +52,10 @@ export interface AddSarfFisiSatirRequest {
     aciklama?: string | null;
 }
 
+export interface IptalSarfFisiRequest {
+    iptalAciklamasi?: string | null;
+}
+
 export interface SarfBirimSecenekModel {
     id: number;
     ad: string;
@@ -56,5 +64,6 @@ export interface SarfBirimSecenekModel {
 export const SARF_FISI_DURUMLARI: Array<{ label: string; value: string }> = [
     { label: 'Taslak', value: 'Taslak' },
     { label: 'Kesinleşti', value: 'Kesinlesti' },
-    { label: 'İptal', value: 'Iptal' }
+    { label: 'İptal', value: 'Iptal' },
+    { label: 'Geri Alındı', value: 'IptalEdildi' }
 ];

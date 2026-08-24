@@ -20,6 +20,11 @@ public class SarfFisi : BaseEntity<int>
     public string? Aciklama { get; set; }
 
     public Guid? OlusturanKullaniciId { get; set; }
+    public DateTime? IptalTarihi { get; set; }
+    public Guid? IptalEdenKullaniciId { get; set; }
+
+    [MaxLength(1024)]
+    public string? IptalAciklamasi { get; set; }
 
     public Depo? Depo { get; set; }
     public IsletmeAlani? IsletmeAlani { get; set; }

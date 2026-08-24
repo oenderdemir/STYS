@@ -26,7 +26,7 @@ import { StokLotBakiyeModel, StokSeriBakiyeModel } from '../stok-hareketleri/sto
 import { StokHareketleriService } from '../stok-hareketleri/stok-hareketleri.service';
 import { TasinirKartModel } from '../tasinir-kartlari/tasinir-kartlari.dto';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
-import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, SARF_FISI_DURUMLARI, SarfBirimSecenekModel, SarfFisiModel, SarfFisiSatirModel } from './sarf-fisleri.dto';
+import { AddSarfFisiSatirRequest, CreateSarfFisiRequest, IptalSarfFisiRequest, SARF_FISI_DURUMLARI, SarfBirimSecenekModel, SarfFisiModel, SarfFisiSatirModel } from './sarf-fisleri.dto';
 import { SarfFisleriService } from './sarf-fisleri.service';
 
 @Component({
@@ -69,6 +69,7 @@ export class SarfFisleriPage implements OnInit {
     saving = false;
     createDialogVisible = false;
     satirDialogVisible = false;
+    iptalDialogVisible = false;
     pageNumber = 1;
     pageSize = 10;
     totalRecords = 0;
@@ -83,6 +84,7 @@ export class SarfFisleriPage implements OnInit {
     createModel: CreateSarfFisiRequest = { depoId: 0, sarfTarihi: '', isletmeAlaniId: null, aciklama: null };
     createDate: Date | null = null;
     satirModel: AddSarfFisiSatirRequest = { tasinirKartId: 0, miktar: 1, stokLotId: null, stokSeriId: null, aciklama: null };
+    iptalModel: IptalSarfFisiRequest = { iptalAciklamasi: null };
     lotOptions: Array<{ label: string; value: number }> = [];
     seriOptions: Array<{ label: string; value: number }> = [];
 
@@ -360,20 +362,35 @@ export class SarfFisleriPage implements OnInit {
         });
     }
 
-    iptal(): void {
-        if (!this.selectedFisi?.id || !this.canCancel || !this.isDraft(this.selectedFisi)) {
+    openIptal(): void {
+        if (!this.selectedFisi?.id || !this.canCancel || (!this.isDraft(this.selectedFisi) && !this.isKesinlesti(this.selectedFisi))) {
             return;
         }
 
+        this.iptalModel = { iptalAciklamasi: null };
+        this.iptalDialogVisible = true;
+    }
+
+    iptal(): void {
+        if (!this.selectedFisi?.id || !this.canCancel || (!this.isDraft(this.selectedFisi) && !this.isKesinlesti(this.selectedFisi))) {
+            return;
+        }
+
+        const wasDraft = this.isDraft(this.selectedFisi);
         this.saving = true;
-        this.service.iptal(this.selectedFisi.id).pipe(finalize(() => {
+        this.service.iptal(this.selectedFisi.id, this.iptalModel).pipe(finalize(() => {
             this.saving = false;
             this.cdr.detectChanges();
         })).subscribe({
             next: (item) => {
+                this.iptalDialogVisible = false;
                 this.selectedFisi = item;
                 this.load(this.pageNumber, this.pageSize);
-                this.messageService.add({ severity: UiSeverity.Success, summary: 'Başarılı', detail: 'Sarf fişi iptal edildi.' });
+                this.messageService.add({
+                    severity: UiSeverity.Success,
+                    summary: 'Başarılı',
+                    detail: wasDraft ? 'Sarf fişi iptal edildi.' : 'Sarf fişi ters hareketlerle geri alındı.'
+                });
             },
             error: (error: unknown) => this.showError(error)
         });
@@ -401,6 +418,10 @@ export class SarfFisleriPage implements OnInit {
 
     isDraft(row: Pick<SarfFisiModel, 'durum'>): boolean {
         return row.durum === 'Taslak';
+    }
+
+    isKesinlesti(row: Pick<SarfFisiModel, 'durum'>): boolean {
+        return row.durum === 'Kesinlesti';
     }
 
     getSelectedKart(): TasinirKartModel | undefined {

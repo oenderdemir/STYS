@@ -101,6 +101,11 @@ public class KantinSatisController : UIController
     public async Task<ActionResult<KantinSatisDto>> Kesinlestir(int id, CancellationToken cancellationToken)
         => Ok(await _service.KesinlestirAsync(id, cancellationToken));
 
+    [HttpPost("{id:int}/iptal")]
+    [Permission(StructurePermissions.KantinSatisYonetimi.Cancel)]
+    public async Task<ActionResult<KantinSatisDto>> Iptal(int id, [FromBody] CancelKantinSatisRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.IptalEtAsync(id, request.Aciklama, cancellationToken));
+
     [HttpPost("{id:int}/muhasebe-fisi-olustur")]
     [Permission(StructurePermissions.KantinSatisYonetimi.Create)]
     public async Task<ActionResult<KantinSatisDto>> MuhasebeFisiOlustur(int id, CancellationToken cancellationToken)

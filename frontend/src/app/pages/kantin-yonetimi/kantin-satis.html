@@ -359,6 +359,15 @@
                                                 class="p-button-text"
                                                 (click)="muhasebelestir(satis)">
                                             </button>
+                                            <button
+                                                *ngIf="canIptalEt(satis)"
+                                                pButton
+                                                type="button"
+                                                label="İptal Et"
+                                                severity="danger"
+                                                class="p-button-text"
+                                                (click)="openIptalDialog(satis)">
+                                            </button>
                                         </td>
                                     </tr>
                                 </ng-template>
@@ -424,6 +433,30 @@
                                     (click)="muhasebelestir(selectedHistory)">
                                 </button>
 
+                                <button
+                                    *ngIf="canIptalEt(selectedHistory)"
+                                    pButton
+                                    type="button"
+                                    label="Satışı İptal Et"
+                                    icon="pi pi-times"
+                                    severity="danger"
+                                    (click)="openIptalDialog(selectedHistory)">
+                                </button>
+
+                                <div *ngIf="selectedHistory.durum === 'IptalEdildi'" class="summary-box">
+                                    <div class="summary-box-label">İptal Bilgisi</div>
+                                    <div class="mt-2 flex flex-column gap-2">
+                                        <div class="flex justify-content-between gap-3">
+                                            <span>İptal Tarihi</span>
+                                            <strong>{{ selectedHistory.iptalTarihi ? (selectedHistory.iptalTarihi | date:'dd.MM.yyyy HH:mm') : '-' }}</strong>
+                                        </div>
+                                        <div class="flex justify-content-between gap-3">
+                                            <span>İptal Açıklaması</span>
+                                            <strong>{{ selectedHistory.iptalAciklamasi ?? '-' }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="detail-stack">
                                     <div *ngFor="let odeme of selectedHistory.odemeler" class="summary-box">
                                         <div class="summary-box-label">{{ odeme.odemeYontemi }}</div>
@@ -471,3 +504,22 @@
         <span>Geçmiş listesinde bir satış seçildiğinde ödeme ve satır dökümü burada görünür.</span>
     </div>
 </ng-template>
+
+<p-dialog [(visible)]="showIptalDialog" [modal]="true" [style]="{ width: '34rem', maxWidth: '94vw' }" header="Satışı İptal Et">
+    <div class="flex flex-column gap-3">
+        <p>
+            <strong>#{{ iptalSatis?.id }}</strong> numaralı kesinleşmiş satış tamamen iptal edilecektir.
+            Stok, tahsilat, POS valör ve varsa muhasebe kayıtları geri alınır.
+        </p>
+        <div class="field-stack">
+            <label class="field-label" for="iptalAciklama">İptal Açıklaması (zorunlu)</label>
+            <textarea id="iptalAciklama" pTextarea [(ngModel)]="iptalAciklama" rows="4" class="w-full"></textarea>
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <div class="flex justify-content-end gap-2">
+            <button pButton type="button" label="Vazgeç" severity="secondary" (click)="showIptalDialog = false"></button>
+            <button pButton type="button" label="İptal Et" severity="danger" [disabled]="!iptalAciklama.trim()" (click)="confirmIptal()"></button>
+        </div>
+    </ng-template>
+</p-dialog>

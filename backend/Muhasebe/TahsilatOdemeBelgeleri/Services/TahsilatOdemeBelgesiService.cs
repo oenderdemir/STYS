@@ -224,19 +224,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
                 throw new BaseException("Tahsilat/ödeme belgesi zaten iptal edilmiş.", 400);
             }
 
-            await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, cancellationToken);
-
-            // POS valor kaydi varsa (kredi karti disi odemelerde no-op) iptal zincirine dahil
-            // edilir - Aktarildi ise once valor transfer fisinin ters kaydi olusturulur.
-            await _posTahsilatValorSnapshotService.IptalEtAsync(id, cancellationToken);
-
-            if (await HasCariHareketAsync(id))
-            {
-                await _cariHareketKapamaService.GeriAlAsync(id, cancellationToken);
-            }
-
-            existing.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await IptalEtCoreAsync(existing, cancellationToken);
 
             if (ownsTransaction && transaction is not null)
             {
@@ -252,6 +240,59 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             throw;
         }
     }
+
+    /// <summary>
+    /// Kantin Satis workflow'u tarafindan, satis iptali sirasinda cagrilan kontrollu iptal metodu.
+    /// Aktif bir ambient transaction bekler (kendi transaction'ini acmaz); belge source'unun
+    /// expectedKaynakModul/expectedKaynakId ile birebir eslesmesini dogrular ve public ownership
+    /// guard'ini bypass ederek IptalEtAsync core davranisini reuse eder. Zaten iptal ise idempotent
+    /// no-op'tur (ikinci ters kayit/valor islemi URETILMEZ).
+    /// </summary>
+    public async Task IptalEtManagedSourceWithinCurrentTransactionAsync(
+        int id,
+        string expectedKaynakModul,
+        int expectedKaynakId,
+        CancellationToken cancellationToken = default)
+    {
+        if (_dbContext.Database.CurrentTransaction is null)
+        {
+            throw new BaseException("Bu işlem aktif bir transaction içinde çalıştırılmalıdır.", 500);
+        }
+
+        var existing = await _repository.GetByIdAsync(id, q => q.Include(x => x.CariKart))
+            ?? throw new BaseException("Tahsilat/ödeme belgesi bulunamadı.", 404);
+
+        if (!string.Equals(existing.KaynakModul, expectedKaynakModul, StringComparison.Ordinal)
+            || existing.KaynakId != expectedKaynakId)
+        {
+            throw new BaseException("Tahsilat belgesi beklenen kaynak ile eşleşmiyor.", 400);
+        }
+
+        if (existing.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
+        {
+            return;
+        }
+
+        await IptalEtCoreAsync(existing, cancellationToken);
+    }
+
+    private async Task IptalEtCoreAsync(TahsilatOdemeBelgesi existing, CancellationToken cancellationToken)
+    {
+        await EnsureOpenPeriodAsync(existing.CariKartId, existing.BelgeTarihi, cancellationToken);
+
+        // POS valor kaydi varsa (kredi karti disi odemelerde no-op) iptal zincirine dahil
+        // edilir - Aktarildi ise once valor transfer fisinin ters kaydi olusturulur.
+        await _posTahsilatValorSnapshotService.IptalEtAsync(existing.Id, cancellationToken);
+
+        if (await HasCariHareketAsync(existing.Id))
+        {
+            await _cariHareketKapamaService.GeriAlAsync(existing.Id, cancellationToken);
+        }
+
+        existing.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
 
     public async Task IptalGeriAlAsync(int id, CancellationToken cancellationToken = default)
     {

@@ -2728,6 +2728,10 @@ public class StysAppDbContext : DbContext
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [StokHareketId] IS NOT NULL");
 
+            entity.HasIndex(x => x.IptalStokHareketId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [IptalStokHareketId] IS NOT NULL");
+
             entity.HasOne(x => x.KantinSatis)
                 .WithMany(x => x.Satirlar)
                 .HasForeignKey(x => x.KantinSatisId)
@@ -2756,6 +2760,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.StokHareket)
                 .WithMany()
                 .HasForeignKey(x => x.StokHareketId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.IptalStokHareket)
+                .WithMany()
+                .HasForeignKey(x => x.IptalStokHareketId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

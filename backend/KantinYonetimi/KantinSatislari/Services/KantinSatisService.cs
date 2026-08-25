@@ -11,16 +11,19 @@ using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
 using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.MuhasebeFisleri.Services;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Services;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
 using STYS.Muhasebe.TasinirKartlari.Entities;
 using STYS.Muhasebe.TasinirKartlari.Services;
 using TOD.Platform.Persistence.Rdbms.Services;
+using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
 using System.Data;
 
@@ -29,12 +32,16 @@ namespace STYS.KantinYonetimi.KantinSatislari.Services;
 public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, int>, IKantinSatisService
 {
     private const string KantinSatisKaynakModulu = "KantinSatisSatir";
+    private const string KantinSatisIptalKaynakModulu = "KantinSatisIptal";
 
     private readonly StysAppDbContext _dbContext;
     private readonly IKantinSatisRepository _repository;
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly IStokHareketService _stokHareketService;
     private readonly ITahsilatOdemeBelgesiService _tahsilatOdemeBelgesiService;
+    private readonly IMuhasebeFisService _muhasebeFisService;
+    private readonly IStokMaliyetKatmaniRestoreService _stokMaliyetKatmaniRestoreService;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IMapper _mapper;
 
     public KantinSatisService(
@@ -43,6 +50,9 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         IUserAccessScopeService userAccessScopeService,
         IStokHareketService stokHareketService,
         ITahsilatOdemeBelgesiService tahsilatOdemeBelgesiService,
+        IMuhasebeFisService muhasebeFisService,
+        IStokMaliyetKatmaniRestoreService stokMaliyetKatmaniRestoreService,
+        ICurrentUserAccessor currentUserAccessor,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -51,6 +61,9 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         _userAccessScopeService = userAccessScopeService;
         _stokHareketService = stokHareketService;
         _tahsilatOdemeBelgesiService = tahsilatOdemeBelgesiService;
+        _muhasebeFisService = muhasebeFisService;
+        _stokMaliyetKatmaniRestoreService = stokMaliyetKatmaniRestoreService;
+        _currentUserAccessor = currentUserAccessor;
         _mapper = mapper;
     }
 
@@ -381,6 +394,85 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
 
             satis.Durum = KantinSatisDurumlari.Kesinlesti;
             satis.KesinlesmeTarihi = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<KantinSatisDto> IptalEtAsync(int satisId, string aciklama, CancellationToken cancellationToken = default)
+    {
+        var normalizedAciklama = NormalizeOptional(aciklama, 1024);
+        if (string.IsNullOrWhiteSpace(normalizedAciklama))
+        {
+            throw new BaseException("Satış iptali için açıklama zorunludur.", 400);
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            var satis = await _dbContext.KantinSatislar
+                .Include(x => x.Kantin)
+                .Include(x => x.SatisNoktasi)
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                    .ThenInclude(x => x.StokHareket)
+                .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+                    .ThenInclude(x => x.TahsilatOdemeBelgesi)
+                .FirstOrDefaultAsync(x => x.Id == satisId && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
+
+            await EnsureTesisAccessAsync(satis.TesisId, cancellationToken);
+
+            if (string.Equals(satis.Durum, KantinSatisDurumlari.IptalEdildi, StringComparison.Ordinal))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return await GetRequiredDtoAsync(satis.Id, cancellationToken);
+            }
+
+            if (!string.Equals(satis.Durum, KantinSatisDurumlari.Kesinlesti, StringComparison.Ordinal))
+            {
+                throw new BaseException("Yalnızca kesinleşmiş satışlar iptal edilebilir.", 400);
+            }
+
+            await ValidateIptalOnKosullariAsync(satis, cancellationToken);
+
+            var kantin = satis.Kantin ?? throw new BaseException("Kantin satışına bağlı kantin bulunamadı.", 400);
+            var iptalZamani = DateTime.UtcNow;
+
+            foreach (var satir in satis.Satirlar.OrderBy(x => x.Id))
+            {
+                var originalMovement = satir.StokHareket
+                    ?? throw new BaseException("Satış satırına bağlı stok hareketi bulunamadı.", 400);
+
+                var reversal = await _stokHareketService.AddWithinCurrentTransactionAsync(
+                    BuildIptalStokHareketDto(kantin, satis, satir, originalMovement, iptalZamani),
+                    cancellationToken);
+
+                await _stokMaliyetKatmaniRestoreService.RestoreLayeredCostIfNeededAsync(originalMovement, reversal, cancellationToken);
+                satir.IptalStokHareketId = reversal.Id;
+            }
+
+            foreach (var odeme in satis.Odemeler.OrderBy(x => x.Id))
+            {
+                await _tahsilatOdemeBelgesiService.IptalEtManagedSourceWithinCurrentTransactionAsync(
+                    odeme.TahsilatOdemeBelgesiId!.Value,
+                    MuhasebeKaynakModulleri.KantinSatisOdeme,
+                    odeme.Id,
+                    cancellationToken);
+            }
+
+            await MuhasebeFisiniKapatAsync(satis, normalizedAciklama, cancellationToken);
+
+            satis.Durum = KantinSatisDurumlari.IptalEdildi;
+            satis.IptalTarihi = iptalZamani;
+            satis.IptalAciklamasi = normalizedAciklama;
+            satis.IptalEdenKullaniciId = _currentUserAccessor.GetCurrentUserId()?.ToString();
+
             await _dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return await GetRequiredDtoAsync(satis.Id, cancellationToken);
@@ -832,6 +924,141 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         satir.SeriNo = projection.SeriNo;
     }
 
+    private async Task ValidateIptalOnKosullariAsync(KantinSatis satis, CancellationToken cancellationToken)
+    {
+        if (satis.Satirlar.Count == 0)
+        {
+            throw new BaseException("İptal için aktif satış satırı bulunmalıdır.", 400);
+        }
+
+        foreach (var satir in satis.Satirlar)
+        {
+            if (!satir.StokHareketId.HasValue)
+            {
+                throw new BaseException("Satış satırına bağlı stok hareketi bulunamadı.", 400);
+            }
+
+            if (satir.IptalStokHareketId.HasValue)
+            {
+                throw new BaseException("Satış satırı için daha önce iptal stok hareketi oluşturulmuş.", 400);
+            }
+
+            var originalMovement = satir.StokHareket;
+            if (originalMovement is null
+                || originalMovement.IsDeleted
+                || !string.Equals(originalMovement.Durum, StokHareketDurumlari.Aktif, StringComparison.Ordinal)
+                || !string.Equals(originalMovement.KaynakModul, KantinSatisKaynakModulu, StringComparison.Ordinal)
+                || originalMovement.KaynakId != satir.Id)
+            {
+                throw new BaseException("Satış satırının kaynak stok hareketi bütünlüğü bozuk.", 400);
+            }
+
+            var existingReversal = await _dbContext.StokHareketleri
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    !x.IsDeleted &&
+                    x.Durum == StokHareketDurumlari.Aktif &&
+                    x.KaynakModul == KantinSatisIptalKaynakModulu &&
+                    x.KaynakId == satir.Id,
+                    cancellationToken);
+
+            if (existingReversal)
+            {
+                throw new BaseException("Satış satırı için daha önce iptal stok hareketi oluşturulmuş.", 400);
+            }
+        }
+
+        foreach (var odeme in satis.Odemeler)
+        {
+            if (!odeme.TahsilatOdemeBelgesiId.HasValue)
+            {
+                throw new BaseException("Tüm ödemeler için tahsilat belgesi bulunmalıdır.", 400);
+            }
+
+            var belge = odeme.TahsilatOdemeBelgesi;
+            if (belge is null
+                || belge.IsDeleted
+                || !string.Equals(belge.KaynakModul, MuhasebeKaynakModulleri.KantinSatisOdeme, StringComparison.Ordinal)
+                || belge.KaynakId != odeme.Id)
+            {
+                throw new BaseException("Ödemenin tahsilat belgesi bütünlüğü bozuk.", 400);
+            }
+        }
+
+        if (satis.MuhasebeFisId.HasValue)
+        {
+            var fis = await _dbContext.MuhasebeFisler
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == satis.MuhasebeFisId.Value && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Satışa bağlı muhasebe fişi bulunamadı.", 400);
+
+            if (!string.Equals(fis.KaynakModul, MuhasebeKaynakModulleri.KantinSatis, StringComparison.Ordinal)
+                || fis.KaynakId != satis.Id
+                || fis.TesisId != satis.TesisId)
+            {
+                throw new BaseException("Satışa bağlı muhasebe fişi bütünlüğü bozuk.", 400);
+            }
+        }
+    }
+
+    private async Task MuhasebeFisiniKapatAsync(KantinSatis satis, string aciklama, CancellationToken cancellationToken)
+    {
+        if (!satis.MuhasebeFisId.HasValue)
+        {
+            return;
+        }
+
+        var fis = await _dbContext.MuhasebeFisler
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == satis.MuhasebeFisId.Value && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Satışa bağlı muhasebe fişi bulunamadı.", 400);
+
+        if (!string.Equals(fis.KaynakModul, MuhasebeKaynakModulleri.KantinSatis, StringComparison.Ordinal)
+            || fis.KaynakId != satis.Id)
+        {
+            throw new BaseException("Satışa bağlı muhasebe fişi bütünlüğü bozuk.", 400);
+        }
+
+        switch (fis.Durum)
+        {
+            case MuhasebeFisDurumlari.Taslak:
+                await _muhasebeFisService.KantinSatisFisiniSilAsync(fis.Id, satis.Id, satis.TesisId, cancellationToken);
+                return;
+
+            case MuhasebeFisDurumlari.Onayli:
+            case MuhasebeFisDurumlari.Iptal:
+                await _muhasebeFisService.KantinSatisFisiIptalEtAsync(fis.Id, satis.Id, satis.TesisId, aciklama, cancellationToken);
+                return;
+
+            default:
+                throw new BaseException($"Satışa bağlı muhasebe fişi beklenmeyen bir durumda ({fis.Durum}).", 400);
+        }
+    }
+
+    private static StokHareketDto BuildIptalStokHareketDto(Kantin kantin, KantinSatis satis, KantinSatisSatir satir, StokHareket originalMovement, DateTime iptalZamani)
+        => new()
+        {
+            DepoId = kantin.DepoId,
+            TasinirKartId = satir.TasinirKartId,
+            HareketTarihi = iptalZamani,
+            HareketTipi = StokHareketTipleri.Giris,
+            Miktar = satir.Miktar,
+            BirimFiyat = originalMovement.BirimFiyat,
+            Tutar = originalMovement.Tutar,
+            BelgeTarihi = iptalZamani,
+            Aciklama = $"Kantin Satışı #{satis.Id} iptal - {satir.StokKodu} {satir.UrunAdi}",
+            KaynakModul = KantinSatisIptalKaynakModulu,
+            KaynakId = satir.Id,
+            Durum = StokHareketDurumlari.Aktif,
+            KdvUygulamaTipi = (int)KdvUygulamaTipi.KdvKapsamDisi,
+            KdvOrani = 0,
+            KdvTutari = 0,
+            MaliyetBirimFiyat = originalMovement.MaliyetBirimFiyat,
+            MaliyetTutari = originalMovement.MaliyetTutari,
+            StokLotId = originalMovement.StokLotId,
+            StokSeriId = originalMovement.StokSeriId
+        };
+
     private static StokHareketDto BuildStokHareketDto(Kantin kantin, KantinSatis satis, KantinSatisSatir satir)
         => new()
         {
@@ -917,6 +1144,8 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             MuhasebeFisNo = entity.MuhasebeFis?.FisNo,
             MuhasebeFisDurumu = entity.MuhasebeFis?.Durum,
             MuhasebeFisOlusturmaTarihi = entity.MuhasebeFisOlusturmaTarihi,
+            IptalTarihi = entity.IptalTarihi,
+            IptalAciklamasi = entity.IptalAciklamasi,
             KantinKod = entity.Kantin?.Kod,
             KantinAd = entity.Kantin?.Ad,
             SatisNoktasiKod = entity.SatisNoktasi?.Kod,

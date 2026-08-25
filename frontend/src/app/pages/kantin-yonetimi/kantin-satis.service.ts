@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, CreateKantinSatisRequest, KantinSatisBarkodUrunModel, KantinSatisModel } from './kantin-satis.dto';
+import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, CancelKantinSatisRequest, CreateKantinSatisRequest, KantinSatisBarkodUrunModel, KantinSatisModel } from './kantin-satis.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KantinSatisService {
@@ -82,6 +82,12 @@ export class KantinSatisService {
         return this.http
             .post<ApiResponse<KantinSatisModel>>(`${this.apiBaseUrl}/ui/kantin-satis/${satisId}/kesinlestir`, {})
             .pipe(map(this.unwrap<KantinSatisModel>('Satış kesinleştirilemedi.')));
+    }
+
+    iptal(satisId: number, request: CancelKantinSatisRequest): Observable<KantinSatisModel> {
+        return this.http
+            .post<ApiResponse<KantinSatisModel>>(`${this.apiBaseUrl}/ui/kantin-satis/${satisId}/iptal`, request)
+            .pipe(map(this.unwrap<KantinSatisModel>('Satış iptal edilemedi.')));
     }
 
     muhasebeFisiOlustur(satisId: number): Observable<KantinSatisModel> {

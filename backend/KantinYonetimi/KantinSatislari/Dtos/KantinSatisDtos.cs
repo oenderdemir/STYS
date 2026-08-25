@@ -19,6 +19,9 @@ public class KantinSatisDto : BaseRdbmsDto<int>
     public string? MuhasebeFisNo { get; set; }
     public string? MuhasebeFisDurumu { get; set; }
     public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
+    public DateTime? IptalTarihi { get; set; }
+    public string? IptalAciklamasi { get; set; }
+    public string? IptalEdenKullaniciId { get; set; }
     public string? KantinKod { get; set; }
     public string? KantinAd { get; set; }
     public string? SatisNoktasiKod { get; set; }
@@ -86,6 +89,13 @@ public class UpdateKantinSatisRequest
 
     [StringLength(1024)]
     public string? Aciklama { get; set; }
+}
+
+public class CancelKantinSatisRequest
+{
+    [Required]
+    [StringLength(1024)]
+    public string Aciklama { get; set; } = string.Empty;
 }
 
 public class AddKantinSatisSatirRequest

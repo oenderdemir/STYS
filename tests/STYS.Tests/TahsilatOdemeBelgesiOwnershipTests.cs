@@ -382,6 +382,8 @@ public class TahsilatOdemeBelgesiOwnershipTests
         public Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniGeriAlAsync(int tersKayitFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<MuhasebeFisIptalSonucDto> SatisBelgesiFisiIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuhasebeFisIptalSonucDto> KantinSatisFisiIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task KantinSatisFisiniSilAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();

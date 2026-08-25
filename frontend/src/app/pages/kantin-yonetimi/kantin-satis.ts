@@ -6,12 +6,14 @@ import { finalize } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
+import { DialogModule } from 'primeng/dialog';
 import { DividerModule } from 'primeng/divider';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { SelectModule } from 'primeng/select';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
+import { TextareaModule } from 'primeng/textarea';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
@@ -32,12 +34,14 @@ import { KantinSatisService } from './kantin-satis.service';
         FormsModule,
         ButtonModule,
         CardModule,
+        DialogModule,
         DividerModule,
         InputNumberModule,
         InputTextModule,
         SelectModule,
         TableModule,
         TagModule,
+        TextareaModule,
         ToastModule,
         ToolbarModule,
         MuhasebeTesisContextBarComponent
@@ -356,6 +360,9 @@ export class KantinSatisPage implements OnInit {
     satislar: KantinSatisModel[] = [];
     currentDraft: KantinSatisModel | null = null;
     selectedHistory: KantinSatisModel | null = null;
+    showIptalDialog = false;
+    iptalSatis: KantinSatisModel | null = null;
+    iptalAciklama = '';
     odemeHesaplari: Record<string, KantinOdemeHesapOption[]> = {};
     yeniOdeme: AddKantinSatisOdemeRequest = { odemeYontemi: KANTIN_ODEME_YONTEMLERI.Nakit, tutar: 0, kasaBankaHesapId: null };
     lotOptions: Record<number, StokLotBakiyeModel[]> = {};
@@ -444,6 +451,10 @@ export class KantinSatisPage implements OnInit {
             && satis.durum === 'Kesinlesti'
             && !satis.muhasebeFisId
             && !this.saving;
+    }
+
+    canIptalEt(satis: KantinSatisModel | null | undefined): boolean {
+        return !!satis?.id && satis.durum === 'Kesinlesti' && !this.saving;
     }
 
     loadKantinler(): void {
@@ -721,6 +732,41 @@ export class KantinSatisPage implements OnInit {
                     this.selectedHistory = result;
                     this.showSuccess(`Muhasebe fişi oluşturuldu: ${result.muhasebeFisNo ?? '#' + result.muhasebeFisId}`);
                     this.loadSatisHistory();
+                },
+                error: (error: unknown) => this.showError(error)
+            });
+    }
+
+    openIptalDialog(satis: KantinSatisModel | null | undefined): void {
+        if (!satis?.id || !this.canIptalEt(satis)) {
+            return;
+        }
+
+        this.iptalSatis = satis;
+        this.iptalAciklama = '';
+        this.showIptalDialog = true;
+    }
+
+    confirmIptal(): void {
+        const satis = this.iptalSatis;
+        if (!satis?.id || !this.iptalAciklama.trim()) {
+            return;
+        }
+
+        this.saving = true;
+        this.satisService.iptal(satis.id, { aciklama: this.iptalAciklama.trim() })
+            .pipe(finalize(() => {
+                this.saving = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (result) => {
+                    this.showIptalDialog = false;
+                    this.iptalSatis = null;
+                    this.iptalAciklama = '';
+                    this.selectedHistory = result;
+                    this.loadSatisHistory();
+                    this.showSuccess(`Satış iptal edildi. Satış no: ${result.id}`);
                 },
                 error: (error: unknown) => this.showError(error)
             });

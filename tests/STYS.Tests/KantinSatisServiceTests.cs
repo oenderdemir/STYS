@@ -8,6 +8,7 @@ using STYS.AccessScope;
 using STYS.Iller.Entities;
 using STYS.Infrastructure.EntityFramework;
 using STYS.KantinYonetimi.KantinSatislari.Dtos;
+using STYS.KantinYonetimi.KantinSatislari.Entities;
 using STYS.KantinYonetimi.KantinSatislari.Mapping;
 using STYS.KantinYonetimi.KantinSatislari.Repositories;
 using STYS.KantinYonetimi.KantinSatislari.Services;
@@ -23,13 +24,20 @@ using STYS.Muhasebe.KasaHareketleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
 using STYS.Muhasebe.MuhasebeDonemleri.Services;
+using STYS.Muhasebe.MuhasebeFisleri.Dtos;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
+using STYS.Muhasebe.MuhasebeFisleri.Repositories;
+using STYS.Muhasebe.MuhasebeFisleri.Services;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Services;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
 using STYS.Muhasebe.PosTahsilatValorleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Dtos;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.StokHareketleri.Services;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Dtos;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Entities;
+using STYS.Muhasebe.StokMaliyetPolitikalari.Services;
 using STYS.Muhasebe.StokLotlari.Dtos;
 using STYS.Muhasebe.StokLotlari.Entities;
 using STYS.Muhasebe.StokSerileri.Entities;
@@ -42,6 +50,7 @@ using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Entities;
 using STYS.Muhasebe.TasinirKodMuhasebeHesapEslemeleri.Services;
 using STYS.Muhasebe.TasinirKodlari.Entities;
 using STYS.Tesisler.Entities;
+using TOD.Platform.AspNetCore.Logging;
 using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Security.Auth.Services;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -955,6 +964,278 @@ public class KantinSatisServiceTests
         Assert.True(migrationsAssembly.Migrations.ContainsKey("20260825072325_AddKantinSatisNoktalari"));
     }
 
+    private static async Task<KantinSatisDto> CreateKesinlesmisNakitSatisAsync(KantinSatisService service)
+    {
+        var satis = await CreateDraftWithSingleLineAsync(service);
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 50 });
+        return await service.KesinlestirAsync(satis.Id!.Value);
+    }
+
+    [Fact]
+    public async Task Iptal_NakitSatis_StokGeriGelirVeTahsilatIptalOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(service);
+
+        var result = await service.IptalEtAsync(satis.Id!.Value, "Müşteri iptal istedi");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, result.Durum);
+        Assert.NotNull(result.IptalTarihi);
+        Assert.Equal("Müşteri iptal istedi", result.IptalAciklamasi);
+
+        var reversal = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisIptal");
+        Assert.Equal(StokHareketTipleri.Giris, reversal.HareketTipi);
+        Assert.Equal(1m, reversal.Miktar);
+        Assert.Equal(10, reversal.DepoId);
+
+        var belge = await dbContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, belge.Durum);
+    }
+
+    [Fact]
+    public async Task Iptal_KrediKarti_ValorVeTahsilatIptalOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, KasaBankaHesapId = 102, Tutar = 75 });
+        await service.KesinlestirAsync(satis.Id!.Value);
+
+        var result = await service.IptalEtAsync(satis.Id!.Value, "İptal");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, result.Durum);
+        var belge = await dbContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Iptal, belge.Durum);
+        var valor = await dbContext.PosTahsilatValorleri.SingleAsync();
+        Assert.Equal(PosTahsilatValorDurumlari.Iptal, valor.Durum);
+    }
+
+    [Fact]
+    public async Task Iptal_SplitPayment_IkiTahsilatDaIptalOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 5 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 100 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 150 });
+        await service.KesinlestirAsync(satis.Id!.Value);
+
+        var result = await service.IptalEtAsync(satis.Id!.Value, "İptal");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, result.Durum);
+        Assert.Equal(2, await dbContext.TahsilatOdemeBelgeleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme && x.Durum == TahsilatOdemeBelgeDurumlari.Iptal));
+    }
+
+    [Fact]
+    public async Task Iptal_MuhasebeFisTaslak_SoftDeleteOlurVeTersKayitYok()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var muhasebeFisService = CreateMuhasebeFisService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(satisService);
+        var fisli = await muhasebeFisService.MuhasebeFisiOlusturAsync(satis.Id!.Value);
+        var fisId = fisli.MuhasebeFisId!.Value;
+
+        var service = CreateService(dbContext, muhasebeFisService: new FakeMuhasebeFisService(dbContext));
+        var result = await service.IptalEtAsync(satis.Id!.Value, "İptal");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, result.Durum);
+        var fis = await dbContext.MuhasebeFisler.IgnoreQueryFilters().SingleAsync(x => x.Id == fisId);
+        Assert.True(fis.IsDeleted);
+        Assert.False(await dbContext.MuhasebeFisler.IgnoreQueryFilters().AnyAsync(x => x.Durum == MuhasebeFisDurumlari.TersKayit));
+    }
+
+    [Fact]
+    public async Task Iptal_MuhasebeFisOnayli_TersKayitOlusur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var muhasebeFisService = CreateMuhasebeFisService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(satisService);
+        var fisli = await muhasebeFisService.MuhasebeFisiOlusturAsync(satis.Id!.Value);
+        var fisId = fisli.MuhasebeFisId!.Value;
+
+        var fis = await dbContext.MuhasebeFisler.SingleAsync(x => x.Id == fisId);
+        fis.Durum = MuhasebeFisDurumlari.Onayli;
+        fis.YevmiyeNo = 1;
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, muhasebeFisService: new FakeMuhasebeFisService(dbContext));
+        var result = await service.IptalEtAsync(satis.Id!.Value, "İptal");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, result.Durum);
+        var original = await dbContext.MuhasebeFisler.SingleAsync(x => x.Id == fisId);
+        Assert.Equal(MuhasebeFisDurumlari.Iptal, original.Durum);
+        Assert.NotNull(original.TersKayitFisId);
+        var tersFis = await dbContext.MuhasebeFisler.SingleAsync(x => x.IptalEdilenFisId == fisId);
+        Assert.Equal(MuhasebeFisDurumlari.TersKayit, tersFis.Durum);
+    }
+
+    [Fact]
+    public async Task Iptal_FinansalAdimHata_ButunMutationRollbackOlur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var createService = CreateService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(createService);
+
+        var cancelService = CreateService(dbContext, tahsilatService: new FakeTahsilatOdemeBelgesiService(dbContext, iptaldaHataFirlat: true));
+        await Assert.ThrowsAsync<BaseException>(() => cancelService.IptalEtAsync(satis.Id!.Value, "İptal"));
+
+        // InMemory provider gerçek transaction rollback'i simüle edemez (stok ters hareketi kaydedilir),
+        // bu yüzden burada transactional bağlamda KESİN olarak yazılmamış olan alanlar doğrulanır:
+        // satış Durum'u ve satırın IptalStokHareketId'si son SaveChanges'a kadar ertelendiğinden iptal
+        // adımındaki hata nedeniyle ASLA kalıcılaşmaz.
+        dbContext.ChangeTracker.Clear();
+
+        var persisted = await createService.GetByIdAsync(satis.Id!.Value);
+        Assert.Equal(KantinSatisDurumlari.Kesinlesti, persisted!.Durum);
+
+        var satir = await dbContext.KantinSatisSatirlari.SingleAsync(x => x.KantinSatisId == satis.Id!.Value);
+        Assert.Null(satir.IptalStokHareketId);
+
+        var belge = await dbContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme);
+        Assert.Equal(TahsilatOdemeBelgeDurumlari.Aktif, belge.Durum);
+    }
+
+    [Fact]
+    public async Task Iptal_IkinciCagri_YeniReversalUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(service);
+
+        await service.IptalEtAsync(satis.Id!.Value, "İptal");
+        var reversalCount = await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == "KantinSatisIptal");
+        var tahsilatIptalCount = await dbContext.TahsilatOdemeBelgeleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme && x.Durum == TahsilatOdemeBelgeDurumlari.Iptal);
+
+        var second = await service.IptalEtAsync(satis.Id!.Value, "İptal");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, second.Durum);
+        Assert.Equal(reversalCount, await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == "KantinSatisIptal"));
+        Assert.Equal(tahsilatIptalCount, await dbContext.TahsilatOdemeBelgeleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisOdeme && x.Durum == TahsilatOdemeBelgeDurumlari.Iptal));
+    }
+
+    [Fact]
+    public async Task Iptal_FifoKatmanGeriYukleme_OrijinalMaliyetleYeniLayerOlusturur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+
+        dbContext.StokMaliyetKatmanlari.Add(new StokMaliyetKatmani
+        {
+            Id = 1,
+            TesisId = 1,
+            DepoId = 10,
+            TasinirKartId = 1,
+            KaynakStokHareketId = 1,
+            KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO,
+            GirisTarihi = new DateTime(2026, 8, 1),
+            IlkMiktar = 10,
+            KalanMiktar = 7,
+            BirimMaliyet = 10m
+        });
+        dbContext.StokMaliyetKatmanTuketimleri.Add(new StokMaliyetKatmanTuketimi
+        {
+            Id = 1,
+            CikisStokHareketId = 99,
+            StokMaliyetKatmaniId = 1,
+            Miktar = 3,
+            BirimMaliyet = 10m,
+            Tutar = 30m
+        });
+        await dbContext.SaveChangesAsync();
+
+        var restoreService = new StokMaliyetKatmaniRestoreService(dbContext);
+        var original = new StokHareket { Id = 99, DepoId = 10, TasinirKartId = 1 };
+        var reversal = new StokHareketDto { Id = 1000, DepoId = 10, TasinirKartId = 1, HareketTarihi = DateTime.UtcNow };
+
+        await restoreService.RestoreLayeredCostIfNeededAsync(original, reversal);
+
+        var katman = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.Id == 1);
+        Assert.Equal(7m, katman.KalanMiktar);
+
+        var yeniLayer = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KaynakStokHareketId == 1000);
+        Assert.Equal(3m, yeniLayer.IlkMiktar);
+        Assert.Equal(10m, yeniLayer.BirimMaliyet);
+        Assert.Equal(StokMaliyetYontemleri.FIFO, yeniLayer.MaliyetYontemi);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisKantinOwned_GenelUpdateDeleteIptalReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeFisler.Add(new MuhasebeFis
+        {
+            Id = 700,
+            TesisId = 1,
+            MaliYil = 2026,
+            Donem = 8,
+            FisNo = "2026-KNT-000001",
+            FisTarihi = new DateTime(2026, 8, 24),
+            FisTipi = MuhasebeFisTipleri.Mahsup,
+            KaynakModul = MuhasebeKaynakModulleri.KantinSatis,
+            KaynakId = 1,
+            Durum = MuhasebeFisDurumlari.Taslak,
+            ToplamBorc = 0,
+            ToplamAlacak = 0
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateRealMuhasebeFisService(dbContext);
+
+        var updateEx = await Assert.ThrowsAsync<BaseException>(() => service.UpdateAsync(new MuhasebeFisDto { Id = 700 }));
+        Assert.Equal("Kantin satış fişi satıştan bağımsız olarak güncellenemez. Satış iptal akışını kullanınız.", updateEx.Message);
+
+        var deleteEx = await Assert.ThrowsAsync<BaseException>(() => service.DeleteAsync(700));
+        Assert.Equal("Kantin satış fişi satıştan bağımsız olarak silinemez. Satış iptal akışını kullanınız.", deleteEx.Message);
+
+        var iptalEx = await Assert.ThrowsAsync<BaseException>(() => service.IptalEtAsync(700, "deneme"));
+        Assert.Contains("genel fiş iptali ile iptal edilemez", iptalEx.Message);
+    }
+
+    [Fact]
+    public async Task MuhasebeFisKantinOwned_OnaylaEngellenmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.MuhasebeFisler.Add(new MuhasebeFis
+        {
+            Id = 701,
+            TesisId = 1,
+            MaliYil = 2026,
+            Donem = 8,
+            FisNo = "2026-KNT-000002",
+            FisTarihi = new DateTime(2026, 8, 24),
+            FisTipi = MuhasebeFisTipleri.Mahsup,
+            KaynakModul = MuhasebeKaynakModulleri.KantinSatis,
+            KaynakId = 1,
+            Durum = MuhasebeFisDurumlari.Taslak,
+            ToplamBorc = 0,
+            ToplamAlacak = 0
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateRealMuhasebeFisService(dbContext);
+
+        // OnaylaAsync Kantin source guard'ı içermez; Kantin Taslak fişi genel muhasebe ekranından
+        // onaylanabilir olmalıdır. Burada farklı bir doğrulama hatası (ör. satır eksik) alınır ama
+        // "Kantin satış fişi" guard mesajı ASLA gelmemelidir.
+        var ex = await Record.ExceptionAsync(() => service.OnaylaAsync(701));
+        Assert.False(ex is BaseException baseException && baseException.Message.Contains("Kantin satış fişi"));
+    }
+
     private static async Task<KantinSatisDto> CreateDraftWithSingleLineAsync(KantinSatisService service)
     {
         var satis = await service.AddAsync(new KantinSatisDto
@@ -1167,7 +1448,12 @@ public class KantinSatisServiceTests
         };
     }
 
-    private static KantinSatisService CreateService(StysAppDbContext dbContext, DomainAccessScope? scope = null, ITahsilatOdemeBelgesiService? tahsilatService = null)
+    private static KantinSatisService CreateService(
+        StysAppDbContext dbContext,
+        DomainAccessScope? scope = null,
+        ITahsilatOdemeBelgesiService? tahsilatService = null,
+        IMuhasebeFisService? muhasebeFisService = null,
+        IStokMaliyetKatmaniRestoreService? stokMaliyetKatmaniRestoreService = null)
     {
         var mapperConfig = new MapperConfiguration(cfg =>
         {
@@ -1182,6 +1468,9 @@ public class KantinSatisServiceTests
             new FakeUserAccessScopeService(scope ?? DomainAccessScope.Unscoped()),
             new FakeStokHareketService(dbContext),
             tahsilatService ?? new FakeTahsilatOdemeBelgesiService(dbContext),
+            muhasebeFisService ?? new FakeMuhasebeFisService(dbContext),
+            stokMaliyetKatmaniRestoreService ?? new FakeStokMaliyetKatmaniRestoreService(),
+            new FakeCurrentUserAccessor(),
             mapper);
     }
 
@@ -1193,9 +1482,31 @@ public class KantinSatisServiceTests
             new FakeTasinirKodMuhasebeHesapEslemeService(dbContext),
             NullLogger<KantinSatisMuhasebeFisService>.Instance);
 
+    private static IMuhasebeFisService CreateRealMuhasebeFisService(StysAppDbContext dbContext)
+    {
+        var mapperConfig = new MapperConfiguration(cfg =>
+        {
+            cfg.AddMaps(typeof(KantinProfile).Assembly);
+            cfg.AddMaps(typeof(KantinSatisProfile).Assembly);
+        }, NullLoggerFactory.Instance);
+        var mapper = mapperConfig.CreateMapper();
+
+        return new MuhasebeFisService(
+            new MuhasebeFisRepository(dbContext, mapper),
+            mapper,
+            dbContext,
+            new FakeMuhasebeDonemService(),
+            new MuhasebeHesapBakiyeGuncellemeService(dbContext),
+            new FakeUserAccessScopeService(DomainAccessScope.Unscoped()),
+            new NoOpDomainOperationLogger());
+    }
+
     private sealed class FakeStokHareketService(StysAppDbContext dbContext) : IStokHareketService
     {
-        private int _nextId = 1000;
+        private async Task<int> NextStokHareketIdAsync(CancellationToken cancellationToken)
+            => await dbContext.StokHareketleri.AnyAsync(cancellationToken)
+                ? await dbContext.StokHareketleri.MaxAsync(x => x.Id, cancellationToken) + 1
+                : 1000;
 
         public async Task<StokHareketDto> AddWithinCurrentTransactionAsync(StokHareketDto dto, CancellationToken cancellationToken = default)
         {
@@ -1245,7 +1556,7 @@ public class KantinSatisServiceTests
 
             var entity = new StokHareket
             {
-                Id = _nextId++,
+                Id = await NextStokHareketIdAsync(cancellationToken),
                 DepoId = dto.DepoId,
                 TasinirKartId = dto.TasinirKartId,
                 HareketTarihi = dto.HareketTarihi,
@@ -1311,6 +1622,14 @@ public class KantinSatisServiceTests
         public Task<DomainAccessScope> GetCurrentScopeAsync(CancellationToken cancellationToken = default) => Task.FromResult(scope);
     }
 
+    private sealed class NoOpDomainOperationLogger : IDomainOperationLogger
+    {
+        public void Started(string eventName, object payload) { }
+        public void Completed(string eventName, object payload) { }
+        public void Warning(string eventName, object payload) { }
+        public void Failed(string eventName, Exception exception, object payload) { }
+    }
+
     private sealed class FakeMuhasebeDonemService : IMuhasebeDonemService
     {
         public Task<MuhasebeDonemDto?> GetAktifDonemAsync(int tesisId, DateTime tarih, CancellationToken cancellationToken = default)
@@ -1372,7 +1691,7 @@ public class KantinSatisServiceTests
         public Task<bool> AnyAsync(System.Linq.Expressions.Expression<Func<TasinirKodMuhasebeHesapEsleme, bool>> predicate, Func<IQueryable<TasinirKodMuhasebeHesapEsleme>, IQueryable<TasinirKodMuhasebeHesapEsleme>>? include = null) => throw new NotImplementedException();
     }
 
-    private sealed class FakeTahsilatOdemeBelgesiService(StysAppDbContext dbContext) : ITahsilatOdemeBelgesiService
+    private sealed class FakeTahsilatOdemeBelgesiService(StysAppDbContext dbContext, bool iptaldaHataFirlat = false) : ITahsilatOdemeBelgesiService
     {
         private int _nextId = 2000;
         private int _nextValorId = 4000;
@@ -1381,6 +1700,36 @@ public class KantinSatisServiceTests
         public Task IptalEtAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalGeriAlAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task ValidateOlusturmaAsync(int cariKartId, string belgeTipi, string odemeYontemi, string durum, DateTime belgeTarihi, int? kapatilacakCariHareketId, bool requireCariMuhasebeHesabi, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public async Task IptalEtManagedSourceWithinCurrentTransactionAsync(int id, string expectedKaynakModul, int expectedKaynakId, CancellationToken cancellationToken = default)
+        {
+            if (iptaldaHataFirlat)
+            {
+                throw new BaseException("Tahsilat iptal edilemedi.", 400);
+            }
+
+            var belge = await dbContext.TahsilatOdemeBelgeleri.SingleAsync(x => x.Id == id, cancellationToken);
+            if (!string.Equals(belge.KaynakModul, expectedKaynakModul, StringComparison.Ordinal) || belge.KaynakId != expectedKaynakId)
+            {
+                throw new BaseException("Tahsilat belgesi beklenen kaynak ile eşleşmiyor.", 400);
+            }
+
+            if (belge.Durum == TahsilatOdemeBelgeDurumlari.Iptal)
+            {
+                return;
+            }
+
+            belge.Durum = TahsilatOdemeBelgeDurumlari.Iptal;
+
+            var valor = await dbContext.PosTahsilatValorleri
+                .FirstOrDefaultAsync(x => x.TahsilatOdemeBelgesiId == id && !x.IsDeleted, cancellationToken);
+            if (valor is not null)
+            {
+                valor.Durum = PosTahsilatValorDurumlari.Iptal;
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
         public Task<IEnumerable<TahsilatOdemeBelgesiDto>> GetAllAsync(Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null) => throw new NotImplementedException();
         public Task<TahsilatOdemeBelgesiDto?> GetByIdAsync(int id, Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null) => throw new NotImplementedException();
         public Task<PagedResult<TahsilatOdemeBelgesiDto>> GetPagedAsync(PagedRequest request, System.Linq.Expressions.Expression<Func<TahsilatOdemeBelgesi, bool>>? predicate = null, Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null, Func<IQueryable<TahsilatOdemeBelgesi>, IOrderedQueryable<TahsilatOdemeBelgesi>>? orderBy = null) => throw new NotImplementedException();
@@ -1439,11 +1788,136 @@ public class KantinSatisServiceTests
         }
     }
 
+    private sealed class FakeStokMaliyetKatmaniRestoreService : IStokMaliyetKatmaniRestoreService
+    {
+        public Task RestoreLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto reversalMovement, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+    }
+
+    private sealed class FakeMuhasebeFisService(StysAppDbContext dbContext) : IMuhasebeFisService
+    {
+        private int _nextFisId = 5000;
+
+        public async Task<MuhasebeFisIptalSonucDto> KantinSatisFisiIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default)
+        {
+            var fis = await dbContext.MuhasebeFisler
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .SingleAsync(x => x.Id == muhasebeFisId, cancellationToken);
+
+            if (fis.KaynakModul != MuhasebeKaynakModulleri.KantinSatis || fis.KaynakId != beklenenKaynakId || fis.TesisId != beklenenTesisId)
+            {
+                throw new BaseException("Fiş bilgileri beklenenle eşleşmiyor, iptal reddedildi.", 400);
+            }
+
+            if (fis.Durum == MuhasebeFisDurumlari.Iptal)
+            {
+                var mevcut = await dbContext.MuhasebeFisler
+                    .SingleAsync(x => x.IptalEdilenFisId == fis.Id && x.Durum == MuhasebeFisDurumlari.TersKayit, cancellationToken);
+                return new MuhasebeFisIptalSonucDto { OrijinalFisId = fis.Id, TersKayitFisId = mevcut.Id, ZatenTersKayitliMi = true };
+            }
+
+            if (fis.Durum != MuhasebeFisDurumlari.Onayli)
+            {
+                throw new BaseException($"Fiş beklenmeyen bir durumda ({fis.Durum}).", 400);
+            }
+
+            var aktifSatirlar = fis.Satirlar.Where(s => !s.IsDeleted).ToList();
+            var tersFis = new MuhasebeFis
+            {
+                Id = _nextFisId++,
+                TesisId = fis.TesisId,
+                MaliYil = fis.MaliYil,
+                Donem = fis.Donem,
+                FisNo = "TERS-" + fis.FisNo,
+                YevmiyeNo = 1,
+                FisTarihi = fis.FisTarihi,
+                FisTipi = MuhasebeFisTipleri.Duzeltme,
+                KaynakModul = fis.KaynakModul,
+                KaynakId = fis.KaynakId,
+                Durum = MuhasebeFisDurumlari.TersKayit,
+                IptalEdilenFisId = fis.Id,
+                Aciklama = aciklama,
+                ToplamBorc = fis.ToplamAlacak,
+                ToplamAlacak = fis.ToplamBorc,
+                Satirlar = aktifSatirlar.Select(s => new MuhasebeFisSatir
+                {
+                    MuhasebeHesapPlaniId = s.MuhasebeHesapPlaniId,
+                    SiraNo = s.SiraNo,
+                    Borc = s.Alacak,
+                    Alacak = s.Borc,
+                    ParaBirimi = s.ParaBirimi,
+                    Kur = s.Kur
+                }).ToList()
+            };
+
+            await dbContext.MuhasebeFisler.AddAsync(tersFis, cancellationToken);
+            fis.Durum = MuhasebeFisDurumlari.Iptal;
+            fis.TersKayitFisId = tersFis.Id;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            return new MuhasebeFisIptalSonucDto { OrijinalFisId = fis.Id, TersKayitFisId = tersFis.Id, ZatenTersKayitliMi = false };
+        }
+
+        public async Task KantinSatisFisiniSilAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, CancellationToken cancellationToken = default)
+        {
+            var fis = await dbContext.MuhasebeFisler
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .SingleAsync(x => x.Id == muhasebeFisId, cancellationToken);
+
+            if (fis.KaynakModul != MuhasebeKaynakModulleri.KantinSatis || fis.KaynakId != beklenenKaynakId || fis.TesisId != beklenenTesisId)
+            {
+                throw new BaseException("Fiş bilgileri beklenenle eşleşmiyor, silme reddedildi.", 400);
+            }
+
+            if (fis.Durum != MuhasebeFisDurumlari.Taslak)
+            {
+                throw new BaseException("Yalnızca taslak durumundaki kantin satış fişi silinebilir.", 400);
+            }
+
+            fis.IsDeleted = true;
+            foreach (var satir in fis.Satirlar.Where(s => !s.IsDeleted))
+            {
+                satir.IsDeleted = true;
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        public Task<IEnumerable<MuhasebeFisDto>> GetAllAsync(Func<IQueryable<MuhasebeFis>, IQueryable<MuhasebeFis>>? include = null) => throw new NotSupportedException();
+        public Task<MuhasebeFisDto?> GetByIdAsync(int id, Func<IQueryable<MuhasebeFis>, IQueryable<MuhasebeFis>>? include = null) => throw new NotSupportedException();
+        public Task<PagedResult<MuhasebeFisDto>> GetPagedAsync(PagedRequest request, System.Linq.Expressions.Expression<Func<MuhasebeFis, bool>>? predicate = null, Func<IQueryable<MuhasebeFis>, IQueryable<MuhasebeFis>>? include = null, Func<IQueryable<MuhasebeFis>, IOrderedQueryable<MuhasebeFis>>? orderBy = null) => throw new NotSupportedException();
+        public Task<MuhasebeFisDto> AddAsync(MuhasebeFisDto dto) => throw new NotSupportedException();
+        public Task<MuhasebeFisDto> UpdateAsync(MuhasebeFisDto dto) => throw new NotSupportedException();
+        public Task DeleteAsync(int id) => throw new NotSupportedException();
+        public Task<IEnumerable<MuhasebeFisDto>> WhereAsync(System.Linq.Expressions.Expression<Func<MuhasebeFis, bool>> predicate, Func<IQueryable<MuhasebeFis>, IQueryable<MuhasebeFis>>? include = null) => throw new NotSupportedException();
+        public Task<bool> AnyAsync(System.Linq.Expressions.Expression<Func<MuhasebeFis, bool>> predicate, Func<IQueryable<MuhasebeFis>, IQueryable<MuhasebeFis>>? include = null) => throw new NotSupportedException();
+        public Task<MuhasebeFisDto?> GetByIdWithSatirlarAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<List<MuhasebeFisDto>> GetByKaynakAsync(string kaynakModul, int kaynakId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuhasebeFisDto> OnaylaAsync(int id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuhasebeFisDto> IptalEtAsync(int id, string? aciklama = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuhasebeFisIptalSonucDto> PosValorTransferFisiniGeriAlAsync(int tersKayitFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuhasebeFisIptalSonucDto> SatisBelgesiFisiIptalEtAsync(int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<byte[]> ExportYevmiyeDefteriExcelAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MuavinDefterDto> GetMuavinDefterAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<byte[]> ExportMuavinDefterExcelAsync(MuavinDefterFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MizanDto> GetMizanAsync(MizanFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MizanDto> GetMizanBakiyeAsync(MizanFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<byte[]> ExportMizanBakiyeExcelAsync(MizanFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<MizanKarsilastirmaDto> KarsilastirMizanAsync(MizanFilterDto filter, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<TasinirMuhasebeFisiOlusturResultDto> TasinirMuhasebeFisiTaslagiOlusturAsync(TasinirMuhasebeFisiOlusturRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
     private sealed class FailingTahsilatOdemeBelgesiService : ITahsilatOdemeBelgesiService
     {
         public Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalEtAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalGeriAlAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task IptalEtManagedSourceWithinCurrentTransactionAsync(int id, string expectedKaynakModul, int expectedKaynakId, CancellationToken cancellationToken = default)
+            => throw new BaseException("Tahsilat iptal edilemedi.", 400);
         public Task ValidateOlusturmaAsync(int cariKartId, string belgeTipi, string odemeYontemi, string durum, DateTime belgeTarihi, int? kapatilacakCariHareketId, bool requireCariMuhasebeHesabi, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IEnumerable<TahsilatOdemeBelgesiDto>> GetAllAsync(Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null) => throw new NotImplementedException();
         public Task<TahsilatOdemeBelgesiDto?> GetByIdAsync(int id, Func<IQueryable<TahsilatOdemeBelgesi>, IQueryable<TahsilatOdemeBelgesi>>? include = null) => throw new NotImplementedException();

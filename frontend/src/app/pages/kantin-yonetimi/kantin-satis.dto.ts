@@ -14,6 +14,8 @@ export interface KantinSatisModel {
     muhasebeFisNo?: string | null;
     muhasebeFisDurumu?: string | null;
     muhasebeFisOlusturmaTarihi?: string | null;
+    iptalTarihi?: string | null;
+    iptalAciklamasi?: string | null;
     kantinKod?: string | null;
     kantinAd?: string | null;
     satisNoktasiKod?: string | null;
@@ -79,6 +81,10 @@ export interface AddKantinSatisOdemeRequest {
     odemeYontemi: string;
     kasaBankaHesapId?: number | null;
     tutar: number;
+}
+
+export interface CancelKantinSatisRequest {
+    aciklama: string;
 }
 
 export interface KantinSatisBarkodUrunModel {

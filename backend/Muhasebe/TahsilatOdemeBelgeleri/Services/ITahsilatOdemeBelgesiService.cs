@@ -9,6 +9,18 @@ public interface ITahsilatOdemeBelgesiService : IBaseRdbmsService<TahsilatOdemeB
     Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default);
     Task IptalEtAsync(int id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Kantin Satis workflow'u tarafindan satis iptali sirasinda cagrilan kontrollu iptal metodu.
+    /// Aktif bir ambient transaction bekler; belge source'unun expectedKaynakModul/expectedKaynakId
+    /// ile birebir eslesmesini dogrular, public ownership guard'ini bypass eder ve IptalEtAsync
+    /// core davranisini reuse eder. Zaten iptal ise idempotent no-op'tur.
+    /// </summary>
+    Task IptalEtManagedSourceWithinCurrentTransactionAsync(
+        int id,
+        string expectedKaynakModul,
+        int expectedKaynakId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Iptal edilmis bir tahsilat/odeme belgesini geri alir: belge.Durum=Aktif'e doner,
     /// varsa iliskili POS valor kaydi (IptalOncesiDurum'a gore, aktarilmis olan icin muhasebe
     /// fisi TERS KAYITLA degil GERI ALMA fisiyle yeniden tesis edilerek) ve varsa cari hareket

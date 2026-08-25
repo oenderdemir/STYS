@@ -15,6 +15,7 @@ public static class KantinSatisDurumlari
 {
     public const string Taslak = "Taslak";
     public const string Kesinlesti = "Kesinlesti";
+    public const string IptalEdildi = "IptalEdildi";
 }
 
 public class KantinSatis : BaseEntity<int>
@@ -39,6 +40,14 @@ public class KantinSatis : BaseEntity<int>
     public int? MuhasebeFisId { get; set; }
     public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
 
+    public DateTime? IptalTarihi { get; set; }
+
+    [MaxLength(1024)]
+    public string? IptalAciklamasi { get; set; }
+
+    [MaxLength(64)]
+    public string? IptalEdenKullaniciId { get; set; }
+
     public Kantin? Kantin { get; set; }
     public KantinSatisNoktasi? SatisNoktasi { get; set; }
     public MuhasebeFis? MuhasebeFis { get; set; }
@@ -60,6 +69,7 @@ public class KantinSatisSatir : BaseEntity<int>
     public int? StokLotId { get; set; }
     public int? StokSeriId { get; set; }
     public int? StokHareketId { get; set; }
+    public int? IptalStokHareketId { get; set; }
 
     [MaxLength(128)]
     public string? Barkod { get; set; }
@@ -93,6 +103,7 @@ public class KantinSatisSatir : BaseEntity<int>
     public StokLot? StokLot { get; set; }
     public StokSeri? StokSeri { get; set; }
     public StokHareket? StokHareket { get; set; }
+    public StokHareket? IptalStokHareket { get; set; }
 }
 
 public class KantinSatisOdeme : BaseEntity<int>

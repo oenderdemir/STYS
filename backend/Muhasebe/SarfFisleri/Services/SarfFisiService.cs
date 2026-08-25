@@ -32,6 +32,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IStokHareketService _stokHareketService;
+    private readonly IStokMaliyetKatmaniRestoreService _stokMaliyetKatmaniRestoreService;
     private readonly IMapper _mapper;
 
     public SarfFisiService(
@@ -42,6 +43,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         IUserAccessScopeService userAccessScopeService,
         ICurrentUserAccessor currentUserAccessor,
         IStokHareketService stokHareketService,
+        IStokMaliyetKatmaniRestoreService stokMaliyetKatmaniRestoreService,
         IMapper mapper)
         : base(repository, mapper)
     {
@@ -52,6 +54,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         _userAccessScopeService = userAccessScopeService;
         _currentUserAccessor = currentUserAccessor;
         _stokHareketService = stokHareketService;
+        _stokMaliyetKatmaniRestoreService = stokMaliyetKatmaniRestoreService;
         _mapper = mapper;
     }
 
@@ -316,7 +319,7 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
                     BuildIptalHareketDto(entity, satir, originalMovement, iptalZamani),
                     cancellationToken);
 
-                await RestoreLayeredCostIfNeededAsync(originalMovement, reversal, cancellationToken);
+                await _stokMaliyetKatmaniRestoreService.RestoreLayeredCostIfNeededAsync(originalMovement, reversal, cancellationToken);
                 satir.IptalStokHareketId = reversal.Id;
             }
 
@@ -429,44 +432,6 @@ public class SarfFisiService : BaseRdbmsService<SarfFisiDto, SarfFisi, int>, ISa
         }
 
         await EnsureOpenPeriodAsync(fis.TesisId, DateTime.UtcNow, cancellationToken);
-    }
-
-    private async Task RestoreLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto reversalMovement, CancellationToken cancellationToken)
-    {
-        var hasConsumptions = await _dbContext.StokMaliyetKatmanTuketimleri
-            .AsNoTracking()
-            .AnyAsync(x => x.CikisStokHareketId == originalMovement.Id && !x.IsDeleted, cancellationToken);
-
-        if (!hasConsumptions)
-        {
-            return;
-        }
-
-        var strategy = await ResolveLayeredCostStrategyAsync(originalMovement.Id, cancellationToken);
-        await strategy.RestoreOutgoingConsumptionAsIncomingLayersAsync(
-            originalMovement.Id,
-            reversalMovement.Id!.Value,
-            reversalMovement.DepoId,
-            reversalMovement.TasinirKartId,
-            reversalMovement.HareketTarihi,
-            cancellationToken);
-    }
-
-    private async Task<LayeredCostStrategyBase> ResolveLayeredCostStrategyAsync(int originalStokHareketId, CancellationToken cancellationToken)
-    {
-        var maliyetYontemi = await _dbContext.StokMaliyetKatmanTuketimleri
-            .AsNoTracking()
-            .Where(x => x.CikisStokHareketId == originalStokHareketId && !x.IsDeleted)
-            .Select(x => x.StokMaliyetKatmani!.MaliyetYontemi)
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new BaseException("Sarf geri alma için maliyet katmanı bilgisi bulunamadı.", 400);
-
-        return maliyetYontemi switch
-        {
-            StokMaliyetYontemleri.FIFO => new FifoMaliyetStrategy(_dbContext),
-            StokMaliyetYontemleri.LIFO => new LifoMaliyetStrategy(_dbContext),
-            _ => throw new BaseException("Bu sarf fişi için geri alma maliyet katmanı işlemi uygulanamaz.", 400)
-        };
     }
 
     private async Task<Dictionary<int, decimal>> GetCurrentSeriDepotBalancesAsync(int stokSeriId, CancellationToken cancellationToken)

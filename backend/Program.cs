@@ -242,6 +242,7 @@ builder.Services.AddScoped<STYS.Agent.Authorization.ICurrentAgentContext, STYS.A
 builder.Services.AddAgentAuthorization();
 builder.Services.AddScoped<IMuhasebeDonemService, MuhasebeDonemService>();
 builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetPolitikasiService, STYS.Muhasebe.StokMaliyetPolitikalari.Services.StokMaliyetPolitikasiService>();
+builder.Services.AddScoped<STYS.Muhasebe.StokMaliyetPolitikalari.Services.IStokMaliyetKatmaniRestoreService, STYS.Muhasebe.StokMaliyetPolitikalari.Services.StokMaliyetKatmaniRestoreService>();
 builder.Services.AddScoped<STYS.Muhasebe.StokUyarilari.Services.IStokUyariService, STYS.Muhasebe.StokUyarilari.Services.StokUyariService>();
 builder.Services.AddScoped<STYS.Muhasebe.StokLotlari.Services.IStokLotSktUyariService, STYS.Muhasebe.StokLotlari.Services.StokLotSktUyariService>();
 builder.Services.AddScoped<IStokCikisStrategy, TalepVeOnayStokCikisStrategy>();

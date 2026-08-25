@@ -1240,6 +1240,7 @@ public class SarfFisiServiceTests
             new FakeUserAccessScopeService(scope ?? DomainAccessScope.Scoped([], [1], [])),
             new FakeCurrentUserAccessor(),
             stokHareketService,
+            new StokMaliyetKatmaniRestoreService(dbContext),
             mapper);
     }
 

@@ -17,5 +17,6 @@ public interface IKantinSatisService : IBaseRdbmsService<KantinSatisDto, KantinS
     Task<KantinSatisDto> UpdateOdemeAsync(int satisId, int odemeId, UpdateKantinSatisOdemeRequest request, CancellationToken cancellationToken = default);
     Task DeleteOdemeAsync(int satisId, int odemeId, CancellationToken cancellationToken = default);
     Task<KantinSatisDto> KesinlestirAsync(int satisId, CancellationToken cancellationToken = default);
+    Task<KantinSatisDto> IptalEtAsync(int satisId, string aciklama, CancellationToken cancellationToken = default);
     Task<KantinSatisBarkodUrunDto?> GetAktifUrunByBarkodAsync(int kantinId, string barkod, CancellationToken cancellationToken = default);
 }

@@ -440,6 +440,7 @@ public static class StructurePermissions
         public const string Menu = "KantinSatisYonetimi.Menu";
         public const string View = "KantinSatisYonetimi.View";
         public const string Create = "KantinSatisYonetimi.Create";
+        public const string Cancel = "KantinSatisYonetimi.Cancel";
     }
 
     public static class StokTalepYonetimi

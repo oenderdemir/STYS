@@ -49,6 +49,24 @@ public interface IMuhasebeFisService : IBaseRdbmsService<MuhasebeFisDto, Muhaseb
     /// </summary>
     Task<MuhasebeFisIptalSonucDto> SatisBelgesiFisiIptalEtAsync(
         int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kantin satış fişlerinin (KaynakModul=KantinSatis) iptal/ters-kayıt işlemine özel, dar bir
+    /// metot — SatisBelgesiFisiIptalEtAsync ile AYNI desen. KaynakModul kontrolü metot içinde
+    /// SABİTTİR; genel IptalEtAsync bu KaynakModul için 409 döner. Ambient transaction'a katılır.
+    /// Orijinal fiş Onayli ise bir TersKayit üretip orijinali Iptal yapar; zaten Iptal ise mevcut
+    /// TersKayit'i bulur (idempotent, ikinci ters kayıt üretilmez).
+    /// </summary>
+    Task<MuhasebeFisIptalSonucDto> KantinSatisFisiIptalEtAsync(
+        int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, string aciklama, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Kantin satış fişlerinin (KaynakModul=KantinSatis) TASLAK hâlinin kontrollü soft-delete'i.
+    /// KaynakModul kontrolü SABİTTİR; genel DeleteAsync bu KaynakModul için 400 döner. Ambient
+    /// transaction'a katılır; ters kayıt üretilmez.
+    /// </summary>
+    Task KantinSatisFisiniSilAsync(
+        int muhasebeFisId, int beklenenKaynakId, int beklenenTesisId, CancellationToken cancellationToken = default);
     Task<List<MuhasebeFisDto>> GetFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<int> CountFilteredAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);
     Task<YevmiyeDefteriDto> GetYevmiyeDefteriAsync(MuhasebeFisFilterDto filter, CancellationToken cancellationToken = default);

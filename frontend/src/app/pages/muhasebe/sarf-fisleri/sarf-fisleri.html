@@ -28,7 +28,7 @@
             [loading]="loading"
             selectionMode="single"
             [(selection)]="selectedFisi"
-            (onRowSelect)="selectFisi($event.data.id)"
+            (onRowSelect)="selectFisi($any($event.data)?.id)"
             (onLazyLoad)="onLazyLoad($event)">
             <ng-template pTemplate="header">
                 <tr>

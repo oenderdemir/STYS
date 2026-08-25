@@ -36,7 +36,7 @@
             [totalRecords]="totalRecords"
             [loading]="loading"
             (onLazyLoad)="onLazyLoad($event)"
-            (selectionChange)="selectedTalep?.id && selectTalep(selectedTalep.id)">
+            (selectionChange)="onSelectedTalepChange()">
             <ng-template pTemplate="header">
                 <tr>
                     <th>Talep</th>
@@ -120,8 +120,8 @@
                         <td>{{ satir.teslimEdilenMiktar | number:'1.0-3' }}</td>
                         <td>
                             <ng-container [ngSwitch]="satir.takipTipi">
-                                <p-select *ngSwitchCase="'Lot'" [options]="lotOptionsByLine[satir.id!] ?? []" [(ngModel)]="satir.stokLotId" optionLabel="label" optionValue="value" placeholder="Lot seç" [disabled]="!canDeliver(talep) || !canTalepDeliver"></p-select>
-                                <p-select *ngSwitchCase="'Seri'" [options]="seriOptionsByLine[satir.id!] ?? []" [(ngModel)]="satir.stokSeriId" optionLabel="label" optionValue="value" placeholder="Seri seç" [disabled]="!canDeliver(talep) || !canTalepDeliver"></p-select>
+                                <p-select *ngSwitchCase="'Lot'" [options]="lotOptionsByLine[satir.id!]" [(ngModel)]="satir.stokLotId" optionLabel="label" optionValue="value" placeholder="Lot seç" [disabled]="!canDeliver(talep) || !canTalepDeliver"></p-select>
+                                <p-select *ngSwitchCase="'Seri'" [options]="seriOptionsByLine[satir.id!]" [(ngModel)]="satir.stokSeriId" optionLabel="label" optionValue="value" placeholder="Seri seç" [disabled]="!canDeliver(talep) || !canTalepDeliver"></p-select>
                                 <span *ngSwitchDefault>-</span>
                             </ng-container>
                         </td>

@@ -43,6 +43,292 @@ import { KantinSatisService } from './kantin-satis.service';
         MuhasebeTesisContextBarComponent
     ],
     templateUrl: './kantin-satis.html',
+    styles: [`
+        :host {
+            display: block;
+        }
+
+        .satis-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .sales-hero {
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            background:
+                radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 24%),
+                radial-gradient(circle at left bottom, rgba(16, 185, 129, 0.18), transparent 26%),
+                linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .sales-hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) minmax(20rem, 0.9fr);
+            gap: 1.5rem;
+            align-items: end;
+        }
+
+        .hero-copy-block {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .hero-control-block {
+            align-self: end;
+            max-width: 26rem;
+            justify-self: end;
+            width: 100%;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.06);
+            color: #334155;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .hero-heading {
+            margin: 0;
+            color: #0f172a;
+            font-size: 2rem;
+            line-height: 1.1;
+        }
+
+        .hero-text {
+            margin: 0.75rem 0 0;
+            max-width: 52rem;
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        .stat-strip {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-panel {
+            border-radius: 1.2rem;
+            padding: 1rem 1.1rem;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+        }
+
+        .stat-panel-label {
+            color: #64748b;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 700;
+        }
+
+        .stat-panel-value {
+            margin-top: 0.65rem;
+            color: #0f172a;
+            font-size: 1.6rem;
+            font-weight: 700;
+        }
+
+        .sales-main-grid {
+            display: grid;
+            grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 2.2fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+
+        .sales-side-stack,
+        .sales-content-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            min-width: 0;
+        }
+
+        .sales-bottom-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+            gap: 1.25rem;
+            align-items: start;
+        }
+
+        .surface-card {
+            height: 100%;
+            border-radius: 1.4rem;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 16px 35px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .surface-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.2rem 1.35rem 0;
+        }
+
+        .surface-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .surface-subtitle {
+            margin: 0.35rem 0 0;
+            color: #64748b;
+            font-size: 0.95rem;
+        }
+
+        .surface-body {
+            padding: 1.2rem 1.35rem 1.35rem;
+        }
+
+        .finder-stack,
+        .payment-stack,
+        .detail-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .quick-toolbar {
+            display: flex;
+            gap: 0.75rem;
+            align-items: end;
+            flex-wrap: wrap;
+        }
+
+        .product-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 24rem;
+            overflow: auto;
+            padding-right: 0.25rem;
+        }
+
+        .product-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.3rem;
+            width: 100%;
+            text-align: left;
+        }
+
+        .product-meta {
+            color: #64748b;
+            font-size: 0.86rem;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+
+        .summary-box {
+            border-radius: 1rem;
+            padding: 0.95rem 1rem;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.98));
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .summary-box-label {
+            color: #64748b;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .summary-box-value {
+            margin-top: 0.55rem;
+            color: #0f172a;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .payment-form-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 1.25fr 1fr auto;
+            gap: 0.85rem;
+            align-items: end;
+        }
+
+        .field-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .field-label {
+            color: #334155;
+            font-size: 0.92rem;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.85rem;
+            min-height: 14rem;
+            padding: 2rem;
+            text-align: center;
+            color: #64748b;
+        }
+
+        .empty-state i {
+            font-size: 2rem;
+            color: #10b981;
+        }
+
+        .empty-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .history-card {
+            min-height: 0;
+        }
+
+        .compact-empty {
+            min-height: 9rem;
+            padding: 1.5rem;
+        }
+
+        @media (max-width: 1200px) {
+            .sales-hero-grid,
+            .sales-main-grid,
+            .sales-bottom-grid,
+            .payment-form-grid,
+            .stat-strip,
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-control-block {
+                max-width: none;
+                justify-self: stretch;
+            }
+        }
+    `],
     providers: [MessageService]
 })
 export class KantinSatisPage implements OnInit {
@@ -124,6 +410,30 @@ export class KantinSatisPage implements OnInit {
 
     get canKesinlestir(): boolean {
         return !!this.currentDraft?.id && this.currentDraft.satirlar.length > 0 && this.currentDraft.odemeler.length > 0 && !this.saving;
+    }
+
+    get odenenToplam(): number {
+        return this.currentDraft?.odemeler.reduce((sum, item) => sum + item.tutar, 0) ?? 0;
+    }
+
+    get kalanTutar(): number {
+        return Math.max(this.genelToplam - this.odenenToplam, 0);
+    }
+
+    get sepetSatirSayisi(): number {
+        return this.currentDraft?.satirlar.length ?? 0;
+    }
+
+    get aktifUrunSayisi(): number {
+        return this.filteredUrunler.length;
+    }
+
+    get selectedKantinLabel(): string {
+        if (!this.selectedKantin) {
+            return 'Kantin seçilmedi';
+        }
+
+        return `${this.selectedKantin.kod} - ${this.selectedKantin.ad}`;
     }
 
     canMuhasebelestir(satis: KantinSatisModel | null | undefined): boolean {

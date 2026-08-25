@@ -14,7 +14,6 @@ import { ToolbarModule } from 'primeng/toolbar';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { DepolarService } from '../depolar/depolar.service';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { TasinirKartlariService } from '../tasinir-kartlari/tasinir-kartlari.service';
 import { StokUyariModel } from './stok-uyarilari.dto';
@@ -33,7 +32,6 @@ import { StokUyarilariService } from './stok-uyarilari.service';
         TagModule,
         ToastModule,
         ToolbarModule,
-        MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],
     templateUrl: './stok-uyarilari.html',
@@ -155,4 +153,3 @@ export class StokUyarilariPage implements OnInit {
         this.cdr.detectChanges();
     }
 }
-

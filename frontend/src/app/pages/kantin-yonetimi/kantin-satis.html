@@ -1,271 +1,459 @@
 <p-toast></p-toast>
-<app-muhasebe-tesis-context-bar></app-muhasebe-tesis-context-bar>
 
-<p-toolbar styleClass="mb-3">
-    <ng-template pTemplate="start">
-        <div class="flex align-items-center gap-2">
-            <span class="font-semibold">Hızlı Satış</span>
-            <p-select
-                [options]="kantinler"
-                optionLabel="ad"
-                optionValue="id"
-                [(ngModel)]="selectedKantinId"
-                placeholder="Kantin seçiniz"
-                (onChange)="onKantinChange($event.value)">
-            </p-select>
-        </div>
-    </ng-template>
-    <ng-template pTemplate="end">
-        <button pButton type="button" label="Yeni Satış" icon="pi pi-plus" (click)="yeniSatis()"></button>
-    </ng-template>
-</p-toolbar>
+<div class="satis-shell">
+    <app-muhasebe-tesis-context-bar></app-muhasebe-tesis-context-bar>
 
-<div class="grid">
-    <div class="col-12 lg:col-3">
-        <p-card header="Ürün Bul">
-            <div class="flex flex-column gap-2">
-                <label for="barkodInput">Barkod</label>
-                <input id="barkodInput" pInputText [(ngModel)]="barkod" (keyup.enter)="barkodAra()" autofocus />
-                <button pButton type="button" label="Barkod Ekle" icon="pi pi-barcode" (click)="barkodAra()" [disabled]="!selectedKantinId"></button>
-
-                <p-divider></p-divider>
-
-                <label for="urunArama">Ürün Ara</label>
-                <input id="urunArama" pInputText [(ngModel)]="urunArama" placeholder="Kod / ürün / barkod" />
-
-                <div class="flex flex-column gap-2" style="max-height: 480px; overflow: auto;">
-                    <button
-                        *ngFor="let urun of filteredUrunler"
-                        pButton
-                        type="button"
-                        class="p-button-outlined text-left justify-content-start"
-                        (click)="urunEkle(urun)">
-                        {{ urun.stokKodu }} - {{ urun.urunAdi }} | {{ urun.satisFiyati | number:'1.2-2' }} TL
-                    </button>
+    <section class="sales-hero">
+        <div class="sales-hero-grid">
+            <div class="hero-copy-block">
+                <div class="hero-badge">
+                    <i class="pi pi-bolt"></i>
+                    <span>Kantin Hızlı Satış</span>
+                </div>
+                <h1 class="hero-heading mt-3">Yoğun tezgah anında daha hızlı satış akışı</h1>
+                <p class="hero-text">
+                    Barkod okutma, ürün seçimi, sepet yönetimi ve ödeme girişini tek akışta tutarak satış ekranını
+                    gereksiz boşluklardan ve sıkışık formlardan arındırın.
+                </p>
+            </div>
+            <div class="hero-control-block">
+                <div class="field-stack">
+                    <label class="field-label" for="kantinSelect">Kantin</label>
+                    <div class="flex gap-2 flex-wrap">
+                        <p-select
+                            inputId="kantinSelect"
+                            [options]="kantinler"
+                            optionLabel="ad"
+                            optionValue="id"
+                            [(ngModel)]="selectedKantinId"
+                            placeholder="Kantin seçiniz"
+                            class="flex-1 min-w-12rem"
+                            (onChange)="onKantinChange($event.value)">
+                        </p-select>
+                        <button pButton type="button" label="Yeni Satış" icon="pi pi-plus" (click)="yeniSatis()"></button>
+                    </div>
                 </div>
             </div>
-        </p-card>
-    </div>
+        </div>
+    </section>
 
-    <div class="col-12 lg:col-6">
-        <p-card header="Sepet">
-            <p-table [value]="currentDraft?.satirlar ?? []" responsiveLayout="scroll">
-                <ng-template pTemplate="header">
-                    <tr>
-                        <th>Ürün</th>
-                        <th>Miktar</th>
-                        <th>Fiyat</th>
-                        <th>Toplam</th>
-                        <th>Lot / Seri</th>
-                        <th></th>
-                    </tr>
-                </ng-template>
-                <ng-template pTemplate="body" let-satir>
-                    <tr>
-                        <td>{{ satir.stokKodu }} - {{ satir.urunAdi }}</td>
-                        <td style="width: 110px;">
-                            <p-inputNumber
-                                [(ngModel)]="satir.miktar"
-                                [min]="1"
-                                [minFractionDigits]="0"
-                                [maxFractionDigits]="2"
-                                [readonlyInput]="isSeriTracked(satir)"
-                                (onBlur)="satirMiktarDegisti(satir)">
-                            </p-inputNumber>
-                        </td>
-                        <td>{{ satir.birimSatisFiyati | number:'1.2-2' }}</td>
-                        <td>{{ satir.toplamTutar | number:'1.2-2' }}</td>
-                        <td>
-                            <div class="flex flex-column gap-2">
-                                <p-select
-                                    *ngIf="isLotTracked(satir)"
-                                    [options]="(lotOptions[satir.id ?? 0] ?? []).map(x => ({ label: x.lotNo, value: x.stokLotId }))"
-                                    [(ngModel)]="satir.stokLotId"
-                                    placeholder="Lot seçiniz"
-                                    (onChange)="satirLotDegisti(satir)">
-                                </p-select>
-                                <p-select
-                                    *ngIf="isSeriTracked(satir)"
-                                    [options]="(seriOptions[satir.id ?? 0] ?? []).map(x => ({ label: x.seriNo, value: x.stokSeriId }))"
-                                    [(ngModel)]="satir.stokSeriId"
-                                    placeholder="Seri seçiniz"
-                                    (onChange)="satirSeriDegisti(satir)">
-                                </p-select>
-                                <span *ngIf="!isLotTracked(satir) && !isSeriTracked(satir)">-</span>
+    <section class="stat-strip">
+        <div class="stat-panel">
+            <div class="stat-panel-label">Seçili Kantin</div>
+            <div class="stat-panel-value text-lg">{{ selectedKantinLabel }}</div>
+        </div>
+        <div class="stat-panel">
+            <div class="stat-panel-label">Sepet Satırı</div>
+            <div class="stat-panel-value">{{ sepetSatirSayisi }}</div>
+        </div>
+        <div class="stat-panel">
+            <div class="stat-panel-label">Filtrelenen Ürün</div>
+            <div class="stat-panel-value">{{ aktifUrunSayisi }}</div>
+        </div>
+        <div class="stat-panel">
+            <div class="stat-panel-label">Bekleyen Tutar</div>
+            <div class="stat-panel-value">{{ kalanTutar | number:'1.2-2' }} TL</div>
+        </div>
+    </section>
+
+    <section class="sales-main-grid">
+        <div class="sales-side-stack">
+                <div class="surface-card">
+                    <div class="surface-header">
+                        <div>
+                            <h2 class="surface-title">Ürün Bul</h2>
+                            <p class="surface-subtitle">Barkod okutun veya ürün listesinden hızlı seçim yapın.</p>
+                        </div>
+                    </div>
+                    <div class="surface-body finder-stack">
+                        <div class="quick-toolbar">
+                            <div class="field-stack flex-1 min-w-12rem">
+                                <label class="field-label" for="barkodInput">Barkod</label>
+                                <input id="barkodInput" pInputText [(ngModel)]="barkod" (keyup.enter)="barkodAra()" autofocus />
                             </div>
-                        </td>
-                        <td>
-                            <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger" (click)="satirSil(satir)"></button>
-                        </td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </p-card>
-    </div>
+                            <button pButton type="button" label="Barkod Ekle" icon="pi pi-barcode" (click)="barkodAra()" [disabled]="!selectedKantinId"></button>
+                        </div>
 
-    <div class="col-12 lg:col-3">
-        <p-card header="Özet ve Ödeme">
-            <div class="flex flex-column gap-2">
-                <div class="flex justify-content-between"><span>Ara Toplam</span><strong>{{ araToplam | number:'1.2-2' }} TL</strong></div>
-                <div class="flex justify-content-between"><span>KDV</span><strong>{{ kdvToplami | number:'1.2-2' }} TL</strong></div>
-                <div class="flex justify-content-between text-xl"><span>Genel Toplam</span><strong>{{ genelToplam | number:'1.2-2' }} TL</strong></div>
+                        <div class="field-stack">
+                            <label class="field-label" for="urunArama">Ürün Ara</label>
+                            <input id="urunArama" pInputText [(ngModel)]="urunArama" placeholder="Kod / ürün / barkod" />
+                        </div>
 
-                <p-divider></p-divider>
+                        <div class="product-list" *ngIf="filteredUrunler.length > 0; else noUrunler">
+                            <button
+                                *ngFor="let urun of filteredUrunler"
+                                pButton
+                                type="button"
+                                severity="secondary"
+                                class="p-button-outlined product-item"
+                                (click)="urunEkle(urun)">
+                                <span class="font-semibold">{{ urun.stokKodu }} - {{ urun.urunAdi }}</span>
+                                <span class="product-meta">{{ urun.satisFiyati | number:'1.2-2' }} TL · Stok {{ urun.mevcutStok | number:'1.0-3' }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-                <label>Ödeme Yöntemi</label>
-                <p-select [options]="odemeYontemiSecenekleri" optionLabel="label" optionValue="value" [(ngModel)]="yeniOdeme.odemeYontemi" (onChange)="onYeniOdemeYontemiChange()"></p-select>
+                <div class="surface-card">
+                    <div class="surface-header">
+                        <div>
+                            <h2 class="surface-title">Özet ve Ödeme</h2>
+                            <p class="surface-subtitle">Toplamı izleyin, tahsilatları ekleyin ve satışa kapanış verin.</p>
+                        </div>
+                    </div>
+                    <div class="surface-body payment-stack">
+                        <div class="summary-grid">
+                            <div class="summary-box">
+                                <div class="summary-box-label">Ara Toplam</div>
+                                <div class="summary-box-value">{{ araToplam | number:'1.2-2' }} TL</div>
+                            </div>
+                            <div class="summary-box">
+                                <div class="summary-box-label">KDV</div>
+                                <div class="summary-box-value">{{ kdvToplami | number:'1.2-2' }} TL</div>
+                            </div>
+                            <div class="summary-box">
+                                <div class="summary-box-label">Genel Toplam</div>
+                                <div class="summary-box-value">{{ genelToplam | number:'1.2-2' }} TL</div>
+                            </div>
+                        </div>
 
-                <label>Hesap</label>
-                <p-select
-                    [options]="getOdemeHesapSecenekleri(yeniOdeme.odemeYontemi)"
-                    [(ngModel)]="yeniOdeme.kasaBankaHesapId"
-                    [showClear]="yeniOdeme.odemeYontemi === 'Nakit'"
-                    placeholder="Hesap seçiniz">
-                </p-select>
+                        <div class="summary-grid">
+                            <div class="summary-box">
+                                <div class="summary-box-label">Ödenen</div>
+                                <div class="summary-box-value">{{ odenenToplam | number:'1.2-2' }} TL</div>
+                            </div>
+                            <div class="summary-box">
+                                <div class="summary-box-label">Kalan</div>
+                                <div class="summary-box-value">{{ kalanTutar | number:'1.2-2' }} TL</div>
+                            </div>
+                            <div class="summary-box">
+                                <div class="summary-box-label">Durum</div>
+                                <div class="summary-box-value text-lg">{{ canKesinlestir ? 'Hazır' : 'Eksik' }}</div>
+                            </div>
+                        </div>
 
-                <label>Tutar</label>
-                <p-inputNumber [(ngModel)]="yeniOdeme.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2"></p-inputNumber>
-                <button pButton type="button" label="Ödeme Ekle" icon="pi pi-plus" (click)="odemeEkle()" [disabled]="!currentDraft?.id"></button>
-
-                <p-table [value]="currentDraft?.odemeler ?? []" responsiveLayout="scroll">
-                    <ng-template pTemplate="header">
-                        <tr>
-                            <th>Yöntem</th>
-                            <th>Hesap</th>
-                            <th>Tutar</th>
-                            <th></th>
-                        </tr>
-                    </ng-template>
-                    <ng-template pTemplate="body" let-odeme>
-                        <tr>
-                            <td style="width: 150px;">
+                        <div class="payment-form-grid">
+                            <div class="field-stack">
+                                <label class="field-label">Ödeme Yöntemi</label>
                                 <p-select
                                     [options]="odemeYontemiSecenekleri"
                                     optionLabel="label"
                                     optionValue="value"
-                                    [(ngModel)]="odeme.odemeYontemi"
-                                    (onChange)="odemeDegisti(odeme)">
+                                    [(ngModel)]="yeniOdeme.odemeYontemi"
+                                    (onChange)="onYeniOdemeYontemiChange()">
                                 </p-select>
-                            </td>
-                            <td style="width: 220px;">
+                            </div>
+
+                            <div class="field-stack">
+                                <label class="field-label">Hesap</label>
                                 <p-select
-                                    [options]="getOdemeHesapSecenekleri(odeme.odemeYontemi)"
-                                    [(ngModel)]="odeme.kasaBankaHesapId"
-                                    [showClear]="odeme.odemeYontemi === 'Nakit'"
-                                    placeholder="Hesap seçiniz"
-                                    (onChange)="odemeDegisti(odeme)">
+                                    [options]="getOdemeHesapSecenekleri(yeniOdeme.odemeYontemi)"
+                                    [(ngModel)]="yeniOdeme.kasaBankaHesapId"
+                                    [showClear]="yeniOdeme.odemeYontemi === 'Nakit'"
+                                    placeholder="Hesap seçiniz">
                                 </p-select>
-                            </td>
-                            <td style="width: 120px;">
-                                <p-inputNumber
-                                    [(ngModel)]="odeme.tutar"
-                                    mode="decimal"
-                                    [minFractionDigits]="2"
-                                    [maxFractionDigits]="2"
-                                    (onBlur)="odemeDegisti(odeme)">
-                                </p-inputNumber>
-                            </td>
-                            <td>
-                                <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger" (click)="odemeSil(odeme)"></button>
-                            </td>
-                        </tr>
-                    </ng-template>
-                </p-table>
+                            </div>
 
-                <button pButton type="button" label="KESİNLEŞTİR" icon="pi pi-check" severity="success" (click)="kesinlestir()" [disabled]="!canKesinlestir"></button>
-            </div>
-        </p-card>
-    </div>
+                            <div class="field-stack">
+                                <label class="field-label">Tutar</label>
+                                <p-inputNumber [(ngModel)]="yeniOdeme.tutar" mode="decimal" [minFractionDigits]="2" [maxFractionDigits]="2"></p-inputNumber>
+                            </div>
+
+                            <button pButton type="button" label="Ödeme Ekle" icon="pi pi-plus" (click)="odemeEkle()" [disabled]="!currentDraft?.id"></button>
+                        </div>
+
+                        <p-table [value]="currentDraft?.odemeler ?? []" responsiveLayout="scroll">
+                            <ng-template pTemplate="header">
+                                <tr>
+                                    <th>Yöntem</th>
+                                    <th>Hesap</th>
+                                    <th>Tutar</th>
+                                    <th></th>
+                                </tr>
+                            </ng-template>
+                            <ng-template pTemplate="body" let-odeme>
+                                <tr>
+                                    <td style="width: 150px;">
+                                        <p-select
+                                            [options]="odemeYontemiSecenekleri"
+                                            optionLabel="label"
+                                            optionValue="value"
+                                            [(ngModel)]="odeme.odemeYontemi"
+                                            (onChange)="odemeDegisti(odeme)">
+                                        </p-select>
+                                    </td>
+                                    <td style="width: 220px;">
+                                        <p-select
+                                            [options]="getOdemeHesapSecenekleri(odeme.odemeYontemi)"
+                                            [(ngModel)]="odeme.kasaBankaHesapId"
+                                            [showClear]="odeme.odemeYontemi === 'Nakit'"
+                                            placeholder="Hesap seçiniz"
+                                            (onChange)="odemeDegisti(odeme)">
+                                        </p-select>
+                                    </td>
+                                    <td style="width: 135px;">
+                                        <p-inputNumber
+                                            [(ngModel)]="odeme.tutar"
+                                            mode="decimal"
+                                            [minFractionDigits]="2"
+                                            [maxFractionDigits]="2"
+                                            (onBlur)="odemeDegisti(odeme)">
+                                        </p-inputNumber>
+                                    </td>
+                                    <td>
+                                        <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger" (click)="odemeSil(odeme)"></button>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                            <ng-template pTemplate="emptymessage">
+                                <tr>
+                                    <td colspan="4">
+                                        <div class="empty-state" style="min-height: 10rem;">
+                                            <i class="pi pi-wallet"></i>
+                                            <h3 class="empty-title">Tahsilat eklenmedi</h3>
+                                            <span>Satışı kapatmadan önce en az bir ödeme satırı ekleyin.</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                        </p-table>
+
+                        <button pButton type="button" label="KESİNLEŞTİR" icon="pi pi-check" severity="success" (click)="kesinlestir()" [disabled]="!canKesinlestir"></button>
+                    </div>
+                </div>
+        </div>
+
+        <div class="sales-content-stack">
+                <div class="surface-card">
+                    <div class="surface-header">
+                        <div>
+                            <h2 class="surface-title">Sepet</h2>
+                            <p class="surface-subtitle">Miktar, lot ve seri seçimlerini satış satırında net şekilde yönetin.</p>
+                        </div>
+                        <p-tag [value]="sepetSatirSayisi + ' satır'" severity="info"></p-tag>
+                    </div>
+                    <div class="surface-body">
+                        <p-table [value]="currentDraft?.satirlar ?? []" responsiveLayout="scroll">
+                            <ng-template pTemplate="header">
+                                <tr>
+                                    <th>Ürün</th>
+                                    <th>Miktar</th>
+                                    <th>Fiyat</th>
+                                    <th>Toplam</th>
+                                    <th>Lot / Seri</th>
+                                    <th></th>
+                                </tr>
+                            </ng-template>
+                            <ng-template pTemplate="body" let-satir>
+                                <tr>
+                                    <td>
+                                        <div class="font-semibold">{{ satir.stokKodu }} - {{ satir.urunAdi }}</div>
+                                        <small class="text-color-secondary">{{ satir.birim }}</small>
+                                    </td>
+                                    <td style="width: 120px;">
+                                        <p-inputNumber
+                                            [(ngModel)]="satir.miktar"
+                                            [min]="1"
+                                            [minFractionDigits]="0"
+                                            [maxFractionDigits]="2"
+                                            [readonly]="isSeriTracked(satir)"
+                                            (onBlur)="satirMiktarDegisti(satir)">
+                                        </p-inputNumber>
+                                    </td>
+                                    <td>{{ satir.birimSatisFiyati | number:'1.2-2' }} TL</td>
+                                    <td>{{ satir.toplamTutar | number:'1.2-2' }} TL</td>
+                                    <td>
+                                        <div class="flex flex-column gap-2">
+                                            <p-select
+                                                *ngIf="isLotTracked(satir)"
+                                                [options]="lotOptions[satir.id ?? 0].map(x => ({ label: x.lotNo, value: x.stokLotId }))"
+                                                [(ngModel)]="satir.stokLotId"
+                                                placeholder="Lot seçiniz"
+                                                (onChange)="satirLotDegisti(satir)">
+                                            </p-select>
+                                            <p-select
+                                                *ngIf="isSeriTracked(satir)"
+                                                [options]="seriOptions[satir.id ?? 0].map(x => ({ label: x.seriNo, value: x.stokSeriId }))"
+                                                [(ngModel)]="satir.stokSeriId"
+                                                placeholder="Seri seçiniz"
+                                                (onChange)="satirSeriDegisti(satir)">
+                                            </p-select>
+                                            <span *ngIf="!isLotTracked(satir) && !isSeriTracked(satir)">-</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <button pButton type="button" icon="pi pi-trash" class="p-button-text p-button-danger" (click)="satirSil(satir)"></button>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                            <ng-template pTemplate="emptymessage">
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="empty-state">
+                                            <i class="pi pi-shopping-cart"></i>
+                                            <h3 class="empty-title">Sepet henüz boş</h3>
+                                            <span>Soldan ürün seçin veya barkod okutarak hızlı satış satırı oluşturun.</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                        </p-table>
+                    </div>
+                </div>
+
+                <div class="sales-bottom-grid">
+                    <div class="surface-card history-card">
+                        <div class="surface-header">
+                            <div>
+                                <h2 class="surface-title">Satış Geçmişi</h2>
+                                <p class="surface-subtitle">Kesinleşmiş satışları izleyin ve muhasebe fişi durumunu görün.</p>
+                            </div>
+                        </div>
+                        <div class="surface-body">
+                            <p-table [value]="satislar" responsiveLayout="scroll">
+                                <ng-template pTemplate="header">
+                                    <tr>
+                                        <th>Tarih</th>
+                                        <th>Satış No</th>
+                                        <th>Kantin</th>
+                                        <th>Toplam</th>
+                                        <th>Ödeme</th>
+                                        <th>Muhasebe</th>
+                                        <th></th>
+                                    </tr>
+                                </ng-template>
+                                <ng-template pTemplate="body" let-satis>
+                                    <tr>
+                                        <td>{{ satis.satisTarihi | date:'dd.MM.yyyy HH:mm' }}</td>
+                                        <td class="font-semibold">#{{ satis.id }}</td>
+                                        <td>{{ satis.kantinAd }}</td>
+                                        <td>{{ satis.toplamTutar | number:'1.2-2' }} TL</td>
+                                        <td>{{ satis.odemeOzeti }}</td>
+                                        <td>
+                                            <span *ngIf="satis.muhasebeFisNo; else muhasebeYok">
+                                                {{ satis.muhasebeFisNo }}
+                                            </span>
+                                            <ng-template #muhasebeYok>-</ng-template>
+                                        </td>
+                                        <td class="flex gap-2">
+                                            <button pButton type="button" label="Detay" class="p-button-text" (click)="historyDetay(satis)"></button>
+                                            <button
+                                                *ngIf="canMuhasebelestir(satis)"
+                                                pButton
+                                                type="button"
+                                                label="Muhasebeleştir"
+                                                class="p-button-text"
+                                                (click)="muhasebelestir(satis)">
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </ng-template>
+                                <ng-template pTemplate="emptymessage">
+                                    <tr>
+                                        <td colspan="7">
+                                            <div class="empty-state compact-empty">
+                                                <i class="pi pi-history"></i>
+                                                <h3 class="empty-title">Henüz kesinleşmiş satış yok</h3>
+                                                <span>İlk başarılı satıştan sonra geçmiş listesi ve muhasebe bağlantıları burada görünür.</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </ng-template>
+                            </p-table>
+                        </div>
+                    </div>
+
+                    <div class="surface-card history-card">
+                         <div class="surface-header">
+                             <div>
+                                 <h2 class="surface-title">Satış Detayı</h2>
+                                 <p class="surface-subtitle">Seçili satışın ödeme ve ürün satırlarını tek panelde inceleyin.</p>
+                            </div>
+                        </div>
+                        <div class="surface-body">
+                            <div *ngIf="selectedHistory; else noDetail" class="detail-stack">
+                                <div class="summary-grid">
+                                    <div class="summary-box">
+                                        <div class="summary-box-label">Satış No</div>
+                                        <div class="summary-box-value text-lg">#{{ selectedHistory.id }}</div>
+                                    </div>
+                                    <div class="summary-box">
+                                        <div class="summary-box-label">Durum</div>
+                                        <div class="summary-box-value text-lg">{{ selectedHistory.durum }}</div>
+                                    </div>
+                                    <div class="summary-box">
+                                        <div class="summary-box-label">Toplam</div>
+                                        <div class="summary-box-value text-lg">{{ selectedHistory.toplamTutar | number:'1.2-2' }} TL</div>
+                                    </div>
+                                </div>
+
+                                <div class="summary-box">
+                                    <div class="summary-box-label">Muhasebe</div>
+                                    <div class="mt-2 flex flex-column gap-2">
+                                        <div class="flex justify-content-between gap-3">
+                                            <span>Muhasebe Durumu</span>
+                                            <strong>{{ selectedHistory.muhasebeFisDurumu ?? '-' }}</strong>
+                                        </div>
+                                        <div class="flex justify-content-between gap-3">
+                                            <span>Fiş No</span>
+                                            <strong>{{ selectedHistory.muhasebeFisNo ?? '-' }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    *ngIf="canMuhasebelestir(selectedHistory)"
+                                    pButton
+                                    type="button"
+                                    label="Muhasebeleştir"
+                                    icon="pi pi-calculator"
+                                    (click)="muhasebelestir(selectedHistory)">
+                                </button>
+
+                                <div class="detail-stack">
+                                    <div *ngFor="let odeme of selectedHistory.odemeler" class="summary-box">
+                                        <div class="summary-box-label">{{ odeme.odemeYontemi }}</div>
+                                        <div class="mt-2 flex flex-column gap-1">
+                                            <div *ngIf="odeme.hesapKodSnapshot || odeme.hesapAdSnapshot">
+                                                Hesap: {{ odeme.hesapKodSnapshot }} {{ odeme.hesapAdSnapshot }}
+                                            </div>
+                                            <div>Tutar: {{ odeme.tutar | number:'1.2-2' }} TL</div>
+                                            <div *ngIf="odeme.tahsilatOdemeBelgesiId">
+                                                Tahsilat: #{{ odeme.tahsilatOdemeBelgesiId }}
+                                                <span *ngIf="odeme.tahsilatBelgeNo">({{ odeme.tahsilatBelgeNo }})</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div *ngFor="let satir of selectedHistory.satirlar" class="summary-box">
+                                        <div class="summary-box-label">{{ satir.stokKodu }} - {{ satir.urunAdi }}</div>
+                                        <div class="mt-2 flex flex-column gap-1">
+                                            <div>{{ satir.miktar }} {{ satir.birim }} x {{ satir.birimSatisFiyati | number:'1.2-2' }} TL</div>
+                                            <div *ngIf="satir.lotNo">Lot: {{ satir.lotNo }}</div>
+                                            <div *ngIf="satir.seriNo">Seri: {{ satir.seriNo }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                             </div>
+                         </div>
+                    </div>
+                </div>
+        </div>
+    </section>
 </div>
 
-<div class="grid mt-3">
-    <div class="col-12 lg:col-7">
-        <p-card header="Satış Geçmişi">
-            <p-table [value]="satislar" responsiveLayout="scroll">
-                <ng-template pTemplate="header">
-                    <tr>
-                        <th>Tarih</th>
-                        <th>Satış No</th>
-                        <th>Kantin</th>
-                        <th>Toplam</th>
-                        <th>Ödeme</th>
-                        <th>Muhasebe</th>
-                        <th></th>
-                    </tr>
-                </ng-template>
-                <ng-template pTemplate="body" let-satis>
-                    <tr>
-                        <td>{{ satis.satisTarihi | date:'dd.MM.yyyy HH:mm' }}</td>
-                        <td>#{{ satis.id }}</td>
-                        <td>{{ satis.kantinAd }}</td>
-                        <td>{{ satis.toplamTutar | number:'1.2-2' }}</td>
-                        <td>{{ satis.odemeOzeti }}</td>
-                        <td>
-                            <span *ngIf="satis.muhasebeFisNo; else muhasebeYok">
-                                {{ satis.muhasebeFisNo }}
-                            </span>
-                            <ng-template #muhasebeYok>-</ng-template>
-                        </td>
-                        <td class="flex gap-2">
-                            <button pButton type="button" label="Detay" class="p-button-text" (click)="historyDetay(satis)"></button>
-                            <button
-                                *ngIf="canMuhasebelestir(satis)"
-                                pButton
-                                type="button"
-                                label="Muhasebeleştir"
-                                class="p-button-text"
-                                (click)="muhasebelestir(satis)">
-                            </button>
-                        </td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </p-card>
+<ng-template #noUrunler>
+    <div class="empty-state">
+        <i class="pi pi-search"></i>
+        <h3 class="empty-title">Gösterilecek ürün yok</h3>
+        <span>Önce kantin seçin veya arama filtresini temizleyin.</span>
     </div>
-    <div class="col-12 lg:col-5">
-        <p-card header="Satış Detayı">
-            <div *ngIf="selectedHistory; else noDetail" class="flex flex-column gap-2">
-                <div class="flex justify-content-between"><span>Satış No</span><strong>#{{ selectedHistory.id }}</strong></div>
-                <div class="flex justify-content-between"><span>Durum</span><p-tag [value]="selectedHistory.durum" severity="success"></p-tag></div>
-                <div class="flex justify-content-between"><span>Toplam</span><strong>{{ selectedHistory.toplamTutar | number:'1.2-2' }} TL</strong></div>
-                <div class="flex justify-content-between">
-                    <span>Muhasebe Durumu</span>
-                    <strong>{{ selectedHistory.muhasebeFisDurumu ?? '-' }}</strong>
-                </div>
-                <div class="flex justify-content-between">
-                    <span>Muhasebe Fiş No</span>
-                    <strong>{{ selectedHistory.muhasebeFisNo ?? '-' }}</strong>
-                </div>
-                <button
-                    *ngIf="canMuhasebelestir(selectedHistory)"
-                    pButton
-                    type="button"
-                    label="Muhasebeleştir"
-                    icon="pi pi-calculator"
-                    (click)="muhasebelestir(selectedHistory)">
-                </button>
+</ng-template>
 
-                <p-divider></p-divider>
-
-                <div *ngFor="let odeme of selectedHistory.odemeler" class="border-1 surface-border border-round p-2">
-                    <div class="font-semibold">{{ odeme.odemeYontemi }}</div>
-                    <div *ngIf="odeme.hesapKodSnapshot || odeme.hesapAdSnapshot">Hesap: {{ odeme.hesapKodSnapshot }} {{ odeme.hesapAdSnapshot }}</div>
-                    <div>Tutar: {{ odeme.tutar | number:'1.2-2' }} TL</div>
-                    <div *ngIf="odeme.tahsilatOdemeBelgesiId">Tahsilat: #{{ odeme.tahsilatOdemeBelgesiId }} <span *ngIf="odeme.tahsilatBelgeNo">({{ odeme.tahsilatBelgeNo }})</span></div>
-                </div>
-
-                <p-divider></p-divider>
-
-                <div *ngFor="let satir of selectedHistory.satirlar" class="border-1 surface-border border-round p-2">
-                    <div class="font-semibold">{{ satir.stokKodu }} - {{ satir.urunAdi }}</div>
-                    <div>{{ satir.miktar }} {{ satir.birim }} x {{ satir.birimSatisFiyati | number:'1.2-2' }} TL</div>
-                    <div *ngIf="satir.lotNo">Lot: {{ satir.lotNo }}</div>
-                    <div *ngIf="satir.seriNo">Seri: {{ satir.seriNo }}</div>
-                </div>
-            </div>
-            <ng-template #noDetail>
-                <span>Detay için bir satış seçiniz.</span>
-            </ng-template>
-        </p-card>
+<ng-template #noDetail>
+    <div class="empty-state">
+        <i class="pi pi-receipt"></i>
+        <h3 class="empty-title">Detay için bir satış seçin</h3>
+        <span>Geçmiş listesinde bir satış seçildiğinde ödeme ve satır dökümü burada görünür.</span>
     </div>
-</div>
+</ng-template>

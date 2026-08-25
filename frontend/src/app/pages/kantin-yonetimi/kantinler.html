@@ -1,219 +1,359 @@
 <p-toast></p-toast>
 
-<app-muhasebe-tesis-context-bar />
+<div class="kantin-shell">
+    <app-muhasebe-tesis-context-bar />
 
-<p-toolbar styleClass="mb-3">
-    <ng-template pTemplate="start">
-        <div class="text-lg font-semibold">Kantinler</div>
-    </ng-template>
-    <ng-template pTemplate="end">
-        <p-button label="Yeni Kantin" icon="pi pi-plus" (onClick)="openNewKantin()"></p-button>
-    </ng-template>
-</p-toolbar>
-
-<p-tabs value="kantinler">
-    <p-tablist>
-        <p-tab value="kantinler">Kantinler</p-tab>
-        <p-tab value="urunler" [disabled]="!selectedKantin">Ürünler</p-tab>
-    </p-tablist>
-    <p-tabpanels>
-        <p-tabpanel value="kantinler">
-            <p-table
-                [value]="kantinler"
-                [loading]="loading"
-                selectionMode="single"
-                [(selection)]="selectedKantin"
-                dataKey="id"
-                responsiveLayout="scroll"
-                styleClass="p-datatable-sm"
-                (onRowSelect)="selectKantin($event.data)">
-                <ng-template pTemplate="header">
-                    <tr>
-                        <th>Kod</th>
-                        <th>Ad</th>
-                        <th>Depo</th>
-                        <th>Varsayılan Kasa</th>
-                        <th>Aktif</th>
-                        <th class="w-8rem"></th>
-                    </tr>
-                </ng-template>
-                <ng-template pTemplate="body" let-row>
-                    <tr [pSelectableRow]="row">
-                        <td>{{ row.kod }}</td>
-                        <td>{{ row.ad }}</td>
-                        <td>{{ row.depoKod }} - {{ row.depoAd }}</td>
-                        <td>{{ row.varsayilanNakitKasaAd ?? '-' }}</td>
-                        <td><p-tag [value]="row.aktifMi ? 'Aktif' : 'Pasif'" [severity]="getAktifSeverity(row.aktifMi)"></p-tag></td>
-                        <td class="text-right">
-                            <p-button icon="pi pi-pencil" text severity="secondary" (onClick)="editKantin(row)"></p-button>
-                        </td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </p-tabpanel>
-
-        <p-tabpanel value="urunler">
-            <div class="flex justify-content-between align-items-center mb-3">
-                <div class="text-lg font-semibold">
-                    {{ selectedKantin?.kod }} - {{ selectedKantin?.ad }}
+    <section class="kantin-hero">
+        <div class="grid align-items-start">
+            <div class="col-12 lg:col-8">
+                <div class="hero-kicker">
+                    <i class="pi pi-shop"></i>
+                    <span>Kantin Yönetimi</span>
                 </div>
-                <p-button label="Yeni Ürün" icon="pi pi-plus" [disabled]="!selectedKantin" (onClick)="openNewUrun()"></p-button>
+                <h1 class="hero-title mt-3">Kantinler ve satış ürünleri tek ekranda yönetilsin</h1>
+                <p class="hero-copy">
+                    Kantin tanımlarını, varsayılan kasa ve depo bağlantılarını ve satışa açılan ürünleri dağınık tab yapısı
+                    yerine daha okunabilir bir operasyon ekranında yönetin.
+                </p>
+            </div>
+            <div class="col-12 lg:col-4 flex lg:justify-content-end">
+                <p-button label="Yeni Kantin" icon="pi pi-plus" (onClick)="openNewKantin()"></p-button>
+            </div>
+        </div>
+    </section>
+
+    <section class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Toplam Kantin</div>
+            <div class="stat-value">{{ kantinler.length }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Aktif Kantin</div>
+            <div class="stat-value">{{ aktifKantinSayisi }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Seçili Kantin Ürünü</div>
+            <div class="stat-value">{{ urunler.length }}</div>
+        </div>
+    </section>
+
+    <section class="grid">
+        <div class="col-12 xl:col-5">
+            <div class="section-card">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">Kantin Listesi</h2>
+                        <p class="section-subtitle">Depo ve varsayılan kasa bağlantılarıyla birlikte tüm kantinler.</p>
+                    </div>
+                    <div class="soft-panel text-sm">
+                        <strong>{{ aktifKantinSayisi }}</strong> aktif, <strong>{{ pasifKantinSayisi }}</strong> pasif
+                    </div>
+                </div>
+
+                <div class="section-body pt-3">
+                    <p-table
+                        [value]="kantinler"
+                        [loading]="loading"
+                        selectionMode="single"
+                        [(selection)]="selectedKantin"
+                        dataKey="id"
+                        responsiveLayout="scroll"
+                        styleClass="p-datatable-sm"
+                        (onRowSelect)="selectKantin($any($event.data))">
+                        <ng-template pTemplate="header">
+                            <tr>
+                                <th>Kod</th>
+                                <th>Ad</th>
+                                <th>Depo</th>
+                                <th>Aktif</th>
+                                <th class="w-8rem"></th>
+                            </tr>
+                        </ng-template>
+                        <ng-template pTemplate="body" let-row>
+                            <tr [pSelectableRow]="row">
+                                <td class="font-semibold">{{ row.kod }}</td>
+                                <td>{{ row.ad }}</td>
+                                <td>{{ row.depoKod }} - {{ row.depoAd }}</td>
+                                <td><p-tag [value]="row.aktifMi ? 'Aktif' : 'Pasif'" [severity]="getAktifSeverity(row.aktifMi)"></p-tag></td>
+                                <td class="text-right">
+                                    <p-button icon="pi pi-pencil" text severity="secondary" (onClick)="editKantin(row)"></p-button>
+                                </td>
+                            </tr>
+                        </ng-template>
+                        <ng-template pTemplate="emptymessage">
+                            <tr>
+                                <td colspan="5">
+                                    <div class="empty-state">
+                                        <i class="pi pi-shop"></i>
+                                        <h3 class="empty-title">Henüz kantin tanımı yok</h3>
+                                        <span>İlk kantini oluşturup depo, kasa ve satış ürünleriyle akışı başlatın.</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 xl:col-7">
+            <div class="section-card">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">Seçili Kantin</h2>
+                        <p class="section-subtitle">{{ selectedKantinDisplay }}</p>
+                    </div>
+                    <p-button
+                        label="Yeni Ürün"
+                        icon="pi pi-plus"
+                        [disabled]="!selectedKantin"
+                        (onClick)="openNewUrun()">
+                    </p-button>
+                </div>
+
+                <div class="section-body" *ngIf="selectedKantin; else noKantinSelected">
+                    <div class="detail-grid mb-4">
+                        <div class="detail-tile">
+                            <div class="detail-label">Bağlı Depo</div>
+                            <div class="detail-value">{{ selectedKantin.depoKod }} - {{ selectedKantin.depoAd }}</div>
+                        </div>
+                        <div class="detail-tile">
+                            <div class="detail-label">Varsayılan Nakit Kasa</div>
+                            <div class="detail-value">{{ selectedKantin.varsayilanNakitKasaAd ?? '-' }}</div>
+                        </div>
+                        <div class="detail-tile">
+                            <div class="detail-label">Perakende Cari</div>
+                            <div class="detail-value">{{ selectedKantin.perakendeCariKartAd ?? '-' }}</div>
+                        </div>
+                        <div class="detail-tile">
+                            <div class="detail-label">Aktif Ürün</div>
+                            <div class="detail-value">{{ aktifUrunSayisi }} / {{ urunler.length }}</div>
+                        </div>
+                    </div>
+
+                    <p-table [value]="urunler" [loading]="urunLoading" responsiveLayout="scroll" styleClass="p-datatable-sm">
+                        <ng-template pTemplate="header">
+                            <tr>
+                                <th>Barkod</th>
+                                <th>Stok Kodu</th>
+                                <th>Ürün</th>
+                                <th>Satış Fiyatı</th>
+                                <th>Stok</th>
+                                <th>Aktif</th>
+                                <th class="w-8rem"></th>
+                            </tr>
+                        </ng-template>
+                        <ng-template pTemplate="body" let-row>
+                            <tr>
+                                <td>{{ row.barkod ?? '-' }}</td>
+                                <td class="font-semibold">{{ row.stokKodu }}</td>
+                                <td>
+                                    <div>{{ row.urunAdi }}</div>
+                                    <small class="text-color-secondary">{{ row.birim }} · KDV %{{ row.kdvOrani | number:'1.0-2' }}</small>
+                                </td>
+                                <td>{{ row.satisFiyati | number:'1.2-2' }} TL</td>
+                                <td>{{ row.mevcutStok | number:'1.0-3' }}</td>
+                                <td><p-tag [value]="row.aktifMi ? 'Aktif' : 'Pasif'" [severity]="getAktifSeverity(row.aktifMi)"></p-tag></td>
+                                <td class="text-right">
+                                    <p-button icon="pi pi-pencil" text severity="secondary" (onClick)="editUrun(row)"></p-button>
+                                </td>
+                            </tr>
+                        </ng-template>
+                        <ng-template pTemplate="emptymessage">
+                            <tr>
+                                <td colspan="7">
+                                    <div class="empty-state" style="min-height: 12rem;">
+                                        <i class="pi pi-box"></i>
+                                        <h3 class="empty-title">Bu kantinde satış ürünü yok</h3>
+                                        <span>Taşınır kart bağlayarak barkodlu veya hızlı seçimli ürün listesini oluşturun.</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </ng-template>
+                    </p-table>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<ng-template #noKantinSelected>
+    <div class="section-body">
+        <div class="empty-state">
+            <i class="pi pi-arrow-left"></i>
+            <h3 class="empty-title">Önce bir kantin seçin</h3>
+            <span>Seçili kantinin depo, kasa ve ürün detayları burada gösterilir.</span>
+        </div>
+    </div>
+</ng-template>
+
+<p-dialog [(visible)]="showKantinDialog" [modal]="true" [style]="{ width: '56rem', maxWidth: '96vw' }" [header]="kantinForm.id ? 'Kantin Düzenle' : 'Yeni Kantin'">
+    <div class="dialog-shell">
+        <div class="dialog-banner">
+            <h3 class="dialog-banner-title">{{ kantinForm.id ? 'Kantin bilgisini güncelleyin' : 'Yeni kantin açılışını hazırlayın' }}</h3>
+            <p class="dialog-banner-copy">
+                Kod, depo, varsayılan kasa ve perakende cari bağlantılarını tek seferde girin. Bu bilgiler hızlı satış ve
+                tahsilat akışında doğrudan kullanılacaktır.
+            </p>
+        </div>
+
+        <div class="dialog-grid">
+            <div class="dialog-field">
+                <label class="dialog-label" for="kantinKod">Kod</label>
+                <input id="kantinKod" pInputText [(ngModel)]="kantinForm.kod" class="w-full" />
             </div>
 
-            <p-table [value]="urunler" [loading]="urunLoading" responsiveLayout="scroll" styleClass="p-datatable-sm">
-                <ng-template pTemplate="header">
-                    <tr>
-                        <th>Barkod</th>
-                        <th>Stok Kodu</th>
-                        <th>Ürün</th>
-                        <th>Birim</th>
-                        <th>Satış Fiyatı</th>
-                        <th>KDV</th>
-                        <th>Mevcut Stok</th>
-                        <th>Aktif</th>
-                        <th class="w-8rem"></th>
-                    </tr>
-                </ng-template>
-                <ng-template pTemplate="body" let-row>
-                    <tr>
-                        <td>{{ row.barkod ?? '-' }}</td>
-                        <td>{{ row.stokKodu }}</td>
-                        <td>{{ row.urunAdi }}</td>
-                        <td>{{ row.birim }}</td>
-                        <td>{{ row.satisFiyati | number:'1.2-2' }}</td>
-                        <td>%{{ row.kdvOrani | number:'1.0-2' }}</td>
-                        <td>{{ row.mevcutStok | number:'1.0-3' }}</td>
-                        <td><p-tag [value]="row.aktifMi ? 'Aktif' : 'Pasif'" [severity]="getAktifSeverity(row.aktifMi)"></p-tag></td>
-                        <td class="text-right">
-                            <p-button icon="pi pi-pencil" text severity="secondary" (onClick)="editUrun(row)"></p-button>
-                        </td>
-                    </tr>
-                </ng-template>
-            </p-table>
-        </p-tabpanel>
-    </p-tabpanels>
-</p-tabs>
+            <div class="dialog-field">
+                <label class="dialog-label" for="kantinAd">Ad</label>
+                <input id="kantinAd" pInputText [(ngModel)]="kantinForm.ad" class="w-full" />
+            </div>
 
-<p-dialog [(visible)]="showKantinDialog" [modal]="true" [style]="{ width: '42rem' }" [header]="kantinForm.id ? 'Kantin Düzenle' : 'Yeni Kantin'">
-    <div class="grid formgrid">
-        <div class="field col-12 md:col-4">
-            <label for="kantinKod">Kod</label>
-            <input id="kantinKod" pInputText [(ngModel)]="kantinForm.kod" class="w-full" />
-        </div>
-        <div class="field col-12 md:col-8">
-            <label for="kantinAd">Ad</label>
-            <input id="kantinAd" pInputText [(ngModel)]="kantinForm.ad" class="w-full" />
-        </div>
-        <div class="field col-12 md:col-6">
-            <label for="kantinDepo">Depo</label>
-            <p-select
-                inputId="kantinDepo"
-                [options]="depoOptions"
-                [(ngModel)]="kantinForm.depoId"
-                optionValue="id"
-                [optionLabel]="'ad'"
-                placeholder="Depo seçin"
-                appendTo="body"
-                class="w-full">
-                <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
-                <ng-template let-item pTemplate="selectedItem">{{ getDepoLabel(item?.id ?? kantinForm.depoId) }}</ng-template>
-            </p-select>
-        </div>
-        <div class="field col-12 md:col-6">
-            <label for="kantinKasa">Varsayılan Kasa</label>
-            <p-select
-                inputId="kantinKasa"
-                [options]="kasaOptions"
-                [(ngModel)]="kantinForm.varsayilanNakitKasaId"
-                optionValue="id"
-                [optionLabel]="'ad'"
-                placeholder="Kasa seçin"
-                [showClear]="true"
-                appendTo="body"
-                class="w-full">
-                <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
-                <ng-template let-item pTemplate="selectedItem">{{ item ? getKasaLabel(item.id) : 'Kasa seçin' }}</ng-template>
-            </p-select>
-        </div>
-        <div class="field col-12 md:col-6">
-            <label for="kantinPerakendeCari">Perakende Cari</label>
-            <p-select
-                inputId="kantinPerakendeCari"
-                [options]="cariKartOptions"
-                [(ngModel)]="kantinForm.perakendeCariKartId"
-                optionValue="id"
-                [optionLabel]="'unvanAdSoyad'"
-                placeholder="Perakende cari seçin"
-                [showClear]="true"
-                appendTo="body"
-                class="w-full">
-                <ng-template let-item pTemplate="item">{{ item.cariKodu }} - {{ item.unvanAdSoyad }}</ng-template>
-                <ng-template let-item pTemplate="selectedItem">{{ item ? getCariKartLabel(item.id) : 'Perakende cari seçin' }}</ng-template>
-            </p-select>
-        </div>
-        <div class="field col-12">
-            <label for="kantinAciklama">Açıklama</label>
-            <textarea id="kantinAciklama" pTextarea [(ngModel)]="kantinForm.aciklama" rows="3" class="w-full"></textarea>
-        </div>
-        <div class="field col-12">
-            <div class="flex align-items-center gap-2">
-                <p-toggleswitch [(ngModel)]="kantinForm.aktifMi" inputId="kantinAktif"></p-toggleswitch>
-                <label for="kantinAktif">Aktif</label>
+            <div class="dialog-field">
+                <label class="dialog-label" for="kantinDepo">Depo</label>
+                <p-select
+                    inputId="kantinDepo"
+                    [options]="depoOptions"
+                    [(ngModel)]="kantinForm.depoId"
+                    optionValue="id"
+                    [optionLabel]="'ad'"
+                    placeholder="Depo seçin"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ getDepoLabel(item?.id ?? kantinForm.depoId) || 'Depo seçin' }}</ng-template>
+                </p-select>
+                <small class="dialog-help">Satış hareketleri ve stok düşümü bu depodan çalışır.</small>
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="kantinKasa">Varsayılan Kasa</label>
+                <p-select
+                    inputId="kantinKasa"
+                    [options]="kasaOptions"
+                    [(ngModel)]="kantinForm.varsayilanNakitKasaId"
+                    optionValue="id"
+                    [optionLabel]="'ad'"
+                    placeholder="Kasa seçin"
+                    [showClear]="true"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ item ? getKasaLabel(item.id) : 'Kasa seçin' }}</ng-template>
+                </p-select>
+                <small class="dialog-help">Nakit tahsilatlarda varsayılan hesap olarak kullanılabilir.</small>
+            </div>
+
+            <div class="dialog-field full">
+                <label class="dialog-label" for="kantinPerakendeCari">Perakende Cari</label>
+                <p-select
+                    inputId="kantinPerakendeCari"
+                    [options]="cariKartOptions"
+                    [(ngModel)]="kantinForm.perakendeCariKartId"
+                    optionValue="id"
+                    [optionLabel]="'unvanAdSoyad'"
+                    placeholder="Perakende cari seçin"
+                    [showClear]="true"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.cariKodu }} - {{ item.unvanAdSoyad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ item ? getCariKartLabel(item.id) : 'Perakende cari seçin' }}</ng-template>
+                </p-select>
+                <small class="dialog-help">Kantin satışının tahsilat ve muhasebe tarafında bağlanacağı varsayılan müşteri kartı.</small>
+            </div>
+
+            <div class="dialog-field full">
+                <label class="dialog-label" for="kantinAciklama">Açıklama</label>
+                <textarea id="kantinAciklama" pTextarea [(ngModel)]="kantinForm.aciklama" rows="4" class="w-full"></textarea>
+            </div>
+
+            <div class="dialog-field full">
+                <div class="dialog-switch-row">
+                    <div>
+                        <div class="dialog-label">Aktif Kullanım</div>
+                        <small class="dialog-help">Pasif kantinler satış seçimlerinde gizlenir.</small>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleswitch [(ngModel)]="kantinForm.aktifMi" inputId="kantinAktif"></p-toggleswitch>
+                        <label for="kantinAktif">Aktif</label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     <ng-template pTemplate="footer">
-        <div class="flex justify-content-end gap-2">
+        <div class="dialog-footer">
             <p-button label="Vazgeç" severity="secondary" text (onClick)="showKantinDialog = false"></p-button>
             <p-button label="Kaydet" (onClick)="saveKantin()"></p-button>
         </div>
     </ng-template>
 </p-dialog>
 
-<p-dialog [(visible)]="showUrunDialog" [modal]="true" [style]="{ width: '42rem' }" [header]="urunForm.id ? 'Ürün Düzenle' : 'Yeni Ürün'">
-    <div class="grid formgrid">
-        <div class="field col-12">
-            <label for="urunKart">Taşınır Kart</label>
-            <p-select
-                inputId="urunKart"
-                [options]="tasinirKartOptions"
-                [(ngModel)]="urunForm.tasinirKartId"
-                optionValue="id"
-                [optionLabel]="'ad'"
-                [filter]="true"
-                filterBy="stokKodu,ad"
-                placeholder="Taşınır kart seçin"
-                appendTo="body"
-                class="w-full">
-                <ng-template let-item pTemplate="item">{{ item.stokKodu }} - {{ item.ad }}</ng-template>
-                <ng-template let-item pTemplate="selectedItem">{{ item ? getKartLabel(item.id) : 'Taşınır kart seçin' }}</ng-template>
-            </p-select>
+<p-dialog [(visible)]="showUrunDialog" [modal]="true" [style]="{ width: '56rem', maxWidth: '96vw' }" [header]="urunForm.id ? 'Ürün Düzenle' : 'Yeni Ürün'">
+    <div class="dialog-shell">
+        <div class="dialog-banner">
+            <h3 class="dialog-banner-title">{{ urunForm.id ? 'Satış ürününü güncelleyin' : 'Kantine yeni satış ürünü ekleyin' }}</h3>
+            <p class="dialog-banner-copy">
+                Taşınır kart bağlantısı, barkod ve satış fiyatını net biçimde tanımlayın. Bu kayıtlar hızlı satış ekranında
+                doğrudan ürün butonlarına dönüşür.
+            </p>
         </div>
-        <div class="field col-12 md:col-6">
-            <label for="urunBarkod">Barkod</label>
-            <input id="urunBarkod" pInputText [(ngModel)]="urunForm.barkod" class="w-full" />
-        </div>
-        <div class="field col-12 md:col-3">
-            <label for="urunFiyat">Satış Fiyatı</label>
-            <p-inputnumber inputId="urunFiyat" [(ngModel)]="urunForm.satisFiyati" mode="decimal" [min]="0" [minFractionDigits]="2" [maxFractionDigits]="2" class="w-full"></p-inputnumber>
-        </div>
-        <div class="field col-12 md:col-3">
-            <label for="urunSira">Sıra No</label>
-            <p-inputnumber inputId="urunSira" [(ngModel)]="urunForm.siraNo" [min]="0" class="w-full"></p-inputnumber>
-        </div>
-        <div class="field col-12">
-            <label for="urunAciklama">Açıklama</label>
-            <textarea id="urunAciklama" pTextarea [(ngModel)]="urunForm.aciklama" rows="3" class="w-full"></textarea>
-        </div>
-        <div class="field col-12">
-            <div class="flex align-items-center gap-2">
-                <p-toggleswitch [(ngModel)]="urunForm.aktifMi" inputId="urunAktif"></p-toggleswitch>
-                <label for="urunAktif">Aktif</label>
+
+        <div class="dialog-grid">
+            <div class="dialog-field full">
+                <label class="dialog-label" for="urunKart">Taşınır Kart</label>
+                <p-select
+                    inputId="urunKart"
+                    [options]="tasinirKartOptions"
+                    [(ngModel)]="urunForm.tasinirKartId"
+                    optionValue="id"
+                    [optionLabel]="'ad'"
+                    [filter]="true"
+                    filterBy="stokKodu,ad"
+                    placeholder="Taşınır kart seçin"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.stokKodu }} - {{ item.ad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ item ? getKartLabel(item.id) : 'Taşınır kart seçin' }}</ng-template>
+                </p-select>
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="urunBarkod">Barkod</label>
+                <input id="urunBarkod" pInputText [(ngModel)]="urunForm.barkod" class="w-full" />
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="urunSira">Sıra No</label>
+                <p-inputnumber inputId="urunSira" [(ngModel)]="urunForm.siraNo" [min]="0" class="w-full"></p-inputnumber>
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="urunFiyat">Satış Fiyatı</label>
+                <p-inputnumber inputId="urunFiyat" [(ngModel)]="urunForm.satisFiyati" mode="decimal" [min]="0" [minFractionDigits]="2" [maxFractionDigits]="2" class="w-full"></p-inputnumber>
+                <small class="dialog-help">KDV hariç/hariçsiz mevcut backend davranışına göre satış toplamında kullanılacaktır.</small>
+            </div>
+
+            <div class="dialog-field full">
+                <label class="dialog-label" for="urunAciklama">Açıklama</label>
+                <textarea id="urunAciklama" pTextarea [(ngModel)]="urunForm.aciklama" rows="4" class="w-full"></textarea>
+            </div>
+
+            <div class="dialog-field full">
+                <div class="dialog-switch-row">
+                    <div>
+                        <div class="dialog-label">Satışta Görünsün</div>
+                        <small class="dialog-help">Pasif ürünler hızlı satış ekranında listeye düşmez.</small>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleswitch [(ngModel)]="urunForm.aktifMi" inputId="urunAktif"></p-toggleswitch>
+                        <label for="urunAktif">Aktif</label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     <ng-template pTemplate="footer">
-        <div class="flex justify-content-end gap-2">
+        <div class="dialog-footer">
             <p-button label="Vazgeç" severity="secondary" text (onClick)="showUrunDialog = false"></p-button>
             <p-button label="Kaydet" (onClick)="saveUrun()"></p-button>
         </div>

@@ -31,6 +31,7 @@ import { StokTalepleriService } from './stok-talepleri.service';
 import { TesisYonetimiService } from '../../tesis-yonetimi/tesis-yonetimi.service';
 
 type StokCikisYontemi = 'TalepVeOnay' | 'DogrudanDepoCikisi';
+type TagSeverity = 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast';
 
 @Component({
     selector: 'app-stok-talepleri-page',
@@ -224,6 +225,12 @@ export class StokTalepleriPage implements OnInit {
     onFiltersChanged(): void {
         this.selectedTalep = null;
         this.load(1, this.pageSize);
+    }
+
+    onSelectedTalepChange(): void {
+        if (this.selectedTalep?.id) {
+            this.selectTalep(this.selectedTalep.id);
+        }
     }
 
     selectTalep(id: number): void {
@@ -583,7 +590,7 @@ export class StokTalepleriPage implements OnInit {
         return this.stokBakiyeMap.get(`${this.selectedTalep.karsilayanDepoId}:${satir.tasinirKartId}`) ?? 0;
     }
 
-    getLineSeverity(durum: string): string {
+    getLineSeverity(durum: string): TagSeverity {
         switch (durum) {
             case 'TeslimEdildi':
                 return UiSeverity.Success;

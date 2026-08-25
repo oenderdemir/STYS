@@ -20,7 +20,6 @@ import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
 import { DepolarService } from '../depolar/depolar.service';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
-import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.service';
 import { StokLotBakiyeModel, StokSeriBakiyeModel } from '../stok-hareketleri/stok-hareketleri.dto';
 import { StokHareketleriService } from '../stok-hareketleri/stok-hareketleri.service';
@@ -46,7 +45,6 @@ import { SarfFisleriService } from './sarf-fisleri.service';
         TextareaModule,
         ToastModule,
         ToolbarModule,
-        MuhasebeTesisSecimDialogComponent,
         MuhasebeTesisContextBarComponent
     ],
     templateUrl: './sarf-fisleri.html',

@@ -43,6 +43,262 @@ import { KantinlerService } from './kantinler.service';
         MuhasebeTesisContextBarComponent
     ],
     templateUrl: './kantinler.html',
+    styles: [`
+        :host {
+            display: block;
+        }
+
+        .kantin-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .kantin-hero {
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            background:
+                radial-gradient(circle at top left, rgba(16, 185, 129, 0.18), transparent 28%),
+                linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+        }
+
+        .hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.06);
+            color: #334155;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .hero-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 2rem;
+            line-height: 1.1;
+        }
+
+        .hero-copy {
+            margin: 0.75rem 0 0;
+            max-width: 54rem;
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-card {
+            min-height: 7rem;
+            border-radius: 1.25rem;
+            padding: 1.1rem 1.2rem;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .stat-label {
+            color: #64748b;
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .stat-value {
+            margin-top: 0.65rem;
+            color: #0f172a;
+            font-size: 1.9rem;
+            font-weight: 700;
+        }
+
+        .section-card {
+            height: 100%;
+            border-radius: 1.4rem;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 18px 38px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.2rem 1.35rem 0;
+        }
+
+        .section-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .section-subtitle {
+            margin: 0.35rem 0 0;
+            color: #64748b;
+            font-size: 0.95rem;
+        }
+
+        .section-body {
+            padding: 1.2rem 1.35rem 1.35rem;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .detail-tile {
+            border-radius: 1rem;
+            padding: 1rem;
+            background: linear-gradient(180deg, rgba(248, 250, 252, 0.92), rgba(255, 255, 255, 0.98));
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .detail-label {
+            color: #64748b;
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .detail-value {
+            margin-top: 0.55rem;
+            color: #0f172a;
+            font-size: 1.1rem;
+            font-weight: 600;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.85rem;
+            min-height: 16rem;
+            padding: 2rem;
+            text-align: center;
+            color: #64748b;
+        }
+
+        .empty-state i {
+            font-size: 2rem;
+            color: #10b981;
+        }
+
+        .empty-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .soft-panel {
+            border-radius: 1rem;
+            padding: 1rem 1.1rem;
+            background: rgba(248, 250, 252, 0.8);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .dialog-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .dialog-banner {
+            padding: 1rem 1.1rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.08));
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .dialog-banner-title {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .dialog-banner-copy {
+            margin: 0.35rem 0 0;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .dialog-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .dialog-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+        }
+
+        .dialog-field.full {
+            grid-column: 1 / -1;
+        }
+
+        .dialog-label {
+            color: #334155;
+            font-size: 0.92rem;
+            font-weight: 600;
+        }
+
+        .dialog-help {
+            color: #64748b;
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+
+        .dialog-switch-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.95rem 1rem;
+            border-radius: 1rem;
+            background: rgba(248, 250, 252, 0.9);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .dialog-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        @media (max-width: 991px) {
+            .stats-grid,
+            .detail-grid,
+            .dialog-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    `],
     providers: [MessageService]
 })
 export class KantinlerPage implements OnInit {
@@ -264,6 +520,26 @@ export class KantinlerPage implements OnInit {
 
     getAktifSeverity(aktifMi: boolean): 'success' | 'secondary' {
         return aktifMi ? 'success' : 'secondary';
+    }
+
+    get aktifKantinSayisi(): number {
+        return this.kantinler.filter((x) => x.aktifMi).length;
+    }
+
+    get pasifKantinSayisi(): number {
+        return this.kantinler.filter((x) => !x.aktifMi).length;
+    }
+
+    get aktifUrunSayisi(): number {
+        return this.urunler.filter((x) => x.aktifMi).length;
+    }
+
+    get selectedKantinDisplay(): string {
+        if (!this.selectedKantin) {
+            return 'Henüz kantin seçilmedi';
+        }
+
+        return `${this.selectedKantin.kod} - ${this.selectedKantin.ad}`;
     }
 
     getDepoLabel(depoId?: number | null): string {

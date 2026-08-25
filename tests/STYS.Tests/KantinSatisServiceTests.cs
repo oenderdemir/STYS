@@ -1547,6 +1547,105 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task Iade_FifoPartialRestore_ArdisikIkiIade_OffsetDogru()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        await SeedKarimliFifoTuketimiAsync(dbContext, originalMovement.Id);
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        // İade #1 = 2 → 2 @ 10
+        var iade1 = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 2))).Id!.Value);
+        var iade1Satir = await dbContext.KantinSatisIadeSatirlari.SingleAsync(x => x.KantinSatisIadeId == iade1.Id);
+        var iade1Hareket = await dbContext.StokHareketleri.SingleAsync(x => x.Id == iade1Satir.StokHareketId);
+        var iade1Layer = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KaynakStokHareketId == iade1Hareket.Id);
+        Assert.Equal(2m, iade1Layer.IlkMiktar);
+        Assert.Equal(10m, iade1Layer.BirimMaliyet);
+        Assert.Equal(10m, iade1Hareket.MaliyetBirimFiyat);
+        Assert.Equal(20m, iade1Hareket.MaliyetTutari);
+
+        // İade #2 = 2 → 2 @ 12 (önceki 2 @ 10 skip edilir, baştan başlamaz).
+        var iade2 = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 2))).Id!.Value);
+        var iade2Satir = await dbContext.KantinSatisIadeSatirlari.SingleAsync(x => x.KantinSatisIadeId == iade2.Id);
+        var iade2Hareket = await dbContext.StokHareketleri.SingleAsync(x => x.Id == iade2Satir.StokHareketId);
+        var iade2Layer = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KaynakStokHareketId == iade2Hareket.Id);
+        Assert.Equal(2m, iade2Layer.IlkMiktar);
+        Assert.Equal(12m, iade2Layer.BirimMaliyet);
+        Assert.Equal(12m, iade2Hareket.MaliyetBirimFiyat);
+        Assert.Equal(24m, iade2Hareket.MaliyetTutari);
+    }
+
+    [Fact]
+    public async Task Iade_LifoPartialRestore_ArdisikIkiIade_OffsetDogru()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        await SeedKarimliLifoTuketimiAsync(dbContext, originalMovement.Id);
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        // İade #1 = 2 → 2 @ 12 (LIFO: ilk tüketim kaydı 3 @ 12).
+        var iade1 = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 2))).Id!.Value);
+        var iade1Satir = await dbContext.KantinSatisIadeSatirlari.SingleAsync(x => x.KantinSatisIadeId == iade1.Id);
+        var iade1Hareket = await dbContext.StokHareketleri.SingleAsync(x => x.Id == iade1Satir.StokHareketId);
+        var iade1Layer = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KaynakStokHareketId == iade1Hareket.Id);
+        Assert.Equal(2m, iade1Layer.IlkMiktar);
+        Assert.Equal(12m, iade1Layer.BirimMaliyet);
+
+        // İade #2 = 2 → 1 @ 12 + 1 @ 10 (önceki 2 @ 12 skip edilir).
+        var iade2 = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 2))).Id!.Value);
+        var iade2Satir = await dbContext.KantinSatisIadeSatirlari.SingleAsync(x => x.KantinSatisIadeId == iade2.Id);
+        var iade2Hareket = await dbContext.StokHareketleri.SingleAsync(x => x.Id == iade2Satir.StokHareketId);
+        var iade2Layerlar = await dbContext.StokMaliyetKatmanlari
+            .Where(x => x.KaynakStokHareketId == iade2Hareket.Id)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+        Assert.Equal(2, iade2Layerlar.Count);
+        Assert.Equal(1m, iade2Layerlar[0].IlkMiktar);
+        Assert.Equal(12m, iade2Layerlar[0].BirimMaliyet);
+        Assert.Equal(1m, iade2Layerlar[1].IlkMiktar);
+        Assert.Equal(10m, iade2Layerlar[1].BirimMaliyet);
+    }
+
+    [Fact]
+    public async Task Iade_MovementMaliyetToplami_RestoredLayerToplami_Esit()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        await SeedKarimliFifoTuketimiAsync(dbContext, originalMovement.Id);
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        // Mixed-layer 4 adet: 2 @ 10 + 2 @ 12 → toplam 44, efektif birim 11.
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 4))).Id!.Value);
+
+        var iadeHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var layerlar = await dbContext.StokMaliyetKatmanlari
+            .Where(x => x.KaynakStokHareketId == iadeHareket.Id)
+            .ToListAsync();
+
+        var layerToplamMaliyet = layerlar.Sum(x => Math.Round(x.IlkMiktar * x.BirimMaliyet, 2, MidpointRounding.AwayFromZero));
+
+        // StokHareket.MaliyetTutari ile restored layer toplam maliyeti birebir eşleşir.
+        Assert.Equal(44m, iadeHareket.MaliyetTutari);
+        Assert.Equal(44m, layerToplamMaliyet);
+        Assert.Equal(11m, iadeHareket.MaliyetBirimFiyat);
+    }
+
+    [Fact]
     public async Task Iade_IkinciFinalizeDuplicateUretmez()
     {
         await using var dbContext = CreateDbContext();
@@ -2218,7 +2317,10 @@ public class KantinSatisServiceTests
         public Task RestoreLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto reversalMovement, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
-        public Task RestorePartialLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto iadeMovement, decimal iadeMiktari, CancellationToken cancellationToken = default)
+        public Task<StokMaliyetRestorePlan?> PlanPartialRestoreAsync(int originalMovementId, decimal alreadyRestoredQuantity, decimal returnQuantity, CancellationToken cancellationToken = default)
+            => Task.FromResult<StokMaliyetRestorePlan?>(null);
+
+        public Task RestorePlannedLayersAsync(StokMaliyetRestorePlan plan, StokHareketDto iadeMovement, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 

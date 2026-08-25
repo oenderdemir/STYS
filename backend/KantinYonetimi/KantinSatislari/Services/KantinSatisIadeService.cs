@@ -102,13 +102,10 @@ public class KantinSatisIadeService : IKantinSatisIadeService
                 throw new BaseException("İade miktarı satılan miktarı aşamaz.", 400);
             }
 
-            var originalMovement = originalSatir.StokHareket
-                ?? throw new BaseException("Satış satırına bağlı stok hareketi bulunamadı.", 400);
-
-            var maliyetBirimFiyat = originalMovement.MaliyetBirimFiyat;
-            var maliyetTutari = maliyetBirimFiyat.HasValue
-                ? ParaTutarYuvarlamaHelper.Yuvarla(satirRequest.Miktar * maliyetBirimFiyat.Value)
-                : (decimal?)null;
+            if (!originalSatir.StokHareketId.HasValue)
+            {
+                throw new BaseException("Satış satırına bağlı stok hareketi bulunamadı.", 400);
+            }
 
             iade.Satirlar.Add(new KantinSatisIadeSatir
             {
@@ -122,9 +119,7 @@ public class KantinSatisIadeService : IKantinSatisIadeService
                 LotNo = originalSatir.LotNo,
                 SeriNo = originalSatir.SeriNo,
                 BirimSatisFiyati = originalSatir.BirimSatisFiyati,
-                KdvOrani = originalSatir.KdvOrani,
-                MaliyetBirimFiyat = maliyetBirimFiyat,
-                MaliyetTutari = maliyetTutari
+                KdvOrani = originalSatir.KdvOrani
             });
         }
 
@@ -165,15 +160,11 @@ public class KantinSatisIadeService : IKantinSatisIadeService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         try
         {
-            // Concurrency hardening: iade kaydı Serializable transaction İÇİNDE yeniden yüklenir. Aynı
-            // iade için iki eşzamanlı kesinleştirme çağrısında ikincisi burada birincinin commit'ini
-            // bekler ve Durum=Kesinlesti'yi görerek idempotent döner — ikinci stok hareketi ÜRETİLMEZ.
-            // (SQL Server'da satır kilidi deseni için bkz. MuhasebeFisService / PosTahsilatValorAktarimService
-            // `WITH (UPDLOCK, ROWLOCK, HOLDLOCK)`.)
-            var iade = await _dbContext.KantinSatisIadeleri
-                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
-                ?? throw new BaseException("İade bulunamadı.", 404);
+            // Concurrency hardening: iade kaydı Serializable transaction İÇİNDE UPDLOCK + ROWLOCK +
+            // HOLDLOCK ile yeniden yüklenir. Aynı iade için iki eşzamanlı kesinleştirme çağrısında
+            // ikincisi burada birincinin commit'ini bekler ve Durum=Kesinlesti'yi görerek idempotent
+            // döner — ikinci stok hareketi ÜRETİLMEZ.
+            var iade = await LoadIadeWithLockAsync(id, cancellationToken);
 
             await EnsureTesisAccessAsync(iade.TesisId, cancellationToken);
 
@@ -225,11 +216,37 @@ public class KantinSatisIadeService : IKantinSatisIadeService
                     throw new BaseException("Kümülatif iade miktarı satış miktarını aşamaz.", 400);
                 }
 
+                // Otoriter maliyet finalize sırasında orijinal tüketim kayıtlarından (skip = önceki
+                // Kesinlesti iade toplamı) üretilir; CreateAsync'te snapshotlanmaz.
+                var plan = await _stokMaliyetKatmaniRestoreService.PlanPartialRestoreAsync(
+                    originalMovement.Id,
+                    oncekiIadeToplami,
+                    iadeSatir.Miktar,
+                    cancellationToken);
+
+                if (plan is not null)
+                {
+                    iadeSatir.MaliyetBirimFiyat = plan.EfektifBirimMaliyet;
+                    iadeSatir.MaliyetTutari = plan.ToplamMaliyet;
+                }
+                else
+                {
+                    // Weighted-average: layer üretilmez, orijinal hareketin ortalama maliyet snapshot'ı taşınır.
+                    iadeSatir.MaliyetBirimFiyat = originalMovement.MaliyetBirimFiyat;
+                    iadeSatir.MaliyetTutari = originalMovement.MaliyetBirimFiyat.HasValue
+                        ? ParaTutarYuvarlamaHelper.Yuvarla(iadeSatir.Miktar * originalMovement.MaliyetBirimFiyat.Value)
+                        : (decimal?)null;
+                }
+
                 var iadeMovement = await _stokHareketService.AddWithinCurrentTransactionAsync(
                     BuildIadeStokHareketDto(iade, iadeSatir, originalMovement, iadeZamani),
                     cancellationToken);
 
-                await _stokMaliyetKatmaniRestoreService.RestorePartialLayeredCostIfNeededAsync(originalMovement, iadeMovement, iadeSatir.Miktar, cancellationToken);
+                if (plan is not null)
+                {
+                    await _stokMaliyetKatmaniRestoreService.RestorePlannedLayersAsync(plan, iadeMovement, cancellationToken);
+                }
+
                 iadeSatir.StokHareketId = iadeMovement.Id;
             }
 
@@ -341,6 +358,27 @@ public class KantinSatisIadeService : IKantinSatisIadeService
             FinansalIadeDurumu = entity.FinansalIadeDurumu,
             Satirlar = satirDtos
         };
+    }
+
+    private async Task<KantinSatisIade> LoadIadeWithLockAsync(int id, CancellationToken cancellationToken)
+    {
+        // SQL Server'da satır UPDLOCK + ROWLOCK + HOLDLOCK ile kilitlenir (açık transaction içinde);
+        // InMemory vb. ilişkisel olmayan/SQL Server olmayan sağlayıcılarda düz okumaya düşülür.
+        if (_dbContext.Database.IsSqlServer() && _dbContext.Database.CurrentTransaction is null)
+        {
+            throw new BaseException("İade kesinleştirme yalnızca açık bir transaction içinde çalışabilir.", 500);
+        }
+
+        IQueryable<KantinSatisIade> query = _dbContext.Database.IsSqlServer()
+            ? _dbContext.KantinSatisIadeleri.FromSqlInterpolated($@"
+SELECT * FROM [kantin].[KantinSatisIadeleri] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [Id] = {id} AND [IsDeleted] = 0")
+            : _dbContext.KantinSatisIadeleri.Where(x => x.Id == id && !x.IsDeleted);
+
+        return await query
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("İade bulunamadı.", 404);
     }
 
     private async Task EnsureTesisAccessAsync(int tesisId, CancellationToken cancellationToken)

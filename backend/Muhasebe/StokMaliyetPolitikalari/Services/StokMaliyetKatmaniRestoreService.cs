@@ -50,26 +50,30 @@ public class StokMaliyetKatmaniRestoreService : IStokMaliyetKatmaniRestoreServic
             cancellationToken);
     }
 
-    public async Task RestorePartialLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto iadeMovement, decimal iadeMiktari, CancellationToken cancellationToken = default)
+    public async Task<StokMaliyetRestorePlan?> PlanPartialRestoreAsync(
+        int originalMovementId,
+        decimal alreadyRestoredQuantity,
+        decimal returnQuantity,
+        CancellationToken cancellationToken = default)
     {
-        if (iadeMiktari <= 0)
+        if (returnQuantity <= 0)
         {
-            return;
+            return null;
         }
 
         var hasConsumptions = await _dbContext.StokMaliyetKatmanTuketimleri
             .AsNoTracking()
-            .AnyAsync(x => x.CikisStokHareketId == originalMovement.Id && !x.IsDeleted, cancellationToken);
+            .AnyAsync(x => x.CikisStokHareketId == originalMovementId && !x.IsDeleted, cancellationToken);
 
         if (!hasConsumptions)
         {
-            // Weighted-average: layer üretilmez; maliyet snapshot iade hareketinin üzerinde taşınır.
-            return;
+            // Weighted-average: layer üretilmez; maliyet orijinal hareketin snapshot'ından taşınır.
+            return null;
         }
 
         var maliyetYontemi = await _dbContext.StokMaliyetKatmanTuketimleri
             .AsNoTracking()
-            .Where(x => x.CikisStokHareketId == originalMovement.Id && !x.IsDeleted)
+            .Where(x => x.CikisStokHareketId == originalMovementId && !x.IsDeleted)
             .Select(x => x.StokMaliyetKatmani!.MaliyetYontemi)
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new BaseException("İade için maliyet katmanı bilgisi bulunamadı.", 400);
@@ -81,13 +85,35 @@ public class StokMaliyetKatmaniRestoreService : IStokMaliyetKatmaniRestoreServic
             _ => throw new BaseException("Bu işlem için maliyet katmanı geri yükleme uygulanamaz.", 400)
         };
 
-        await strategy.RestorePartialConsumptionAsIncomingLayersAsync(
-            originalMovement.Id,
+        var segmentler = await strategy.ComputePartialRestoreSegmentsAsync(
+            originalMovementId,
+            alreadyRestoredQuantity,
+            returnQuantity,
+            cancellationToken);
+
+        var toplamMaliyet = segmentler.Sum(x => x.Tutar);
+        var efektifBirimMaliyet = returnQuantity > 0
+            ? Math.Round(toplamMaliyet / returnQuantity, 6, MidpointRounding.AwayFromZero)
+            : 0m;
+
+        return new StokMaliyetRestorePlan(maliyetYontemi, segmentler, toplamMaliyet, efektifBirimMaliyet);
+    }
+
+    public async Task RestorePlannedLayersAsync(StokMaliyetRestorePlan plan, StokHareketDto iadeMovement, CancellationToken cancellationToken = default)
+    {
+        LayeredCostStrategyBase strategy = plan.MaliyetYontemi switch
+        {
+            StokMaliyetYontemleri.FIFO => new FifoMaliyetStrategy(_dbContext),
+            StokMaliyetYontemleri.LIFO => new LifoMaliyetStrategy(_dbContext),
+            _ => throw new BaseException("Bu işlem için maliyet katmanı geri yükleme uygulanamaz.", 400)
+        };
+
+        await strategy.RestorePlannedSegmentsAsIncomingLayersAsync(
+            plan.Segmentler,
             iadeMovement.Id!.Value,
             iadeMovement.DepoId,
             iadeMovement.TasinirKartId,
             iadeMovement.HareketTarihi,
-            iadeMiktari,
             cancellationToken);
     }
 }

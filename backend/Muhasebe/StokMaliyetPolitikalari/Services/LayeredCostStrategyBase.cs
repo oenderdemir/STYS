@@ -145,22 +145,20 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
     }
 
     /// <summary>
-    /// KISMİ geri-alma için: orijinal çıkış hareketinin tüketim kayıtlarını (StokMaliyetKatmanTuketimleri)
-    /// ORJİNAL sıralarıyla (Id) dolaşarak iade edilen miktar kadar YENİ incoming layer oluşturur.
-    /// Orijinal tüketim kayıtları DEĞİŞTİRİLMEZ. FIFO ve LIFO için aynı deterministik sıra korunur.
+    /// Orijinal çıkış hareketinin tüketim kayıtlarını (StokMaliyetKatmanTuketimleri) ORJİNAL
+    /// sıralarıyla (Id) dolaşır; alreadyRestoredQuantity kadarını ATLAR, kalan returnQuantity
+    /// kadarını deterministik segmentler olarak döndürür. FIFO ve LIFO için aynı sıra korunur.
+    /// Orijinal tüketim kayıtları DEĞİŞTİRİLMEZ.
     /// </summary>
-    public async Task RestorePartialConsumptionAsIncomingLayersAsync(
+    public async Task<IReadOnlyList<StokMaliyetRestoreSegment>> ComputePartialRestoreSegmentsAsync(
         int originalCikisStokHareketId,
-        int iadeStokHareketId,
-        int depoId,
-        int tasinirKartId,
-        DateTime girisTarihi,
-        decimal iadeMiktari,
+        decimal alreadyRestoredQuantity,
+        decimal returnQuantity,
         CancellationToken cancellationToken = default)
     {
-        if (iadeMiktari <= 0)
+        if (returnQuantity <= 0)
         {
-            return;
+            return [];
         }
 
         var tuketimler = await DbContext.StokMaliyetKatmanTuketimleri
@@ -169,38 +167,71 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
             .OrderBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        var kalan = iadeMiktari;
+        var segmentler = new List<StokMaliyetRestoreSegment>();
+        var skipRemaining = alreadyRestoredQuantity;
+        var restoreRemaining = returnQuantity;
+
         foreach (var tuketim in tuketimler)
         {
-            if (kalan <= 0)
+            if (restoreRemaining <= 0)
             {
                 break;
             }
 
-            var alinacak = Math.Min(tuketim.Miktar, kalan);
-            if (alinacak <= 0)
+            var available = tuketim.Miktar;
+            if (skipRemaining > 0)
             {
-                continue;
+                var skip = Math.Min(available, skipRemaining);
+                available -= skip;
+                skipRemaining -= skip;
             }
 
+            if (available > 0)
+            {
+                var alinacak = Math.Min(available, restoreRemaining);
+                if (alinacak > 0)
+                {
+                    segmentler.Add(new StokMaliyetRestoreSegment(alinacak, tuketim.BirimMaliyet));
+                    restoreRemaining -= alinacak;
+                }
+            }
+        }
+
+        if (restoreRemaining > 0)
+        {
+            throw new BaseException("İade miktarı orijinal tüketim kayıtlarını aşıyor.", 400);
+        }
+
+        return segmentler;
+    }
+
+    /// <summary>
+    /// Verilen segmentleri iade hareketi üzerinde YENİ incoming layer olarak yazar.
+    /// </summary>
+    public async Task RestorePlannedSegmentsAsIncomingLayersAsync(
+        IReadOnlyList<StokMaliyetRestoreSegment> segmentler,
+        int iadeStokHareketId,
+        int depoId,
+        int tasinirKartId,
+        DateTime girisTarihi,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var segment in segmentler)
+        {
             AddIncomingLayer(
                 iadeStokHareketId,
                 depoId,
                 tasinirKartId,
                 girisTarihi,
-                alinacak,
-                tuketim.BirimMaliyet,
+                segment.Miktar,
+                segment.BirimMaliyet,
                 MaliyetYontemi);
-
-            kalan -= alinacak;
         }
 
-        if (kalan > 0)
+        if (segmentler.Count > 0)
         {
-            throw new BaseException("İade miktarı orijinal tüketim kayıtlarını aşıyor.", 400);
+            await DbContext.SaveChangesAsync(cancellationToken);
         }
-
-        await DbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<LayeredConsumptionPlan> PlanOutgoingConsumptionAsync(int depoId, int tasinirKartId, decimal miktar, CancellationToken cancellationToken = default)

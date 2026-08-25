@@ -145,32 +145,62 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
     }
 
     /// <summary>
-    /// KISMİ geri-alma için: verilen miktar ve birim maliyetle YENİ bir incoming layer oluşturur.
-    /// Orijinal tüketim kayıtlarını değiştirmez; yalnızca iade edilen miktarı bu maliyet yöntemine
-    /// ait yeni bir katman olarak stoğa geri koyar.
+    /// KISMİ geri-alma için: orijinal çıkış hareketinin tüketim kayıtlarını (StokMaliyetKatmanTuketimleri)
+    /// ORJİNAL sıralarıyla (Id) dolaşarak iade edilen miktar kadar YENİ incoming layer oluşturur.
+    /// Orijinal tüketim kayıtları DEĞİŞTİRİLMEZ. FIFO ve LIFO için aynı deterministik sıra korunur.
     /// </summary>
-    public async Task AddPartialIncomingLayerAsync(
-        int kaynakStokHareketId,
+    public async Task RestorePartialConsumptionAsIncomingLayersAsync(
+        int originalCikisStokHareketId,
+        int iadeStokHareketId,
         int depoId,
         int tasinirKartId,
         DateTime girisTarihi,
-        decimal miktar,
-        decimal birimMaliyet,
+        decimal iadeMiktari,
         CancellationToken cancellationToken = default)
     {
-        if (miktar <= 0)
+        if (iadeMiktari <= 0)
         {
             return;
         }
 
-        await CreateIncomingLayerAsync(
-            kaynakStokHareketId,
-            depoId,
-            tasinirKartId,
-            girisTarihi,
-            miktar,
-            birimMaliyet,
-            cancellationToken);
+        var tuketimler = await DbContext.StokMaliyetKatmanTuketimleri
+            .AsNoTracking()
+            .Where(x => x.CikisStokHareketId == originalCikisStokHareketId && !x.IsDeleted)
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var kalan = iadeMiktari;
+        foreach (var tuketim in tuketimler)
+        {
+            if (kalan <= 0)
+            {
+                break;
+            }
+
+            var alinacak = Math.Min(tuketim.Miktar, kalan);
+            if (alinacak <= 0)
+            {
+                continue;
+            }
+
+            AddIncomingLayer(
+                iadeStokHareketId,
+                depoId,
+                tasinirKartId,
+                girisTarihi,
+                alinacak,
+                tuketim.BirimMaliyet,
+                MaliyetYontemi);
+
+            kalan -= alinacak;
+        }
+
+        if (kalan > 0)
+        {
+            throw new BaseException("İade miktarı orijinal tüketim kayıtlarını aşıyor.", 400);
+        }
+
+        await DbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<LayeredConsumptionPlan> PlanOutgoingConsumptionAsync(int depoId, int tasinirKartId, decimal miktar, CancellationToken cancellationToken = default)

@@ -162,26 +162,32 @@ public class KantinSatisIadeService : IKantinSatisIadeService
 
     public async Task<KantinSatisIadeDto> KesinlestirAsync(int id, CancellationToken cancellationToken = default)
     {
-        var iade = await _dbContext.KantinSatisIadeleri
-            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
-            ?? throw new BaseException("İade bulunamadı.", 404);
-
-        await EnsureTesisAccessAsync(iade.TesisId, cancellationToken);
-
-        if (string.Equals(iade.Durum, KantinSatisIadeDurumlari.Kesinlesti, StringComparison.Ordinal))
-        {
-            return await MapDtoAsync(iade, cancellationToken);
-        }
-
-        if (!string.Equals(iade.Durum, KantinSatisIadeDurumlari.Taslak, StringComparison.Ordinal))
-        {
-            throw new BaseException("Yalnızca taslak iadeler kesinleştirilebilir.", 400);
-        }
-
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         try
         {
+            // Concurrency hardening: iade kaydı Serializable transaction İÇİNDE yeniden yüklenir. Aynı
+            // iade için iki eşzamanlı kesinleştirme çağrısında ikincisi burada birincinin commit'ini
+            // bekler ve Durum=Kesinlesti'yi görerek idempotent döner — ikinci stok hareketi ÜRETİLMEZ.
+            // (SQL Server'da satır kilidi deseni için bkz. MuhasebeFisService / PosTahsilatValorAktarimService
+            // `WITH (UPDLOCK, ROWLOCK, HOLDLOCK)`.)
+            var iade = await _dbContext.KantinSatisIadeleri
+                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("İade bulunamadı.", 404);
+
+            await EnsureTesisAccessAsync(iade.TesisId, cancellationToken);
+
+            if (string.Equals(iade.Durum, KantinSatisIadeDurumlari.Kesinlesti, StringComparison.Ordinal))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return await MapDtoAsync(iade, cancellationToken);
+            }
+
+            if (!string.Equals(iade.Durum, KantinSatisIadeDurumlari.Taslak, StringComparison.Ordinal))
+            {
+                throw new BaseException("Yalnızca taslak iadeler kesinleştirilebilir.", 400);
+            }
+
             var satis = await _dbContext.KantinSatislar
                 .AsNoTracking()
                 .Include(x => x.Satirlar.Where(s => !s.IsDeleted))

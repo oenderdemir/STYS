@@ -81,13 +81,13 @@ public class StokMaliyetKatmaniRestoreService : IStokMaliyetKatmaniRestoreServic
             _ => throw new BaseException("Bu işlem için maliyet katmanı geri yükleme uygulanamaz.", 400)
         };
 
-        await strategy.AddPartialIncomingLayerAsync(
+        await strategy.RestorePartialConsumptionAsIncomingLayersAsync(
+            originalMovement.Id,
             iadeMovement.Id!.Value,
             iadeMovement.DepoId,
             iadeMovement.TasinirKartId,
             iadeMovement.HareketTarihi,
             iadeMiktari,
-            originalMovement.MaliyetBirimFiyat ?? 0m,
             cancellationToken);
     }
 }

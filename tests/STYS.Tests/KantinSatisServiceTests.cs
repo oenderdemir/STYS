@@ -1448,6 +1448,104 @@ public class KantinSatisServiceTests
         Assert.Equal(StokMaliyetYontemleri.FIFO, yeniLayer.MaliyetYontemi);
     }
 
+    private static async Task SeedKarimliFifoTuketimiAsync(StysAppDbContext dbContext, int cikisStokHareketId)
+    {
+        dbContext.StokMaliyetKatmanlari.AddRange(
+            new StokMaliyetKatmani { Id = 1, TesisId = 1, DepoId = 10, TasinirKartId = 1, KaynakStokHareketId = 90, KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi, MaliyetYontemi = StokMaliyetYontemleri.FIFO, GirisTarihi = new DateTime(2026, 8, 24), IlkMiktar = 2, KalanMiktar = 0, BirimMaliyet = 10m },
+            new StokMaliyetKatmani { Id = 2, TesisId = 1, DepoId = 10, TasinirKartId = 1, KaynakStokHareketId = 90, KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi, MaliyetYontemi = StokMaliyetYontemleri.FIFO, GirisTarihi = new DateTime(2026, 8, 25), IlkMiktar = 3, KalanMiktar = 0, BirimMaliyet = 12m });
+        dbContext.StokMaliyetKatmanTuketimleri.AddRange(
+            new StokMaliyetKatmanTuketimi { Id = 1, CikisStokHareketId = cikisStokHareketId, StokMaliyetKatmaniId = 1, Miktar = 2, BirimMaliyet = 10m, Tutar = 20m },
+            new StokMaliyetKatmanTuketimi { Id = 2, CikisStokHareketId = cikisStokHareketId, StokMaliyetKatmaniId = 2, Miktar = 3, BirimMaliyet = 12m, Tutar = 36m });
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedKarimliLifoTuketimiAsync(StysAppDbContext dbContext, int cikisStokHareketId)
+    {
+        dbContext.StokMaliyetKatmanlari.AddRange(
+            new StokMaliyetKatmani { Id = 1, TesisId = 1, DepoId = 10, TasinirKartId = 1, KaynakStokHareketId = 90, KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi, MaliyetYontemi = StokMaliyetYontemleri.LIFO, GirisTarihi = new DateTime(2026, 8, 25), IlkMiktar = 3, KalanMiktar = 0, BirimMaliyet = 12m },
+            new StokMaliyetKatmani { Id = 2, TesisId = 1, DepoId = 10, TasinirKartId = 1, KaynakStokHareketId = 90, KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi, MaliyetYontemi = StokMaliyetYontemleri.LIFO, GirisTarihi = new DateTime(2026, 8, 24), IlkMiktar = 2, KalanMiktar = 0, BirimMaliyet = 10m });
+        dbContext.StokMaliyetKatmanTuketimleri.AddRange(
+            new StokMaliyetKatmanTuketimi { Id = 1, CikisStokHareketId = cikisStokHareketId, StokMaliyetKatmaniId = 1, Miktar = 3, BirimMaliyet = 12m, Tutar = 36m },
+            new StokMaliyetKatmanTuketimi { Id = 2, CikisStokHareketId = cikisStokHareketId, StokMaliyetKatmaniId = 2, Miktar = 2, BirimMaliyet = 10m, Tutar = 20m });
+        await dbContext.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Iade_FifoPartialRestore_MixedLayer_IkiBirim()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        await SeedKarimliFifoTuketimiAsync(dbContext, originalMovement.Id);
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 2))).Id!.Value);
+
+        var iadeHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var yeniLayer = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KaynakStokHareketId == iadeHareket.Id);
+        Assert.Equal(2m, yeniLayer.IlkMiktar);
+        Assert.Equal(10m, yeniLayer.BirimMaliyet);
+
+        // Orijinal consumption kayıtları değişmez.
+        Assert.Equal(2m, (await dbContext.StokMaliyetKatmanTuketimleri.SingleAsync(x => x.Id == 1)).Miktar);
+        Assert.Equal(3m, (await dbContext.StokMaliyetKatmanTuketimleri.SingleAsync(x => x.Id == 2)).Miktar);
+    }
+
+    [Fact]
+    public async Task Iade_FifoPartialRestore_MixedLayer_DortBirim()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        await SeedKarimliFifoTuketimiAsync(dbContext, originalMovement.Id);
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 4))).Id!.Value);
+
+        var iadeHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var yeniLayerlar = await dbContext.StokMaliyetKatmanlari
+            .Where(x => x.KaynakStokHareketId == iadeHareket.Id)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+
+        Assert.Equal(2, yeniLayerlar.Count);
+        Assert.Equal(2m, yeniLayerlar[0].IlkMiktar);
+        Assert.Equal(10m, yeniLayerlar[0].BirimMaliyet);
+        Assert.Equal(2m, yeniLayerlar[1].IlkMiktar);
+        Assert.Equal(12m, yeniLayerlar[1].BirimMaliyet);
+    }
+
+    [Fact]
+    public async Task Iade_LifoPartialRestore_MixedLayer_DortBirim()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        await SeedKarimliLifoTuketimiAsync(dbContext, originalMovement.Id);
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 4))).Id!.Value);
+
+        var iadeHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var yeniLayerlar = await dbContext.StokMaliyetKatmanlari
+            .Where(x => x.KaynakStokHareketId == iadeHareket.Id)
+            .OrderBy(x => x.Id)
+            .ToListAsync();
+
+        // LIFO orijinal tüketim sırasını korur: önce 3 @ 12, sonra 1 @ 10.
+        Assert.Equal(2, yeniLayerlar.Count);
+        Assert.Equal(3m, yeniLayerlar[0].IlkMiktar);
+        Assert.Equal(12m, yeniLayerlar[0].BirimMaliyet);
+        Assert.Equal(1m, yeniLayerlar[1].IlkMiktar);
+        Assert.Equal(10m, yeniLayerlar[1].BirimMaliyet);
+    }
+
     [Fact]
     public async Task Iade_IkinciFinalizeDuplicateUretmez()
     {

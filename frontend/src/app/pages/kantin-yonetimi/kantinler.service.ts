@@ -79,6 +79,10 @@ export class KantinlerService {
             .pipe(map(this.unwrap<KantinOdemeHesapOption[]>('Ödeme hesapları alınamadı.')));
     }
 
+    getPosHesaplari(tesisId: number): Observable<KantinOdemeHesapOption[]> {
+        return this.getOdemeHesaplari(tesisId, 'KrediKarti');
+    }
+
     getTasinirKartlar(tesisId: number): Observable<KantinTasinirKartOption[]> {
         return this.http
             .get<ApiResponse<KantinTasinirKartOption[]>>(`${this.apiBaseUrl}/ui/kantinler/tasinir-kartlar`, { params: new HttpParams().set('tesisId', tesisId) })

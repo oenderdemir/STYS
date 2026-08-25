@@ -2578,6 +2578,8 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.VarsayilanNakitKasaId)
                 .HasFilter("[IsDeleted] = 0 AND [VarsayilanNakitKasaId] IS NOT NULL");
+            entity.HasIndex(x => x.VarsayilanPosHesapId)
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanPosHesapId] IS NOT NULL");
             entity.HasIndex(x => x.PerakendeCariKartId)
                 .HasFilter("[IsDeleted] = 0 AND [PerakendeCariKartId] IS NOT NULL");
 
@@ -2594,6 +2596,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.VarsayilanNakitKasa)
                 .WithMany()
                 .HasForeignKey(x => x.VarsayilanNakitKasaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.VarsayilanPosHesap)
+                .WithMany()
+                .HasForeignKey(x => x.VarsayilanPosHesapId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.PerakendeCariKart)

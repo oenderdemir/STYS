@@ -111,6 +111,63 @@ public class KantinServiceTests
     }
 
     [Fact]
+    public async Task Kantin_CrossTesisVarsayilanPosHesapReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
+        {
+            TesisId = 1,
+            DepoId = 10,
+            VarsayilanPosHesapId = 300,
+            Kod = "KNT-01",
+            Ad = "Merkez Kantin"
+        }));
+
+        Assert.Equal("Seçilen varsayılan POS hesabı kantin ile aynı tesise ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Kantin_NakitKasaOlanVarsayilanPosHesapReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
+        {
+            TesisId = 1,
+            DepoId = 10,
+            VarsayilanPosHesapId = 100,
+            Kod = "KNT-01",
+            Ad = "Merkez Kantin"
+        }));
+
+        Assert.Equal("Varsayılan POS hesabı yalnızca kredi kartı tipinde olabilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Kantin_PasifVarsayilanPosHesapReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
+        {
+            TesisId = 1,
+            DepoId = 10,
+            VarsayilanPosHesapId = 103,
+            Kod = "KNT-01",
+            Ad = "Merkez Kantin"
+        }));
+
+        Assert.Equal("Seçilen varsayılan POS hesabı aktif olmalıdır.", ex.Message);
+    }
+
+    [Fact]
     public async Task Kantin_CrossTesisPerakendeCariReddedilir()
     {
         await using var dbContext = CreateDbContext();
@@ -398,6 +455,33 @@ public class KantinServiceTests
                 Tip = KasaBankaHesapTipleri.NakitKasa,
                 Kod = "KASA-B",
                 Ad = "Yan Nakit Kasa",
+                AktifMi = true
+            },
+            new KasaBankaHesap
+            {
+                Id = 102,
+                TesisId = 1,
+                Tip = KasaBankaHesapTipleri.KrediKarti,
+                Kod = "POS-A",
+                Ad = "Merkez POS",
+                AktifMi = true
+            },
+            new KasaBankaHesap
+            {
+                Id = 103,
+                TesisId = 1,
+                Tip = KasaBankaHesapTipleri.KrediKarti,
+                Kod = "POS-PASIF",
+                Ad = "Pasif POS",
+                AktifMi = false
+            },
+            new KasaBankaHesap
+            {
+                Id = 300,
+                TesisId = 2,
+                Tip = KasaBankaHesapTipleri.KrediKarti,
+                Kod = "POS-B",
+                Ad = "Yan POS",
                 AktifMi = true
             });
 

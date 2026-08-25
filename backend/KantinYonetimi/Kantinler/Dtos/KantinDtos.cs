@@ -8,6 +8,7 @@ public class KantinDto : BaseRdbmsDto<int>
     public int TesisId { get; set; }
     public int DepoId { get; set; }
     public int? VarsayilanNakitKasaId { get; set; }
+    public int? VarsayilanPosHesapId { get; set; }
     public int? PerakendeCariKartId { get; set; }
     public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
@@ -16,6 +17,7 @@ public class KantinDto : BaseRdbmsDto<int>
     public string? DepoKod { get; set; }
     public string? DepoAd { get; set; }
     public string? VarsayilanNakitKasaAd { get; set; }
+    public string? VarsayilanPosHesapAd { get; set; }
     public string? PerakendeCariKartAd { get; set; }
 }
 
@@ -83,6 +85,7 @@ public class CreateKantinRequest
     public int DepoId { get; set; }
 
     public int? VarsayilanNakitKasaId { get; set; }
+    public int? VarsayilanPosHesapId { get; set; }
     public int? PerakendeCariKartId { get; set; }
 
     [Required]

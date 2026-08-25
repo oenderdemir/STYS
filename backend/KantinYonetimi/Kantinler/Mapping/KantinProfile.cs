@@ -13,6 +13,7 @@ public class KantinProfile : Profile
             .ForMember(x => x.Tesis, opt => opt.Ignore())
             .ForMember(x => x.Depo, opt => opt.Ignore())
             .ForMember(x => x.VarsayilanNakitKasa, opt => opt.Ignore())
+            .ForMember(x => x.VarsayilanPosHesap, opt => opt.Ignore())
             .ForMember(x => x.Urunler, opt => opt.Ignore());
 
         CreateMap<KantinUrun, KantinUrunDto>();

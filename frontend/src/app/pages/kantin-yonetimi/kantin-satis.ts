@@ -476,7 +476,7 @@ export class KantinSatisPage implements OnInit {
         this.satislar = [];
         this.lotOptions = {};
         this.seriOptions = {};
-        this.yeniOdeme = { odemeYontemi: KANTIN_ODEME_YONTEMLERI.Nakit, tutar: 0, kasaBankaHesapId: null };
+        this.resetYeniOdeme();
 
         if (!this.selectedKantin?.id) {
             return;
@@ -586,7 +586,7 @@ export class KantinSatisPage implements OnInit {
         this.satisService.addOdeme(this.currentDraft.id, this.yeniOdeme).subscribe({
             next: (draft) => {
                 this.applyDraft(draft);
-                this.yeniOdeme = { odemeYontemi: KANTIN_ODEME_YONTEMLERI.Nakit, tutar: 0, kasaBankaHesapId: null };
+                this.resetYeniOdeme();
                 this.cdr.detectChanges();
             },
             error: (error: unknown) => this.showError(error)
@@ -686,9 +686,32 @@ export class KantinSatisPage implements OnInit {
     }
 
     onYeniOdemeYontemiChange(): void {
-        if (this.yeniOdeme.odemeYontemi === KANTIN_ODEME_YONTEMLERI.Nakit) {
-            this.yeniOdeme.kasaBankaHesapId = null;
+        this.yeniOdeme.kasaBankaHesapId = this.resolveDefaultOdemeHesapId(this.yeniOdeme.odemeYontemi);
+    }
+
+    onOdemeYontemiDegisti(odeme: KantinSatisOdemeModel): void {
+        odeme.kasaBankaHesapId = this.resolveDefaultOdemeHesapId(odeme.odemeYontemi);
+        this.odemeDegisti(odeme);
+    }
+
+    private resolveDefaultOdemeHesapId(odemeYontemi: string): number | null {
+        if (odemeYontemi === KANTIN_ODEME_YONTEMLERI.Nakit) {
+            return this.selectedKantin?.varsayilanNakitKasaId ?? null;
         }
+
+        if (odemeYontemi === KANTIN_ODEME_YONTEMLERI.KrediKarti) {
+            return this.selectedKantin?.varsayilanPosHesapId ?? null;
+        }
+
+        return null;
+    }
+
+    private resetYeniOdeme(): void {
+        this.yeniOdeme = {
+            odemeYontemi: KANTIN_ODEME_YONTEMLERI.Nakit,
+            tutar: 0,
+            kasaBankaHesapId: this.selectedKantin?.varsayilanNakitKasaId ?? null
+        };
     }
 
     getOdemeHesapSecenekleri(odemeYontemi: string): Array<{ label: string; value: number }> {

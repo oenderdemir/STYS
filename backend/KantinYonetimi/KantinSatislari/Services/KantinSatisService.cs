@@ -595,12 +595,13 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         }
         else
         {
-            if (!kasaBankaHesapId.HasValue)
+            var effectiveHesapId = kasaBankaHesapId ?? kantin.VarsayilanPosHesapId;
+            if (!effectiveHesapId.HasValue)
             {
-                throw new BaseException("Kredi kartı ödemesinde hesap seçimi zorunludur.", 400);
+                throw new BaseException("Kredi kartı ödeme için POS hesabı seçimi zorunludur.", 400);
             }
 
-            hesap = await ResolveValidHesapAsync(kantin.TesisId, kasaBankaHesapId.Value, KasaBankaHesapTipleri.KrediKarti, "Kredi kartı", cancellationToken);
+            hesap = await ResolveValidHesapAsync(kantin.TesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.KrediKarti, "Kredi kartı", cancellationToken);
         }
 
         return new OdemeProjection(

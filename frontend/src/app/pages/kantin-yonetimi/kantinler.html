@@ -122,6 +122,10 @@
                             <div class="detail-value">{{ selectedKantin.varsayilanNakitKasaAd ?? '-' }}</div>
                         </div>
                         <div class="detail-tile">
+                            <div class="detail-label">Varsayılan POS Hesabı</div>
+                            <div class="detail-value">{{ selectedKantin.varsayilanPosHesapAd ?? '-' }}</div>
+                        </div>
+                        <div class="detail-tile">
                             <div class="detail-label">Perakende Cari</div>
                             <div class="detail-value">{{ selectedKantin.perakendeCariKartAd ?? '-' }}</div>
                         </div>
@@ -241,6 +245,24 @@
                     <ng-template let-item pTemplate="selectedItem">{{ item ? getKasaLabel(item.id) : 'Kasa seçin' }}</ng-template>
                 </p-select>
                 <small class="dialog-help">Nakit tahsilatlarda varsayılan hesap olarak kullanılabilir.</small>
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="kantinPos">Varsayılan POS Hesabı</label>
+                <p-select
+                    inputId="kantinPos"
+                    [options]="posOptions"
+                    [(ngModel)]="kantinForm.varsayilanPosHesapId"
+                    optionValue="id"
+                    [optionLabel]="'ad'"
+                    placeholder="POS hesabı seçin"
+                    [showClear]="true"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ item ? getPosLabel(item.id) : 'POS hesabı seçin' }}</ng-template>
+                </p-select>
+                <small class="dialog-help">Kredi kartı tahsilatlarda varsayılan POS hesabı olarak kullanılabilir.</small>
             </div>
 
             <div class="dialog-field full">

@@ -319,6 +319,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             .AsNoTracking()
             .Include(x => x.Depo)
             .Include(x => x.VarsayilanNakitKasa)
+            .Include(x => x.VarsayilanPosHesap)
             .Include(x => x.PerakendeCariKart)
             .Where(x => !x.IsDeleted);
 
@@ -377,6 +378,29 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             if (!string.Equals(kasa.Tip, KasaBankaHesapTipleri.NakitKasa, StringComparison.Ordinal))
             {
                 throw new BaseException("Varsayılan kasa yalnızca nakit kasa tipinde olabilir.", 400);
+            }
+        }
+
+        if (dto.VarsayilanPosHesapId.HasValue)
+        {
+            var posHesap = await _dbContext.KasaBankaHesaplari
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == dto.VarsayilanPosHesapId.Value && !x.IsDeleted, cancellationToken)
+                ?? throw new BaseException("Seçilen varsayılan POS hesabı bulunamadı.", 400);
+
+            if (posHesap.TesisId != dto.TesisId)
+            {
+                throw new BaseException("Seçilen varsayılan POS hesabı kantin ile aynı tesise ait olmalıdır.", 400);
+            }
+
+            if (!posHesap.AktifMi)
+            {
+                throw new BaseException("Seçilen varsayılan POS hesabı aktif olmalıdır.", 400);
+            }
+
+            if (!string.Equals(posHesap.Tip, KasaBankaHesapTipleri.KrediKarti, StringComparison.Ordinal))
+            {
+                throw new BaseException("Varsayılan POS hesabı yalnızca kredi kartı tipinde olabilir.", 400);
             }
         }
 
@@ -491,6 +515,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             TesisId = entity.TesisId,
             DepoId = entity.DepoId,
             VarsayilanNakitKasaId = entity.VarsayilanNakitKasaId,
+            VarsayilanPosHesapId = entity.VarsayilanPosHesapId,
             PerakendeCariKartId = entity.PerakendeCariKartId,
             Kod = entity.Kod,
             Ad = entity.Ad,
@@ -499,6 +524,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             DepoKod = entity.Depo?.Kod,
             DepoAd = entity.Depo?.Ad,
             VarsayilanNakitKasaAd = entity.VarsayilanNakitKasa?.Ad,
+            VarsayilanPosHesapAd = entity.VarsayilanPosHesap?.Ad,
             PerakendeCariKartAd = entity.PerakendeCariKart is null
                 ? null
                 : $"{entity.PerakendeCariKart.CariKodu} - {entity.PerakendeCariKart.UnvanAdSoyad}"

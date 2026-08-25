@@ -240,6 +240,114 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task KrediKartiOdeme_RequestHesapYoksa_DefaultPosCozulur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var result = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.KrediKarti,
+            Tutar = 50
+        });
+
+        var odeme = Assert.Single(result.Odemeler);
+        Assert.Equal(102, odeme.KasaBankaHesapId);
+    }
+
+    [Fact]
+    public async Task KrediKartiOdeme_GecerliRequestHesabi_DefaultPosuEzer()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.KasaBankaHesaplari.Add(new KasaBankaHesap
+        {
+            Id = 104,
+            TesisId = 1,
+            Tip = KasaBankaHesapTipleri.KrediKarti,
+            Kod = "POS-B",
+            Ad = "Alternatif POS",
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var result = await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.KrediKarti,
+            KasaBankaHesapId = 104,
+            Tutar = 50
+        });
+
+        var odeme = Assert.Single(result.Odemeler);
+        Assert.Equal(104, odeme.KasaBankaHesapId);
+    }
+
+    [Fact]
+    public async Task KrediKartiOdeme_RequestVeDefaultPosYoksa_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
+        kantin.VarsayilanPosHesapId = null;
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.KrediKarti,
+            Tutar = 50
+        }));
+
+        Assert.Equal("Kredi kartı ödeme için POS hesabı seçimi zorunludur.", ex.Message);
+    }
+
+    [Fact]
+    public async Task KrediKartiOdeme_NakitKasaFallbackOlmaz_Reddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
+        kantin.VarsayilanPosHesapId = null;
+        kantin.VarsayilanNakitKasaId = 100;
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+        var satis = await CreateDraftWithSingleLineAsync(service);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest
+        {
+            OdemeYontemi = OdemeYontemleri.KrediKarti,
+            Tutar = 50
+        }));
+
+        Assert.Equal("Kredi kartı ödeme için POS hesabı seçimi zorunludur.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SplitPayment_DefaultNakitVeDefaultPosIle_Calisir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 5 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 100 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 150 });
+
+        var result = await service.KesinlestirAsync(satis.Id!.Value);
+
+        Assert.Equal(2, result.Odemeler.Count);
+        var nakit = Assert.Single(result.Odemeler, x => x.OdemeYontemi == OdemeYontemleri.Nakit);
+        var krediKarti = Assert.Single(result.Odemeler, x => x.OdemeYontemi == OdemeYontemleri.KrediKarti);
+        Assert.Equal(100, nakit.KasaBankaHesapId);
+        Assert.Equal(102, krediKarti.KasaBankaHesapId);
+    }
+
+    [Fact]
     public async Task YetersizStokta_KesinlestirmeRollbackOlur()
     {
         await using var dbContext = CreateDbContext();
@@ -867,6 +975,7 @@ public class KantinSatisServiceTests
             TesisId = 1,
             DepoId = 10,
             VarsayilanNakitKasaId = 100,
+            VarsayilanPosHesapId = 102,
             PerakendeCariKartId = 100,
             Kod = "KNT-01",
             Ad = "Merkez Kantin",

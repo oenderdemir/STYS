@@ -12,6 +12,7 @@ public class Kantin : BaseEntity<int>
     public int TesisId { get; set; }
     public int DepoId { get; set; }
     public int? VarsayilanNakitKasaId { get; set; }
+    public int? VarsayilanPosHesapId { get; set; }
     public int? PerakendeCariKartId { get; set; }
 
     [Required]
@@ -30,6 +31,7 @@ public class Kantin : BaseEntity<int>
     public Tesis? Tesis { get; set; }
     public Depo? Depo { get; set; }
     public KasaBankaHesap? VarsayilanNakitKasa { get; set; }
+    public KasaBankaHesap? VarsayilanPosHesap { get; set; }
     public CariKart? PerakendeCariKart { get; set; }
     public ICollection<KantinUrun> Urunler { get; set; } = [];
 }

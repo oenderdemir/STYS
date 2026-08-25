@@ -1126,6 +1126,48 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task Iptal_KesinlesmisIadeVarken_ReddedilirVeStokDegismez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        // 3 adet kesinleşmiş ürün iadesi.
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 3))).Id!.Value);
+
+        var reversalOncesi = await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == "KantinSatisIptal");
+        var iadeHareketOncesi = await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var bakiyeOncesi = await StokBakiyesiAsync(dbContext, 10, 1);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => satisService.IptalEtAsync(satis.Id!.Value, "İptal"));
+
+        Assert.Equal("Bu satış için kesinleşmiş ürün iadesi bulunduğundan satış tamamen iptal edilemez.", ex.Message);
+
+        // Yeni KantinSatisIptal (full reversal) stok hareketi oluşmaz; stok bakiyesi değişmez.
+        Assert.Equal(reversalOncesi, await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == "KantinSatisIptal"));
+        Assert.Equal(iadeHareketOncesi, await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir));
+        Assert.Equal(bakiyeOncesi, await StokBakiyesiAsync(dbContext, 10, 1));
+
+        // Satış kesinleşmiş durumda kalır.
+        var persisted = await satisService.GetByIdAsync(satis.Id!.Value);
+        Assert.Equal(KantinSatisDurumlari.Kesinlesti, persisted!.Durum);
+    }
+
+    private static async Task<decimal> StokBakiyesiAsync(StysAppDbContext dbContext, int depoId, int tasinirKartId)
+    {
+        var rows = await dbContext.StokHareketleri
+            .AsNoTracking()
+            .Where(x => x.DepoId == depoId && x.TasinirKartId == tasinirKartId && !x.IsDeleted && x.Durum == StokHareketDurumlari.Aktif)
+            .Select(x => new { x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu, x.Miktar })
+            .ToListAsync();
+
+        return rows.Sum(x => StokHareketTipleri.IsGirisEtkisi(x.HareketTipi, x.TransferYonu, x.SayimFarkiYonu) ? x.Miktar : -x.Miktar);
+    }
+
+    [Fact]
     public async Task Iptal_DepoSonradanDegistirilmis_OriginalDepoyaGeriKoyar()
     {
         await using var dbContext = CreateDbContext();

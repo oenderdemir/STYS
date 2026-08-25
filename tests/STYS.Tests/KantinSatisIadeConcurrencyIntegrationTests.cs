@@ -38,6 +38,8 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
     private int _depoId = 0;
     private int _kantinId = 0;
     private int _kantinSatisId = 0;
+    private int _satisSatirId = 0;
+    private int _tasinirKartId = 0;
     private int _iadeId = 0;
 
     public Task InitializeAsync()
@@ -103,6 +105,7 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
         };
         dbContext.TasinirKartlar.Add(tasinirKart);
         await dbContext.SaveChangesAsync();
+        _tasinirKartId = tasinirKart.Id;
 
         var kantin = new Kantin
         {
@@ -196,10 +199,16 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
         };
         dbContext.KantinSatisSatirlari.Add(satisSatir);
         await dbContext.SaveChangesAsync();
+        _satisSatirId = satisSatir.Id;
 
         cikisHareket.KaynakId = satisSatir.Id;
         await dbContext.SaveChangesAsync();
 
+        _iadeId = await CreateIadeAsync(dbContext, 2m);
+    }
+
+    private async Task<int> CreateIadeAsync(StysAppDbContext dbContext, decimal miktar)
+    {
         var iade = new KantinSatisIade
         {
             TesisId = _tesisId,
@@ -207,18 +216,17 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
             IadeTarihi = new DateTime(2026, 8, 24, 11, 0, 0),
             Durum = KantinSatisIadeDurumlari.Taslak,
             FinansalIadeDurumu = KantinSatisIadeFinansalDurumlari.Bekliyor,
-            Aciklama = $"IADE-{_uniqueSuffix}"
+            Aciklama = $"IADE-{_uniqueSuffix}-{Guid.NewGuid():N}"
         };
         dbContext.KantinSatisIadeleri.Add(iade);
         await dbContext.SaveChangesAsync();
-        _iadeId = iade.Id;
 
         dbContext.KantinSatisIadeSatirlari.Add(new KantinSatisIadeSatir
         {
             KantinSatisIadeId = iade.Id,
-            KantinSatisSatirId = satisSatir.Id,
-            Miktar = 2m,
-            TasinirKartId = tasinirKart.Id,
+            KantinSatisSatirId = _satisSatirId,
+            Miktar = miktar,
+            TasinirKartId = _tasinirKartId,
             StokKodu = $"STK-{_uniqueSuffix}"[..40],
             UrunAdi = "Test Urun",
             Birim = "Adet",
@@ -227,6 +235,8 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
             KdvOrani = 0m
         });
         await dbContext.SaveChangesAsync();
+
+        return iade.Id;
     }
 
     private sealed class KantinSatisIadeSelectBarrierInterceptor(SemaphoreSlim gate, CountdownEvent hazir) : DbCommandInterceptor
@@ -387,5 +397,56 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
         var iadeDb = await verifyCtx.KantinSatisIadeleri.AsNoTracking().SingleAsync(x => x.Id == _iadeId);
         Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, iadeDb.Durum);
         Assert.True(iadeDb.KesinlesmeTarihi.HasValue);
+    }
+
+    [IntegrationFact]
+    public async Task IkiFarkliTaslakIade_EsZamanliFinalize_ToplamMiktarSatisMiktariniAsamaz()
+    {
+        await SeedAsync();
+
+        // Aynı source satır için iki FARKLI Taslak iade (6 + 6 > satılan 10).
+        int iadeAId;
+        int iadeBId;
+        await using (var setupCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext())
+        {
+            iadeAId = await CreateIadeAsync(setupCtx, 6m);
+            iadeBId = await CreateIadeAsync(setupCtx, 6m);
+        }
+
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var interceptorA = new KantinSatisIadeSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new KantinSatisIadeSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
+        await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
+        var serviceA = CreateIadeService(ctx1);
+        var serviceB = CreateIadeService(ctx2);
+
+        var taskA = Task.Run(() => SafeCallAsync(() => serviceA.KesinlestirAsync(iadeAId, CancellationToken.None)));
+        var taskB = Task.Run(() => SafeCallAsync(() => serviceB.KesinlestirAsync(iadeBId, CancellationToken.None)));
+
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(15));
+        if (!ikisiDeHazir)
+        {
+            gate.Release(2);
+            Assert.Fail("Ön-koşul ihlali: iki taraf da beklenen sürede UPDLOCK SELECT'e ulaşmadı.");
+        }
+        gate.Release(2);
+
+        await taskA;
+        await taskB;
+
+        // Invariant: source satır için kesinleşmiş iade toplamı satış miktarını (10) AŞAMAZ.
+        await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var kesinlesmisToplam = await verifyCtx.KantinSatisIadeSatirlari
+            .AsNoTracking()
+            .Where(x =>
+                x.KantinSatisSatirId == _satisSatirId
+                && x.KantinSatisIade != null
+                && x.KantinSatisIade.Durum == KantinSatisIadeDurumlari.Kesinlesti)
+            .SumAsync(x => (decimal?)x.Miktar) ?? 0m;
+
+        Assert.True(kesinlesmisToplam <= 10m, $"Kesinleşmiş iade toplamı satış miktarını aştı: {kesinlesmisToplam}");
     }
 }

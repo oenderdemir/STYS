@@ -925,6 +925,22 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
 
     private async Task ValidateIptalOnKosullariAsync(KantinSatis satis, CancellationToken cancellationToken)
     {
+        // Cross-invariant: bu satış için kesinleşmiş (Kesinlesti) en az bir KantinSatisIade varsa tam
+        // satış iptali reddedilir — kısmi iade ile stoğa dönmüş miktar, K3C1 full reversal tarafından
+        // İKİNCİ KEZ geri eklenmesin. Kontrol service/domain seviyesinde ve iptal transaction'ı içinde.
+        var kesinlesmisIadeVarMi = await _dbContext.KantinSatisIadeleri
+            .AsNoTracking()
+            .AnyAsync(x =>
+                x.KantinSatisId == satis.Id
+                && !x.IsDeleted
+                && x.Durum == KantinSatisIadeDurumlari.Kesinlesti,
+                cancellationToken);
+
+        if (kesinlesmisIadeVarMi)
+        {
+            throw new BaseException("Bu satış için kesinleşmiş ürün iadesi bulunduğundan satış tamamen iptal edilemez.", 400);
+        }
+
         if (satis.Satirlar.Count == 0)
         {
             throw new BaseException("İptal için aktif satış satırı bulunmalıdır.", 400);

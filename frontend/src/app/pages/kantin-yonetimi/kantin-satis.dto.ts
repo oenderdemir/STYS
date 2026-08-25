@@ -87,6 +87,59 @@ export interface CancelKantinSatisRequest {
     aciklama: string;
 }
 
+export interface KantinSatisIadeSatirModel {
+    id?: number;
+    kantinSatisIadeId: number;
+    kantinSatisSatirId: number;
+    miktar: number;
+    tasinirKartId: number;
+    stokKodu: string;
+    urunAdi: string;
+    birim: string;
+    takipTipi: string;
+    lotNo?: string | null;
+    seriNo?: string | null;
+    birimSatisFiyati: number;
+    kdvOrani: number;
+    maliyetBirimFiyat?: number | null;
+    maliyetTutari?: number | null;
+    stokHareketId?: number | null;
+    satilanMiktar: number;
+    oncekiIadeMiktari: number;
+    kalanMiktar: number;
+}
+
+export interface KantinSatisIadeModel {
+    id?: number;
+    tesisId: number;
+    kantinSatisId: number;
+    iadeTarihi: string;
+    durum: string;
+    aciklama?: string | null;
+    olusturanKullaniciId?: string | null;
+    kesinlesmeTarihi?: string | null;
+    finansalIadeDurumu: string;
+    satirlar: KantinSatisIadeSatirModel[];
+}
+
+export interface CreateKantinSatisIadeSatirRequest {
+    kantinSatisSatirId: number;
+    miktar: number;
+}
+
+export interface CreateKantinSatisIadeRequest {
+    kantinSatisId: number;
+    aciklama?: string | null;
+    satirlar: CreateKantinSatisIadeSatirRequest[];
+}
+
+export interface KantinSatisIadeOzetModel {
+    kantinSatisSatirId: number;
+    satilanMiktar: number;
+    oncekiIadeMiktari: number;
+    kalanMiktar: number;
+}
+
 export interface KantinSatisBarkodUrunModel {
     kantinUrunId: number;
     tasinirKartId: number;

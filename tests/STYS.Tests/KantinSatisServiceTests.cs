@@ -1193,6 +1193,301 @@ public class KantinSatisServiceTests
         Assert.Equal(StokMaliyetYontemleri.FIFO, yeniLayer.MaliyetYontemi);
     }
 
+    private static async Task<KantinSatisDto> CreateKesinlesmis10UrunSatisAsync(StysAppDbContext dbContext, KantinSatisService service)
+    {
+        dbContext.StokHareketleri.Add(new StokHareket
+        {
+            Id = 90,
+            DepoId = 10,
+            TasinirKartId = 1,
+            HareketTarihi = new DateTime(2026, 8, 24, 7, 0, 0),
+            HareketTipi = StokHareketTipleri.Giris,
+            Miktar = 5,
+            BirimFiyat = 10,
+            Tutar = 50,
+            Durum = StokHareketDurumlari.Aktif,
+            KdvUygulamaTipi = 1,
+            KdvOrani = 8,
+            KdvTutari = 4
+        });
+        await dbContext.SaveChangesAsync();
+
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 10 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 500 });
+        return await service.KesinlestirAsync(satis.Id!.Value);
+    }
+
+    private static CreateKantinSatisIadeRequest IadeRequest(int kantinSatisId, int satirId, decimal miktar)
+        => new()
+        {
+            KantinSatisId = kantinSatisId,
+            Satirlar = [new CreateKantinSatisIadeSatirRequest { KantinSatisSatirId = satirId, Miktar = miktar }]
+        };
+
+    [Fact]
+    public async Task Iade_OnUrununUcunuIadeEder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        var iade = await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 3));
+        var kesinlesmis = await iadeService.KesinlestirAsync(iade.Id!.Value);
+
+        Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, kesinlesmis.Durum);
+        Assert.Equal(KantinSatisIadeFinansalDurumlari.Bekliyor, kesinlesmis.FinansalIadeDurumu);
+
+        var hareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        Assert.Equal(StokHareketTipleri.Iade, hareket.HareketTipi);
+        Assert.Equal(3m, hareket.Miktar);
+        Assert.Equal(10, hareket.DepoId);
+        Assert.Equal(1, hareket.TasinirKartId);
+
+        var iadeSatir = await dbContext.KantinSatisIadeSatirlari.SingleAsync();
+        Assert.Equal(hareket.Id, iadeSatir.StokHareketId);
+    }
+
+    [Fact]
+    public async Task Iade_IkinciIadeKalanMiktariDogru()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        var iade1 = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 3))).Id!.Value);
+        var iade2 = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 7))).Id!.Value);
+
+        Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, iade1.Durum);
+        Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, iade2.Durum);
+
+        var ozet = await iadeService.GetSatisIadeOzetiAsync(satis.Id!.Value);
+        var ozetSatir = ozet.Single();
+        Assert.Equal(10m, ozetSatir.SatilanMiktar);
+        Assert.Equal(10m, ozetSatir.OncekiIadeMiktari);
+        Assert.Equal(0m, ozetSatir.KalanMiktar);
+    }
+
+    [Fact]
+    public async Task Iade_ToplamIadeSatisMiktariniAsamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 3))).Id!.Value);
+
+        var iade2 = await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 8));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => iadeService.KesinlestirAsync(iade2.Id!.Value));
+
+        Assert.Equal("Kümülatif iade miktarı satış miktarını aşamaz.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Iade_TaslakQuotaTuketmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        // Taslak iade (8) quota tüketmez.
+        await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 8));
+
+        // Başka bir iade (10) kesinleşebilir — Taslak 8 sayılmaz.
+        var kesinlesmis = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 10))).Id!.Value);
+        Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, kesinlesmis.Durum);
+    }
+
+    [Fact]
+    public async Task Iade_IptalEdilmisSatistanIadeOlmaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(satisService);
+        await satisService.IptalEtAsync(satis.Id!.Value, "iptal");
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 1)));
+
+        Assert.Equal("Yalnızca kesinleşmiş satışlardan iade yapılabilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Iade_OriginalDepoyaDoner()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(satisService);
+
+        dbContext.Depolar.Add(new Depo { Id = 30, TesisId = 1, Kod = "DEP-B", Ad = "Yeni Depo", AktifMi = true });
+        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
+        kantin.DepoId = 30;
+        await dbContext.SaveChangesAsync();
+
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 1))).Id!.Value);
+
+        var hareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        Assert.Equal(10, hareket.DepoId);
+        Assert.False(await dbContext.StokHareketleri.AnyAsync(x => x.DepoId == 30));
+    }
+
+    [Fact]
+    public async Task Iade_LotVeSeriKorunur_SeriIkinciKezIadeEdilemez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+
+        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 2, Miktar = 2, StokLotId = 1 });
+        await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
+        await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 115 });
+        var kesinlesmis = await satisService.KesinlestirAsync(satis.Id!.Value);
+
+        var lotSatir = kesinlesmis.Satirlar.Single(x => x.KantinUrunId == 2);
+        var seriSatir = kesinlesmis.Satirlar.Single(x => x.KantinUrunId == 3);
+
+        // Lot takipli: 1 birim iade -> lot korunur.
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, lotSatir.Id!.Value, 1))).Id!.Value);
+        var lotHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir && x.StokLotId == 1);
+        Assert.Equal(1, lotHareket.StokLotId);
+
+        // Seri takipli: 1 birim iade -> seri korunur.
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, seriSatir.Id!.Value, 1))).Id!.Value);
+        var seriHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir && x.StokSeriId == 1);
+        Assert.Equal(1, seriHareket.StokSeriId);
+
+        // Seri takipli ürün ikinci kez iade edilemez.
+        var seriIade2 = await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, seriSatir.Id!.Value, 1));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => iadeService.KesinlestirAsync(seriIade2.Id!.Value));
+        Assert.Equal("Seri takipli ürün yalnızca bir kez iade edilebilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Iade_MaliyetOriginalHarekettenGelir_WeightedAverage()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+
+        await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 3))).Id!.Value);
+
+        var hareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        Assert.Equal(10m, hareket.MaliyetBirimFiyat);
+        Assert.Equal(30m, hareket.MaliyetTutari);
+        // Weighted-average (katman yok) -> yeni layer üretilmez.
+        Assert.False(await dbContext.StokMaliyetKatmanlari.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Iade_FifoPartialRestore_YeniLayerOlustururVeConsumptionDegismez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+
+        var originalMovement = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisSatir");
+        dbContext.StokMaliyetKatmanlari.Add(new StokMaliyetKatmani
+        {
+            Id = 1,
+            TesisId = 1,
+            DepoId = 10,
+            TasinirKartId = 1,
+            KaynakStokHareketId = 90,
+            KatmanKaynakTipi = StokMaliyetKatmanKaynakTipleri.StokHareketi,
+            MaliyetYontemi = StokMaliyetYontemleri.FIFO,
+            GirisTarihi = new DateTime(2026, 8, 24),
+            IlkMiktar = 10,
+            KalanMiktar = 0,
+            BirimMaliyet = 10m
+        });
+        dbContext.StokMaliyetKatmanTuketimleri.Add(new StokMaliyetKatmanTuketimi
+        {
+            Id = 1,
+            CikisStokHareketId = originalMovement.Id,
+            StokMaliyetKatmaniId = 1,
+            Miktar = 10,
+            BirimMaliyet = 10m,
+            Tutar = 100m
+        });
+        await dbContext.SaveChangesAsync();
+
+        var iadeService = CreateIadeService(dbContext, stokMaliyetKatmaniRestoreService: new StokMaliyetKatmaniRestoreService(dbContext));
+        var iade = await iadeService.KesinlestirAsync((await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 3))).Id!.Value);
+
+        Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, iade.Durum);
+
+        // Orijinal consumption kaydı değişmez.
+        var tuketim = await dbContext.StokMaliyetKatmanTuketimleri.SingleAsync(x => x.Id == 1);
+        Assert.Equal(10m, tuketim.Miktar);
+
+        // Yeni incoming layer iade miktarı ve orijinal maliyetle oluşur.
+        var iadeHareket = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var yeniLayer = await dbContext.StokMaliyetKatmanlari.SingleAsync(x => x.KaynakStokHareketId == iadeHareket.Id);
+        Assert.Equal(3m, yeniLayer.IlkMiktar);
+        Assert.Equal(10m, yeniLayer.BirimMaliyet);
+        Assert.Equal(StokMaliyetYontemleri.FIFO, yeniLayer.MaliyetYontemi);
+    }
+
+    [Fact]
+    public async Task Iade_IkinciFinalizeDuplicateUretmez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+
+        var iade = await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satis.Satirlar.Single().Id!.Value, 3));
+        await iadeService.KesinlestirAsync(iade.Id!.Value);
+
+        var hareketSayisi = await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+        var ikinci = await iadeService.KesinlestirAsync(iade.Id!.Value);
+
+        Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, ikinci.Durum);
+        Assert.Equal(hareketSayisi, await dbContext.StokHareketleri.CountAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir));
+    }
+
+    [Fact]
+    public async Task Iade_Concurrency_CiftKesinlestirmeCumulativeReddeder()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var satisService = CreateService(dbContext);
+        var iadeService = CreateIadeService(dbContext);
+        var satis = await CreateKesinlesmis10UrunSatisAsync(dbContext, satisService);
+        var satirId = satis.Satirlar.Single().Id!.Value;
+
+        // İki Taslak iade aynı anda (her biri 6).
+        var iadeA = await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 6));
+        var iadeB = await iadeService.CreateAsync(IadeRequest(satis.Id!.Value, satirId, 6));
+
+        await iadeService.KesinlestirAsync(iadeA.Id!.Value);
+
+        // İkinci kesinleştirme cumulative kontrolünde reddedilir (6 + 6 > 10).
+        var ex = await Assert.ThrowsAsync<BaseException>(() => iadeService.KesinlestirAsync(iadeB.Id!.Value));
+        Assert.Equal("Kümülatif iade miktarı satış miktarını aşamaz.", ex.Message);
+    }
+
     [Fact]
     public async Task MuhasebeFisKantinOwned_GenelUpdateDeleteIptalReddedilir()
     {
@@ -1495,6 +1790,16 @@ public class KantinSatisServiceTests
             new FakeCurrentUserAccessor(),
             mapper);
     }
+
+    private static KantinSatisIadeService CreateIadeService(
+        StysAppDbContext dbContext,
+        IStokMaliyetKatmaniRestoreService? stokMaliyetKatmaniRestoreService = null)
+        => new KantinSatisIadeService(
+            dbContext,
+            new FakeUserAccessScopeService(DomainAccessScope.Unscoped()),
+            new FakeCurrentUserAccessor(),
+            new FakeStokHareketService(dbContext),
+            stokMaliyetKatmaniRestoreService ?? new FakeStokMaliyetKatmaniRestoreService());
 
     private static IKantinSatisMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext)
         => new KantinSatisMuhasebeFisService(
@@ -1813,6 +2118,9 @@ public class KantinSatisServiceTests
     private sealed class FakeStokMaliyetKatmaniRestoreService : IStokMaliyetKatmaniRestoreService
     {
         public Task RestoreLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto reversalMovement, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public Task RestorePartialLayeredCostIfNeededAsync(StokHareket originalMovement, StokHareketDto iadeMovement, decimal iadeMiktari, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 

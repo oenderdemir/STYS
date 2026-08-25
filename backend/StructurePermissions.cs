@@ -443,6 +443,14 @@ public static class StructurePermissions
         public const string Cancel = "KantinSatisYonetimi.Cancel";
     }
 
+    public static class KantinSatisIadeYonetimi
+    {
+        public const string Menu = "KantinSatisIadeYonetimi.Menu";
+        public const string View = "KantinSatisIadeYonetimi.View";
+        public const string Create = "KantinSatisIadeYonetimi.Create";
+        public const string Finalize = "KantinSatisIadeYonetimi.Finalize";
+    }
+
     public static class StokTalepYonetimi
     {
         public const string Menu = "StokTalepYonetimi.Menu";

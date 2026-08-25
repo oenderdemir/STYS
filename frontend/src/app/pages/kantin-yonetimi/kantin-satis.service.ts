@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, CancelKantinSatisRequest, CreateKantinSatisRequest, KantinSatisBarkodUrunModel, KantinSatisModel } from './kantin-satis.dto';
+import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, CancelKantinSatisRequest, CreateKantinSatisIadeRequest, CreateKantinSatisRequest, KantinSatisBarkodUrunModel, KantinSatisIadeModel, KantinSatisIadeOzetModel, KantinSatisModel } from './kantin-satis.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KantinSatisService {
@@ -94,6 +94,25 @@ export class KantinSatisService {
         return this.http
             .post<ApiResponse<KantinSatisModel>>(`${this.apiBaseUrl}/ui/kantin-satis/${satisId}/muhasebe-fisi-olustur`, {})
             .pipe(map(this.unwrap<KantinSatisModel>('Muhasebe fişi oluşturulamadı.')));
+    }
+
+    getIadeOzeti(kantinSatisId: number): Observable<KantinSatisIadeOzetModel[]> {
+        const params = new HttpParams().set('kantinSatisId', kantinSatisId);
+        return this.http
+            .get<ApiResponse<KantinSatisIadeOzetModel[]>>(`${this.apiBaseUrl}/ui/kantin-satis-iade/ozet`, { params })
+            .pipe(map(this.unwrap<KantinSatisIadeOzetModel[]>('İade özeti alınamadı.')));
+    }
+
+    createIade(request: CreateKantinSatisIadeRequest): Observable<KantinSatisIadeModel> {
+        return this.http
+            .post<ApiResponse<KantinSatisIadeModel>>(`${this.apiBaseUrl}/ui/kantin-satis-iade`, request)
+            .pipe(map(this.unwrap<KantinSatisIadeModel>('İade oluşturulamadı.')));
+    }
+
+    finalizeIade(iadeId: number): Observable<KantinSatisIadeModel> {
+        return this.http
+            .post<ApiResponse<KantinSatisIadeModel>>(`${this.apiBaseUrl}/ui/kantin-satis-iade/${iadeId}/kesinlestir`, {})
+            .pipe(map(this.unwrap<KantinSatisIadeModel>('İade kesinleştirilemedi.')));
     }
 
     private unwrap<T>(fallback: string) {

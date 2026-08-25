@@ -23,7 +23,7 @@ import { StokHareketleriService } from '../muhasebe/stok-hareketleri/stok-hareke
 import { StokLotBakiyeModel, StokSeriBakiyeModel } from '../muhasebe/stok-hareketleri/stok-hareketleri.dto';
 import { KantinlerService } from './kantinler.service';
 import { KantinModel, KantinOdemeHesapOption, KantinSatisNoktasiModel, KantinUrunModel } from './kantinler.dto';
-import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, KANTIN_ODEME_YONTEMLERI, KantinSatisBarkodUrunModel, KantinSatisModel, KantinSatisOdemeModel, KantinSatisSatirModel } from './kantin-satis.dto';
+import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, KANTIN_ODEME_YONTEMLERI, KantinSatisBarkodUrunModel, KantinSatisIadeOzetModel, KantinSatisModel, KantinSatisOdemeModel, KantinSatisSatirModel } from './kantin-satis.dto';
 import { KantinSatisService } from './kantin-satis.service';
 
 @Component({
@@ -363,6 +363,11 @@ export class KantinSatisPage implements OnInit {
     showIptalDialog = false;
     iptalSatis: KantinSatisModel | null = null;
     iptalAciklama = '';
+    showIadeDialog = false;
+    iadeLoading = false;
+    iadeAciklama = '';
+    iadeOzeti: KantinSatisIadeOzetModel[] = [];
+    iadeMiktarlari: Record<number, number | null> = {};
     odemeHesaplari: Record<string, KantinOdemeHesapOption[]> = {};
     yeniOdeme: AddKantinSatisOdemeRequest = { odemeYontemi: KANTIN_ODEME_YONTEMLERI.Nakit, tutar: 0, kasaBankaHesapId: null };
     lotOptions: Record<number, StokLotBakiyeModel[]> = {};
@@ -455,6 +460,15 @@ export class KantinSatisPage implements OnInit {
 
     canIptalEt(satis: KantinSatisModel | null | undefined): boolean {
         return !!satis?.id && satis.durum === 'Kesinlesti' && !this.saving;
+    }
+
+    canIadeOlustur(satis: KantinSatisModel | null | undefined): boolean {
+        return !!satis?.id && satis.durum === 'Kesinlesti' && !this.saving;
+    }
+
+    iadeOzetiBySatir(satirId?: number): KantinSatisIadeOzetModel {
+        return this.iadeOzeti.find((x) => x.kantinSatisSatirId === satirId)
+            ?? { kantinSatisSatirId: satirId ?? 0, satilanMiktar: 0, oncekiIadeMiktari: 0, kalanMiktar: 0 };
     }
 
     loadKantinler(): void {
@@ -770,6 +784,82 @@ export class KantinSatisPage implements OnInit {
                 },
                 error: (error: unknown) => this.showError(error)
             });
+    }
+
+    openIadeDialog(satis: KantinSatisModel | null | undefined): void {
+        if (!satis?.id || !this.canIadeOlustur(satis)) {
+            return;
+        }
+
+        this.iadeAciklama = '';
+        this.iadeMiktarlari = {};
+        this.iadeOzeti = [];
+        this.showIadeDialog = true;
+
+        this.iadeLoading = true;
+        this.satisService.getIadeOzeti(satis.id)
+            .pipe(finalize(() => {
+                this.iadeLoading = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (items) => {
+                    this.iadeOzeti = items;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => this.showError(error)
+            });
+    }
+
+    confirmIade(): void {
+        const satis = this.selectedHistory;
+        if (!satis?.id) {
+            return;
+        }
+
+        const satirlar = Object.entries(this.iadeMiktarlari)
+            .map(([satirId, miktar]) => ({ kantinSatisSatirId: Number(satirId), miktar: miktar ?? 0 }))
+            .filter((x) => x.miktar > 0);
+
+        if (satirlar.length === 0) {
+            this.showError(new Error('En az bir satır için iade miktarı giriniz.'));
+            return;
+        }
+
+        this.saving = true;
+        this.satisService.createIade({
+            kantinSatisId: satis.id,
+            aciklama: this.iadeAciklama.trim() || null,
+            satirlar
+        }).subscribe({
+            next: (iade) => {
+                if (!iade.id) {
+                    this.saving = false;
+                    this.showError(new Error('İade oluşturulamadı.'));
+                    return;
+                }
+
+                this.satisService.finalizeIade(iade.id)
+                    .pipe(finalize(() => {
+                        this.saving = false;
+                        this.cdr.detectChanges();
+                    }))
+                    .subscribe({
+                        next: () => {
+                            this.showIadeDialog = false;
+                            this.iadeMiktarlari = {};
+                            this.iadeOzeti = [];
+                            this.loadSatisHistory();
+                            this.showSuccess('İade oluşturuldu ve kesinleştirildi.');
+                        },
+                        error: (error: unknown) => this.showError(error)
+                    });
+            },
+            error: (error: unknown) => {
+                this.saving = false;
+                this.showError(error);
+            }
+        });
     }
 
     onYeniOdemeYontemiChange(): void {

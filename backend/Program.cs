@@ -205,6 +205,7 @@ builder.Services.AddScoped<IKantinService, KantinService>();
 builder.Services.AddScoped<IKantinSatisRepository, KantinSatisRepository>();
 builder.Services.AddScoped<IKantinSatisService, KantinSatisService>();
 builder.Services.AddScoped<IKantinSatisMuhasebeFisService, KantinSatisMuhasebeFisService>();
+builder.Services.AddScoped<IKantinSatisIadeService, KantinSatisIadeService>();
 builder.Services.AddScoped<IRestoranService, RestoranService>();
 builder.Services.AddScoped<IRestoranMasaService, RestoranMasaService>();
 builder.Services.AddScoped<IRestoranMenuKategoriService, RestoranMenuKategoriService>();

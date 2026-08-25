@@ -144,6 +144,35 @@ public abstract class LayeredCostStrategyBase : IStokMaliyetStrategy
         await DbContext.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// KISMİ geri-alma için: verilen miktar ve birim maliyetle YENİ bir incoming layer oluşturur.
+    /// Orijinal tüketim kayıtlarını değiştirmez; yalnızca iade edilen miktarı bu maliyet yöntemine
+    /// ait yeni bir katman olarak stoğa geri koyar.
+    /// </summary>
+    public async Task AddPartialIncomingLayerAsync(
+        int kaynakStokHareketId,
+        int depoId,
+        int tasinirKartId,
+        DateTime girisTarihi,
+        decimal miktar,
+        decimal birimMaliyet,
+        CancellationToken cancellationToken = default)
+    {
+        if (miktar <= 0)
+        {
+            return;
+        }
+
+        await CreateIncomingLayerAsync(
+            kaynakStokHareketId,
+            depoId,
+            tasinirKartId,
+            girisTarihi,
+            miktar,
+            birimMaliyet,
+            cancellationToken);
+    }
+
     public async Task<LayeredConsumptionPlan> PlanOutgoingConsumptionAsync(int depoId, int tasinirKartId, decimal miktar, CancellationToken cancellationToken = default)
     {
         if (miktar <= 0)

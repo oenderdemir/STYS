@@ -1813,11 +1813,13 @@ public class StokHareketService : BaseRdbmsService<StokHareketDto, StokHareket, 
     private static bool IsWorkflowManagedSourceModule(string? kaynakModul)
         => string.Equals(kaynakModul, "SarfFisiSatir", StringComparison.Ordinal)
            || string.Equals(kaynakModul, "SarfFisiIptal", StringComparison.Ordinal)
-           || string.Equals(kaynakModul, "KantinSatisIptal", StringComparison.Ordinal);
+           || string.Equals(kaynakModul, "KantinSatisIptal", StringComparison.Ordinal)
+           || string.Equals(kaynakModul, "KantinSatisIadeSatir", StringComparison.Ordinal);
 
     private static bool IsSarfIptalWorkflow(string? kaynakModul)
         => string.Equals(kaynakModul, "SarfFisiIptal", StringComparison.Ordinal)
-           || string.Equals(kaynakModul, "KantinSatisIptal", StringComparison.Ordinal);
+           || string.Equals(kaynakModul, "KantinSatisIptal", StringComparison.Ordinal)
+           || string.Equals(kaynakModul, "KantinSatisIadeSatir", StringComparison.Ordinal);
 
     private void DetachTrackedStokHareket(int id)
     {

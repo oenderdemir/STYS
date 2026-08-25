@@ -200,6 +200,8 @@ public class StysAppDbContext : DbContext
     public DbSet<KantinSatis> KantinSatislar => Set<KantinSatis>();
     public DbSet<KantinSatisSatir> KantinSatisSatirlari => Set<KantinSatisSatir>();
     public DbSet<KantinSatisOdeme> KantinSatisOdemeleri => Set<KantinSatisOdeme>();
+    public DbSet<KantinSatisIade> KantinSatisIadeleri => Set<KantinSatisIade>();
+    public DbSet<KantinSatisIadeSatir> KantinSatisIadeSatirlari => Set<KantinSatisIadeSatir>();
     public DbSet<StokHareket> StokHareketleri => Set<StokHareket>();
     public DbSet<StokLot> StokLotlar => Set<StokLot>();
     public DbSet<StokMaliyetKatmani> StokMaliyetKatmanlari => Set<StokMaliyetKatmani>();
@@ -2799,6 +2801,65 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.TahsilatOdemeBelgesi)
                 .WithMany()
                 .HasForeignKey(x => x.TahsilatOdemeBelgesiId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KantinSatisIade>(entity =>
+        {
+            entity.ToTable("KantinSatisIadeleri", kantinSchema);
+            entity.Property(x => x.Durum).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+            entity.Property(x => x.OlusturanKullaniciId).HasMaxLength(64);
+            entity.Property(x => x.FinansalIadeDurumu).HasMaxLength(16).IsRequired();
+
+            entity.HasIndex(x => x.KantinSatisId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasOne(x => x.KantinSatis)
+                .WithMany()
+                .HasForeignKey(x => x.KantinSatisId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KantinSatisIadeSatir>(entity =>
+        {
+            entity.ToTable("KantinSatisIadeSatirlari", kantinSchema);
+            entity.Property(x => x.Miktar).HasPrecision(18, 3);
+            entity.Property(x => x.StokKodu).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.UrunAdi).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Birim).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.TakipTipi).HasMaxLength(16);
+            entity.Property(x => x.LotNo).HasMaxLength(128);
+            entity.Property(x => x.SeriNo).HasMaxLength(128);
+            entity.Property(x => x.BirimSatisFiyati).HasPrecision(18, 2);
+            entity.Property(x => x.KdvOrani).HasPrecision(5, 2);
+            entity.Property(x => x.MaliyetBirimFiyat).HasPrecision(18, 6);
+            entity.Property(x => x.MaliyetTutari).HasPrecision(18, 2);
+
+            entity.HasIndex(x => new { x.KantinSatisIadeId, x.KantinSatisSatirId })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.KantinSatisSatirId)
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.StokHareketId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [StokHareketId] IS NOT NULL");
+
+            entity.HasOne(x => x.KantinSatisIade)
+                .WithMany(x => x.Satirlar)
+                .HasForeignKey(x => x.KantinSatisIadeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.KantinSatisSatir)
+                .WithMany()
+                .HasForeignKey(x => x.KantinSatisSatirId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.StokHareket)
+                .WithMany()
+                .HasForeignKey(x => x.StokHareketId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

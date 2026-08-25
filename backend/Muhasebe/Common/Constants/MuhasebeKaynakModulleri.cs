@@ -16,6 +16,7 @@ public static class MuhasebeKaynakModulleri
     public const string KantinSatis = "KantinSatis";
     public const string KantinSatisOdeme = "KantinSatisOdeme";
     public const string KantinSatisIptal = "KantinSatisIptal";
+    public const string KantinSatisIadeSatir = "KantinSatisIadeSatir";
     public const string PosTahsilatValorTransferi = "PosTahsilatValorTransferi";
 
     public static readonly string[] Hepsi =
@@ -34,6 +35,7 @@ public static class MuhasebeKaynakModulleri
         KantinSatis,
         KantinSatisOdeme,
         KantinSatisIptal,
+        KantinSatisIadeSatir,
         PosTahsilatValorTransferi
     ];
 }

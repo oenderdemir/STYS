@@ -1,10 +1,15 @@
 using System.Data.Common;
 using System.Linq.Expressions;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Infrastructure.EntityFramework;
 using STYS.KantinYonetimi.Kantinler.Entities;
+using STYS.KantinYonetimi.Kantinler.Mapping;
 using STYS.KantinYonetimi.KantinSatislari.Entities;
+using STYS.KantinYonetimi.KantinSatislari.Mapping;
+using STYS.KantinYonetimi.KantinSatislari.Repositories;
 using STYS.KantinYonetimi.KantinSatislari.Services;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Depolar.Entities;
@@ -239,7 +244,7 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
         return iade.Id;
     }
 
-    private sealed class KantinSatisIadeSelectBarrierInterceptor(SemaphoreSlim gate, CountdownEvent hazir) : DbCommandInterceptor
+    private sealed class KantinSatisSelectBarrierInterceptor(SemaphoreSlim gate, CountdownEvent hazir) : DbCommandInterceptor
     {
         private bool _tetiklendi;
 
@@ -250,7 +255,7 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             if (!_tetiklendi
-                && command.CommandText.Contains("KantinSatisIadeleri", StringComparison.OrdinalIgnoreCase)
+                && command.CommandText.Contains("KantinSatislar", StringComparison.OrdinalIgnoreCase)
                 && command.CommandText.Contains("UPDLOCK", StringComparison.OrdinalIgnoreCase))
             {
                 _tetiklendi = true;
@@ -281,6 +286,31 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
             new SatisBelgesiMuhasebeTestSupport.FakeCurrentUserAccessor(),
             new IntegrationFakeStokHareketService(dbContext),
             new IntegrationFakeRestoreService());
+
+    private static IMapper CreateMapper()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            cfg.AddMaps(typeof(KantinProfile).Assembly);
+            cfg.AddMaps(typeof(KantinSatisProfile).Assembly);
+        }, NullLoggerFactory.Instance);
+        return config.CreateMapper();
+    }
+
+    private static KantinSatisService CreateSatisService(StysAppDbContext dbContext)
+    {
+        var mapper = CreateMapper();
+        return new KantinSatisService(
+            dbContext,
+            new KantinSatisRepository(dbContext, mapper),
+            new SatisBelgesiMuhasebeTestSupport.FakeUserAccessScopeService(),
+            new IntegrationFakeStokHareketService(dbContext),
+            null!, // ITahsilatOdemeBelgesiService: odemesiz satışta (bu testlerde) çağrılmaz.
+            null!, // IMuhasebeFisService: MuhasebeFisId null olduğunda (bu testlerde) çağrılmaz.
+            new IntegrationFakeRestoreService(),
+            new SatisBelgesiMuhasebeTestSupport.FakeCurrentUserAccessor(),
+            mapper);
+    }
 
     private static async Task<(bool Basarili, string? Hata)> SafeCallAsync(Func<Task> action)
     {
@@ -361,8 +391,8 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
 
         using var gate = new SemaphoreSlim(0, 2);
         using var hazirSayaci = new CountdownEvent(2);
-        var interceptorA = new KantinSatisIadeSelectBarrierInterceptor(gate, hazirSayaci);
-        var interceptorB = new KantinSatisIadeSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorA = new KantinSatisSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new KantinSatisSelectBarrierInterceptor(gate, hazirSayaci);
 
         await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
         await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
@@ -415,8 +445,8 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
 
         using var gate = new SemaphoreSlim(0, 2);
         using var hazirSayaci = new CountdownEvent(2);
-        var interceptorA = new KantinSatisIadeSelectBarrierInterceptor(gate, hazirSayaci);
-        var interceptorB = new KantinSatisIadeSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorA = new KantinSatisSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new KantinSatisSelectBarrierInterceptor(gate, hazirSayaci);
 
         await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
         await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
@@ -434,10 +464,14 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
         }
         gate.Release(2);
 
-        await taskA;
-        await taskB;
+        var (aBasarili, aHata) = await taskA;
+        var (bBasarili, bHata) = await taskB;
 
-        // Invariant: source satır için kesinleşmiş iade toplamı satış miktarını (10) AŞAMAZ.
+        // 6 + 6 > satılan 10 → tam olarak BİRİ başarılı olur, diğeri kümülatif sınırı görüp reddedilir.
+        Assert.True(aBasarili ^ bBasarili, $"Tam olarak biri başarılı olmalı. A={aBasarili} ({aHata}), B={bBasarili} ({bHata})");
+        Assert.Contains("Kümülatif iade miktarı satış miktarını aşamaz", (aBasarili ? bHata : aHata)!);
+
+        // Kesinleşmiş toplam tam 6 olmalı.
         await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var kesinlesmisToplam = await verifyCtx.KantinSatisIadeSatirlari
             .AsNoTracking()
@@ -447,6 +481,72 @@ public class KantinSatisIadeConcurrencyIntegrationTests : IAsyncLifetime
                 && x.KantinSatisIade.Durum == KantinSatisIadeDurumlari.Kesinlesti)
             .SumAsync(x => (decimal?)x.Miktar) ?? 0m;
 
-        Assert.True(kesinlesmisToplam <= 10m, $"Kesinleşmiş iade toplamı satış miktarını aştı: {kesinlesmisToplam}");
+        Assert.Equal(6m, kesinlesmisToplam);
+    }
+
+    [IntegrationFact]
+    public async Task SatisIptaliIleIadeFinalize_EsZamanli_YalnizcaBiriBasarili()
+    {
+        await SeedAsync();
+
+        using var gate = new SemaphoreSlim(0, 2);
+        using var hazirSayaci = new CountdownEvent(2);
+        var interceptorA = new KantinSatisSelectBarrierInterceptor(gate, hazirSayaci);
+        var interceptorB = new KantinSatisSelectBarrierInterceptor(gate, hazirSayaci);
+
+        await using var ctx1 = CreateDbContextWithInterceptor(interceptorA);
+        await using var ctx2 = CreateDbContextWithInterceptor(interceptorB);
+        var iptalService = CreateSatisService(ctx1);
+        var iadeService = CreateIadeService(ctx2);
+
+        var taskA = Task.Run(() => SafeCallAsync(() => iptalService.IptalEtAsync(_kantinSatisId, "İptal")));
+        var taskB = Task.Run(() => SafeCallAsync(() => iadeService.KesinlestirAsync(_iadeId, CancellationToken.None)));
+
+        var ikisiDeHazir = hazirSayaci.Wait(TimeSpan.FromSeconds(15));
+        if (!ikisiDeHazir)
+        {
+            gate.Release(2);
+            Assert.Fail("Ön-koşul ihlali: iki taraf da beklenen sürede UPDLOCK SELECT'e ulaşmadı.");
+        }
+        gate.Release(2);
+
+        var (iptalBasarili, iptalHata) = await taskA;
+        var (iadeBasarili, iadeHata) = await taskB;
+
+        // Yalnız BİR workflow başarılı olur.
+        Assert.True(iptalBasarili ^ iadeBasarili,
+            $"Tam olarak biri başarılı olmalı. İptal={iptalBasarili} ({iptalHata}), İade={iadeBasarili} ({iadeHata})");
+
+        await using var verifyCtx = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisDb = await verifyCtx.KantinSatislar.AsNoTracking().SingleAsync(x => x.Id == _kantinSatisId);
+        var iadeDb = await verifyCtx.KantinSatisIadeleri.AsNoTracking().SingleAsync(x => x.Id == _iadeId);
+
+        var iptalHareketVar = await verifyCtx.StokHareketleri
+            .IgnoreQueryFilters()
+            .AnyAsync(x => x.KaynakModul == "KantinSatisIptal");
+        var iadeHareketVar = await verifyCtx.StokHareketleri
+            .IgnoreQueryFilters()
+            .AnyAsync(x => x.KaynakModul == MuhasebeKaynakModulleri.KantinSatisIadeSatir);
+
+        if (iptalBasarili)
+        {
+            // Satış iptal olduysa iade Kesinlesti olmamalı; full reversal + partial return birlikte olmamalı.
+            Assert.Equal(KantinSatisDurumlari.IptalEdildi, satisDb.Durum);
+            Assert.Equal(KantinSatisIadeDurumlari.Taslak, iadeDb.Durum);
+            Assert.True(iptalHareketVar);
+            Assert.False(iadeHareketVar);
+            Assert.False(iadeBasarili);
+            Assert.Contains("kesinleşmiş satışlardan iade", iadeHata);
+        }
+        else
+        {
+            // İade Kesinlesti olduysa satış iptal edilmemeli; full reversal + partial return birlikte olmamalı.
+            Assert.Equal(KantinSatisDurumlari.Kesinlesti, satisDb.Durum);
+            Assert.Equal(KantinSatisIadeDurumlari.Kesinlesti, iadeDb.Durum);
+            Assert.True(iadeHareketVar);
+            Assert.False(iptalHareketVar);
+            Assert.False(iptalBasarili);
+            Assert.Contains("kesinleşmiş ürün iadesi bulunduğundan", iptalHata);
+        }
     }
 }

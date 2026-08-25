@@ -416,15 +416,10 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         try
         {
-            var satis = await _dbContext.KantinSatislar
-                .Include(x => x.Kantin)
-                .Include(x => x.SatisNoktasi)
-                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-                    .ThenInclude(x => x.StokHareket)
-                .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
-                    .ThenInclude(x => x.TahsilatOdemeBelgesi)
-                .FirstOrDefaultAsync(x => x.Id == satisId && !x.IsDeleted, cancellationToken)
-                ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
+            // Ortak lock ordering (KantinSatisIadeService.KesinlestirAsync ile): KantinSatis kaydı
+            // transaction başında UPDLOCK + ROWLOCK + HOLDLOCK ile kilitlenir; iade finalize ile aynı
+            // sıralama kullanılır, böylece iki workflow aynı satış üzerinde serialize olur.
+            var satis = await LoadSatisWithLockAsync(satisId, cancellationToken);
 
             await EnsureTesisAccessAsync(satis.TesisId, cancellationToken);
 
@@ -571,6 +566,32 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         {
             throw new BaseException("Bu tesis için yetkiniz bulunmuyor.", 403);
         }
+    }
+
+    private async Task<KantinSatis> LoadSatisWithLockAsync(int satisId, CancellationToken cancellationToken)
+    {
+        // SQL Server'da satır UPDLOCK + ROWLOCK + HOLDLOCK ile kilitlenir (açık transaction içinde);
+        // InMemory vb. ilişkisel olmayan/SQL Server olmayan sağlayıcılarda düz okumaya düşülür.
+        if (_dbContext.Database.IsSqlServer() && _dbContext.Database.CurrentTransaction is null)
+        {
+            throw new BaseException("Bu işlem yalnızca açık bir transaction içinde çalışabilir.", 500);
+        }
+
+        IQueryable<KantinSatis> query = _dbContext.Database.IsSqlServer()
+            ? _dbContext.KantinSatislar.FromSqlInterpolated($@"
+SELECT * FROM [kantin].[KantinSatislar] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [Id] = {satisId} AND [IsDeleted] = 0")
+            : _dbContext.KantinSatislar.Where(x => x.Id == satisId && !x.IsDeleted);
+
+        return await query
+            .Include(x => x.Kantin)
+            .Include(x => x.SatisNoktasi)
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .ThenInclude(x => x.StokHareket)
+            .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
+                .ThenInclude(x => x.TahsilatOdemeBelgesi)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
     }
 
     private async Task<SatirProjection> BuildSatirProjectionAsync(Kantin kantin, int kantinUrunId, decimal miktar, int? stokLotId, int? stokSeriId, CancellationToken cancellationToken)

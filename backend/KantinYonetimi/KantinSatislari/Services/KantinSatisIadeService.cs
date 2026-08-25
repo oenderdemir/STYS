@@ -160,13 +160,30 @@ public class KantinSatisIadeService : IKantinSatisIadeService
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         try
         {
+            // Ortak lock ordering (KantinSatisService.IptalEtAsync ile): önce KantinSatis UPDLOCK,
+            // sonra KantinSatisIade UPDLOCK. Böylece satış iptali ile iade finalize aynı satış üzerinde
+            // serialize olur; stok iki kez geri dönemez.
+            var kantinSatisId = await _dbContext.KantinSatisIadeleri
+                .AsNoTracking()
+                .Where(x => x.Id == id && !x.IsDeleted)
+                .Select(x => (int?)x.KantinSatisId)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw new BaseException("İade bulunamadı.", 404);
+
+            var satis = await LoadSatisWithLockAsync(kantinSatisId, cancellationToken);
+
+            await EnsureTesisAccessAsync(satis.TesisId, cancellationToken);
+
+            if (!string.Equals(satis.Durum, KantinSatisDurumlari.Kesinlesti, StringComparison.Ordinal))
+            {
+                throw new BaseException("Yalnızca kesinleşmiş satışlardan iade yapılabilir.", 400);
+            }
+
             // Concurrency hardening: iade kaydı Serializable transaction İÇİNDE UPDLOCK + ROWLOCK +
             // HOLDLOCK ile yeniden yüklenir. Aynı iade için iki eşzamanlı kesinleştirme çağrısında
             // ikincisi burada birincinin commit'ini bekler ve Durum=Kesinlesti'yi görerek idempotent
             // döner — ikinci stok hareketi ÜRETİLMEZ.
             var iade = await LoadIadeWithLockAsync(id, cancellationToken);
-
-            await EnsureTesisAccessAsync(iade.TesisId, cancellationToken);
 
             if (string.Equals(iade.Durum, KantinSatisIadeDurumlari.Kesinlesti, StringComparison.Ordinal))
             {
@@ -177,18 +194,6 @@ public class KantinSatisIadeService : IKantinSatisIadeService
             if (!string.Equals(iade.Durum, KantinSatisIadeDurumlari.Taslak, StringComparison.Ordinal))
             {
                 throw new BaseException("Yalnızca taslak iadeler kesinleştirilebilir.", 400);
-            }
-
-            var satis = await _dbContext.KantinSatislar
-                .AsNoTracking()
-                .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
-                    .ThenInclude(x => x.StokHareket)
-                .FirstOrDefaultAsync(x => x.Id == iade.KantinSatisId && !x.IsDeleted, cancellationToken)
-                ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
-
-            if (!string.Equals(satis.Durum, KantinSatisDurumlari.Kesinlesti, StringComparison.Ordinal))
-            {
-                throw new BaseException("Yalnızca kesinleşmiş satışlardan iade yapılabilir.", 400);
             }
 
             var iadeZamani = DateTime.UtcNow;
@@ -379,6 +384,28 @@ WHERE [Id] = {id} AND [IsDeleted] = 0")
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new BaseException("İade bulunamadı.", 404);
+    }
+
+    private async Task<KantinSatis> LoadSatisWithLockAsync(int satisId, CancellationToken cancellationToken)
+    {
+        // SQL Server'da satır UPDLOCK + ROWLOCK + HOLDLOCK ile kilitlenir (açık transaction içinde);
+        // InMemory vb. ilişkisel olmayan/SQL Server olmayan sağlayıcılarda düz okumaya düşülür.
+        if (_dbContext.Database.IsSqlServer() && _dbContext.Database.CurrentTransaction is null)
+        {
+            throw new BaseException("İade kesinleştirme yalnızca açık bir transaction içinde çalışabilir.", 500);
+        }
+
+        IQueryable<KantinSatis> query = _dbContext.Database.IsSqlServer()
+            ? _dbContext.KantinSatislar.FromSqlInterpolated($@"
+SELECT * FROM [kantin].[KantinSatislar] WITH (UPDLOCK, ROWLOCK, HOLDLOCK)
+WHERE [Id] = {satisId} AND [IsDeleted] = 0")
+            : _dbContext.KantinSatislar.Where(x => x.Id == satisId && !x.IsDeleted);
+
+        return await query
+            .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
+                .ThenInclude(x => x.StokHareket)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BaseException("Kantin satışı bulunamadı.", 404);
     }
 
     private async Task EnsureTesisAccessAsync(int tesisId, CancellationToken cancellationToken)

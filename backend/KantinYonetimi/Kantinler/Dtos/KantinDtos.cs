@@ -7,8 +7,6 @@ public class KantinDto : BaseRdbmsDto<int>
 {
     public int TesisId { get; set; }
     public int DepoId { get; set; }
-    public int? VarsayilanNakitKasaId { get; set; }
-    public int? VarsayilanPosHesapId { get; set; }
     public int? PerakendeCariKartId { get; set; }
     public string Kod { get; set; } = string.Empty;
     public string Ad { get; set; } = string.Empty;
@@ -16,9 +14,21 @@ public class KantinDto : BaseRdbmsDto<int>
     public string? Aciklama { get; set; }
     public string? DepoKod { get; set; }
     public string? DepoAd { get; set; }
+    public string? PerakendeCariKartAd { get; set; }
+}
+
+public class KantinSatisNoktasiDto : BaseRdbmsDto<int>
+{
+    public int KantinId { get; set; }
+    public string Kod { get; set; } = string.Empty;
+    public string Ad { get; set; } = string.Empty;
+    public int? VarsayilanNakitKasaId { get; set; }
+    public int? VarsayilanPosHesapId { get; set; }
+    public bool VarsayilanMi { get; set; }
+    public bool AktifMi { get; set; } = true;
+    public string? Aciklama { get; set; }
     public string? VarsayilanNakitKasaAd { get; set; }
     public string? VarsayilanPosHesapAd { get; set; }
-    public string? PerakendeCariKartAd { get; set; }
 }
 
 public class KantinUrunDto : BaseRdbmsDto<int>
@@ -84,8 +94,6 @@ public class CreateKantinRequest
     [Required]
     public int DepoId { get; set; }
 
-    public int? VarsayilanNakitKasaId { get; set; }
-    public int? VarsayilanPosHesapId { get; set; }
     public int? PerakendeCariKartId { get; set; }
 
     [Required]
@@ -103,6 +111,30 @@ public class CreateKantinRequest
 }
 
 public class UpdateKantinRequest : CreateKantinRequest
+{
+}
+
+public class CreateKantinSatisNoktasiRequest
+{
+    [Required]
+    [StringLength(64)]
+    public string Kod { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(200)]
+    public string Ad { get; set; } = string.Empty;
+
+    public int? VarsayilanNakitKasaId { get; set; }
+    public int? VarsayilanPosHesapId { get; set; }
+
+    public bool VarsayilanMi { get; set; }
+    public bool AktifMi { get; set; } = true;
+
+    [StringLength(1024)]
+    public string? Aciklama { get; set; }
+}
+
+public class UpdateKantinSatisNoktasiRequest : CreateKantinSatisNoktasiRequest
 {
 }
 

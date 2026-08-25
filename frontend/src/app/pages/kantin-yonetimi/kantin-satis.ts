@@ -20,7 +20,7 @@ import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis
 import { StokHareketleriService } from '../muhasebe/stok-hareketleri/stok-hareketleri.service';
 import { StokLotBakiyeModel, StokSeriBakiyeModel } from '../muhasebe/stok-hareketleri/stok-hareketleri.dto';
 import { KantinlerService } from './kantinler.service';
-import { KantinModel, KantinOdemeHesapOption, KantinUrunModel } from './kantinler.dto';
+import { KantinModel, KantinOdemeHesapOption, KantinSatisNoktasiModel, KantinUrunModel } from './kantinler.dto';
 import { AddKantinSatisOdemeRequest, AddKantinSatisSatirRequest, KANTIN_ODEME_YONTEMLERI, KantinSatisBarkodUrunModel, KantinSatisModel, KantinSatisOdemeModel, KantinSatisSatirModel } from './kantin-satis.dto';
 import { KantinSatisService } from './kantin-satis.service';
 
@@ -349,6 +349,9 @@ export class KantinSatisPage implements OnInit {
     kantinler: KantinModel[] = [];
     selectedKantinId: number | null = null;
     selectedKantin: KantinModel | null = null;
+    satisNoktalari: KantinSatisNoktasiModel[] = [];
+    selectedSatisNoktasiId: number | null = null;
+    selectedSatisNoktasi: KantinSatisNoktasiModel | null = null;
     urunler: KantinUrunModel[] = [];
     satislar: KantinSatisModel[] = [];
     currentDraft: KantinSatisModel | null = null;
@@ -476,6 +479,9 @@ export class KantinSatisPage implements OnInit {
         this.satislar = [];
         this.lotOptions = {};
         this.seriOptions = {};
+        this.satisNoktalari = [];
+        this.selectedSatisNoktasiId = null;
+        this.selectedSatisNoktasi = null;
         this.resetYeniOdeme();
 
         if (!this.selectedKantin?.id) {
@@ -490,9 +496,44 @@ export class KantinSatisPage implements OnInit {
             error: (error: unknown) => this.showError(error)
         });
 
+        this.kantinlerService.getSatisNoktalari(this.selectedKantin.id).subscribe({
+            next: (items) => {
+                this.satisNoktalari = items.filter((x) => x.aktifMi);
+                this.autoSelectSatisNoktasi();
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+
         this.loadSatisHistory();
         this.loadOdemeHesaplari(KANTIN_ODEME_YONTEMLERI.Nakit);
         this.loadOdemeHesaplari(KANTIN_ODEME_YONTEMLERI.KrediKarti);
+    }
+
+    onSatisNoktasiChange(noktaId: number | null): void {
+        this.selectedSatisNoktasiId = noktaId;
+        this.selectedSatisNoktasi = this.satisNoktalari.find((x) => x.id === noktaId) ?? null;
+        this.currentDraft = null;
+        this.selectedHistory = null;
+        this.lotOptions = {};
+        this.seriOptions = {};
+        this.resetYeniOdeme();
+    }
+
+    private autoSelectSatisNoktasi(): void {
+        const aktifler = this.satisNoktalari.filter((x) => x.aktifMi);
+        if (aktifler.length === 1) {
+            this.onSatisNoktasiChange(aktifler[0].id ?? null);
+            return;
+        }
+
+        const varsayilan = aktifler.find((x) => x.varsayilanMi);
+        if (varsayilan) {
+            this.onSatisNoktasiChange(varsayilan.id ?? null);
+            return;
+        }
+
+        this.onSatisNoktasiChange(null);
     }
 
     yeniSatis(): void {
@@ -696,11 +737,11 @@ export class KantinSatisPage implements OnInit {
 
     private resolveDefaultOdemeHesapId(odemeYontemi: string): number | null {
         if (odemeYontemi === KANTIN_ODEME_YONTEMLERI.Nakit) {
-            return this.selectedKantin?.varsayilanNakitKasaId ?? null;
+            return this.selectedSatisNoktasi?.varsayilanNakitKasaId ?? null;
         }
 
         if (odemeYontemi === KANTIN_ODEME_YONTEMLERI.KrediKarti) {
-            return this.selectedKantin?.varsayilanPosHesapId ?? null;
+            return this.selectedSatisNoktasi?.varsayilanPosHesapId ?? null;
         }
 
         return null;
@@ -710,7 +751,7 @@ export class KantinSatisPage implements OnInit {
         this.yeniOdeme = {
             odemeYontemi: KANTIN_ODEME_YONTEMLERI.Nakit,
             tutar: 0,
-            kasaBankaHesapId: this.selectedKantin?.varsayilanNakitKasaId ?? null
+            kasaBankaHesapId: this.selectedSatisNoktasi?.varsayilanNakitKasaId ?? null
         };
     }
 
@@ -764,12 +805,14 @@ export class KantinSatisPage implements OnInit {
             return;
         }
 
-        if (!this.selectedKantin?.id) {
+        if (!this.selectedKantin?.id || !this.selectedSatisNoktasiId) {
+            this.showError(new Error('Satış yapmak için bir satış noktası seçiniz.'));
             return;
         }
 
         this.satisService.create({
             kantinId: this.selectedKantin.id,
+            satisNoktasiId: this.selectedSatisNoktasiId,
             satisTarihi: new Date().toISOString(),
             aciklama: null
         }).subscribe({
@@ -856,6 +899,9 @@ export class KantinSatisPage implements OnInit {
         this.kantinler = [];
         this.selectedKantinId = null;
         this.selectedKantin = null;
+        this.satisNoktalari = [];
+        this.selectedSatisNoktasiId = null;
+        this.selectedSatisNoktasi = null;
         this.urunler = [];
         this.satislar = [];
         this.currentDraft = null;

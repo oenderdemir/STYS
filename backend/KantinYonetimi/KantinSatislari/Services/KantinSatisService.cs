@@ -123,6 +123,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
     public async Task<KantinSatisDto> AddAsync(KantinSatisDto dto, CancellationToken cancellationToken = default)
     {
         var kantin = await GetRequiredActiveKantinAsync(dto.KantinId, cancellationToken);
+        await GetRequiredActiveSatisNoktasiAsync(dto.SatisNoktasiId, dto.KantinId, cancellationToken);
         dto.TesisId = kantin.TesisId;
         dto.SatisTarihi = dto.SatisTarihi == default ? DateTime.UtcNow : dto.SatisTarihi;
         dto.Durum = KantinSatisDurumlari.Taslak;
@@ -233,7 +234,8 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
     {
         var satis = await GetEditableEntityAsync(satisId, cancellationToken);
         var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
-        var projection = await BuildOdemeProjectionAsync(kantin, request.OdemeYontemi, request.KasaBankaHesapId, request.Tutar, cancellationToken);
+        var satisNoktasi = await GetRequiredActiveSatisNoktasiAsync(satis.SatisNoktasiId, satis.KantinId, cancellationToken);
+        var projection = await BuildOdemeProjectionAsync(satisNoktasi, kantin.TesisId, request.OdemeYontemi, request.KasaBankaHesapId, request.Tutar, cancellationToken);
 
         satis.Odemeler.Add(new KantinSatisOdeme
         {
@@ -253,10 +255,11 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
     {
         var satis = await GetEditableEntityAsync(satisId, cancellationToken);
         var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+        var satisNoktasi = await GetRequiredActiveSatisNoktasiAsync(satis.SatisNoktasiId, satis.KantinId, cancellationToken);
         var odeme = satis.Odemeler.FirstOrDefault(x => x.Id == odemeId)
             ?? throw new BaseException("Kantin satış ödeme satırı bulunamadı.", 404);
 
-        var projection = await BuildOdemeProjectionAsync(kantin, request.OdemeYontemi, request.KasaBankaHesapId, request.Tutar, cancellationToken);
+        var projection = await BuildOdemeProjectionAsync(satisNoktasi, kantin.TesisId, request.OdemeYontemi, request.KasaBankaHesapId, request.Tutar, cancellationToken);
         odeme.OdemeYontemi = projection.OdemeYontemi;
         odeme.KasaBankaHesapId = projection.KasaBankaHesapId;
         odeme.Tutar = projection.Tutar;
@@ -319,6 +322,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         {
             var satis = await _dbContext.KantinSatislar
                 .Include(x => x.Kantin)
+                .Include(x => x.SatisNoktasi)
                 .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
                 .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
                 .FirstOrDefaultAsync(x => x.Id == satisId && !x.IsDeleted, cancellationToken)
@@ -338,13 +342,14 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             }
 
             var kantin = await GetRequiredActiveKantinAsync(satis.KantinId, cancellationToken);
+            var satisNoktasi = await GetRequiredActiveSatisNoktasiAsync(satis.SatisNoktasiId, satis.KantinId, cancellationToken);
             if (!kantin.PerakendeCariKartId.HasValue)
             {
                 throw new BaseException("Kantin satışının kesinleşmesi için Perakende Cari seçimi zorunludur.", 400);
             }
 
             ValidateDraftConsistency(satis);
-            await ValidateOdemelerAsync(kantin, satis, assignResolvedAccounts: true, cancellationToken);
+            await ValidateOdemelerAsync(satisNoktasi, kantin.TesisId, satis, assignResolvedAccounts: true, cancellationToken);
 
             foreach (var satir in satis.Satirlar)
             {
@@ -392,6 +397,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         var query = _dbContext.KantinSatislar
             .AsNoTracking()
             .Include(x => x.Kantin)
+            .Include(x => x.SatisNoktasi)
             .Include(x => x.MuhasebeFis)
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
@@ -410,6 +416,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
     {
         var entity = await _dbContext.KantinSatislar
             .Include(x => x.Kantin)
+            .Include(x => x.SatisNoktasi)
             .Include(x => x.MuhasebeFis)
             .Include(x => x.Satirlar.Where(s => !s.IsDeleted))
             .Include(x => x.Odemeler.Where(o => !o.IsDeleted))
@@ -441,6 +448,26 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         }
 
         return kantin;
+    }
+
+    private async Task<KantinSatisNoktasi> GetRequiredActiveSatisNoktasiAsync(int satisNoktasiId, int kantinId, CancellationToken cancellationToken)
+    {
+        var satisNoktasi = await _dbContext.KantinSatisNoktalari
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == satisNoktasiId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Satış noktası bulunamadı.", 404);
+
+        if (satisNoktasi.KantinId != kantinId)
+        {
+            throw new BaseException("Satış noktası seçilen kantine ait olmalıdır.", 400);
+        }
+
+        if (!satisNoktasi.AktifMi)
+        {
+            throw new BaseException("Satış için satış noktası aktif olmalıdır.", 400);
+        }
+
+        return satisNoktasi;
     }
 
     private async Task<KantinSatisDto> GetRequiredDtoAsync(int id, CancellationToken cancellationToken)
@@ -568,7 +595,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             seriNo);
     }
 
-    private async Task<OdemeProjection> BuildOdemeProjectionAsync(Kantin kantin, string odemeYontemi, int? kasaBankaHesapId, decimal tutar, CancellationToken cancellationToken)
+    private async Task<OdemeProjection> BuildOdemeProjectionAsync(KantinSatisNoktasi satisNoktasi, int tesisId, string odemeYontemi, int? kasaBankaHesapId, decimal tutar, CancellationToken cancellationToken)
     {
         if (tutar <= 0)
         {
@@ -585,23 +612,23 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         KasaBankaHesap? hesap = null;
         if (string.Equals(normalizedYontem, OdemeYontemleri.Nakit, StringComparison.Ordinal))
         {
-            var effectiveHesapId = kasaBankaHesapId ?? kantin.VarsayilanNakitKasaId;
+            var effectiveHesapId = kasaBankaHesapId ?? satisNoktasi.VarsayilanNakitKasaId;
             if (!effectiveHesapId.HasValue)
             {
                 throw new BaseException("Nakit ödeme için kasa seçimi zorunludur.", 400);
             }
 
-            hesap = await ResolveValidHesapAsync(kantin.TesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.NakitKasa, "Nakit", cancellationToken);
+            hesap = await ResolveValidHesapAsync(tesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.NakitKasa, "Nakit", cancellationToken);
         }
         else
         {
-            var effectiveHesapId = kasaBankaHesapId ?? kantin.VarsayilanPosHesapId;
+            var effectiveHesapId = kasaBankaHesapId ?? satisNoktasi.VarsayilanPosHesapId;
             if (!effectiveHesapId.HasValue)
             {
                 throw new BaseException("Kredi kartı ödeme için POS hesabı seçimi zorunludur.", 400);
             }
 
-            hesap = await ResolveValidHesapAsync(kantin.TesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.KrediKarti, "Kredi kartı", cancellationToken);
+            hesap = await ResolveValidHesapAsync(tesisId, effectiveHesapId.Value, KasaBankaHesapTipleri.KrediKarti, "Kredi kartı", cancellationToken);
         }
 
         return new OdemeProjection(
@@ -725,7 +752,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         }
     }
 
-    private async Task ValidateOdemelerAsync(Kantin kantin, KantinSatis satis, bool assignResolvedAccounts, CancellationToken cancellationToken)
+    private async Task ValidateOdemelerAsync(KantinSatisNoktasi satisNoktasi, int tesisId, KantinSatis satis, bool assignResolvedAccounts, CancellationToken cancellationToken)
     {
         if (satis.Odemeler.Count == 0)
         {
@@ -734,7 +761,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
 
         foreach (var odeme in satis.Odemeler)
         {
-            var projection = await BuildOdemeProjectionAsync(kantin, odeme.OdemeYontemi, odeme.KasaBankaHesapId, odeme.Tutar, cancellationToken);
+            var projection = await BuildOdemeProjectionAsync(satisNoktasi, tesisId, odeme.OdemeYontemi, odeme.KasaBankaHesapId, odeme.Tutar, cancellationToken);
             odeme.OdemeYontemi = projection.OdemeYontemi;
             odeme.Tutar = projection.Tutar;
             if (assignResolvedAccounts)
@@ -878,6 +905,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             Id = entity.Id,
             TesisId = entity.TesisId,
             KantinId = entity.KantinId,
+            SatisNoktasiId = entity.SatisNoktasiId,
             SatisTarihi = entity.SatisTarihi,
             Durum = entity.Durum,
             ToplamTutar = entity.ToplamTutar,
@@ -891,6 +919,8 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             MuhasebeFisOlusturmaTarihi = entity.MuhasebeFisOlusturmaTarihi,
             KantinKod = entity.Kantin?.Kod,
             KantinAd = entity.Kantin?.Ad,
+            SatisNoktasiKod = entity.SatisNoktasi?.Kod,
+            SatisNoktasiAd = entity.SatisNoktasi?.Ad,
             Satirlar = entity.Satirlar
                 .Where(x => !x.IsDeleted)
                 .OrderBy(x => x.Id)

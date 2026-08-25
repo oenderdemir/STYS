@@ -19,7 +19,7 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { UiSeverity } from '../../core/ui/ui-severity.constants';
 import { MuhasebeTesisContextBarComponent } from '../muhasebe/components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { MuhasebeTesisContextService } from '../muhasebe/services/muhasebe-tesis-context.service';
-import { KantinCariKartOption, KantinDepoOption, KantinKasaOption, KantinModel, KantinOdemeHesapOption, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
+import { KantinCariKartOption, KantinDepoOption, KantinKasaOption, KantinModel, KantinOdemeHesapOption, KantinSatisNoktasiModel, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
 import { KantinlerService } from './kantinler.service';
 
 @Component({
@@ -311,8 +311,10 @@ export class KantinlerPage implements OnInit {
 
     loading = false;
     urunLoading = false;
+    satisNoktasiLoading = false;
     kantinler: KantinModel[] = [];
     urunler: KantinUrunModel[] = [];
+    satisNoktalari: KantinSatisNoktasiModel[] = [];
     selectedKantin: KantinModel | null = null;
 
     depoOptions: KantinDepoOption[] = [];
@@ -323,8 +325,10 @@ export class KantinlerPage implements OnInit {
 
     showKantinDialog = false;
     showUrunDialog = false;
+    showSatisNoktasiDialog = false;
     kantinForm: KantinModel = this.createEmptyKantin();
     urunForm: KantinUrunModel = this.createEmptyUrun();
+    satisNoktasiForm: KantinSatisNoktasiModel = this.createEmptySatisNoktasi();
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -374,8 +378,10 @@ export class KantinlerPage implements OnInit {
 
                     if (this.selectedKantin?.id) {
                         this.loadUrunler(this.selectedKantin.id);
+                        this.loadSatisNoktalari(this.selectedKantin.id);
                     } else {
                         this.urunler = [];
+                        this.satisNoktalari = [];
                     }
 
                     this.cdr.detectChanges();
@@ -428,8 +434,10 @@ export class KantinlerPage implements OnInit {
 
     selectKantin(kantin: KantinModel): void {
         this.selectedKantin = kantin;
+        this.satisNoktalari = [];
         if (kantin.id) {
             this.loadUrunler(kantin.id);
+            this.loadSatisNoktalari(kantin.id);
         }
     }
 
@@ -510,6 +518,64 @@ export class KantinlerPage implements OnInit {
         });
     }
 
+    openNewSatisNoktasi(): void {
+        if (!this.selectedKantin?.id) {
+            return;
+        }
+
+        this.satisNoktasiForm = {
+            ...this.createEmptySatisNoktasi(),
+            kantinId: this.selectedKantin.id
+        };
+        this.showSatisNoktasiDialog = true;
+    }
+
+    editSatisNoktasi(nokta: KantinSatisNoktasiModel): void {
+        this.satisNoktasiForm = { ...nokta };
+        this.showSatisNoktasiDialog = true;
+    }
+
+    saveSatisNoktasi(): void {
+        if (!this.selectedKantin?.id) {
+            return;
+        }
+
+        const kantinId = this.selectedKantin.id;
+        const payload: KantinSatisNoktasiModel = {
+            ...this.satisNoktasiForm,
+            kantinId
+        };
+
+        const request$ = payload.id
+            ? this.service.updateSatisNoktasi(kantinId, payload.id, payload)
+            : this.service.createSatisNoktasi(kantinId, payload);
+
+        request$.subscribe({
+            next: () => {
+                this.showSatisNoktasiDialog = false;
+                this.loadSatisNoktalari(kantinId);
+                this.showSuccess('Satış noktası kaydedildi.');
+            },
+            error: (error: unknown) => this.showError(error)
+        });
+    }
+
+    private loadSatisNoktalari(kantinId: number): void {
+        this.satisNoktasiLoading = true;
+        this.service.getSatisNoktalari(kantinId)
+            .pipe(finalize(() => {
+                this.satisNoktasiLoading = false;
+                this.cdr.detectChanges();
+            }))
+            .subscribe({
+                next: (items) => {
+                    this.satisNoktalari = items;
+                    this.cdr.detectChanges();
+                },
+                error: (error: unknown) => this.showError(error)
+            });
+    }
+
     private loadUrunler(kantinId: number): void {
         this.urunLoading = true;
         this.service.getUrunler(kantinId)
@@ -579,11 +645,22 @@ export class KantinlerPage implements OnInit {
         return {
             tesisId: this.currentTesisId ?? 0,
             depoId: 0,
-            varsayilanNakitKasaId: null,
-            varsayilanPosHesapId: null,
             perakendeCariKartId: null,
             kod: '',
             ad: '',
+            aktifMi: true,
+            aciklama: null
+        };
+    }
+
+    private createEmptySatisNoktasi(): KantinSatisNoktasiModel {
+        return {
+            kantinId: this.selectedKantin?.id ?? 0,
+            kod: '',
+            ad: '',
+            varsayilanNakitKasaId: null,
+            varsayilanPosHesapId: null,
+            varsayilanMi: false,
             aktifMi: true,
             aciklama: null
         };

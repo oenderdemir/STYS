@@ -2,8 +2,6 @@ export interface KantinModel {
     id?: number;
     tesisId: number;
     depoId: number;
-    varsayilanNakitKasaId?: number | null;
-    varsayilanPosHesapId?: number | null;
     perakendeCariKartId?: number | null;
     kod: string;
     ad: string;
@@ -11,9 +9,21 @@ export interface KantinModel {
     aciklama?: string | null;
     depoKod?: string | null;
     depoAd?: string | null;
+    perakendeCariKartAd?: string | null;
+}
+
+export interface KantinSatisNoktasiModel {
+    id?: number;
+    kantinId: number;
+    kod: string;
+    ad: string;
+    varsayilanNakitKasaId?: number | null;
+    varsayilanPosHesapId?: number | null;
+    varsayilanMi: boolean;
+    aktifMi: boolean;
+    aciklama?: string | null;
     varsayilanNakitKasaAd?: string | null;
     varsayilanPosHesapAd?: string | null;
-    perakendeCariKartAd?: string | null;
 }
 
 export interface KantinUrunModel {

@@ -103,12 +103,21 @@
                         <h2 class="section-title">Seçili Kantin</h2>
                         <p class="section-subtitle">{{ selectedKantinDisplay }}</p>
                     </div>
-                    <p-button
-                        label="Yeni Ürün"
-                        icon="pi pi-plus"
-                        [disabled]="!selectedKantin"
-                        (onClick)="openNewUrun()">
-                    </p-button>
+                    <div class="flex gap-2">
+                        <p-button
+                            label="Satış Noktası"
+                            icon="pi pi-plus"
+                            severity="secondary"
+                            [disabled]="!selectedKantin"
+                            (onClick)="openNewSatisNoktasi()">
+                        </p-button>
+                        <p-button
+                            label="Yeni Ürün"
+                            icon="pi pi-plus"
+                            [disabled]="!selectedKantin"
+                            (onClick)="openNewUrun()">
+                        </p-button>
+                    </div>
                 </div>
 
                 <div class="section-body" *ngIf="selectedKantin; else noKantinSelected">
@@ -118,20 +127,16 @@
                             <div class="detail-value">{{ selectedKantin.depoKod }} - {{ selectedKantin.depoAd }}</div>
                         </div>
                         <div class="detail-tile">
-                            <div class="detail-label">Varsayılan Nakit Kasa</div>
-                            <div class="detail-value">{{ selectedKantin.varsayilanNakitKasaAd ?? '-' }}</div>
-                        </div>
-                        <div class="detail-tile">
-                            <div class="detail-label">Varsayılan POS Hesabı</div>
-                            <div class="detail-value">{{ selectedKantin.varsayilanPosHesapAd ?? '-' }}</div>
-                        </div>
-                        <div class="detail-tile">
                             <div class="detail-label">Perakende Cari</div>
                             <div class="detail-value">{{ selectedKantin.perakendeCariKartAd ?? '-' }}</div>
                         </div>
                         <div class="detail-tile">
                             <div class="detail-label">Aktif Ürün</div>
                             <div class="detail-value">{{ aktifUrunSayisi }} / {{ urunler.length }}</div>
+                        </div>
+                        <div class="detail-tile">
+                            <div class="detail-label">Satış Noktası</div>
+                            <div class="detail-value">{{ satisNoktalari.length }}</div>
                         </div>
                     </div>
 
@@ -175,6 +180,53 @@
                             </tr>
                         </ng-template>
                     </p-table>
+
+                    <div class="mt-4">
+                        <div class="section-header px-0 pt-0">
+                            <div>
+                                <h2 class="section-title" style="font-size: 1.1rem;">Satış Noktaları</h2>
+                                <p class="section-subtitle">Her noktanın kendi varsayılan kasa ve POS hesabı olabilir.</p>
+                            </div>
+                        </div>
+
+                        <p-table [value]="satisNoktalari" [loading]="satisNoktasiLoading" responsiveLayout="scroll" styleClass="p-datatable-sm">
+                            <ng-template pTemplate="header">
+                                <tr>
+                                    <th>Kod</th>
+                                    <th>Ad</th>
+                                    <th>Varsayılan Kasa</th>
+                                    <th>Varsayılan POS</th>
+                                    <th>Varsayılan</th>
+                                    <th>Aktif</th>
+                                    <th class="w-8rem"></th>
+                                </tr>
+                            </ng-template>
+                            <ng-template pTemplate="body" let-row>
+                                <tr>
+                                    <td class="font-semibold">{{ row.kod }}</td>
+                                    <td>{{ row.ad }}</td>
+                                    <td>{{ row.varsayilanNakitKasaAd ?? '-' }}</td>
+                                    <td>{{ row.varsayilanPosHesapAd ?? '-' }}</td>
+                                    <td><p-tag [value]="row.varsayilanMi ? 'Evet' : 'Hayır'" [severity]="row.varsayilanMi ? 'success' : 'secondary'"></p-tag></td>
+                                    <td><p-tag [value]="row.aktifMi ? 'Aktif' : 'Pasif'" [severity]="getAktifSeverity(row.aktifMi)"></p-tag></td>
+                                    <td class="text-right">
+                                        <p-button icon="pi pi-pencil" text severity="secondary" (onClick)="editSatisNoktasi(row)"></p-button>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                            <ng-template pTemplate="emptymessage">
+                                <tr>
+                                    <td colspan="7">
+                                        <div class="empty-state" style="min-height: 8rem;">
+                                            <i class="pi pi-map-marker"></i>
+                                            <h3 class="empty-title">Satış noktası yok</h3>
+                                            <span>Bu kantine satış noktası ekleyin.</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </ng-template>
+                        </p-table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -196,8 +248,8 @@
         <div class="dialog-banner">
             <h3 class="dialog-banner-title">{{ kantinForm.id ? 'Kantin bilgisini güncelleyin' : 'Yeni kantin açılışını hazırlayın' }}</h3>
             <p class="dialog-banner-copy">
-                Kod, depo, varsayılan kasa ve perakende cari bağlantılarını tek seferde girin. Bu bilgiler hızlı satış ve
-                tahsilat akışında doğrudan kullanılacaktır.
+                Kod, depo ve perakende cari bağlantılarını tek seferde girin. Varsayılan kasa ve POS hesapları satış
+                noktaları üzerinden yönetilir.
             </p>
         </div>
 
@@ -227,42 +279,6 @@
                     <ng-template let-item pTemplate="selectedItem">{{ getDepoLabel(item?.id ?? kantinForm.depoId) || 'Depo seçin' }}</ng-template>
                 </p-select>
                 <small class="dialog-help">Satış hareketleri ve stok düşümü bu depodan çalışır.</small>
-            </div>
-
-            <div class="dialog-field">
-                <label class="dialog-label" for="kantinKasa">Varsayılan Kasa</label>
-                <p-select
-                    inputId="kantinKasa"
-                    [options]="kasaOptions"
-                    [(ngModel)]="kantinForm.varsayilanNakitKasaId"
-                    optionValue="id"
-                    [optionLabel]="'ad'"
-                    placeholder="Kasa seçin"
-                    [showClear]="true"
-                    appendTo="body"
-                    class="w-full">
-                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
-                    <ng-template let-item pTemplate="selectedItem">{{ item ? getKasaLabel(item.id) : 'Kasa seçin' }}</ng-template>
-                </p-select>
-                <small class="dialog-help">Nakit tahsilatlarda varsayılan hesap olarak kullanılabilir.</small>
-            </div>
-
-            <div class="dialog-field">
-                <label class="dialog-label" for="kantinPos">Varsayılan POS Hesabı</label>
-                <p-select
-                    inputId="kantinPos"
-                    [options]="posOptions"
-                    [(ngModel)]="kantinForm.varsayilanPosHesapId"
-                    optionValue="id"
-                    [optionLabel]="'ad'"
-                    placeholder="POS hesabı seçin"
-                    [showClear]="true"
-                    appendTo="body"
-                    class="w-full">
-                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
-                    <ng-template let-item pTemplate="selectedItem">{{ item ? getPosLabel(item.id) : 'POS hesabı seçin' }}</ng-template>
-                </p-select>
-                <small class="dialog-help">Kredi kartı tahsilatlarda varsayılan POS hesabı olarak kullanılabilir.</small>
             </div>
 
             <div class="dialog-field full">
@@ -378,6 +394,103 @@
         <div class="dialog-footer">
             <p-button label="Vazgeç" severity="secondary" text (onClick)="showUrunDialog = false"></p-button>
             <p-button label="Kaydet" (onClick)="saveUrun()"></p-button>
+        </div>
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="showSatisNoktasiDialog" [modal]="true" [style]="{ width: '56rem', maxWidth: '96vw' }" [header]="satisNoktasiForm.id ? 'Satış Noktası Düzenle' : 'Yeni Satış Noktası'">
+    <div class="dialog-shell">
+        <div class="dialog-banner">
+            <h3 class="dialog-banner-title">{{ satisNoktasiForm.id ? 'Satış noktasını güncelleyin' : 'Yeni satış noktası açın' }}</h3>
+            <p class="dialog-banner-copy">
+                Her satış noktası kendi varsayılan nakit kasa ve POS hesabına sahip olabilir. Bir kantinde en fazla bir aktif
+                varsayılan satış noktası olabilir.
+            </p>
+        </div>
+
+        <div class="dialog-grid">
+            <div class="dialog-field">
+                <label class="dialog-label" for="noktaKod">Kod</label>
+                <input id="noktaKod" pInputText [(ngModel)]="satisNoktasiForm.kod" class="w-full" />
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="noktaAd">Ad</label>
+                <input id="noktaAd" pInputText [(ngModel)]="satisNoktasiForm.ad" class="w-full" />
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="noktaKasa">Varsayılan Nakit Kasa</label>
+                <p-select
+                    inputId="noktaKasa"
+                    [options]="kasaOptions"
+                    [(ngModel)]="satisNoktasiForm.varsayilanNakitKasaId"
+                    optionValue="id"
+                    [optionLabel]="'ad'"
+                    placeholder="Kasa seçin"
+                    [showClear]="true"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ item ? getKasaLabel(item.id) : 'Kasa seçin' }}</ng-template>
+                </p-select>
+                <small class="dialog-help">Nakit tahsilatlarda bu noktanın varsayılan kasası.</small>
+            </div>
+
+            <div class="dialog-field">
+                <label class="dialog-label" for="noktaPos">Varsayılan POS Hesabı</label>
+                <p-select
+                    inputId="noktaPos"
+                    [options]="posOptions"
+                    [(ngModel)]="satisNoktasiForm.varsayilanPosHesapId"
+                    optionValue="id"
+                    [optionLabel]="'ad'"
+                    placeholder="POS hesabı seçin"
+                    [showClear]="true"
+                    appendTo="body"
+                    class="w-full">
+                    <ng-template let-item pTemplate="item">{{ item.kod }} - {{ item.ad }}</ng-template>
+                    <ng-template let-item pTemplate="selectedItem">{{ item ? getPosLabel(item.id) : 'POS hesabı seçin' }}</ng-template>
+                </p-select>
+                <small class="dialog-help">Kredi kartı tahsilatlarda bu noktanın varsayılan POS hesabı.</small>
+            </div>
+
+            <div class="dialog-field full">
+                <label class="dialog-label" for="noktaAciklama">Açıklama</label>
+                <textarea id="noktaAciklama" pTextarea [(ngModel)]="satisNoktasiForm.aciklama" rows="3" class="w-full"></textarea>
+            </div>
+
+            <div class="dialog-field">
+                <div class="dialog-switch-row">
+                    <div>
+                        <div class="dialog-label">Varsayılan Nokta</div>
+                        <small class="dialog-help">Aktif varsayılan nokta hızlı satışta otomatik seçilir.</small>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleswitch [(ngModel)]="satisNoktasiForm.varsayilanMi" inputId="noktaVarsayilan"></p-toggleswitch>
+                        <label for="noktaVarsayilan">Varsayılan</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dialog-field">
+                <div class="dialog-switch-row">
+                    <div>
+                        <div class="dialog-label">Aktif Kullanım</div>
+                        <small class="dialog-help">Pasif satış noktaları satışta seçilemez.</small>
+                    </div>
+                    <div class="flex align-items-center gap-2">
+                        <p-toggleswitch [(ngModel)]="satisNoktasiForm.aktifMi" inputId="noktaAktif"></p-toggleswitch>
+                        <label for="noktaAktif">Aktif</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <ng-template pTemplate="footer">
+        <div class="dialog-footer">
+            <p-button label="Vazgeç" severity="secondary" text (onClick)="showSatisNoktasiDialog = false"></p-button>
+            <p-button label="Kaydet" (onClick)="saveSatisNoktasi()"></p-button>
         </div>
     </ng-template>
 </p-dialog>

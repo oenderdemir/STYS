@@ -216,6 +216,62 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
         return await GetRequiredUrunDtoAsync(kantin.Id, entity.Id, cancellationToken);
     }
 
+    public async Task<List<KantinSatisNoktasiDto>> GetSatisNoktalariAsync(int kantinId, CancellationToken cancellationToken = default)
+    {
+        await GetRequiredKantinAsync(kantinId, cancellationToken);
+        var noktalar = await _dbContext.KantinSatisNoktalari
+            .AsNoTracking()
+            .Include(x => x.VarsayilanNakitKasa)
+            .Include(x => x.VarsayilanPosHesap)
+            .Where(x => x.KantinId == kantinId && !x.IsDeleted)
+            .OrderBy(x => x.Kod)
+            .ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return noktalar.Select(MapSatisNoktasiDto).ToList();
+    }
+
+    public async Task<KantinSatisNoktasiDto> AddSatisNoktasiAsync(int kantinId, KantinSatisNoktasiDto dto, CancellationToken cancellationToken = default)
+    {
+        var kantin = await GetRequiredKantinAsync(kantinId, cancellationToken);
+        dto.KantinId = kantin.Id;
+        NormalizeSatisNoktasiDto(dto);
+        await ValidateSatisNoktasiAsync(kantin, dto, null, cancellationToken);
+
+        var entity = _mapper.Map<KantinSatisNoktasi>(dto);
+        _dbContext.KantinSatisNoktalari.Add(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredSatisNoktasiDtoAsync(kantin.Id, entity.Id, cancellationToken);
+    }
+
+    public async Task<KantinSatisNoktasiDto> UpdateSatisNoktasiAsync(int kantinId, KantinSatisNoktasiDto dto, CancellationToken cancellationToken = default)
+    {
+        if (!dto.Id.HasValue)
+        {
+            throw new BaseException("Satış noktası id zorunludur.", 400);
+        }
+
+        var kantin = await GetRequiredKantinAsync(kantinId, cancellationToken);
+        var entity = await _dbContext.KantinSatisNoktalari
+            .FirstOrDefaultAsync(x => x.Id == dto.Id.Value && x.KantinId == kantinId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Satış noktası bulunamadı.", 404);
+
+        dto.KantinId = kantin.Id;
+        NormalizeSatisNoktasiDto(dto);
+        await ValidateSatisNoktasiAsync(kantin, dto, entity.Id, cancellationToken);
+
+        entity.Kod = dto.Kod;
+        entity.Ad = dto.Ad;
+        entity.VarsayilanNakitKasaId = dto.VarsayilanNakitKasaId;
+        entity.VarsayilanPosHesapId = dto.VarsayilanPosHesapId;
+        entity.VarsayilanMi = dto.VarsayilanMi;
+        entity.AktifMi = dto.AktifMi;
+        entity.Aciklama = dto.Aciklama;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredSatisNoktasiDtoAsync(kantin.Id, entity.Id, cancellationToken);
+    }
+
     public async Task<List<KantinDepoSecenekDto>> GetDepolarAsync(int tesisId, CancellationToken cancellationToken = default)
     {
         await EnsureTesisAccessAsync(tesisId, cancellationToken);
@@ -318,8 +374,6 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
         var query = _dbContext.Kantinler
             .AsNoTracking()
             .Include(x => x.Depo)
-            .Include(x => x.VarsayilanNakitKasa)
-            .Include(x => x.VarsayilanPosHesap)
             .Include(x => x.PerakendeCariKart)
             .Where(x => !x.IsDeleted);
 
@@ -346,16 +400,66 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
         => (await GetUrunlerAsync(kantinId, cancellationToken)).FirstOrDefault(x => x.Id == urunId)
             ?? throw new BaseException("Kantin ürünü bulunamadı.", 404);
 
-    private async Task ValidateKantinAsync(KantinDto dto, int? excludedId, CancellationToken cancellationToken)
-    {
-        var depo = await _dbContext.Depolar
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == dto.DepoId && !x.IsDeleted, cancellationToken)
-            ?? throw new BaseException("Seçilen depo bulunamadı.", 400);
+    private async Task<KantinSatisNoktasiDto> GetRequiredSatisNoktasiDtoAsync(int kantinId, int noktaId, CancellationToken cancellationToken)
+        => (await GetSatisNoktalariAsync(kantinId, cancellationToken)).FirstOrDefault(x => x.Id == noktaId)
+            ?? throw new BaseException("Satış noktası bulunamadı.", 404);
 
-        if (!depo.TesisId.HasValue || depo.TesisId.Value != dto.TesisId)
+    private static KantinSatisNoktasiDto MapSatisNoktasiDto(KantinSatisNoktasi entity)
+        => new()
         {
-            throw new BaseException("Seçilen depo kantin ile aynı tesise ait olmalıdır.", 400);
+            Id = entity.Id,
+            KantinId = entity.KantinId,
+            Kod = entity.Kod,
+            Ad = entity.Ad,
+            VarsayilanNakitKasaId = entity.VarsayilanNakitKasaId,
+            VarsayilanPosHesapId = entity.VarsayilanPosHesapId,
+            VarsayilanMi = entity.VarsayilanMi,
+            AktifMi = entity.AktifMi,
+            Aciklama = entity.Aciklama,
+            VarsayilanNakitKasaAd = entity.VarsayilanNakitKasa?.Ad,
+            VarsayilanPosHesapAd = entity.VarsayilanPosHesap?.Ad
+        };
+
+    private static void NormalizeSatisNoktasiDto(KantinSatisNoktasiDto dto)
+    {
+        dto.Kod = NormalizeRequired(dto.Kod, "Satış noktası kodu zorunludur.", 64).ToUpperInvariant();
+        dto.Ad = NormalizeRequired(dto.Ad, "Satış noktası adı zorunludur.", 200);
+        dto.Aciklama = NormalizeOptional(dto.Aciklama, 1024);
+    }
+
+    private async Task ValidateSatisNoktasiAsync(Kantin kantin, KantinSatisNoktasiDto dto, int? excludedId, CancellationToken cancellationToken)
+    {
+        var normalizedKod = NormalizeRequired(dto.Kod, "Satış noktası kodu zorunludur.", 64).ToUpperInvariant();
+        var duplicateKod = await _dbContext.KantinSatisNoktalari
+            .AsNoTracking()
+            .AnyAsync(x =>
+                !x.IsDeleted &&
+                x.KantinId == kantin.Id &&
+                x.Id != excludedId &&
+                x.Kod.ToUpper() == normalizedKod,
+                cancellationToken);
+
+        if (duplicateKod)
+        {
+            throw new BaseException("Aynı kantin içinde bu satış noktası kodu zaten kullanılıyor.", 400);
+        }
+
+        if (dto.VarsayilanMi && dto.AktifMi)
+        {
+            var anotherDefault = await _dbContext.KantinSatisNoktalari
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    !x.IsDeleted &&
+                    x.KantinId == kantin.Id &&
+                    x.Id != excludedId &&
+                    x.VarsayilanMi &&
+                    x.AktifMi,
+                    cancellationToken);
+
+            if (anotherDefault)
+            {
+                throw new BaseException("Bir kantinde en fazla bir aktif varsayılan satış noktası olabilir.", 400);
+            }
         }
 
         if (dto.VarsayilanNakitKasaId.HasValue)
@@ -365,9 +469,9 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
                 .FirstOrDefaultAsync(x => x.Id == dto.VarsayilanNakitKasaId.Value && !x.IsDeleted, cancellationToken)
                 ?? throw new BaseException("Seçilen varsayılan kasa bulunamadı.", 400);
 
-            if (kasa.TesisId != dto.TesisId)
+            if (kasa.TesisId != kantin.TesisId)
             {
-                throw new BaseException("Seçilen varsayılan kasa kantin ile aynı tesise ait olmalıdır.", 400);
+                throw new BaseException("Seçilen varsayılan kasa satış noktası ile aynı tesise ait olmalıdır.", 400);
             }
 
             if (!kasa.AktifMi)
@@ -388,9 +492,9 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
                 .FirstOrDefaultAsync(x => x.Id == dto.VarsayilanPosHesapId.Value && !x.IsDeleted, cancellationToken)
                 ?? throw new BaseException("Seçilen varsayılan POS hesabı bulunamadı.", 400);
 
-            if (posHesap.TesisId != dto.TesisId)
+            if (posHesap.TesisId != kantin.TesisId)
             {
-                throw new BaseException("Seçilen varsayılan POS hesabı kantin ile aynı tesise ait olmalıdır.", 400);
+                throw new BaseException("Seçilen varsayılan POS hesabı satış noktası ile aynı tesise ait olmalıdır.", 400);
             }
 
             if (!posHesap.AktifMi)
@@ -402,6 +506,19 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             {
                 throw new BaseException("Varsayılan POS hesabı yalnızca kredi kartı tipinde olabilir.", 400);
             }
+        }
+    }
+
+    private async Task ValidateKantinAsync(KantinDto dto, int? excludedId, CancellationToken cancellationToken)
+    {
+        var depo = await _dbContext.Depolar
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == dto.DepoId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Seçilen depo bulunamadı.", 400);
+
+        if (!depo.TesisId.HasValue || depo.TesisId.Value != dto.TesisId)
+        {
+            throw new BaseException("Seçilen depo kantin ile aynı tesise ait olmalıdır.", 400);
         }
 
         if (dto.PerakendeCariKartId.HasValue)
@@ -514,8 +631,6 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             Id = entity.Id,
             TesisId = entity.TesisId,
             DepoId = entity.DepoId,
-            VarsayilanNakitKasaId = entity.VarsayilanNakitKasaId,
-            VarsayilanPosHesapId = entity.VarsayilanPosHesapId,
             PerakendeCariKartId = entity.PerakendeCariKartId,
             Kod = entity.Kod,
             Ad = entity.Ad,
@@ -523,8 +638,6 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             Aciklama = entity.Aciklama,
             DepoKod = entity.Depo?.Kod,
             DepoAd = entity.Depo?.Ad,
-            VarsayilanNakitKasaAd = entity.VarsayilanNakitKasa?.Ad,
-            VarsayilanPosHesapAd = entity.VarsayilanPosHesap?.Ad,
             PerakendeCariKartAd = entity.PerakendeCariKart is null
                 ? null
                 : $"{entity.PerakendeCariKart.CariKodu} - {entity.PerakendeCariKart.UnvanAdSoyad}"

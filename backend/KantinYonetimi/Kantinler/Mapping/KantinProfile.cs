@@ -12,9 +12,14 @@ public class KantinProfile : Profile
         CreateMap<KantinDto, Kantin>()
             .ForMember(x => x.Tesis, opt => opt.Ignore())
             .ForMember(x => x.Depo, opt => opt.Ignore())
+            .ForMember(x => x.Urunler, opt => opt.Ignore())
+            .ForMember(x => x.SatisNoktalari, opt => opt.Ignore());
+
+        CreateMap<KantinSatisNoktasi, KantinSatisNoktasiDto>();
+        CreateMap<KantinSatisNoktasiDto, KantinSatisNoktasi>()
+            .ForMember(x => x.Kantin, opt => opt.Ignore())
             .ForMember(x => x.VarsayilanNakitKasa, opt => opt.Ignore())
-            .ForMember(x => x.VarsayilanPosHesap, opt => opt.Ignore())
-            .ForMember(x => x.Urunler, opt => opt.Ignore());
+            .ForMember(x => x.VarsayilanPosHesap, opt => opt.Ignore());
 
         CreateMap<KantinUrun, KantinUrunDto>();
         CreateMap<KantinUrunDto, KantinUrun>()

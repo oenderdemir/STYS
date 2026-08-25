@@ -37,6 +37,7 @@ public class KantinSatisController : UIController
         => Ok(await _service.AddAsync(new KantinSatisDto
         {
             KantinId = request.KantinId,
+            SatisNoktasiId = request.SatisNoktasiId,
             SatisTarihi = request.SatisTarihi ?? DateTime.UtcNow,
             Aciklama = request.Aciklama
         }, cancellationToken));

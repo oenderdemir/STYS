@@ -36,8 +36,6 @@ public class KantinlerController : UIController
         {
             TesisId = request.TesisId,
             DepoId = request.DepoId,
-            VarsayilanNakitKasaId = request.VarsayilanNakitKasaId,
-            VarsayilanPosHesapId = request.VarsayilanPosHesapId,
             PerakendeCariKartId = request.PerakendeCariKartId,
             Kod = request.Kod,
             Ad = request.Ad,
@@ -53,8 +51,6 @@ public class KantinlerController : UIController
             Id = id,
             TesisId = request.TesisId,
             DepoId = request.DepoId,
-            VarsayilanNakitKasaId = request.VarsayilanNakitKasaId,
-            VarsayilanPosHesapId = request.VarsayilanPosHesapId,
             PerakendeCariKartId = request.PerakendeCariKartId,
             Kod = request.Kod,
             Ad = request.Ad,
@@ -66,6 +62,40 @@ public class KantinlerController : UIController
     [Permission(StructurePermissions.KantinYonetimi.View)]
     public async Task<ActionResult<List<KantinUrunDto>>> GetUrunler(int id, CancellationToken cancellationToken)
         => Ok(await _service.GetUrunlerAsync(id, cancellationToken));
+
+    [HttpGet("{id:int}/satis-noktalari")]
+    [Permission(StructurePermissions.KantinYonetimi.View)]
+    public async Task<ActionResult<List<KantinSatisNoktasiDto>>> GetSatisNoktalari(int id, CancellationToken cancellationToken)
+        => Ok(await _service.GetSatisNoktalariAsync(id, cancellationToken));
+
+    [HttpPost("{id:int}/satis-noktalari")]
+    [Permission(StructurePermissions.KantinYonetimi.Manage)]
+    public async Task<ActionResult<KantinSatisNoktasiDto>> AddSatisNoktasi(int id, [FromBody] CreateKantinSatisNoktasiRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.AddSatisNoktasiAsync(id, new KantinSatisNoktasiDto
+        {
+            Kod = request.Kod,
+            Ad = request.Ad,
+            VarsayilanNakitKasaId = request.VarsayilanNakitKasaId,
+            VarsayilanPosHesapId = request.VarsayilanPosHesapId,
+            VarsayilanMi = request.VarsayilanMi,
+            AktifMi = request.AktifMi,
+            Aciklama = request.Aciklama
+        }, cancellationToken));
+
+    [HttpPut("{id:int}/satis-noktalari/{noktaId:int}")]
+    [Permission(StructurePermissions.KantinYonetimi.Manage)]
+    public async Task<ActionResult<KantinSatisNoktasiDto>> UpdateSatisNoktasi(int id, int noktaId, [FromBody] UpdateKantinSatisNoktasiRequest request, CancellationToken cancellationToken)
+        => Ok(await _service.UpdateSatisNoktasiAsync(id, new KantinSatisNoktasiDto
+        {
+            Id = noktaId,
+            Kod = request.Kod,
+            Ad = request.Ad,
+            VarsayilanNakitKasaId = request.VarsayilanNakitKasaId,
+            VarsayilanPosHesapId = request.VarsayilanPosHesapId,
+            VarsayilanMi = request.VarsayilanMi,
+            AktifMi = request.AktifMi,
+            Aciklama = request.Aciklama
+        }, cancellationToken));
 
     [HttpPost("{id:int}/urunler")]
     [Permission(StructurePermissions.KantinYonetimi.Manage)]

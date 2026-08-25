@@ -196,6 +196,7 @@ public class StysAppDbContext : DbContext
     public DbSet<DepoCikisGrup> DepoCikisGruplari => Set<DepoCikisGrup>();
     public DbSet<Kantin> Kantinler => Set<Kantin>();
     public DbSet<KantinUrun> KantinUrunler => Set<KantinUrun>();
+    public DbSet<KantinSatisNoktasi> KantinSatisNoktalari => Set<KantinSatisNoktasi>();
     public DbSet<KantinSatis> KantinSatislar => Set<KantinSatis>();
     public DbSet<KantinSatisSatir> KantinSatisSatirlari => Set<KantinSatisSatir>();
     public DbSet<KantinSatisOdeme> KantinSatisOdemeleri => Set<KantinSatisOdeme>();
@@ -2576,10 +2577,6 @@ public class StysAppDbContext : DbContext
                 .HasFilter("[IsDeleted] = 0");
             entity.HasIndex(x => x.DepoId)
                 .HasFilter("[IsDeleted] = 0");
-            entity.HasIndex(x => x.VarsayilanNakitKasaId)
-                .HasFilter("[IsDeleted] = 0 AND [VarsayilanNakitKasaId] IS NOT NULL");
-            entity.HasIndex(x => x.VarsayilanPosHesapId)
-                .HasFilter("[IsDeleted] = 0 AND [VarsayilanPosHesapId] IS NOT NULL");
             entity.HasIndex(x => x.PerakendeCariKartId)
                 .HasFilter("[IsDeleted] = 0 AND [PerakendeCariKartId] IS NOT NULL");
 
@@ -2593,6 +2590,38 @@ public class StysAppDbContext : DbContext
                 .HasForeignKey(x => x.DepoId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.PerakendeCariKart)
+                .WithMany()
+                .HasForeignKey(x => x.PerakendeCariKartId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<KantinSatisNoktasi>(entity =>
+        {
+            entity.ToTable("KantinSatisNoktalari", kantinSchema);
+            entity.Property(x => x.Kod).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Ad).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Aciklama).HasMaxLength(1024);
+
+            entity.HasIndex(x => new { x.KantinId, x.Kod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0");
+
+            entity.HasIndex(x => x.KantinId)
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanMi] = 1 AND [AktifMi] = 1");
+
+            entity.HasIndex(x => x.VarsayilanNakitKasaId)
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanNakitKasaId] IS NOT NULL");
+
+            entity.HasIndex(x => x.VarsayilanPosHesapId)
+                .HasFilter("[IsDeleted] = 0 AND [VarsayilanPosHesapId] IS NOT NULL");
+
+            entity.HasOne(x => x.Kantin)
+                .WithMany(x => x.SatisNoktalari)
+                .HasForeignKey(x => x.KantinId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasOne(x => x.VarsayilanNakitKasa)
                 .WithMany()
                 .HasForeignKey(x => x.VarsayilanNakitKasaId)
@@ -2601,11 +2630,6 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.VarsayilanPosHesap)
                 .WithMany()
                 .HasForeignKey(x => x.VarsayilanPosHesapId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(x => x.PerakendeCariKart)
-                .WithMany()
-                .HasForeignKey(x => x.PerakendeCariKartId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -2648,6 +2672,9 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => x.KantinId)
                 .HasFilter("[IsDeleted] = 0");
 
+            entity.HasIndex(x => x.SatisNoktasiId)
+                .HasFilter("[IsDeleted] = 0");
+
             entity.HasIndex(x => x.MuhasebeFisId)
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0 AND [MuhasebeFisId] IS NOT NULL");
@@ -2655,6 +2682,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Kantin)
                 .WithMany()
                 .HasForeignKey(x => x.KantinId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.SatisNoktasi)
+                .WithMany()
+                .HasForeignKey(x => x.SatisNoktasiId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.MuhasebeFis)

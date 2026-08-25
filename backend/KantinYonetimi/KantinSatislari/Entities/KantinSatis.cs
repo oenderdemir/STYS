@@ -21,6 +21,7 @@ public class KantinSatis : BaseEntity<int>
 {
     public int TesisId { get; set; }
     public int KantinId { get; set; }
+    public int SatisNoktasiId { get; set; }
     public DateTime SatisTarihi { get; set; }
 
     [Required]
@@ -39,6 +40,7 @@ public class KantinSatis : BaseEntity<int>
     public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
 
     public Kantin? Kantin { get; set; }
+    public KantinSatisNoktasi? SatisNoktasi { get; set; }
     public MuhasebeFis? MuhasebeFis { get; set; }
     public ICollection<KantinSatisSatir> Satirlar { get; set; } = [];
     public ICollection<KantinSatisOdeme> Odemeler { get; set; } = [];

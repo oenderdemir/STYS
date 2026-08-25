@@ -85,7 +85,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
 
         var updated = await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest
         {
@@ -104,7 +104,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
 
         var updated = await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest
         {
@@ -141,8 +141,8 @@ public class KantinSatisServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
-        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
-        kantin.VarsayilanNakitKasaId = null;
+        var nokta = await dbContext.KantinSatisNoktalari.SingleAsync(x => x.Id == 1);
+        nokta.VarsayilanNakitKasaId = null;
         await dbContext.SaveChangesAsync();
         var service = CreateService(dbContext);
         var satis = await CreateDraftWithSingleLineAsync(service);
@@ -291,8 +291,8 @@ public class KantinSatisServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
-        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
-        kantin.VarsayilanPosHesapId = null;
+        var nokta = await dbContext.KantinSatisNoktalari.SingleAsync(x => x.Id == 1);
+        nokta.VarsayilanPosHesapId = null;
         await dbContext.SaveChangesAsync();
         var service = CreateService(dbContext);
         var satis = await CreateDraftWithSingleLineAsync(service);
@@ -311,9 +311,9 @@ public class KantinSatisServiceTests
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
-        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
-        kantin.VarsayilanPosHesapId = null;
-        kantin.VarsayilanNakitKasaId = 100;
+        var nokta = await dbContext.KantinSatisNoktalari.SingleAsync(x => x.Id == 1);
+        nokta.VarsayilanPosHesapId = null;
+        nokta.VarsayilanNakitKasaId = 100;
         await dbContext.SaveChangesAsync();
         var service = CreateService(dbContext);
         var satis = await CreateDraftWithSingleLineAsync(service);
@@ -333,7 +333,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 5 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 100 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 150 });
@@ -348,12 +348,97 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task Satis_DogruSatisNoktasiIdIleOlusur()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+
+        Assert.Equal(1, satis.SatisNoktasiId);
+        Assert.Equal("ANA", satis.SatisNoktasiKod);
+    }
+
+    [Fact]
+    public async Task Satis_BaskaKantininSatisNoktasiKullanilamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.Kantinler.Add(new Kantin
+        {
+            Id = 2,
+            TesisId = 1,
+            DepoId = 10,
+            PerakendeCariKartId = 100,
+            Kod = "KNT-02",
+            Ad = "Yan Kantin",
+            AktifMi = true
+        });
+        dbContext.KantinSatisNoktalari.Add(new KantinSatisNoktasi
+        {
+            Id = 2,
+            KantinId = 2,
+            Kod = "ANA",
+            Ad = "Ana Satış Noktası",
+            VarsayilanMi = true,
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinSatisDto
+        {
+            KantinId = 1,
+            SatisNoktasiId = 2,
+            SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0)
+        }));
+
+        Assert.Equal("Satış noktası seçilen kantine ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task IkiSatisNoktasi_FarkliKasaVePosKullanir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        dbContext.KasaBankaHesaplari.AddRange(
+            new KasaBankaHesap { Id = 105, TesisId = 1, Tip = KasaBankaHesapTipleri.NakitKasa, Kod = "KASA-B", Ad = "Nakit Kasa B", AktifMi = true, MuhasebeHesapPlaniId = 1000 },
+            new KasaBankaHesap { Id = 106, TesisId = 1, Tip = KasaBankaHesapTipleri.KrediKarti, Kod = "POS-B", Ad = "POS B", AktifMi = true, MuhasebeHesapPlaniId = 1001 });
+        dbContext.KantinSatisNoktalari.Add(new KantinSatisNoktasi
+        {
+            Id = 2,
+            KantinId = 1,
+            Kod = "YAN",
+            Ad = "Yan Satış Noktası",
+            VarsayilanNakitKasaId = 105,
+            VarsayilanPosHesapId = 106,
+            VarsayilanMi = false,
+            AktifMi = true
+        });
+        await dbContext.SaveChangesAsync();
+        var service = CreateService(dbContext);
+
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 2, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 5 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 100 });
+        await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 150 });
+
+        var result = await service.KesinlestirAsync(satis.Id!.Value);
+
+        var nakit = Assert.Single(result.Odemeler, x => x.OdemeYontemi == OdemeYontemleri.Nakit);
+        var krediKarti = Assert.Single(result.Odemeler, x => x.OdemeYontemi == OdemeYontemleri.KrediKarti);
+        Assert.Equal(105, nakit.KasaBankaHesapId);
+        Assert.Equal(106, krediKarti.KasaBankaHesapId);
+    }
+
+    [Fact]
     public async Task YetersizStokta_KesinlestirmeRollbackOlur()
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 99 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 4950 });
 
@@ -388,7 +473,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 2, Miktar = 2, StokLotId = 1 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 40 });
 
@@ -405,7 +490,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, KasaBankaHesapId = 102, Tutar = 75 });
 
@@ -531,7 +616,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, KasaBankaHesapId = 102, Tutar = 75 });
 
@@ -548,7 +633,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 5 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 100, KasaBankaHesapId = 100 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 150, KasaBankaHesapId = 102 });
@@ -566,7 +651,7 @@ public class KantinSatisServiceTests
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
-        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await service.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await service.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
         await service.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, KasaBankaHesapId = 102, Tutar = 75 });
 
@@ -718,7 +803,7 @@ public class KantinSatisServiceTests
         var satisService = CreateService(dbContext);
         var muhasebeService = CreateMuhasebeFisService(dbContext);
 
-        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 1, Miktar = 1 });
         await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 2, Miktar = 1, StokLotId = 1 });
         await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.Nakit, Tutar = 40, KasaBankaHesapId = 100 });
@@ -751,7 +836,7 @@ public class KantinSatisServiceTests
         var satisService = CreateService(dbContext);
         var muhasebeService = CreateMuhasebeFisService(dbContext);
 
-        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
+        var satis = await satisService.AddAsync(new KantinSatisDto { KantinId = 1, SatisNoktasiId = 1, SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0) });
         await satisService.AddSatirAsync(satis.Id!.Value, new AddKantinSatisSatirRequest { KantinUrunId = 3, Miktar = 1, StokSeriId = 1 });
         await satisService.AddOdemeAsync(satis.Id!.Value, new AddKantinSatisOdemeRequest { OdemeYontemi = OdemeYontemleri.KrediKarti, Tutar = 75, KasaBankaHesapId = 102 });
         await satisService.KesinlestirAsync(satis.Id!.Value);
@@ -854,11 +939,28 @@ public class KantinSatisServiceTests
         Assert.True(migrationsAssembly.Migrations.ContainsKey("20260824212438_AddKantinSalesK3BAccounting"));
     }
 
+    [Fact]
+    public void AddKantinSatisNoktalariMigration_MigrationsAssemblydeDiscoverEdilir()
+    {
+        var options = new DbContextOptionsBuilder<StysAppDbContext>()
+            .UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=StysMigrationDiscoveryKantinSatisNoktalari;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
+
+        using var dbContext = new StysAppDbContext(options, new FakeCurrentUserAccessor(), new FakeCurrentTenantAccessor())
+        {
+            AllowExplicitTenantWritesWithoutAmbientTenant = true
+        };
+
+        var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+        Assert.True(migrationsAssembly.Migrations.ContainsKey("20260825072325_AddKantinSatisNoktalari"));
+    }
+
     private static async Task<KantinSatisDto> CreateDraftWithSingleLineAsync(KantinSatisService service)
     {
         var satis = await service.AddAsync(new KantinSatisDto
         {
             KantinId = 1,
+            SatisNoktasiId = 1,
             SatisTarihi = new DateTime(2026, 8, 24, 10, 0, 0)
         });
 
@@ -974,11 +1076,21 @@ public class KantinSatisServiceTests
             Id = 1,
             TesisId = 1,
             DepoId = 10,
-            VarsayilanNakitKasaId = 100,
-            VarsayilanPosHesapId = 102,
             PerakendeCariKartId = 100,
             Kod = "KNT-01",
             Ad = "Merkez Kantin",
+            AktifMi = true
+        });
+
+        dbContext.KantinSatisNoktalari.Add(new KantinSatisNoktasi
+        {
+            Id = 1,
+            KantinId = 1,
+            Kod = "ANA",
+            Ad = "Ana Satış Noktası",
+            VarsayilanNakitKasaId = 100,
+            VarsayilanPosHesapId = 102,
+            VarsayilanMi = true,
             AktifMi = true
         });
 

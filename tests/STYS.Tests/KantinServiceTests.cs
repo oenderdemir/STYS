@@ -73,98 +73,124 @@ public class KantinServiceTests
     }
 
     [Fact]
-    public async Task Kantin_CrossTesisVarsayilanKasaReddedilir()
+    public async Task SatisNoktasi_BirKantindeBirdenFazlaOlusturulabilir()
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
+        var kantin = await CreateKantinAsync(service);
 
-        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
-        {
-            TesisId = 1,
-            DepoId = 10,
-            VarsayilanNakitKasaId = 200,
-            Kod = "KNT-01",
-            Ad = "Merkez Kantin"
-        }));
+        await service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto { Kod = "ANA", Ad = "Ana Nokta", VarsayilanMi = true });
+        await service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto { Kod = "YAN", Ad = "Yan Nokta" });
 
-        Assert.Equal("Seçilen varsayılan kasa kantin ile aynı tesise ait olmalıdır.", ex.Message);
+        var noktalar = await service.GetSatisNoktalariAsync(kantin.Id!.Value);
+        Assert.Equal(2, noktalar.Count);
     }
 
     [Fact]
-    public async Task Kantin_NakitKasaOlmayanVarsayilanHesapReddedilir()
+    public async Task SatisNoktasi_KoduKantinIcindeUniqueOlmalidir()
     {
         await using var dbContext = CreateDbContext();
         await SeedBaseAsync(dbContext);
         var service = CreateService(dbContext);
+        var kantin = await CreateKantinAsync(service);
 
-        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
+        await service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto { Kod = "ANA", Ad = "Ana Nokta" });
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto { Kod = "ana", Ad = "Dup Nokta" }));
+
+        Assert.Equal("Aynı kantin içinde bu satış noktası kodu zaten kullanılıyor.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SatisNoktasi_FarkliKantinlerdeAyniKodKullanilabilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var kantinA = await CreateKantinAsync(service);
+        var kantinB = await service.AddAsync(new KantinDto
         {
             TesisId = 1,
             DepoId = 10,
-            VarsayilanNakitKasaId = 101,
-            Kod = "KNT-01",
-            Ad = "Merkez Kantin"
+            Kod = "KNT-02",
+            Ad = "İkinci Kantin"
+        });
+
+        var noktaA = await service.AddSatisNoktasiAsync(kantinA.Id!.Value, new KantinSatisNoktasiDto { Kod = "ANA", Ad = "Ana Nokta A" });
+        var noktaB = await service.AddSatisNoktasiAsync(kantinB.Id!.Value, new KantinSatisNoktasiDto { Kod = "ANA", Ad = "Ana Nokta B" });
+
+        Assert.Equal("ANA", noktaA.Kod);
+        Assert.Equal("ANA", noktaB.Kod);
+    }
+
+    [Fact]
+    public async Task SatisNoktasi_IkiAktifVarsayilanOlamaz()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var kantin = await CreateKantinAsync(service);
+
+        await service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto { Kod = "ANA", Ad = "Ana Nokta", VarsayilanMi = true });
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto { Kod = "YAN", Ad = "Yan Nokta", VarsayilanMi = true }));
+
+        Assert.Equal("Bir kantinde en fazla bir aktif varsayılan satış noktası olabilir.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SatisNoktasi_BaskaTesiseAitNakitReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var kantin = await CreateKantinAsync(service);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto
+        {
+            Kod = "ANA",
+            Ad = "Ana Nokta",
+            VarsayilanNakitKasaId = 200
+        }));
+
+        Assert.Equal("Seçilen varsayılan kasa satış noktası ile aynı tesise ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SatisNoktasi_BaskaTesiseAitPosReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var kantin = await CreateKantinAsync(service);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto
+        {
+            Kod = "ANA",
+            Ad = "Ana Nokta",
+            VarsayilanPosHesapId = 300
+        }));
+
+        Assert.Equal("Seçilen varsayılan POS hesabı satış noktası ile aynı tesise ait olmalıdır.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SatisNoktasi_YanlisHesapTipiReddedilir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var kantin = await CreateKantinAsync(service);
+
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddSatisNoktasiAsync(kantin.Id!.Value, new KantinSatisNoktasiDto
+        {
+            Kod = "ANA",
+            Ad = "Ana Nokta",
+            VarsayilanNakitKasaId = 102
         }));
 
         Assert.Equal("Varsayılan kasa yalnızca nakit kasa tipinde olabilir.", ex.Message);
-    }
-
-    [Fact]
-    public async Task Kantin_CrossTesisVarsayilanPosHesapReddedilir()
-    {
-        await using var dbContext = CreateDbContext();
-        await SeedBaseAsync(dbContext);
-        var service = CreateService(dbContext);
-
-        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
-        {
-            TesisId = 1,
-            DepoId = 10,
-            VarsayilanPosHesapId = 300,
-            Kod = "KNT-01",
-            Ad = "Merkez Kantin"
-        }));
-
-        Assert.Equal("Seçilen varsayılan POS hesabı kantin ile aynı tesise ait olmalıdır.", ex.Message);
-    }
-
-    [Fact]
-    public async Task Kantin_NakitKasaOlanVarsayilanPosHesapReddedilir()
-    {
-        await using var dbContext = CreateDbContext();
-        await SeedBaseAsync(dbContext);
-        var service = CreateService(dbContext);
-
-        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
-        {
-            TesisId = 1,
-            DepoId = 10,
-            VarsayilanPosHesapId = 100,
-            Kod = "KNT-01",
-            Ad = "Merkez Kantin"
-        }));
-
-        Assert.Equal("Varsayılan POS hesabı yalnızca kredi kartı tipinde olabilir.", ex.Message);
-    }
-
-    [Fact]
-    public async Task Kantin_PasifVarsayilanPosHesapReddedilir()
-    {
-        await using var dbContext = CreateDbContext();
-        await SeedBaseAsync(dbContext);
-        var service = CreateService(dbContext);
-
-        var ex = await Assert.ThrowsAsync<BaseException>(() => service.AddAsync(new KantinDto
-        {
-            TesisId = 1,
-            DepoId = 10,
-            VarsayilanPosHesapId = 103,
-            Kod = "KNT-01",
-            Ad = "Merkez Kantin"
-        }));
-
-        Assert.Equal("Seçilen varsayılan POS hesabı aktif olmalıdır.", ex.Message);
     }
 
     [Fact]

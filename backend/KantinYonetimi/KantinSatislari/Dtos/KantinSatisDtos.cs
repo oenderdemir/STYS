@@ -7,6 +7,7 @@ public class KantinSatisDto : BaseRdbmsDto<int>
 {
     public int TesisId { get; set; }
     public int KantinId { get; set; }
+    public int SatisNoktasiId { get; set; }
     public DateTime SatisTarihi { get; set; }
     public string Durum { get; set; } = string.Empty;
     public decimal ToplamTutar { get; set; }
@@ -20,6 +21,8 @@ public class KantinSatisDto : BaseRdbmsDto<int>
     public DateTime? MuhasebeFisOlusturmaTarihi { get; set; }
     public string? KantinKod { get; set; }
     public string? KantinAd { get; set; }
+    public string? SatisNoktasiKod { get; set; }
+    public string? SatisNoktasiAd { get; set; }
     public string? OdemeOzeti { get; set; }
     public List<KantinSatisSatirDto> Satirlar { get; set; } = [];
     public List<KantinSatisOdemeDto> Odemeler { get; set; } = [];
@@ -67,6 +70,9 @@ public class CreateKantinSatisRequest
 {
     [Required]
     public int KantinId { get; set; }
+
+    [Required]
+    public int SatisNoktasiId { get; set; }
 
     public DateTime? SatisTarihi { get; set; }
 

@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, tryReadApiMessage } from '../../core/api';
 import { getApiBaseUrl } from '../../core/config';
-import { KantinCariKartOption, KantinDepoOption, KantinKasaOption, KantinModel, KantinOdemeHesapOption, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
+import { KantinCariKartOption, KantinDepoOption, KantinKasaOption, KantinModel, KantinOdemeHesapOption, KantinSatisNoktasiModel, KantinTasinirKartOption, KantinUrunModel } from './kantinler.dto';
 
 @Injectable({ providedIn: 'root' })
 export class KantinlerService {
@@ -49,6 +49,24 @@ export class KantinlerService {
         return this.http
             .put<ApiResponse<KantinUrunModel>>(`${this.apiBaseUrl}/ui/kantinler/${kantinId}/urunler/${urunId}`, request)
             .pipe(map(this.unwrap<KantinUrunModel>('Kantin ürünü güncellenemedi.')));
+    }
+
+    getSatisNoktalari(kantinId: number): Observable<KantinSatisNoktasiModel[]> {
+        return this.http
+            .get<ApiResponse<KantinSatisNoktasiModel[]>>(`${this.apiBaseUrl}/ui/kantinler/${kantinId}/satis-noktalari`)
+            .pipe(map(this.unwrap<KantinSatisNoktasiModel[]>('Satış noktaları alınamadı.')));
+    }
+
+    createSatisNoktasi(kantinId: number, request: KantinSatisNoktasiModel): Observable<KantinSatisNoktasiModel> {
+        return this.http
+            .post<ApiResponse<KantinSatisNoktasiModel>>(`${this.apiBaseUrl}/ui/kantinler/${kantinId}/satis-noktalari`, request)
+            .pipe(map(this.unwrap<KantinSatisNoktasiModel>('Satış noktası oluşturulamadı.')));
+    }
+
+    updateSatisNoktasi(kantinId: number, noktaId: number, request: KantinSatisNoktasiModel): Observable<KantinSatisNoktasiModel> {
+        return this.http
+            .put<ApiResponse<KantinSatisNoktasiModel>>(`${this.apiBaseUrl}/ui/kantinler/${kantinId}/satis-noktalari/${noktaId}`, request)
+            .pipe(map(this.unwrap<KantinSatisNoktasiModel>('Satış noktası güncellenemedi.')));
     }
 
     getDepolar(tesisId: number): Observable<KantinDepoOption[]> {

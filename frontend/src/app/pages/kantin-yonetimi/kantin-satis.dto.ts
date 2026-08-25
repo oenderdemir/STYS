@@ -2,6 +2,7 @@ export interface KantinSatisModel {
     id?: number;
     tesisId: number;
     kantinId: number;
+    satisNoktasiId: number;
     satisTarihi: string;
     durum: string;
     toplamTutar: number;
@@ -15,6 +16,8 @@ export interface KantinSatisModel {
     muhasebeFisOlusturmaTarihi?: string | null;
     kantinKod?: string | null;
     kantinAd?: string | null;
+    satisNoktasiKod?: string | null;
+    satisNoktasiAd?: string | null;
     odemeOzeti?: string | null;
     satirlar: KantinSatisSatirModel[];
     odemeler: KantinSatisOdemeModel[];
@@ -60,6 +63,7 @@ export interface KantinSatisOdemeModel {
 
 export interface CreateKantinSatisRequest {
     kantinId: number;
+    satisNoktasiId: number;
     satisTarihi?: string | null;
     aciklama?: string | null;
 }

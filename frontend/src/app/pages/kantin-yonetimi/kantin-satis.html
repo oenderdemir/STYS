@@ -33,6 +33,20 @@
                         <button pButton type="button" label="Yeni Satış" icon="pi pi-plus" (click)="yeniSatis()"></button>
                     </div>
                 </div>
+                <div class="field-stack">
+                    <label class="field-label" for="satisNoktasiSelect">Satış Noktası</label>
+                    <p-select
+                        inputId="satisNoktasiSelect"
+                        [options]="satisNoktalari"
+                        optionLabel="ad"
+                        optionValue="id"
+                        [(ngModel)]="selectedSatisNoktasiId"
+                        placeholder="Satış noktası seçiniz"
+                        [disabled]="!selectedKantinId"
+                        class="w-full"
+                        (onChange)="onSatisNoktasiChange($event.value)">
+                    </p-select>
+                </div>
             </div>
         </div>
     </section>

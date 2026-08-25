@@ -13,6 +13,9 @@ public interface IKantinService : IBaseRdbmsService<KantinDto, Kantin, int>
     Task<List<KantinUrunDto>> GetUrunlerAsync(int kantinId, CancellationToken cancellationToken = default);
     Task<KantinUrunDto> AddUrunAsync(int kantinId, KantinUrunDto dto, CancellationToken cancellationToken = default);
     Task<KantinUrunDto> UpdateUrunAsync(int kantinId, KantinUrunDto dto, CancellationToken cancellationToken = default);
+    Task<List<KantinSatisNoktasiDto>> GetSatisNoktalariAsync(int kantinId, CancellationToken cancellationToken = default);
+    Task<KantinSatisNoktasiDto> AddSatisNoktasiAsync(int kantinId, KantinSatisNoktasiDto dto, CancellationToken cancellationToken = default);
+    Task<KantinSatisNoktasiDto> UpdateSatisNoktasiAsync(int kantinId, KantinSatisNoktasiDto dto, CancellationToken cancellationToken = default);
     Task<List<KantinDepoSecenekDto>> GetDepolarAsync(int tesisId, CancellationToken cancellationToken = default);
     Task<List<KantinKasaSecenekDto>> GetNakitKasalarAsync(int tesisId, CancellationToken cancellationToken = default);
     Task<List<KantinCariKartSecenekDto>> GetPerakendeCariKartlarAsync(int tesisId, CancellationToken cancellationToken = default);

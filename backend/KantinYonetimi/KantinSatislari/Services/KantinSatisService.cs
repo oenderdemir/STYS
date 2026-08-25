@@ -441,7 +441,6 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
 
             await ValidateIptalOnKosullariAsync(satis, cancellationToken);
 
-            var kantin = satis.Kantin ?? throw new BaseException("Kantin satışına bağlı kantin bulunamadı.", 400);
             var iptalZamani = DateTime.UtcNow;
 
             foreach (var satir in satis.Satirlar.OrderBy(x => x.Id))
@@ -450,7 +449,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
                     ?? throw new BaseException("Satış satırına bağlı stok hareketi bulunamadı.", 400);
 
                 var reversal = await _stokHareketService.AddWithinCurrentTransactionAsync(
-                    BuildIptalStokHareketDto(kantin, satis, satir, originalMovement, iptalZamani),
+                    BuildIptalStokHareketDto(satis, satir, originalMovement, iptalZamani),
                     cancellationToken);
 
                 await _stokMaliyetKatmaniRestoreService.RestoreLayeredCostIfNeededAsync(originalMovement, reversal, cancellationToken);
@@ -1035,14 +1034,14 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
         }
     }
 
-    private static StokHareketDto BuildIptalStokHareketDto(Kantin kantin, KantinSatis satis, KantinSatisSatir satir, StokHareket originalMovement, DateTime iptalZamani)
+    private static StokHareketDto BuildIptalStokHareketDto(KantinSatis satis, KantinSatisSatir satir, StokHareket originalMovement, DateTime iptalZamani)
         => new()
         {
-            DepoId = kantin.DepoId,
-            TasinirKartId = satir.TasinirKartId,
+            DepoId = originalMovement.DepoId,
+            TasinirKartId = originalMovement.TasinirKartId,
             HareketTarihi = iptalZamani,
             HareketTipi = StokHareketTipleri.Giris,
-            Miktar = satir.Miktar,
+            Miktar = originalMovement.Miktar,
             BirimFiyat = originalMovement.BirimFiyat,
             Tutar = originalMovement.Tutar,
             BelgeTarihi = iptalZamani,
@@ -1146,6 +1145,7 @@ public class KantinSatisService : BaseRdbmsService<KantinSatisDto, KantinSatis, 
             MuhasebeFisOlusturmaTarihi = entity.MuhasebeFisOlusturmaTarihi,
             IptalTarihi = entity.IptalTarihi,
             IptalAciklamasi = entity.IptalAciklamasi,
+            IptalEdenKullaniciId = entity.IptalEdenKullaniciId,
             KantinKod = entity.Kantin?.Kod,
             KantinAd = entity.Kantin?.Ad,
             SatisNoktasiKod = entity.SatisNoktasi?.Kod,

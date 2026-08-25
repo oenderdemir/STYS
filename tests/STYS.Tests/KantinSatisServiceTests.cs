@@ -1126,6 +1126,28 @@ public class KantinSatisServiceTests
     }
 
     [Fact]
+    public async Task Iptal_DepoSonradanDegistirilmis_OriginalDepoyaGeriKoyar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedBaseAsync(dbContext);
+        var service = CreateService(dbContext);
+        var satis = await CreateKesinlesmisNakitSatisAsync(service);
+
+        // Satış Depo A (Id=10)'dan kesinleşti; ardından kantinin deposu Depo B'ye değiştirildi.
+        dbContext.Depolar.Add(new Depo { Id = 30, TesisId = 1, Kod = "DEP-B", Ad = "Yeni Depo", AktifMi = true });
+        var kantin = await dbContext.Kantinler.SingleAsync(x => x.Id == 1);
+        kantin.DepoId = 30;
+        await dbContext.SaveChangesAsync();
+
+        var result = await service.IptalEtAsync(satis.Id!.Value, "İptal");
+
+        Assert.Equal(KantinSatisDurumlari.IptalEdildi, result.Durum);
+        var reversal = await dbContext.StokHareketleri.SingleAsync(x => x.KaynakModul == "KantinSatisIptal");
+        Assert.Equal(10, reversal.DepoId);
+        Assert.False(await dbContext.StokHareketleri.AnyAsync(x => x.DepoId == 30));
+    }
+
+    [Fact]
     public async Task Iptal_FifoKatmanGeriYukleme_OrijinalMaliyetleYeniLayerOlusturur()
     {
         await using var dbContext = CreateDbContext();

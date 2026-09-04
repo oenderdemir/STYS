@@ -53,12 +53,18 @@ $remoteCommand = @"
 cd '$RemoteDir' &&
 test -f .env || (echo 'HATA: .env dosyasi bulunamadi. $RemoteDir/.env dosyasini olusturun. Ornek icin .env.example dosyasina bakin.' && exit 1) &&
 test -f docker-compose.yml || (echo 'HATA: docker-compose.yml bulunamadi.' && exit 1) &&
+test -f images/backend.tar || (echo 'HATA: images/backend.tar bulunamadi. Once scripts/deploy-all.ps1 ile image artefactlarini VPSye kopyalayin.' && exit 1) &&
+test -f images/frontend.tar || (echo 'HATA: images/frontend.tar bulunamadi. Once scripts/deploy-all.ps1 ile image artefactlarini VPSye kopyalayin.' && exit 1) &&
+test -f images/schematron-validator.tar || (echo 'HATA: images/schematron-validator.tar bulunamadi. Schematron validator image artefacti VPSye kopyalanmamis.' && exit 1) &&
+test -f images/stys-image.env || (echo 'HATA: images/stys-image.env bulunamadi. Image repository/tag env dosyasi eksik.' && exit 1) &&
+test -f scripts/stys-integrity.env || (echo 'HATA: scripts/stys-integrity.env bulunamadi. Integrity hash env dosyasi eksik.' && exit 1) &&
 $($observabilityFileCheck)set -a &&
 . ./images/stys-image.env &&
 set +a &&
 docker load -i images/backend.tar &&
 docker load -i images/frontend.tar &&
-docker compose $composeArgs up -d
+docker load -i images/schematron-validator.tar &&
+docker compose $composeArgs up -d --no-build
 "@
 
 Write-Host "VPS deploy basliyor: $remoteTarget"

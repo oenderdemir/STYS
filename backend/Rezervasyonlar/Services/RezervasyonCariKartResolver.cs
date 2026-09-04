@@ -91,7 +91,7 @@ public class RezervasyonCariKartResolver : IRezervasyonCariKartResolver
                             && x.AktifMi
                             && x.TesisId == rezervasyon.TesisId
                             && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
-                            && x.VergiNoTcknNormalized == tcknVkn)
+                            && (x.VergiNoTcknNormalized == tcknVkn || x.VergiNoTckn == tcknVkn))
                 .OrderBy(x => x.Id)
                 .Take(2)
                 .ToListAsync(cancellationToken);

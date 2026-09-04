@@ -466,6 +466,7 @@ public class TicariBelgeLookupServiceIadeAdaylariIntegrationTests : IAsyncLifeti
         public Task<CariKartDto> AddAsync(CariKartDto dto) => throw new NotImplementedException();
         public Task<CariKartDto> UpdateAsync(CariKartDto dto) => throw new NotImplementedException();
         public Task DeleteAsync(int id) => throw new NotImplementedException();
+        public Task<CariKartDto> FindOrCreateMusteriCariKartAsync(CariKartDto dto, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IEnumerable<CariKartDto>> WhereAsync(Expression<Func<CariKart, bool>> predicate, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null) => throw new NotImplementedException();
         public Task<bool> AnyAsync(Expression<Func<CariKart, bool>> predicate, Func<IQueryable<CariKart>, IQueryable<CariKart>>? include = null) => throw new NotImplementedException();
     }

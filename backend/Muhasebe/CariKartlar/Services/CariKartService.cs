@@ -302,7 +302,9 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
                 if (weakMatches.Count > 1)
                 {
-                    return await AddAsync(dto);
+                    // Birden fazla legacy eslesme varsa asla yeni cari olusturma: ayni kisi icin bir
+                    // kac tane daha cari karti uretmek yerine tekillestirme gerektigini bildir.
+                    throw new BaseException("Bu müşteri için birden fazla mevcut cari kart bulundu. Cari kart kayıtlarının tekilleştirilmesi gerekiyor.", 400);
                 }
             }
         }

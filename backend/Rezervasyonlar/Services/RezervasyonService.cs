@@ -17,6 +17,7 @@ using STYS.Infrastructure.EntityFramework;
 using STYS.KonaklamaTipleri;
 using STYS.KonaklamaTipleri.Entities;
 using STYS.Licensing;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Odalar;
 using STYS.OdaTipleri.Entities;
@@ -41,6 +42,7 @@ public partial class RezervasyonService : IRezervasyonService
     private readonly IDomainOperationLogger _domainLogger;
     private readonly IRezervasyonOdemeMuhasebeService _rezervasyonOdemeMuhasebeService;
     private readonly IRezervasyonGelirTahakkukService _rezervasyonGelirTahakkukService;
+    private readonly TimeProvider _timeProvider;
 
     public RezervasyonService(
         StysAppDbContext stysDbContext,
@@ -51,7 +53,8 @@ public partial class RezervasyonService : IRezervasyonService
         ICurrentTenantAccessor currentTenantAccessor,
         IDomainOperationLogger domainLogger,
         IRezervasyonOdemeMuhasebeService rezervasyonOdemeMuhasebeService,
-        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService)
+        IRezervasyonGelirTahakkukService rezervasyonGelirTahakkukService,
+        TimeProvider? timeProvider = null)
     {
         _stysDbContext = stysDbContext;
         _userAccessScopeService = userAccessScopeService;
@@ -62,6 +65,7 @@ public partial class RezervasyonService : IRezervasyonService
         _domainLogger = domainLogger;
         _rezervasyonOdemeMuhasebeService = rezervasyonOdemeMuhasebeService;
         _rezervasyonGelirTahakkukService = rezervasyonGelirTahakkukService;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<List<RezervasyonTesisDto>> GetErisilebilirTesislerAsync(CancellationToken cancellationToken = default)

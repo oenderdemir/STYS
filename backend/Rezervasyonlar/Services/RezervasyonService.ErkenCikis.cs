@@ -1,6 +1,7 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using STYS.Fiyatlandirma.Dto;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
 using STYS.Rezervasyonlar.Entities;
@@ -16,7 +17,7 @@ public partial class RezervasyonService
         CancellationToken cancellationToken = default)
     {
         var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
-        ValidateErkenCikisRequest(reservation, request);
+        await ValidateErkenCikisRequestAsync(reservation, request, cancellationToken);
 
         var segmentDtos = await BuildErkenCikisSegmentDtosAsync(rezervasyonId, request.YeniCikisTarihi, cancellationToken);
         var fiyat = await CalculateReservationPricingWithExistingDiscountsAsync(
@@ -65,7 +66,7 @@ public partial class RezervasyonService
         CancellationToken cancellationToken = default)
     {
         var reservation = await GetScopedReservationForManageAsync(rezervasyonId, cancellationToken);
-        ValidateErkenCikisRequest(reservation, request);
+        await ValidateErkenCikisRequestAsync(reservation, request, cancellationToken);
 
         var onizleme = await GetErkenCikisOzetiAsync(rezervasyonId, request, cancellationToken);
         var kilitlenecekOdaIds = await _stysDbContext.RezervasyonSegmentOdaAtamalari
@@ -80,7 +81,7 @@ public partial class RezervasyonService
         await AcquireRoomApplicationLocksAsync(kilitlenecekOdaIds, cancellationToken);
         await _stysDbContext.Entry(reservation).ReloadAsync(cancellationToken);
 
-        ValidateErkenCikisRequest(reservation, request);
+        await ValidateErkenCikisRequestAsync(reservation, request, cancellationToken);
 
         var guncelOnizleme = await GetErkenCikisOzetiAsync(rezervasyonId, request, cancellationToken);
         if (!string.Equals(onizleme.ParaBirimi, guncelOnizleme.ParaBirimi, StringComparison.OrdinalIgnoreCase))
@@ -138,12 +139,21 @@ public partial class RezervasyonService
             .ThenByDescending(x => x.Id)
             .FirstOrDefault();
 
-        if (guncellenecekSonSegment is null)
+        if (guncellenecekSonSegment is not null)
         {
-            throw new BaseException("Yeni cikis tarihini kapsayan aktif bir rezervasyon segmenti bulunamadi.", 400);
+            guncellenecekSonSegment.BitisTarihi = request.YeniCikisTarihi;
         }
+        else
+        {
+            var kalanSegmentVar = segments
+                .Except(silinecekSegmentler)
+                .Any(x => x.BitisTarihi == request.YeniCikisTarihi);
 
-        guncellenecekSonSegment.BitisTarihi = request.YeniCikisTarihi;
+            if (!kalanSegmentVar)
+            {
+                throw new BaseException("Yeni cikis tarihini kapsayan veya bu tarihte biten aktif bir rezervasyon segmenti bulunamadi.", 400);
+            }
+        }
 
         await CancelRemovedKonaklamaHaklariAsync(reservation, request.YeniCikisTarihi, cancellationToken);
 
@@ -178,7 +188,10 @@ public partial class RezervasyonService
         return guncelOnizleme;
     }
 
-    private void ValidateErkenCikisRequest(Rezervasyon reservation, RezervasyonErkenCikisRequestDto request)
+    private async Task ValidateErkenCikisRequestAsync(
+        Rezervasyon reservation,
+        RezervasyonErkenCikisRequestDto request,
+        CancellationToken cancellationToken)
     {
         if (reservation.RezervasyonDurumu != RezervasyonDurumlari.CheckInTamamlandi)
         {
@@ -199,6 +212,23 @@ public partial class RezervasyonService
         {
             throw new BaseException("Rezervasyonun fiyatlama bilgileri eksik; erken cikis hesaplanamaz.", 400);
         }
+
+        var minimumCikisTarihi = await GetMinimumErkenCikisTarihiAsync(reservation.TesisId, cancellationToken);
+        if (request.YeniCikisTarihi < minimumCikisTarihi)
+        {
+            throw new BaseException("Yeni cikis tarihi bugunun tesis cikis saatinden once olamaz.", 400);
+        }
+    }
+
+    private async Task<DateTime> GetMinimumErkenCikisTarihiAsync(int tesisId, CancellationToken cancellationToken)
+    {
+        var cikisSaati = await _stysDbContext.Tesisler
+            .Where(x => x.Id == tesisId)
+            .Select(x => x.CikisSaati)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var bugunTr = TurkeyTimeZoneHelper.UtcdenTurkiyeYereleCevir(_timeProvider.GetUtcNow().UtcDateTime).Date;
+        return bugunTr.Add(cikisSaati);
     }
 
     private async Task<List<SenaryoFiyatHesaplaSegmentDto>> BuildErkenCikisSegmentDtosAsync(

@@ -25,10 +25,13 @@
                 (ngModelChange)="onYeniCikisTarihiChange($event)"
                 [disabled]="loading || saving"
                 [showIcon]="true"
+                [minDate]="minimumYeniCikisTarihi"
                 dateFormat="dd.mm.yy"
                 appendTo="body"
             />
-            @if (yeniCikisTarihi && !canGetirOnizleme()) {
+            @if (yeniCikisTarihi && yeniCikisTarihi < minimumYeniCikisTarihi) {
+                <div class="text-xs text-red-500 mt-1">Yeni cikis tarihi bugunun tesis cikis saatinden once olamaz.</div>
+            } @else if (yeniCikisTarihi && !canGetirOnizleme()) {
                 <div class="text-xs text-red-500 mt-1">Yeni cikis tarihi mevcut cikis tarihinden once olmalidir.</div>
             }
         </div>

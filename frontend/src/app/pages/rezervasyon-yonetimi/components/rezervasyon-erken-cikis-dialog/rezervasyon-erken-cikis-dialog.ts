@@ -49,11 +49,16 @@ export class RezervasyonErkenCikisDialogComponent implements OnChanges {
     private readonly cdr = inject(ChangeDetectorRef);
 
     yeniCikisTarihi: Date | null = null;
+    minimumYeniCikisTarihi: Date = this.createMinimumYeniCikisTarihi();
     loading = false;
     saving = false;
     ozet: RezervasyonErkenCikisOzetDto | null = null;
 
     ngOnChanges(changes: SimpleChanges): void {
+        if (changes['tesisCikisSaati']) {
+            this.minimumYeniCikisTarihi = this.createMinimumYeniCikisTarihi();
+        }
+
         if (changes['visible']) {
             this.reset();
         }
@@ -220,10 +225,11 @@ export class RezervasyonErkenCikisDialogComponent implements OnChanges {
 
         const mevcut = this.parseApiDateTime(this.mevcutCikisTarihi);
         if (!mevcut) {
-            return true;
+            return this.yeniCikisTarihi.getTime() >= this.minimumYeniCikisTarihi.getTime();
         }
 
-        return this.yeniCikisTarihi.getTime() < mevcut.getTime();
+        return this.yeniCikisTarihi.getTime() >= this.minimumYeniCikisTarihi.getTime()
+            && this.yeniCikisTarihi.getTime() < mevcut.getTime();
     }
 
     private applyTesisCikisSaati(value: Date | null): Date | null {
@@ -236,6 +242,10 @@ export class RezervasyonErkenCikisDialogComponent implements OnChanges {
         const minute = Number.isFinite(parts[1]) ? parts[1] : 0;
         const second = Number.isFinite(parts[2]) ? parts[2] : 0;
         return new Date(value.getFullYear(), value.getMonth(), value.getDate(), hour, minute, second);
+    }
+
+    private createMinimumYeniCikisTarihi(): Date {
+        return this.applyTesisCikisSaati(new Date()) ?? new Date();
     }
 
     private toLocalDateTimeString(value: Date | null | undefined): string {
@@ -280,6 +290,7 @@ export class RezervasyonErkenCikisDialogComponent implements OnChanges {
     }
 
     private reset(): void {
+        this.minimumYeniCikisTarihi = this.createMinimumYeniCikisTarihi();
         this.yeniCikisTarihi = null;
         this.loading = false;
         this.saving = false;

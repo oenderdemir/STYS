@@ -1,0 +1,121 @@
+<p-confirmDialog />
+
+<p-dialog
+    header="Konaklamayi Kisalt"
+    [visible]="visible"
+    [modal]="true"
+    [style]="{ width: '42rem', 'max-width': '96vw' }"
+    [breakpoints]="{ '960px': '94vw' }"
+    (onHide)="kapat()"
+>
+    <div class="text-sm mb-3">
+        <div><strong>Referans:</strong> {{ referansNo }}</div>
+        <div><strong>Mevcut Cikis Tarihi:</strong> {{ formatDateTime(mevcutCikisTarihi) }}</div>
+    </div>
+
+    <div class="flex flex-wrap items-end gap-3 mb-4">
+        <div style="min-width: 220px">
+            <label for="erkenCikisYeniTarih" class="block font-medium mb-2">Yeni Cikis Tarihi</label>
+            <p-datepicker
+                inputId="erkenCikisYeniTarih"
+                class="w-full"
+                styleClass="w-full"
+                inputStyleClass="w-full"
+                [ngModel]="yeniCikisTarihi"
+                (ngModelChange)="onYeniCikisTarihiChange($event)"
+                [disabled]="loading || saving"
+                [showIcon]="true"
+                dateFormat="dd.mm.yy"
+                appendTo="body"
+            />
+            @if (yeniCikisTarihi && !canGetirOnizleme()) {
+                <div class="text-xs text-red-500 mt-1">Yeni cikis tarihi mevcut cikis tarihinden once olmalidir.</div>
+            }
+        </div>
+        <p-button
+            label="Onizleme Hesapla"
+            icon="pi pi-calculator"
+            [loading]="loading"
+            [disabled]="!canGetirOnizleme()"
+            (onClick)="getirOnizleme()"
+        />
+    </div>
+
+    @if (loading) {
+        <div>Erken cikis onizlemesi hesaplanıyor...</div>
+    } @else if (ozet) {
+        <div class="grid grid-cols-12 gap-3 text-sm">
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Mevcut Cikis</div>
+                <div class="font-semibold">{{ formatDateTime(ozet.eskiCikisTarihi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Yeni Cikis</div>
+                <div class="font-semibold">{{ formatDateTime(ozet.yeniCikisTarihi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Mevcut Gece</div>
+                <div class="font-semibold">{{ ozet.eskiGeceSayisi }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Yeni Gece</div>
+                <div class="font-semibold">{{ ozet.yeniGeceSayisi }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Mevcut Konaklama Tutari</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.eskiKonaklamaTutari, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Yeni Konaklama Tutari</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.yeniKonaklamaTutari, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Fiyat Farki</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.fiyatFarki, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Tahsilat Durumu</div>
+                <p-tag [value]="bakiyeDurumEtiketi" [severity]="bakiyeSeverity" />
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-color-secondary">Ek Hizmet</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.ekHizmetToplami, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-color-secondary">Restoran/Odaya Ekle</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.restoranToplami, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-4">
+                <div class="text-color-secondary">Yeni Toplam</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.yeniToplamTutar, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">Tahsilat Toplami</div>
+                <div class="font-semibold">{{ formatCurrency(ozet.tahsilatToplami, ozet.paraBirimi) }}</div>
+            </div>
+            <div class="col-span-12 md:col-span-6">
+                <div class="text-color-secondary">{{ ozet.fazlaTahsilat > 0 ? 'Fazla Tahsilat' : 'Kalan Bakiye' }}</div>
+                <div class="font-semibold">
+                    {{ formatCurrency(ozet.fazlaTahsilat > 0 ? ozet.fazlaTahsilat : ozet.kalanBakiye, ozet.paraBirimi) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3 p-3 border-round surface-100 text-sm">
+            {{ ozet.mesaj }}
+        </div>
+    } @else {
+        <div class="text-color-secondary">Yeni cikis tarihini secip onizleme hesaplayin.</div>
+    }
+
+    <ng-template #footer>
+        <p-button label="Kapat" icon="pi pi-times" severity="secondary" text [disabled]="saving" (onClick)="kapat()" />
+        <p-button
+            label="Erken Cikisi Onayla"
+            icon="pi pi-check"
+            [loading]="saving"
+            [disabled]="!canKaydet()"
+            (onClick)="onayla()"
+        />
+    </ng-template>
+</p-dialog>

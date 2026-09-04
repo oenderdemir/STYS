@@ -11,6 +11,8 @@ import {
     RezervasyonDashboardDto,
     RezervasyonDegisiklikGecmisiDto,
     RezervasyonDetayDto,
+    RezervasyonErkenCikisOzetDto,
+    RezervasyonErkenCikisRequestDto,
     RezervasyonEkHizmetKaydetRequestDto,
     RezervasyonEkHizmetSecenekleriDto,
     RezervasyonIndirimKuraliSecenekDto,
@@ -288,6 +290,30 @@ export class RezervasyonYonetimiService {
                 }
 
                 throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Rezervasyon uzatilamadi.');
+            })
+        );
+    }
+
+    getErkenCikisOnizleme(rezervasyonId: number, request: RezervasyonErkenCikisRequestDto): Observable<RezervasyonErkenCikisOzetDto> {
+        return this.http.post<ApiResponse<RezervasyonErkenCikisOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/erken-cikis-onizleme`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Erken cikis onizlemesi alinamadi.');
+            })
+        );
+    }
+
+    kaydetErkenCikis(rezervasyonId: number, request: RezervasyonErkenCikisRequestDto): Observable<RezervasyonErkenCikisOzetDto> {
+        return this.http.post<ApiResponse<RezervasyonErkenCikisOzetDto>>(`${this.apiBaseUrl}/ui/rezervasyon/kayitlar/${rezervasyonId}/erken-cikis`, request).pipe(
+            map((responseEnvelope) => {
+                if (responseEnvelope.success && responseEnvelope.data) {
+                    return responseEnvelope.data;
+                }
+
+                throw new Error(tryReadApiMessage(responseEnvelope) ?? 'Erken cikis kaydedilemedi.');
             })
         );
     }

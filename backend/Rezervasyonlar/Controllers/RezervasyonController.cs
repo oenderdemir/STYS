@@ -208,6 +208,28 @@ public class RezervasyonController : UIController
         return Ok(result);
     }
 
+    [HttpPost("kayitlar/{rezervasyonId:int}/erken-cikis-onizleme")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonErkenCikisOzetDto>> GetErkenCikisOnizleme(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonErkenCikisRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.GetErkenCikisOzetiAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("kayitlar/{rezervasyonId:int}/erken-cikis")]
+    [Permission(StructurePermissions.RezervasyonYonetimi.Manage)]
+    public async Task<ActionResult<RezervasyonErkenCikisOzetDto>> KaydetErkenCikis(
+        [FromRoute] int rezervasyonId,
+        [FromBody] RezervasyonErkenCikisRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _rezervasyonService.KaydetErkenCikisAsync(rezervasyonId, request, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("uygun-odalar")]
     [Permission(StructurePermissions.RezervasyonYonetimi.View)]
     public async Task<ActionResult<List<UygunOdaDto>>> GetUygunOdalar([FromBody] UygunOdaAramaRequestDto request, CancellationToken cancellationToken)

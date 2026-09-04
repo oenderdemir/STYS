@@ -5516,6 +5516,142 @@ public class RezervasyonServiceTests
     }
 
     [Fact]
+    public async Task ErkenCikis_CheckInTamamlanmamisRezervasyondaHataVerir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        var giris = new DateTime(2026, 3, 8, 14, 0, 0);
+        var mevcutCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        await SeedUzatmaRezervasyonuAsync(dbContext, 6116, 6117, odaId: 101, giris, mevcutCikis, durum: RezervasyonDurumlari.Onayli);
+
+        var service = CreateService(dbContext);
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.GetErkenCikisOzetiAsync(6116, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = yeniCikis }));
+
+        Assert.Equal(400, ex.ErrorCode);
+        Assert.Contains("check-in", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ErkenCikis_KonaklamaTutariniYenidenHesaplarVeRezervasyonuKisaltir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        var giris = new DateTime(2026, 3, 8, 14, 0, 0);
+        var mevcutCikis = new DateTime(2026, 3, 12, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+        await SeedUzatmaRezervasyonuAsync(dbContext, 6118, 6119, odaId: 101, giris, mevcutCikis);
+
+        var rezervasyon = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 6118);
+        rezervasyon.ToplamBazUcret = 3600m;
+        rezervasyon.ToplamUcret = 3600m;
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var onizleme = await service.GetErkenCikisOzetiAsync(6118, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(4, onizleme.EskiGeceSayisi);
+        Assert.Equal(2, onizleme.YeniGeceSayisi);
+        Assert.Equal(3600m, onizleme.EskiKonaklamaTutari);
+        Assert.Equal(1800m, onizleme.YeniKonaklamaTutari);
+        Assert.Equal(-1800m, onizleme.FiyatFarki);
+
+        var sonuc = await service.KaydetErkenCikisAsync(6118, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = yeniCikis });
+
+        var guncel = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 6118);
+        Assert.Equal(yeniCikis, guncel.CikisTarihi);
+        Assert.Equal(1800m, guncel.ToplamBazUcret);
+        Assert.Equal(1800m, guncel.ToplamUcret);
+        Assert.Equal(1800m, sonuc.YeniKonaklamaTutari);
+
+        var segment = await dbContext.RezervasyonSegmentleri.SingleAsync(x => x.RezervasyonId == 6118);
+        Assert.Equal(yeniCikis, segment.BitisTarihi);
+
+        var gecmis = await dbContext.RezervasyonDegisiklikGecmisleri.SingleAsync(x =>
+            x.RezervasyonId == 6118 && x.IslemTipi == RezervasyonGecmisIslemTipleri.ErkenCikisYapildi);
+        Assert.Contains(mevcutCikis.ToString("dd.MM.yyyy"), gecmis.Aciklama);
+        Assert.Contains(yeniCikis.ToString("dd.MM.yyyy"), gecmis.Aciklama);
+    }
+
+    [Fact]
+    public async Task ErkenCikis_BosalanOdaGunleriniTekrarMusaitYapar()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        var giris = new DateTime(2026, 3, 8, 14, 0, 0);
+        var mevcutCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 9, 10, 0, 0);
+        await SeedUzatmaRezervasyonuAsync(dbContext, 6120, 6121, odaId: 101, giris, mevcutCikis);
+
+        var service = CreateService(dbContext);
+        await service.KaydetErkenCikisAsync(6120, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = yeniCikis });
+
+        var uygunOdalar = await service.GetUygunOdalarAsync(new UygunOdaAramaRequestDto
+        {
+            TesisId = 1,
+            KisiSayisi = 1,
+            BaslangicTarihi = yeniCikis,
+            BitisTarihi = mevcutCikis
+        });
+
+        Assert.Contains(uygunOdalar, x => x.OdaId == 101);
+    }
+
+    [Fact]
+    public async Task ErkenCikis_TahsilatiSilmezVeFazlaTahsilatiGosterir()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        var giris = new DateTime(2026, 3, 8, 14, 0, 0);
+        var mevcutCikis = new DateTime(2026, 3, 12, 10, 0, 0);
+        var yeniCikis = new DateTime(2026, 3, 10, 10, 0, 0);
+        await SeedUzatmaRezervasyonuAsync(dbContext, 6122, 6123, odaId: 101, giris, mevcutCikis);
+
+        var rezervasyon = await dbContext.Rezervasyonlar.SingleAsync(x => x.Id == 6122);
+        rezervasyon.ToplamBazUcret = 3600m;
+        rezervasyon.ToplamUcret = 3600m;
+        dbContext.RezervasyonOdemeler.Add(new RezervasyonOdeme
+        {
+            Id = 6124,
+            RezervasyonId = 6122,
+            OdemeTarihi = giris,
+            OdemeTutari = 3500m,
+            ParaBirimi = "TRY",
+            OdemeTipi = OdemeTipleri.Nakit,
+            Durum = RezervasyonOdemeDurumlari.Aktif
+        });
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        var onizleme = await service.GetErkenCikisOzetiAsync(6122, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = yeniCikis });
+
+        Assert.Equal(3500m, onizleme.TahsilatToplami);
+        Assert.Equal(1700m, onizleme.FazlaTahsilat);
+        Assert.Equal(0m, onizleme.KalanBakiye);
+
+        await service.KaydetErkenCikisAsync(6122, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = yeniCikis });
+
+        var odeme = await dbContext.RezervasyonOdemeler.SingleAsync(x => x.Id == 6124);
+        Assert.Equal(3500m, odeme.OdemeTutari);
+        Assert.Equal(RezervasyonOdemeDurumlari.Aktif, odeme.Durum);
+    }
+
+    [Fact]
+    public async Task ErkenCikis_BaskaTenantRezervasyonunuDegistiremez()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedReservationFixtureWithTenRoomsAsync(dbContext);
+        await SeedUzatmaRezervasyonuAsync(dbContext, 6125, 6126, odaId: 101, new DateTime(2026, 3, 8, 14, 0, 0), new DateTime(2026, 3, 10, 10, 0, 0));
+
+        var service = CreateService(dbContext, currentTenantAccessor: new FakeNonSuperAdminTenantAccessor(2));
+        var ex = await Assert.ThrowsAsync<BaseException>(() =>
+            service.KaydetErkenCikisAsync(6125, new RezervasyonErkenCikisRequestDto { YeniCikisTarihi = new DateTime(2026, 3, 9, 10, 0, 0) }));
+
+        Assert.Equal(404, ex.ErrorCode);
+    }
+
+    [Fact]
     public async Task Uzat_DegisiklikGecmisindeEskiYeniTarihVeFiyatlarVeSegmentPlaniBulunur()
     {
         await using var dbContext = CreateDbContext();

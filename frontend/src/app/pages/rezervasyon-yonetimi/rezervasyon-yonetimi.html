@@ -1105,6 +1105,16 @@
     (saved)="onUzatmaSaved()">
 </app-rezervasyon-uzatma-dialog>
 
+<app-rezervasyon-erken-cikis-dialog
+    [(visible)]="erkenCikisDialogVisible"
+    [rezervasyonId]="erkenCikisRezervasyonId"
+    [referansNo]="erkenCikisReferansNo"
+    [rezervasyonDurumu]="erkenCikisRezervasyonDurumu"
+    [mevcutCikisTarihi]="erkenCikisMevcutCikisTarihi"
+    [tesisCikisSaati]="erkenCikisTesisCikisSaati"
+    (saved)="onErkenCikisSaved()">
+</app-rezervasyon-erken-cikis-dialog>
+
 <app-rezervasyon-odeme-dialog
     [(visible)]="odemeDialogVisible"
     [rezervasyonId]="odemeRezervasyonId"

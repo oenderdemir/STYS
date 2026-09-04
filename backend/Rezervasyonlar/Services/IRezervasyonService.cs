@@ -58,6 +58,16 @@ public interface IRezervasyonService
 
     Task<RezervasyonUzatmaSonucDto> RezervasyonUzatAsync(int rezervasyonId, RezervasyonUzatRequestDto request, CancellationToken cancellationToken = default);
 
+    Task<RezervasyonErkenCikisOzetDto> GetErkenCikisOzetiAsync(
+        int rezervasyonId,
+        RezervasyonErkenCikisRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<RezervasyonErkenCikisOzetDto> KaydetErkenCikisAsync(
+        int rezervasyonId,
+        RezervasyonErkenCikisRequestDto request,
+        CancellationToken cancellationToken = default);
+
     Task<RezervasyonKayitSonucDto> TamamlaCheckInAsync(int rezervasyonId, CancellationToken cancellationToken = default);
 
     Task<RezervasyonCheckInKontrolDto> GetCheckInKontrolAsync(int rezervasyonId, CancellationToken cancellationToken = default);

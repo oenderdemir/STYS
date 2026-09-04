@@ -18,4 +18,5 @@ public static class RezervasyonGecmisIslemTipleri
     public const string KonaklamaHakkiTuketimiKaydedildi = "KonaklamaHakkiTuketimiKaydedildi";
     public const string KonaklamaHakkiTuketimiSilindi = "KonaklamaHakkiTuketimiSilindi";
     public const string Uzatildi = "Uzatildi";
+    public const string ErkenCikisYapildi = "ErkenCikisYapildi";
 }

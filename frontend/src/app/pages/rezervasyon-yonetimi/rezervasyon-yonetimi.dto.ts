@@ -353,6 +353,30 @@ export interface RezervasyonDetayDto {
     segmentler: RezervasyonDetaySegmentDto[];
 }
 
+export interface RezervasyonErkenCikisRequestDto {
+    yeniCikisTarihi: string;
+}
+
+export interface RezervasyonErkenCikisOzetDto {
+    rezervasyonId: number;
+    referansNo: string;
+    eskiCikisTarihi: string;
+    yeniCikisTarihi: string;
+    eskiGeceSayisi: number;
+    yeniGeceSayisi: number;
+    eskiKonaklamaTutari: number;
+    yeniKonaklamaTutari: number;
+    fiyatFarki: number;
+    ekHizmetToplami: number;
+    restoranToplami: number;
+    yeniToplamTutar: number;
+    tahsilatToplami: number;
+    kalanBakiye: number;
+    fazlaTahsilat: number;
+    paraBirimi: string;
+    mesaj: string;
+}
+
 export interface RezervasyonKonaklamaHakkiDto {
     id: number;
     hizmetKodu: string;

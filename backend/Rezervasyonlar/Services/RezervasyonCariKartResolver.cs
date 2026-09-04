@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
+using STYS.Muhasebe.CariKartlar;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Rezervasyonlar.Entities;
 using TOD.Platform.SharedKernel.Exceptions;
@@ -78,24 +79,48 @@ public class RezervasyonCariKartResolver : IRezervasyonCariKartResolver
 
     private async Task<int?> FindEslesenCariKartAsync(Rezervasyon rezervasyon, CancellationToken cancellationToken)
     {
-        var tcknVkn = rezervasyon.TcKimlikNo?.Trim();
+        var tcknVkn = CariKartIdentityNormalizer.NormalizeVergiNoTckn(rezervasyon.TcKimlikNo);
         var telefon = rezervasyon.MisafirTelefon?.Trim();
         var adSoyad = rezervasyon.MisafirAdiSoyadi?.Trim();
 
+        if (!string.IsNullOrWhiteSpace(tcknVkn))
+        {
+            var exactMatches = await _dbContext.CariKartlar
+                .AsNoTracking()
+                .Where(x => !x.IsDeleted
+                            && x.AktifMi
+                            && x.TesisId == rezervasyon.TesisId
+                            && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
+                            && x.VergiNoTcknNormalized == tcknVkn)
+                .OrderBy(x => x.Id)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+
+            if (exactMatches.Count > 1)
+            {
+                throw new BaseException("Rezervasyon cari karti TCKN/VKN ile otomatik belirlenemedi: ayni tesiste birden fazla aktif musteri cari karti bulundu.", 400);
+            }
+
+            if (exactMatches.Count == 1)
+            {
+                return exactMatches[0].Id;
+            }
+        }
+
         var aday = await _dbContext.CariKartlar
+            .AsNoTracking()
             .Where(x => !x.IsDeleted
                         && x.AktifMi
                         && x.TesisId == rezervasyon.TesisId
                         && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
-                        && (
-                            (!string.IsNullOrEmpty(tcknVkn) && x.VergiNoTckn == tcknVkn)
-                            || (!string.IsNullOrEmpty(telefon) && !string.IsNullOrEmpty(adSoyad)
-                                && x.Telefon == telefon && x.UnvanAdSoyad == adSoyad)
-                        ))
-            // TCKN eslesmesi telefon+ad eslesmesinden daha guvenilir — once onu tercih et.
-            .OrderByDescending(x => !string.IsNullOrEmpty(tcknVkn) && x.VergiNoTckn == tcknVkn)
-            .FirstOrDefaultAsync(cancellationToken);
+                        && !string.IsNullOrEmpty(telefon)
+                        && !string.IsNullOrEmpty(adSoyad)
+                        && x.Telefon == telefon
+                        && x.UnvanAdSoyad == adSoyad)
+            .OrderBy(x => x.Id)
+            .Take(2)
+            .ToListAsync(cancellationToken);
 
-        return aday?.Id;
+        return aday.Count == 1 ? aday[0].Id : null;
     }
 }

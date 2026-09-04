@@ -31,7 +31,7 @@ function Invoke-NativeCommand {
 }
 
 function Get-ComposeConfig {
-    $configJson = & docker compose config --format json
+    $configJson = & docker compose -f $ComposeFilePath config --format json
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose config failed with exit code $LASTEXITCODE"
     }
@@ -131,11 +131,16 @@ $env:STYS_IMAGE_TAG = $FullTag
 $composeConfig = Get-ComposeConfig
 $backendImageReference = $composeConfig.services.backend.image
 $frontendImageReference = $composeConfig.services.frontend.image
+$schematronImageReference = $composeConfig.services.'schematron-validator'.image
 $backendImageInfo = Split-ImageReference $backendImageReference
 $frontendImageInfo = Split-ImageReference $frontendImageReference
+$schematronImageInfo = Split-ImageReference $schematronImageReference
 
 if ($backendImageInfo.Tag -ne $frontendImageInfo.Tag) {
     throw "Backend ve frontend image tag'leri farkli: $($backendImageInfo.Tag) / $($frontendImageInfo.Tag)"
+}
+if ($backendImageInfo.Tag -ne $schematronImageInfo.Tag) {
+    throw "Backend ve schematron-validator image tag'leri farkli: $($backendImageInfo.Tag) / $($schematronImageInfo.Tag)"
 }
 
 $artifactDir = Join-Path $projectRoot "artifacts\deploy\$AppVersion"
@@ -143,6 +148,7 @@ New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
 $backendTar = Join-Path $artifactDir "backend.tar"
 $frontendTar = Join-Path $artifactDir "frontend.tar"
+$schematronTar = Join-Path $artifactDir "schematron-validator.tar"
 $imageEnvFile = Join-Path $artifactDir "stys-image.env"
 $integrityEnvFile = Join-Path $artifactDir "stys-integrity.env"
 $resolvedSshKeyPath = $SshKeyPath
@@ -178,6 +184,13 @@ Invoke-NativeCommand docker @(
     '.'
 )
 
+Invoke-NativeCommand docker @(
+    'build',
+    '-t', $schematronImageReference,
+    '-f', 'sidecar/schematron-validator/Dockerfile',
+    'sidecar/schematron-validator'
+)
+
 Write-Host "Frontend environment: prod" -ForegroundColor Green
 Write-Host "Runtime env file:     env.prod.js -> env.js" -ForegroundColor Green
 Write-Host "Base href:            /stys/" -ForegroundColor Green
@@ -185,6 +198,7 @@ Write-Host "Base href:            /stys/" -ForegroundColor Green
 Write-Host "Image archive olusturuluyor..."
 Invoke-NativeCommand docker @('save', '-o', $backendTar, $backendImageReference)
 Invoke-NativeCommand docker @('save', '-o', $frontendTar, $frontendImageReference)
+Invoke-NativeCommand docker @('save', '-o', $schematronTar, $schematronImageReference)
 
 Write-Host "Assembly integrity env dosyasi olusturuluyor..."
 $integrityEnvContent = Get-BackendIntegrityEnvContent -ImageReference $backendImageReference -WorkingDirectory $artifactDir
@@ -193,6 +207,7 @@ $integrityEnvContent = Get-BackendIntegrityEnvContent -ImageReference $backendIm
 $imageEnvContent = @(
     "export STYS_BACKEND_IMAGE=$($backendImageInfo.Repository)"
     "export STYS_FRONTEND_IMAGE=$($frontendImageInfo.Repository)"
+    "export STYS_SCHEMATRON_IMAGE=$($schematronImageInfo.Repository)"
     "export STYS_IMAGE_TAG=$($backendImageInfo.Tag)"
 ) -join "`n"
 [System.IO.File]::WriteAllText($imageEnvFile, $imageEnvContent + "`n", (New-Object System.Text.UTF8Encoding($false)))
@@ -200,6 +215,7 @@ $imageEnvContent = @(
 Write-Host "VPS'ye kopyalanacak dosyalar hazir:"
 Write-Host " - $backendTar"
 Write-Host " - $frontendTar"
+Write-Host " - $schematronTar"
 Write-Host " - $imageEnvFile"
 Write-Host " - $integrityEnvFile"
 
@@ -209,7 +225,7 @@ $remoteDirs = "'$RemoteDir/images' '$RemoteDir/scripts'"
 if ($IncludeObservability) { $remoteDirs += " '$RemoteDir/observability'" }
 Invoke-NativeCommand ssh @('-i', $resolvedSshKeyPath, $remoteTarget, "mkdir -p $remoteDirs")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $ComposeFilePath, "${remoteTarget}:$RemoteDir/docker-compose.yml")
-Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $backendTar, $frontendTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
+Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $backendTar, $frontendTar, $schematronTar, $imageEnvFile, "${remoteTarget}:$RemoteDir/images/")
 Invoke-NativeCommand scp @('-i', $resolvedSshKeyPath, $integrityEnvFile, "${remoteTarget}:$RemoteDir/scripts/stys-integrity.env")
 
 if ($IncludeObservability) {
@@ -257,5 +273,6 @@ if ($IncludeObservability) {
 Write-Host " - ${remoteTarget}:$RemoteDir/.env (STYS_IMAGE_TAG=$FullTag olarak guncellendi)"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/backend.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/frontend.tar"
+Write-Host " - ${remoteTarget}:$RemoteDir/images/schematron-validator.tar"
 Write-Host " - ${remoteTarget}:$RemoteDir/images/stys-image.env"
 Write-Host " - ${remoteTarget}:$RemoteDir/scripts/stys-integrity.env"

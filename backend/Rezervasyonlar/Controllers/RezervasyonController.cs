@@ -421,7 +421,7 @@ public class RezervasyonController : UIController
             EArsivKapsamindaMi = false
         };
 
-        var result = await _cariKartService.AddAsync(dto);
+        var result = await _cariKartService.FindOrCreateMusteriCariKartAsync(dto, cancellationToken);
         return Ok(result);
     }
 

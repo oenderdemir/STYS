@@ -14,6 +14,7 @@ public class CariKartDto : BaseRdbmsDto<int>
     public string? Ad { get; set; }
     public string? Soyad { get; set; }
     public string? VergiNoTckn { get; set; }
+    public string? VergiNoTcknNormalized { get; set; }
     public string? VergiDairesi { get; set; }
     public string? Telefon { get; set; }
     public string? Eposta { get; set; }
@@ -28,6 +29,7 @@ public class CariKartDto : BaseRdbmsDto<int>
     public decimal? AcilisBakiyeTutari { get; set; }
     public string? AcilisBakiyeYonu { get; set; }
     public bool AcilisBakiyeDuzeltilebilirMi { get; set; }
+    public bool VarOlanCariKartKullanildiMi { get; set; }
     public List<CariKartBankaHesabiDto> BankaHesaplari { get; set; } = [];
     public List<CariKartYetkiliKisiDto> YetkiliKisiler { get; set; } = [];
 }

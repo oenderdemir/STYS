@@ -20,4 +20,5 @@ public interface ICariKartService : IBaseRdbmsService<CariKartDto, CariKart, int
         string? yeniYonu,
         DateTime? duzeltmeTarihi = null,
         CancellationToken cancellationToken = default);
+    Task<CariKartDto> FindOrCreateMusteriCariKartAsync(CariKartDto dto, CancellationToken cancellationToken = default);
 }

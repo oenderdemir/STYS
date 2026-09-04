@@ -1683,6 +1683,7 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.Ad).HasMaxLength(128);
             entity.Property(x => x.Soyad).HasMaxLength(128);
             entity.Property(x => x.VergiNoTckn).HasMaxLength(32);
+            entity.Property(x => x.VergiNoTcknNormalized).HasMaxLength(32);
             entity.Property(x => x.VergiDairesi).HasMaxLength(128);
             entity.Property(x => x.Telefon).HasMaxLength(32);
             entity.Property(x => x.Eposta).HasMaxLength(256);
@@ -1696,6 +1697,10 @@ public class StysAppDbContext : DbContext
             entity.HasIndex(x => new { x.TesisId, x.CariKodu })
                 .IsUnique()
                 .HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.TesisId, x.VergiNoTcknNormalized })
+                .IsUnique()
+                .HasDatabaseName("IX_CariKartlar_TesisId_VergiNoTcknNormalized_Musteri")
+                .HasFilter("[IsDeleted] = 0 AND [AktifMi] = 1 AND [TesisId] IS NOT NULL AND [VergiNoTcknNormalized] IS NOT NULL AND [CariTipi] IN ('Musteri', 'KurumsalMusteri')");
             entity.HasIndex(x => x.TesisId)
                 .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
             entity.HasIndex(x => new { x.CariTipi, x.UnvanAdSoyad })

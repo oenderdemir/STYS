@@ -54,6 +54,7 @@ export interface CariKartModel {
   ad?: string | null;
   soyad?: string | null;
   vergiNoTckn?: string | null;
+  vergiNoTcknNormalized?: string | null;
   vergiDairesi?: string | null;
   telefon?: string | null;
   eposta?: string | null;
@@ -68,6 +69,7 @@ export interface CariKartModel {
   acilisBakiyeTutari?: number | null;
   acilisBakiyeYonu?: string | null;
   acilisBakiyeDuzeltilebilirMi?: boolean;
+  varOlanCariKartKullanildiMi?: boolean;
   bankaHesaplari: CariKartBankaHesabiModel[];
   yetkiliKisiler: CariKartYetkiliKisiModel[];
 }

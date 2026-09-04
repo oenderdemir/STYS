@@ -43,6 +43,9 @@ public class CariKart : BaseEntity<int>
     [MaxLength(32)]
     public string? VergiNoTckn { get; set; }
 
+    [MaxLength(32)]
+    public string? VergiNoTcknNormalized { get; set; }
+
     [MaxLength(128)]
     public string? VergiDairesi { get; set; }
 

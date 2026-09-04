@@ -118,6 +118,7 @@ Write-Host "Short SHA:      $ShortGitSha"
 Write-Host "Build Time:     $BuildTime"
 Write-Host "Backend image:  stys-backend:$Tag-$ShortGitSha"
 Write-Host "Frontend image: stys-frontend:$Tag-$ShortGitSha"
+Write-Host "Schematron:     compose config'ten cozulup artefact olarak tasinacak"
 Write-Host "====================" -ForegroundColor Cyan
 Write-Host ""
 

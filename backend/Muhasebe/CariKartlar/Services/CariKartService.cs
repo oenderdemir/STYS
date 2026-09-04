@@ -1,10 +1,12 @@
 using AutoMapper;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Mail;
 using STYS.AccessScope;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.Common.Constants;
 using STYS.Muhasebe.Common.Services;
+using STYS.Muhasebe.CariKartlar;
 using STYS.Muhasebe.CariHareketler.Entities;
 using STYS.Muhasebe.CariKartlar.Dtos;
 using STYS.Muhasebe.CariKartlar.Entities;
@@ -213,6 +215,8 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
                     throw new BaseException("Tedarikci/Musteri/Kurumsal Musteri icin tesis secimi zorunludur.", 400);
                 }
 
+                await EnsureNoActiveMusteriIdentityDuplicateAsync(dto.TesisId.Value, dto.CariTipi, dto.VergiNoTcknNormalized, null, CancellationToken.None);
+
                 var detay = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
                     dto.TesisId.Value,
                     anaHesapKodu,
@@ -239,9 +243,86 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             await tx.CommitAsync(CancellationToken.None);
             return await GetByIdAsync(resultId) ?? result;
         }
+        catch (DbUpdateException ex) when (IsMusteriIdentityUniqueViolation(ex))
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw BuildMusteriIdentityDuplicateException();
+        }
         catch
         {
             await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    public async Task<CariKartDto> FindOrCreateMusteriCariKartAsync(CariKartDto dto, CancellationToken cancellationToken = default)
+    {
+        dto.CariTipi = CariKartTipleri.Musteri;
+        dto.TesisId = await ResolveWriteTesisIdAsync(dto.TesisId, null);
+        NormalizeCommonFields(dto);
+        NormalizeFinansFields(dto);
+
+        if (!dto.TesisId.HasValue || dto.TesisId.Value <= 0)
+        {
+            throw new BaseException("Musteri icin tesis secimi zorunludur.", 400);
+        }
+
+        var existing = await FindSingleActiveMusteriByIdentityAsync(dto.TesisId.Value, dto.VergiNoTcknNormalized, cancellationToken);
+        if (existing is not null)
+        {
+            var existingDto = Mapper.Map<CariKartDto>(existing);
+            existingDto.VarOlanCariKartKullanildiMi = true;
+            return existingDto;
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.VergiNoTcknNormalized))
+        {
+            var telefon = NormalizeOptional(dto.Telefon, 32);
+            var adSoyad = dto.UnvanAdSoyad.Trim();
+            if (!string.IsNullOrWhiteSpace(telefon) && !string.IsNullOrWhiteSpace(adSoyad))
+            {
+                var weakMatches = await _dbContext.CariKartlar
+                    .AsNoTracking()
+                    .Where(x => !x.IsDeleted
+                                && x.AktifMi
+                                && x.TesisId == dto.TesisId.Value
+                                && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
+                                && x.Telefon == telefon
+                                && x.UnvanAdSoyad == adSoyad)
+                    .OrderBy(x => x.Id)
+                    .Take(2)
+                    .ToListAsync(cancellationToken);
+
+                if (weakMatches.Count == 1)
+                {
+                    var existingDto = Mapper.Map<CariKartDto>(weakMatches[0]);
+                    existingDto.VarOlanCariKartKullanildiMi = true;
+                    return existingDto;
+                }
+
+                if (weakMatches.Count > 1)
+                {
+                    return await AddAsync(dto);
+                }
+            }
+        }
+
+        try
+        {
+            var created = await AddAsync(dto);
+            created.VarOlanCariKartKullanildiMi = false;
+            return created;
+        }
+        catch (BaseException) when (!string.IsNullOrWhiteSpace(dto.VergiNoTcknNormalized))
+        {
+            var racedExisting = await FindSingleActiveMusteriByIdentityAsync(dto.TesisId.Value, dto.VergiNoTcknNormalized, cancellationToken);
+            if (racedExisting is not null)
+            {
+                var existingDto = Mapper.Map<CariKartDto>(racedExisting);
+                existingDto.VarOlanCariKartKullanildiMi = true;
+                return existingDto;
+            }
+
             throw;
         }
     }
@@ -278,10 +359,16 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             throw new BaseException("Muhasebe hesabı oluşturulmuş cari kartlarda tesis değiştirilemez.", 400);
         }
 
+        if (nextTesisId.HasValue && dto.AktifMi)
+        {
+            await EnsureNoActiveMusteriIdentityDuplicateAsync(nextTesisId.Value, dto.CariTipi, dto.VergiNoTcknNormalized, dto.Id.Value, CancellationToken.None);
+        }
+
         entity.TesisId = nextTesisId;
         entity.CariTipi = dto.CariTipi;
         entity.UnvanAdSoyad = dto.UnvanAdSoyad;
-        entity.VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32);
+        entity.VergiNoTckn = dto.VergiNoTckn;
+        entity.VergiNoTcknNormalized = dto.VergiNoTcknNormalized;
         entity.VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128);
         entity.Telefon = NormalizeOptional(dto.Telefon, 32);
         entity.Eposta = NormalizeOptional(dto.Eposta, 256);
@@ -327,6 +414,11 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
 
             await tx.CommitAsync(CancellationToken.None);
             return await GetByIdAsync(entity.Id) ?? Mapper.Map<CariKartDto>(entity);
+        }
+        catch (DbUpdateException ex) when (IsMusteriIdentityUniqueViolation(ex))
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            throw BuildMusteriIdentityDuplicateException();
         }
         catch
         {
@@ -460,7 +552,8 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
         dto.CariTipi = (dto.CariTipi ?? string.Empty).Trim();
         dto.UnvanAdSoyad = (dto.UnvanAdSoyad ?? string.Empty).Trim();
         dto.CariKodu = (dto.CariKodu ?? string.Empty).Trim();
-        dto.VergiNoTckn = NormalizeOptional(dto.VergiNoTckn, 32);
+        dto.VergiNoTckn = CariKartIdentityNormalizer.NormalizeVergiNoTckn(dto.VergiNoTckn);
+        dto.VergiNoTcknNormalized = CariKartIdentityNormalizer.NormalizeVergiNoTckn(dto.VergiNoTckn);
         dto.VergiDairesi = NormalizeOptional(dto.VergiDairesi, 128);
         dto.Telefon = NormalizeOptional(dto.Telefon, 32);
         dto.Eposta = NormalizeOptional(dto.Eposta, 256);
@@ -479,6 +572,79 @@ public class CariKartService : BaseRdbmsService<CariKartDto, CariKart, int>, ICa
             throw new BaseException("Unvan/Ad Soyad zorunludur.", 400);
         }
     }
+
+    private async Task EnsureNoActiveMusteriIdentityDuplicateAsync(
+        int tesisId,
+        string cariTipi,
+        string? normalizedVergiNoTckn,
+        int? exceptCariKartId,
+        CancellationToken cancellationToken)
+    {
+        if (!CariKartIdentityNormalizer.IsMusteriGrubu(cariTipi) || string.IsNullOrWhiteSpace(normalizedVergiNoTckn))
+        {
+            return;
+        }
+
+        var duplicate = await _dbContext.CariKartlar
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                        && x.AktifMi
+                        && x.TesisId == tesisId
+                        && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
+                        && x.VergiNoTcknNormalized == normalizedVergiNoTckn
+                        && (!exceptCariKartId.HasValue || x.Id != exceptCariKartId.Value))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.CariKodu, x.UnvanAdSoyad })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (duplicate is not null)
+        {
+            throw BuildMusteriIdentityDuplicateException(duplicate.CariKodu, duplicate.UnvanAdSoyad);
+        }
+    }
+
+    private async Task<CariKart?> FindSingleActiveMusteriByIdentityAsync(
+        int tesisId,
+        string? normalizedVergiNoTckn,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedVergiNoTckn))
+        {
+            return null;
+        }
+
+        var matches = await _dbContext.CariKartlar
+            .AsNoTracking()
+            .Where(x => !x.IsDeleted
+                        && x.AktifMi
+                        && x.TesisId == tesisId
+                        && (x.CariTipi == CariKartTipleri.Musteri || x.CariTipi == CariKartTipleri.KurumsalMusteri)
+                        && x.VergiNoTcknNormalized == normalizedVergiNoTckn)
+            .OrderBy(x => x.Id)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+
+        if (matches.Count > 1)
+        {
+            throw new BaseException("Bu TCKN/VKN ile ayni tesiste birden fazla aktif musteri cari karti bulunuyor. Once duplicate cari kartlari temizleyin.", 400);
+        }
+
+        return matches.SingleOrDefault();
+    }
+
+    private static BaseException BuildMusteriIdentityDuplicateException(string? cariKodu = null, string? unvanAdSoyad = null)
+    {
+        var suffix = !string.IsNullOrWhiteSpace(cariKodu) || !string.IsNullOrWhiteSpace(unvanAdSoyad)
+            ? $": {cariKodu} - {unvanAdSoyad}"
+            : string.Empty;
+
+        return new BaseException($"Bu TCKN/VKN ile ayni tesiste aktif bir musteri cari karti zaten bulunmaktadir{suffix}.", 400);
+    }
+
+    private static bool IsMusteriIdentityUniqueViolation(DbUpdateException exception)
+        => exception.InnerException is SqlException sqlException
+            && sqlException.Errors.Cast<SqlError>().Any(x => x.Number is 2601 or 2627
+                && x.Message.Contains("IX_CariKartlar_TesisId_VergiNoTcknNormalized_Musteri", StringComparison.OrdinalIgnoreCase));
 
     private static void NormalizeFinansFields(CariKartDto dto)
     {

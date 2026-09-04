@@ -861,7 +861,10 @@ export class RezervasyonOdemeDialogComponent implements OnChanges {
                         ...this.cariKartSecenekleri.filter((x) => x.id !== result.id)
                     ];
                     this.cariKartId = result.id!;
-                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: `Cari kart olusturuldu: ${result.unvanAdSoyad}` });
+                    const detail = result.varOlanCariKartKullanildiMi
+                        ? 'Bu TCKN icin mevcut cari kart kullanildi.'
+                        : `Cari kart olusturuldu: ${result.unvanAdSoyad}`;
+                    this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail });
                     this.cdr.markForCheck();
                 },
                 error: (error: unknown) => {

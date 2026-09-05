@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.CariHareketler.Entities;
+using STYS.Muhasebe.MuhasebeHesapBakiyeleri.Entities;
+using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Tests.TestSupport;
 
 namespace STYS.Tests;
@@ -9,6 +11,18 @@ namespace STYS.Tests;
 [Collection(SqlServerIntegrationCollection.Name)]
 public sealed class CariKartDuplicateMigrationIntegrationTests
 {
+    private static async Task CleanupCariDataAsync(StysAppDbContext db, int tesisId)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM muhasebe.CariHareketler WHERE CariKartId IN (SELECT Id FROM muhasebe.CariKartlar WHERE TesisId = {tesisId});
+            DELETE FROM muhasebe.CariKartYetkiliKisileri WHERE CariKartId IN (SELECT Id FROM muhasebe.CariKartlar WHERE TesisId = {tesisId});
+            DELETE FROM muhasebe.CariKartBankaHesaplari WHERE CariKartId IN (SELECT Id FROM muhasebe.CariKartlar WHERE TesisId = {tesisId});
+            DELETE FROM muhasebe.CariKartlar WHERE TesisId = {tesisId};
+            DELETE FROM muhasebe.MuhasebeHesapBakiyeleri WHERE MuhasebeHesapPlaniId IN (SELECT Id FROM muhasebe.MuhasebeHesapPlanlari WHERE TesisId = {tesisId});
+            DELETE FROM muhasebe.MuhasebeHesapPlanlari WHERE TesisId = {tesisId};
+            """);
+    }
+
     private const string IndexName = "IX_CariKartlar_TesisId_VergiNoTcknNormalized_Musteri";
 
     private const string DropIndexSql =
@@ -49,6 +63,8 @@ public sealed class CariKartDuplicateMigrationIntegrationTests
                   OR EXISTS (SELECT 1 FROM muhasebe.StokHareketleri x WHERE x.CariKartId = c.Id)
                   OR EXISTS (SELECT 1 FROM muhasebe.MuhasebeFisSatirlari x WHERE x.CariKartId = c.Id)
                   OR EXISTS (SELECT 1 FROM entegrasyon.PosOdemeIslemleri x WHERE x.CariKartId = c.Id)
+                  OR (c.MuhasebeHesapPlaniId IS NOT NULL AND EXISTS (SELECT 1 FROM muhasebe.MuhasebeFisSatirlari x WHERE x.MuhasebeHesapPlaniId = c.MuhasebeHesapPlaniId))
+                  OR (c.MuhasebeHesapPlaniId IS NOT NULL AND EXISTS (SELECT 1 FROM muhasebe.MuhasebeHesapBakiyeleri x WHERE x.MuhasebeHesapPlaniId = c.MuhasebeHesapPlaniId))
                 THEN 1 ELSE 0 END AS FinansalKullanildi,
             CASE WHEN EXISTS (SELECT 1 FROM dbo.Rezervasyonlar x WHERE x.CariKartId = c.Id)
                   OR EXISTS (SELECT 1 FROM dbo.Tesisler x WHERE x.RezervasyonMisafirVarsayilanCariKartId = c.Id)
@@ -140,6 +156,7 @@ public sealed class CariKartDuplicateMigrationIntegrationTests
 
         var normalized = await db.CariKartlar.Where(x => x.Id == card.Id).Select(x => x.VergiNoTcknNormalized).SingleAsync();
         Assert.Equal("1234567890", normalized);
+        await CleanupCariDataAsync(db, tesis.Id);
     }
 
     [IntegrationFact]
@@ -186,6 +203,7 @@ public sealed class CariKartDuplicateMigrationIntegrationTests
         finally
         {
             await db.Database.ExecuteSqlRawAsync(RecreateIndexSql);
+            await CleanupCariDataAsync(db, tesis.Id);
         }
     }
 
@@ -256,6 +274,7 @@ public sealed class CariKartDuplicateMigrationIntegrationTests
         finally
         {
             await db.Database.ExecuteSqlRawAsync(RecreateIndexSql);
+            await CleanupCariDataAsync(db, tesis.Id);
         }
     }
 
@@ -297,5 +316,170 @@ public sealed class CariKartDuplicateMigrationIntegrationTests
 
         var count = await db.CariKartlar.CountAsync(x => x.VergiNoTcknNormalized == "33333333333" && !x.IsDeleted);
         Assert.Equal(2, count);
+        await CleanupCariDataAsync(db, tesis1.Id);
+        await CleanupCariDataAsync(db, tesis2.Id);
+    }
+
+    [IntegrationFact]
+    public async Task Repair_AccountLevelFinancialUsage_Silinmez()
+    {
+        var cs = Environment.GetEnvironmentVariable(IntegrationFactAttribute.ConnectionStringEnvVar);
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var suffix = Guid.NewGuid().ToString("N")[..10];
+
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var (_, _, tesis) = await AgentTestSupport.SeedKurumIlTesisAsync(db, suffix);
+
+        var hesap = new MuhasebeHesapPlani
+        {
+            Kod = $"120.{suffix}",
+            TamKod = $"120.{suffix}",
+            Ad = "Detay Hesap",
+            TesisId = tesis.Id,
+            SeviyeNo = 3,
+            HesapTipi = HesapTipi.DetayHesap
+        };
+        db.MuhasebeHesapPlanlari.Add(hesap);
+        await db.SaveChangesAsync();
+
+        await db.Database.ExecuteSqlRawAsync(DropIndexSql);
+        try
+        {
+            var unused = new CariKart
+            {
+                TesisId = tesis.Id,
+                CariTipi = CariKartTipleri.Musteri,
+                CariKodu = $"ACC-{suffix}-0",
+                UnvanAdSoyad = "Acc Test",
+                VergiNoTckn = "44444444444",
+                VergiNoTcknNormalized = "44444444444",
+                AktifMi = true
+            };
+            var accountUsed = new CariKart
+            {
+                TesisId = tesis.Id,
+                CariTipi = CariKartTipleri.Musteri,
+                CariKodu = $"ACC-{suffix}-1",
+                UnvanAdSoyad = "Acc Test",
+                VergiNoTckn = "44444444444",
+                VergiNoTcknNormalized = "44444444444",
+                MuhasebeHesapPlaniId = hesap.Id,
+                AktifMi = true
+            };
+            db.CariKartlar.AddRange(unused, accountUsed);
+            await db.SaveChangesAsync();
+
+            db.MuhasebeHesapBakiyeleri.Add(new MuhasebeHesapBakiye
+            {
+                TesisId = tesis.Id,
+                MaliYil = 2026,
+                Donem = 1,
+                MuhasebeHesapPlaniId = hesap.Id,
+                HesapKodu = hesap.TamKod,
+                HesapAdi = hesap.Ad,
+                KonsolideMi = false,
+                BorcToplam = 100m,
+                AlacakToplam = 0m,
+                BorcBakiye = 100m,
+                AlacakBakiye = 0m,
+                NetBakiye = 100m,
+                BakiyeTipi = "Borc",
+                HesapSeviyesi = 3,
+                SonGuncellemeTarihi = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            await db.Database.ExecuteSqlRawAsync(RepairSql);
+
+            // accountUsed has an account-level financial usage (MuhasebeHesapBakiyeleri), so it must not be soft-deleted.
+            var accountUsedSurvives = await db.CariKartlar.IgnoreQueryFilters().AnyAsync(x => x.Id == accountUsed.Id && !x.IsDeleted);
+            Assert.True(accountUsedSurvives);
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlRawAsync(RecreateIndexSql);
+            await CleanupCariDataAsync(db, tesis.Id);
+        }
+    }
+
+    [IntegrationFact]
+    public async Task Repair_IkiFinansalKullanilmis_HerIkiKorunur()
+    {
+        var cs = Environment.GetEnvironmentVariable(IntegrationFactAttribute.ConnectionStringEnvVar);
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var suffix = Guid.NewGuid().ToString("N")[..10];
+
+        await using var db = AgentTestSupport.CreateDbContext(cs);
+        await db.Database.MigrateAsync();
+        var (_, _, tesis) = await AgentTestSupport.SeedKurumIlTesisAsync(db, suffix);
+
+        await db.Database.ExecuteSqlRawAsync(DropIndexSql);
+        try
+        {
+            var a = new CariKart
+            {
+                TesisId = tesis.Id,
+                CariTipi = CariKartTipleri.Musteri,
+                CariKodu = $"MULTI-{suffix}-0",
+                UnvanAdSoyad = "Multi Fin",
+                VergiNoTckn = "55555555555",
+                VergiNoTcknNormalized = "55555555555",
+                AktifMi = true
+            };
+            var b = new CariKart
+            {
+                TesisId = tesis.Id,
+                CariTipi = CariKartTipleri.Musteri,
+                CariKodu = $"MULTI-{suffix}-1",
+                UnvanAdSoyad = "Multi Fin",
+                VergiNoTckn = "55555555555",
+                VergiNoTcknNormalized = "55555555555",
+                AktifMi = true
+            };
+            db.CariKartlar.AddRange(a, b);
+            await db.SaveChangesAsync();
+
+            foreach (var card in new[] { a, b })
+            {
+                db.CariHareketler.Add(new CariHareket
+                {
+                    CariKartId = card.Id,
+                    HareketTarihi = DateTime.UtcNow.Date,
+                    BelgeTuru = "TEST",
+                    BelgeNo = $"TEST-{suffix}-{card.Id}",
+                    Aciklama = "test",
+                    BorcTutari = 0m,
+                    AlacakTutari = 0m,
+                    KapananTutar = 0m,
+                    KalanTutar = 0m,
+                    ParaBirimi = "TRY",
+                    Durum = CariHareketDurumlari.Aktif,
+                    KaynakModul = "TEST",
+                    KaynakId = 0,
+                    KapandiMi = false
+                });
+            }
+
+            await db.SaveChangesAsync();
+
+            await db.Database.ExecuteSqlRawAsync(RepairSql);
+
+            var aSurvives = await db.CariKartlar.IgnoreQueryFilters().AnyAsync(x => x.Id == a.Id && !x.IsDeleted);
+            var bSurvives = await db.CariKartlar.IgnoreQueryFilters().AnyAsync(x => x.Id == b.Id && !x.IsDeleted);
+            Assert.True(aSurvives);
+            Assert.True(bSurvives);
+
+            // The non-canonical financially-used card must have its normalized key cleared (manual review).
+            var canonicalId = Math.Min(a.Id, b.Id);
+            var nonCanonicalId = Math.Max(a.Id, b.Id);
+            var nonCanonicalNormalized = await db.CariKartlar.IgnoreQueryFilters().Where(x => x.Id == nonCanonicalId).Select(x => x.VergiNoTcknNormalized).SingleAsync();
+            Assert.Null(nonCanonicalNormalized);
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlRawAsync(RecreateIndexSql);
+            await CleanupCariDataAsync(db, tesis.Id);
+        }
     }
 }

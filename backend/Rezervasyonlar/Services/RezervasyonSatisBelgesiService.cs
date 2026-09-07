@@ -28,6 +28,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
     private readonly IUserAccessScopeService _userAccessScopeService;
     private readonly ITicariBelgeService _ticariBelgeService;
     private readonly IRezervasyonCariKartResolver _cariKartResolver;
+    private readonly IRezervasyonKonaklamaVergiPolitikasi _konaklamaVergiPolitikasi;
     private readonly ILogger<RezervasyonSatisBelgesiService> _logger;
 
     /// <summary>Ek hizmet ve restoran (OdayaEkle) satırlarında kullanılan varsayılan KDV oranı.
@@ -41,12 +42,14 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
         IUserAccessScopeService userAccessScopeService,
         ITicariBelgeService ticariBelgeService,
         IRezervasyonCariKartResolver cariKartResolver,
-        ILogger<RezervasyonSatisBelgesiService> logger)
+        ILogger<RezervasyonSatisBelgesiService> logger,
+        IRezervasyonKonaklamaVergiPolitikasi? konaklamaVergiPolitikasi = null)
     {
         _dbContext = dbContext;
         _userAccessScopeService = userAccessScopeService;
         _ticariBelgeService = ticariBelgeService;
         _cariKartResolver = cariKartResolver;
+        _konaklamaVergiPolitikasi = konaklamaVergiPolitikasi ?? new RezervasyonKonaklamaVergiPolitikasi();
         _logger = logger;
     }
 
@@ -211,9 +214,9 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
         RezervasyonSatisBelgesiTaslakRequest request,
         CancellationToken cancellationToken)
     {
-        // KDV parametrelerini çözümle
+        // KDV istisnası mevcut KDV altyapısı tarafından nihai olarak doğrulanır; normal oran ise
+        // checkout akışında client'tan değil hizmet tarihine bağlı policy'den gelir.
         KdvUygulamaTipi kdvUygulamaTipi;
-        decimal kdvOrani;
         int? kdvIstisnaTanimId = null;
 
         if (request.KdvIstisnaTanimId.HasValue && request.KdvIstisnaTanimId.Value > 0)
@@ -231,44 +234,54 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
             }
 
             kdvUygulamaTipi = istisna.UygulamaTipi;
-            kdvOrani = 0m;
             kdvIstisnaTanimId = istisna.Id;
         }
         else
         {
             kdvUygulamaTipi = KdvUygulamaTipi.Kdvli;
-            kdvOrani = request.KdvOrani ?? VarsayilanKdvOrani;
         }
 
-        var birimFiyat = geceSayisi > 0
+        var geceBrutTutar = geceSayisi > 0
             ? Math.Round(rezervasyon.ToplamUcret / geceSayisi, 2, MidpointRounding.AwayFromZero)
             : rezervasyon.ToplamUcret;
 
         // Son satırda kuruş yuvarlama farkını dengele
-        var toplamDagitilan = birimFiyat * geceSayisi;
+        var toplamDagitilan = geceBrutTutar * geceSayisi;
         var fark = rezervasyon.ToplamUcret - toplamDagitilan;
+
+        var operasyonSatiriKdvOrani = kdvUygulamaTipi == KdvUygulamaTipi.Kdvli ? VarsayilanKdvOrani : 0m;
 
         var satirlar = new List<TicariBelgeTaslakSatirRequest>(geceSayisi);
         for (var i = 0; i < geceSayisi; i++)
         {
             var geceTarihi = rezervasyon.GirisTarihi.Date.AddDays(i);
-            var satirBirimFiyat = birimFiyat;
+            var satirBrutTutar = geceBrutTutar;
 
             // Son satıra yuvarlama farkını ekle
             if (i == geceSayisi - 1 && fark != 0)
             {
-                satirBirimFiyat += fark;
+                satirBrutTutar += fark;
             }
+
+            var vergiKarari = _konaklamaVergiPolitikasi.Resolve(geceTarihi);
+            var kdvOrani = kdvUygulamaTipi == KdvUygulamaTipi.Kdvli ? vergiKarari.KdvOrani : 0m;
+            var ayristirma = SatisBelgesiTutarHesaplayici.AyristirVergiDahilTutar(
+                satirBrutTutar,
+                kdvOrani,
+                vergiKarari.KonaklamaVergisiOrani);
 
             satirlar.Add(new TicariBelgeTaslakSatirRequest
             {
                 SatirTipi = SatisBelgesiSatirTipi.Konaklama,
                 Aciklama = $"Konaklama — {geceTarihi:dd.MM.yyyy}",
                 Miktar = 1,
-                BirimFiyat = satirBirimFiyat,
+                BirimFiyat = ayristirma.Matrah,
                 KdvUygulamaTipi = kdvUygulamaTipi,
                 KdvOrani = kdvOrani,
                 KdvIstisnaTanimId = kdvIstisnaTanimId,
+                KonaklamaVergisiOrani = vergiKarari.KonaklamaVergisiOrani,
+                KonaklamaVergisiTutari = ayristirma.KonaklamaVergisiTutari,
+                VergiTutarlariniAynenKullan = true,
                 KaynakSatirId = $"{rezervasyon.Id}_{geceTarihi:yyyyMMdd}"
             });
         }
@@ -292,7 +305,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
                     ? Math.Round(ekHizmet.ToplamTutar / ekHizmet.Miktar, 2, MidpointRounding.AwayFromZero)
                     : ekHizmet.ToplamTutar,
                 KdvUygulamaTipi = kdvUygulamaTipi,
-                KdvOrani = kdvOrani,
+                KdvOrani = operasyonSatiriKdvOrani,
                 KdvIstisnaTanimId = kdvIstisnaTanimId,
                 KaynakSatirId = $"{rezervasyon.Id}_ekhizmet_{ekHizmet.Id}"
             });
@@ -324,7 +337,7 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
                 Miktar = 1,
                 BirimFiyat = tutar,
                 KdvUygulamaTipi = kdvUygulamaTipi,
-                KdvOrani = kdvOrani,
+                KdvOrani = operasyonSatiriKdvOrani,
                 KdvIstisnaTanimId = kdvIstisnaTanimId,
                 KaynakSatirId = $"{rezervasyon.Id}_restoran_{restoranOdeme.Id}"
             });

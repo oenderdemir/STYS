@@ -10,6 +10,7 @@ using STYS.Muhasebe.MuhasebeDonemleri.Services;
 using STYS.Muhasebe.MuhasebeFisleri.Entities;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
 using STYS.Muhasebe.MuhasebeVergiHesapEslemeleri.Entities;
+using STYS.Muhasebe.KonaklamaVergisiHesapEslemeleri.Services;
 using STYS.Muhasebe.StokHareketleri.Entities;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Entities;
@@ -45,6 +46,7 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
     private readonly IMapper _mapper;
     private readonly IMuhasebeDonemService _muhasebeDonemService;
     private readonly IReadOnlyList<ISatisBelgesiMuhasebeFisStratejisi> _stratejiler;
+    private readonly IKonaklamaVergisiHesapEslemeService? _konaklamaVergisiHesapEslemeService;
     private readonly ILogger<SatisBelgesiMuhasebeFisService> _logger;
 
     public SatisBelgesiMuhasebeFisService(
@@ -53,13 +55,15 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         IMapper mapper,
         IMuhasebeDonemService muhasebeDonemService,
         IEnumerable<ISatisBelgesiMuhasebeFisStratejisi> stratejiler,
-        ILogger<SatisBelgesiMuhasebeFisService> logger)
+        ILogger<SatisBelgesiMuhasebeFisService> logger,
+        IKonaklamaVergisiHesapEslemeService? konaklamaVergisiHesapEslemeService = null)
     {
         _satisBelgesiRepository = satisBelgesiRepository;
         _dbContext = dbContext;
         _mapper = mapper;
         _muhasebeDonemService = muhasebeDonemService;
         _stratejiler = stratejiler.ToList();
+        _konaklamaVergisiHesapEslemeService = konaklamaVergisiHesapEslemeService;
         _logger = logger;
     }
 
@@ -242,10 +246,10 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 // (ve ona bağlı cari/stok hareketi) üretimi tamamen ENGELLENİR - hiçbir
                 // fiş/cari/stok kaydı oluşturulmadan, transaction'da hiçbir yazım
                 // yapılmadan önce burada durdurulur.
-                if (aktifSatirlar.Any(s => s.OtvTutari > 0 || s.OivTutari > 0 || s.KonaklamaVergisiTutari > 0))
+                if (aktifSatirlar.Any(s => s.OtvTutari > 0 || s.OivTutari > 0))
                 {
                     throw new BaseException(
-                        "ÖTV, ÖİV veya konaklama vergisi içeren belgeler için muhasebe hesap eşlemeleri henüz tanımlanmamıştır. Otomatik muhasebe fişi oluşturulamaz.",
+                        "ÖTV veya ÖİV içeren belgeler için muhasebe hesap eşlemeleri henüz tanımlanmamıştır. Otomatik muhasebe fişi oluşturulamaz.",
                         400);
                 }
 
@@ -582,6 +586,10 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         var kdvHesaplariByOran = kdvGerekli
             ? await ResolveKdvHesaplariByOranAsync(tesisId, aktifSatirlar, MuhasebeAnaHesapKodlari.KDVHesaplanan, satisMi: true, cancellationToken)
             : new Dictionary<decimal, int>();
+        var konaklamaVergisiHesapId = await ResolveKonaklamaVergisiHesapIdAsync(
+            tesisId,
+            aktifSatirlar,
+            cancellationToken);
 
         return new SatisBelgesiMuhasebeFisContext
         {
@@ -594,7 +602,8 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             CariHesapPlaniId = cariHesabi.Id,
             CariKartId = cariKartId,
             GelirHesapPlaniId = gelir.Id,
-            KdvHesaplariByOran = kdvHesaplariByOran
+            KdvHesaplariByOran = kdvHesaplariByOran,
+            KonaklamaVergisiHesapPlaniId = konaklamaVergisiHesapId
         };
     }
 
@@ -744,6 +753,24 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
             StokHesapPlaniId = stok?.Id,
             HizmetGiderHesapPlaniId = hizmet?.Id
         };
+    }
+
+    private async Task<int?> ResolveKonaklamaVergisiHesapIdAsync(
+        int tesisId,
+        IReadOnlyList<SatisBelgesiSatiri> aktifSatirlar,
+        CancellationToken cancellationToken)
+    {
+        if (!aktifSatirlar.Any(x => x.KonaklamaVergisiTutari > 0))
+        {
+            return null;
+        }
+
+        if (_konaklamaVergisiHesapEslemeService is null)
+        {
+            return null;
+        }
+
+        return await _konaklamaVergisiHesapEslemeService.ResolveAktifHesapIdAsync(tesisId, cancellationToken);
     }
 
     private async Task CreateAlisStokGirisHareketleriAsync(

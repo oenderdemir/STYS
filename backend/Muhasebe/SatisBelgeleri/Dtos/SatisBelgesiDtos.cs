@@ -169,6 +169,8 @@ public class CreateSatisBelgesiSatiriRequest
     public decimal OivTutari { get; set; }
     public decimal KonaklamaVergisiOrani { get; set; }
     public decimal KonaklamaVergisiTutari { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool VergiTutarlariniAynenKullan { get; set; }
     public string? KaynakSatirId { get; set; }
 }
 

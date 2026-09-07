@@ -35,6 +35,34 @@ public class SatisBelgesiTutarHesaplayiciTests
     }
 
     [Fact]
+    public void AyristirVergiDahilTutar_1110Brut_1000Matrah100Kdv10KonaklamaVergisiUretir()
+    {
+        var sonuc = SatisBelgesiTutarHesaplayici.AyristirVergiDahilTutar(
+            brutTutar: 1110m,
+            kdvOrani: 10m,
+            konaklamaVergisiOrani: 1m);
+
+        Assert.Equal(1000m, sonuc.Matrah);
+        Assert.Equal(100m, sonuc.KdvTutari);
+        Assert.Equal(10m, sonuc.KonaklamaVergisiTutari);
+        Assert.Equal(1110m, sonuc.SatirToplami);
+    }
+
+    [Fact]
+    public void AyristirVergiDahilTutar_9600Brut_YuvarlamaArtiginiKonaklamaVergisindeDengeler()
+    {
+        var sonuc = SatisBelgesiTutarHesaplayici.AyristirVergiDahilTutar(
+            brutTutar: 9600m,
+            kdvOrani: 10m,
+            konaklamaVergisiOrani: 1m);
+
+        Assert.Equal(8648.65m, sonuc.Matrah);
+        Assert.Equal(864.87m, sonuc.KdvTutari);
+        Assert.Equal(86.48m, sonuc.KonaklamaVergisiTutari);
+        Assert.Equal(9600m, sonuc.SatirToplami);
+    }
+
+    [Fact]
     public void SatirBazliYuvarlananKdvToplamiTopluMatrahtanYenidenHesaplananandanFarklidir()
     {
         const decimal kdvOrani = 18m;

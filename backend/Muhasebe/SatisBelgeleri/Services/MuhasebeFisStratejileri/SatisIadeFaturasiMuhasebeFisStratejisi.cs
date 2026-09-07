@@ -34,9 +34,6 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
 
         var iadeHesabi = await ResolveHesapByAnaKodAsync(MuhasebeAnaHesapKodlari.SatisIade, belge.TesisId!.Value, cancellationToken);
 
-        // ÖTV/ÖİV/konaklama vergisi içeren belgeler için bu strateji hiç çağrılmaz —
-        // SatisBelgesiMuhasebeFisService, fiş/cari/stok hareketi oluşturulmadan önce bu
-        // belgeleri reddeder (bkz. SatisBelgesiMuhasebeFisService.MuhasebeFisiOlusturAsync).
         var satirlar = new List<MuhasebeFisSatiriTaslak>
         {
             new()
@@ -67,6 +64,29 @@ public sealed class SatisIadeFaturasiMuhasebeFisStratejisi : ISatisBelgesiMuhase
                     Aciklama = $"Hesaplanan KDV iadesi (%{oran}) - {belge.BelgeNo}"
                 });
             }
+        }
+
+        var konaklamaVergisiTutari = belge.Satirlar
+            .Where(x => !x.IsDeleted)
+            .Sum(x => x.KonaklamaVergisiTutari);
+
+        if (konaklamaVergisiTutari > 0)
+        {
+            if (!context.KonaklamaVergisiHesapPlaniId.HasValue)
+            {
+                throw new BaseException(
+                    "Konaklama vergisi için muhasebe hesabı tanımlanmamış. Muhasebe Yönetimi > Konaklama Vergisi Hesabı ekranından hesap eşlemesi yapın.",
+                    400);
+            }
+
+            satirlar.Add(new MuhasebeFisSatiriTaslak
+            {
+                MuhasebeHesapPlaniId = context.KonaklamaVergisiHesapPlaniId.Value,
+                SiraNo = siraNo++,
+                Borc = konaklamaVergisiTutari,
+                Alacak = 0,
+                Aciklama = $"Konaklama vergisi iadesi - {belge.BelgeNo}"
+            });
         }
 
         satirlar.Add(new MuhasebeFisSatiriTaslak

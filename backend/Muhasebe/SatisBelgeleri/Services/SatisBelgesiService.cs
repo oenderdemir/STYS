@@ -2489,6 +2489,9 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         if (request.KonaklamaVergisiTutari < 0)
             throw new BaseException($"Konaklama vergisi tutarı negatif olamaz. (SıraNo: {request.SiraNo})", errorCode: 400);
 
+        if (!request.VergiTutarlariniAynenKullan && request.KonaklamaVergisiTutari > 0)
+            throw new BaseException($"Konaklama vergisi tutarı yalnızca rezervasyon check-out akışında sistem tarafından hesaplanabilir. (SıraNo: {request.SiraNo})", errorCode: 400);
+
         // Bilinmeyen KDV uygulama tipi
         if (!DesteklenenKdvUygulamaTipleri.Contains(request.KdvUygulamaTipi))
             throw new BaseException($"Geçersiz KDV uygulama tipi: {request.KdvUygulamaTipi}", errorCode: 400);
@@ -3103,7 +3106,9 @@ WHERE [IsDeleted] = 0 AND [Durum] = {CariHareketDurumlari.Aktif}
         var konaklamaVergisiOrani = request.KonaklamaVergisiOrani > 0
             ? request.KonaklamaVergisiOrani
             : ResolveLineRate(request.KonaklamaVergisiTutari, matrah);
-        var konaklamaVergisiTutari = ResolveRateBasedAmount(matrah, konaklamaVergisiOrani, request.KonaklamaVergisiTutari);
+        var konaklamaVergisiTutari = request.VergiTutarlariniAynenKullan
+            ? SatisBelgesiTutarHesaplayici.Yuvarla(request.KonaklamaVergisiTutari)
+            : ResolveRateBasedAmount(matrah, konaklamaVergisiOrani, request.KonaklamaVergisiTutari);
 
         // SatirToplami = Matrah + Kdv - Tevkifat + Otv + Oiv + KonaklamaVergisi (bkz.
         // SatisBelgesiTutarHesaplayici) - ÖTV/ÖİV/konaklama vergisi ÖNCEDEN satıra

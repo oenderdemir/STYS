@@ -38,6 +38,48 @@ public static class SatisBelgesiTutarHesaplayici
     public static decimal HesaplaKdvTutari(decimal matrah, decimal kdvOrani) =>
         Yuvarla(matrah * kdvOrani / 100m);
 
+    public static VergiDahilTutarAyristirmaSonucu AyristirVergiDahilTutar(
+        decimal brutTutar,
+        decimal kdvOrani,
+        decimal konaklamaVergisiOrani)
+    {
+        if (brutTutar < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(brutTutar), "Brut tutar negatif olamaz.");
+        }
+
+        if (kdvOrani < 0 || konaklamaVergisiOrani < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(kdvOrani), "Vergi oranlari negatif olamaz.");
+        }
+
+        var carpan = 1m + (kdvOrani / 100m) + (konaklamaVergisiOrani / 100m);
+        if (carpan <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(kdvOrani), "Vergi carpanlari gecersiz.");
+        }
+
+        var matrah = Yuvarla(brutTutar / carpan);
+        var kdvTutari = Yuvarla(matrah * kdvOrani / 100m);
+        var konaklamaVergisiTutari = Yuvarla(brutTutar - matrah - kdvTutari);
+
+        if (konaklamaVergisiTutari < 0)
+        {
+            konaklamaVergisiTutari = 0m;
+            kdvTutari = Yuvarla(brutTutar - matrah);
+        }
+
+        var satirToplami = HesaplaSatirToplami(
+            matrah,
+            kdvTutari,
+            tevkifatTutari: 0m,
+            otvTutari: 0m,
+            oivTutari: 0m,
+            konaklamaVergisiTutari);
+
+        return new VergiDahilTutarAyristirmaSonucu(matrah, kdvTutari, konaklamaVergisiTutari, satirToplami);
+    }
+
     /// <summary>
     /// Bir satırın nihai (ödenecek) toplamını hesaplar. Sonuç 2 ondalık basamağa
     /// yuvarlanır; belge GenelToplam'ı bu (satır bazında zaten yuvarlanmış) değerlerin
@@ -62,6 +104,12 @@ public static class SatisBelgesiTutarHesaplayici
     /// aynı doğrulama mantığını çağırabilir - toplam tutarlılık kuralı tek yerde tanımlıdır.
     /// </summary>
     public readonly record struct SatirTutarKatkisi(decimal Matrah, decimal KdvTutari, decimal SatirToplami);
+
+    public readonly record struct VergiDahilTutarAyristirmaSonucu(
+        decimal Matrah,
+        decimal KdvTutari,
+        decimal KonaklamaVergisiTutari,
+        decimal SatirToplami);
 
     /// <summary>
     /// Belge düzeyi toplamların (ToplamMatrah/ToplamKdv/GenelToplam), aktif satırların

@@ -505,6 +505,13 @@ public static class StructurePermissions
         public const string Manage = "MuhasebeTevkifatHesapEslemeYonetimi.Manage";
     }
 
+    public static class MuhasebeKonaklamaVergisiHesapEslemeYonetimi
+    {
+        public const string Menu = "MuhasebeKonaklamaVergisiHesapEslemeYonetimi.Menu";
+        public const string View = "MuhasebeKonaklamaVergisiHesapEslemeYonetimi.View";
+        public const string Manage = "MuhasebeKonaklamaVergisiHesapEslemeYonetimi.Manage";
+    }
+
     public static class MuhasebeDonemYonetimi
     {
         public const string Menu = "MuhasebeDonemYonetimi.Menu";

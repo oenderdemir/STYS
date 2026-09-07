@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using STYS.Infrastructure.EntityFramework;
 using STYS.Muhasebe.CariKartlar.Entities;
 using STYS.Muhasebe.Common.Constants;
+using STYS.Muhasebe.KonaklamaVergisiHesapEslemeleri.Dtos;
+using STYS.Muhasebe.KonaklamaVergisiHesapEslemeleri.Services;
 using STYS.Muhasebe.Kdv.Enums;
 using STYS.Muhasebe.MuhasebeDonemleri.Dtos;
 using STYS.Muhasebe.MuhasebeDonemleri.Entities;
@@ -32,9 +34,10 @@ namespace STYS.Tests;
 
 /// <summary>
 /// SatisBelgesiTutarHesaplayici (satır/belge toplam formülü), bu formülü kullanan
-/// SatisBelgesiService.CreateSatirFromRequest / HesaplaBelgeToplamlari, muhasebe fişi
-/// stratejilerinin (Borç/Alacak dengesi) ve SatisBelgesiMuhasebeFisService'in ÖTV/ÖİV/
-/// konaklama vergisi içeren belgeler için otomatik muhasebe fişi üretimini ENGELLEDİĞİNİ
+    /// SatisBelgesiService.CreateSatirFromRequest / HesaplaBelgeToplamlari, muhasebe fişi
+    /// stratejilerinin (Borç/Alacak dengesi) ve SatisBelgesiMuhasebeFisService'in ÖTV/ÖİV
+    /// içeren belgeler için otomatik muhasebe fişi üretimini ENGELLEDİĞİNİ, konaklama vergisini
+    /// ise tanımlı hesap eşlemesiyle fişe aldığını
 /// doğrulayan testler.
 ///
 /// "private static" metotlar reflection ile çağrılır - DbContext/servis bağımlılığı
@@ -557,8 +560,8 @@ public class SatisBelgesiHesaplamaTests
     }
 
     // ─────────────────────────────────────────────────────────────
-    // SatisBelgesiMuhasebeFisService — ÖTV/ÖİV/konaklama vergisi icin
-    // otomatik muhasebe fisi engelleme testleri (gercek servis cagrisi,
+    // SatisBelgesiMuhasebeFisService — ÖTV/ÖİV engelleme ve konaklama vergisi
+    // hesap esleme testleri (gercek servis cagrisi,
     // InMemory DbContext).
     // ─────────────────────────────────────────────────────────────
 
@@ -580,7 +583,7 @@ public class SatisBelgesiHesaplamaTests
             () => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
 
         Assert.Contains(
-            "ÖTV, ÖİV veya konaklama vergisi içeren belgeler için muhasebe hesap eşlemeleri henüz tanımlanmamıştır",
+            "ÖTV veya ÖİV içeren belgeler için muhasebe hesap eşlemeleri henüz tanımlanmamıştır",
             ex.Message);
 
         await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
@@ -606,7 +609,7 @@ public class SatisBelgesiHesaplamaTests
     }
 
     [Fact]
-    public async Task MuhasebeFisiOlusturAsync_KonaklamaVergisiIcerenSatisFaturasi_Engellenir()
+    public async Task MuhasebeFisiOlusturAsync_KonaklamaVergisiIcerenSatisFaturasi_MappingIleFisOlusur()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisFaturasi, [
@@ -617,11 +620,26 @@ public class SatisBelgesiHesaplamaTests
             }
         ]);
 
-        var service = CreateMuhasebeFisService(dbContext);
+        await SeedCariMusteriKartAsync(dbContext, belge.CariKartId!.Value);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.GelirSatis, tesisId: 1);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.KDVHesaplanan, tesisId: 1);
+        var konaklamaVergisiHesap = await SeedDetayHesapAsync(dbContext, "360.001", tesisId: 1);
 
-        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+        var service = CreateMuhasebeFisService(dbContext, new FakeKonaklamaVergisiHesapEslemeService(konaklamaVergisiHesap.Id));
 
-        await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
+        var dto = await service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None);
+
+        Assert.NotNull(dto.MuhasebeFisId);
+
+        var fisSatirlari = await dbContext.MuhasebeFisSatirlari
+            .Where(x => x.MuhasebeFisId == dto.MuhasebeFisId)
+            .ToListAsync();
+        Assert.Equal(4, fisSatirlari.Count);
+
+        var konaklamaVergisiSatiri = Assert.Single(fisSatirlari, x => x.MuhasebeHesapPlaniId == konaklamaVergisiHesap.Id);
+        Assert.Equal(0m, konaklamaVergisiSatiri.Borc);
+        Assert.Equal(20m, konaklamaVergisiSatiri.Alacak);
+        Assert.Equal(fisSatirlari.Sum(x => x.Borc), fisSatirlari.Sum(x => x.Alacak));
     }
 
     [Fact]
@@ -644,7 +662,7 @@ public class SatisBelgesiHesaplamaTests
     }
 
     [Fact]
-    public async Task MuhasebeFisiOlusturAsync_KonaklamaVergisiIcerenSatisIadeFaturasi_Engellenir()
+    public async Task MuhasebeFisiOlusturAsync_KonaklamaVergisiIcerenSatisIadeFaturasi_MappingYoksaEngellenir()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var belge = await SeedMuhasebeOnaylanmisBelgeAsync(dbContext, SatisBelgesiTipi.SatisIadeFaturasi, [
@@ -655,9 +673,16 @@ public class SatisBelgesiHesaplamaTests
             }
         ]);
 
+        await SeedCariMusteriKartAsync(dbContext, belge.CariKartId!.Value);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.GelirSatis, tesisId: 1);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.KDVHesaplanan, tesisId: 1);
+        await SeedDetayHesapAsync(dbContext, MuhasebeAnaHesapKodlari.SatisIade, tesisId: 1);
+
         var service = CreateMuhasebeFisService(dbContext);
 
-        await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.MuhasebeFisiOlusturAsync(belge.Id, CancellationToken.None));
+
+        Assert.Contains("Konaklama vergisi için muhasebe hesabı tanımlanmamış", ex.Message);
 
         await AssertHicKayitOlusmadiAsync(dbContext, belge.Id);
     }
@@ -881,7 +906,9 @@ public class SatisBelgesiHesaplamaTests
         Assert.False(guncelBelge!.MuhasebeFisId.HasValue);
     }
 
-    private static ISatisBelgesiMuhasebeFisService CreateMuhasebeFisService(StysAppDbContext dbContext)
+    private static ISatisBelgesiMuhasebeFisService CreateMuhasebeFisService(
+        StysAppDbContext dbContext,
+        IKonaklamaVergisiHesapEslemeService? konaklamaVergisiHesapEslemeService = null)
     {
         var mapper = CreateMapper();
         var repository = new SatisBelgesiRepository(dbContext, mapper);
@@ -903,7 +930,38 @@ public class SatisBelgesiHesaplamaTests
             mapper,
             new FakeMuhasebeDonemService(),
             stratejiler,
-            NullLogger<SatisBelgesiMuhasebeFisService>.Instance);
+            NullLogger<SatisBelgesiMuhasebeFisService>.Instance,
+            konaklamaVergisiHesapEslemeService);
+    }
+
+    private sealed class FakeKonaklamaVergisiHesapEslemeService(int? hesapPlaniId) : IKonaklamaVergisiHesapEslemeService
+    {
+        public Task<int?> ResolveAktifHesapIdAsync(int tesisId, CancellationToken cancellationToken = default)
+            => Task.FromResult(hesapPlaniId);
+
+        public Task<IEnumerable<KonaklamaVergisiHesapEslemeDto>> GetAllAsync(int? tesisId = null, bool? aktifMi = null, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<PagedResult<KonaklamaVergisiHesapEslemeDto>> GetPagedAsync(PagedRequest request, int? tesisId = null, bool? aktifMi = null, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<KonaklamaVergisiHesapEslemeDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<KonaklamaVergisiHesapEslemeDto?> GetAktifEslemeAsync(int? tesisId, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<List<KonaklamaVergisiHesapSecenekDto>> GetHesapSecenekleriAsync(int? tesisId, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<KonaklamaVergisiHesapEslemeDto> AddAsync(KonaklamaVergisiHesapEslemeDto dto, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task<KonaklamaVergisiHesapEslemeDto> UpdateAsync(KonaklamaVergisiHesapEslemeDto dto, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
+
+        public Task DeleteAsync(int id, CancellationToken cancellationToken = default)
+            => throw new NotImplementedException();
     }
 
     private sealed class FakeMuhasebeDonemService : IMuhasebeDonemService

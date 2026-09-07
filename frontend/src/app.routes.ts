@@ -95,6 +95,7 @@ import { KdvBeyannameHazirlikKontrolComponent } from './app/pages/muhasebe/kdv-b
 import { SatisBelgeleriComponent } from './app/pages/muhasebe/satis-belgeleri/satis-belgeleri.component';
 import { EBelgeYonetimi } from './app/pages/muhasebe/e-belge-yonetimi/e-belge-yonetimi';
 import { TevkifatHesapEslemeleriPage } from './app/pages/muhasebe/tevkifat-hesap-eslemeleri/tevkifat-hesap-eslemeleri.component';
+import { KonaklamaVergisiHesapEslemeleriPage } from './app/pages/muhasebe/konaklama-vergisi-hesap-eslemeleri/konaklama-vergisi-hesap-eslemeleri.component';
 import { TicariBelgelerComponent } from './app/pages/ticari-belgeler/ticari-belgeler';
 import { LisansYonetimi } from './app/pages/lisans-yonetimi/lisans-yonetimi';
 import { SezonYonetimi } from './app/pages/sezon-yonetimi/sezon-yonetimi';
@@ -216,6 +217,7 @@ export const appRoutes: Routes = [
             { path: 'muhasebe/donem-kapanis-kontrol', component: DonemKapanisKontrolComponent, data: { breadcrumb: ['Muhasebe', 'Dönem Kapanış Ön Kontrol'] } },
             { path: 'muhasebe/kdv-istisna-tanimlari', component: KdvIstisnaTanimlariComponent, data: { breadcrumb: ['Vergi & KDV İşlemleri', 'KDV İstisna Tanımları'] } },
             { path: 'muhasebe/tevkifat-hesap-eslemeleri', component: TevkifatHesapEslemeleriPage, data: { breadcrumb: ['Muhasebe', 'Tevkifat Hesap Eşlemeleri'] } },
+            { path: 'muhasebe/konaklama-vergisi-hesap-eslemeleri', component: KonaklamaVergisiHesapEslemeleriPage, data: { breadcrumb: ['Muhasebe Yönetimi', 'Konaklama Vergisi Hesabı'] } },
             { path: 'muhasebe/kdv-hareket-raporu', component: KdvHareketRaporuComponent, data: { breadcrumb: ['Vergi & KDV İşlemleri', 'KDV Hareket Raporu'] } },
             { path: 'muhasebe/kdv-ozet-raporu', component: KdvOzetRaporuComponent, data: { breadcrumb: ['Vergi & KDV İşlemleri', 'KDV Özet Raporu'] } },
             { path: 'muhasebe/kdv-beyanname-hazirlik-kontrol', component: KdvBeyannameHazirlikKontrolComponent, data: { breadcrumb: ['Muhasebe', 'KDV Beyanname Hazırlık Kontrolü'] } },

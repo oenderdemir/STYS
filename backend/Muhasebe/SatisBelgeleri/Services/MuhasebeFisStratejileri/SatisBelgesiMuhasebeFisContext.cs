@@ -18,6 +18,7 @@ public sealed class SatisBelgesiMuhasebeFisContext
     /// sözlük, belgede hiç KDV olmadığı (ToplamKdv=0) anlamına gelir.
     /// </summary>
     public IReadOnlyDictionary<decimal, int> KdvHesaplariByOran { get; init; } = new Dictionary<decimal, int>();
+    public int? KonaklamaVergisiHesapPlaniId { get; init; }
     public int? StokHesapPlaniId { get; init; }
     public int? HizmetGiderHesapPlaniId { get; init; }
 }

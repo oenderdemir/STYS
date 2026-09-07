@@ -237,6 +237,7 @@ public class SatisBelgesiTaslakOlusturmaService : ISatisBelgesiTaslakOlusturmaSe
                 OivTutari = src.OivTutari,
                 KonaklamaVergisiOrani = src.KonaklamaVergisiOrani,
                 KonaklamaVergisiTutari = src.KonaklamaVergisiTutari,
+                VergiTutarlariniAynenKullan = request.RezervasyonCheckoutAkisiMi && src.VergiTutarlariniAynenKullan,
                 KaynakSatirId = src.KaynakSatirId
             });
         }

@@ -13,6 +13,7 @@ import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { TreeTableModule } from 'primeng/treetable';
 import { tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
@@ -24,7 +25,7 @@ import { MuhasebeHesapPlaniService } from './muhasebe-hesap-plani.service';
 @Component({
     selector: 'app-muhasebe-hesap-plani-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, MuhasebeTesisContextBarComponent, SelectModule, TagModule, ToastModule, ToolbarModule, TreeTableModule],
+    imports: [CommonModule, FormsModule, ButtonModule, ConfirmDialogModule, DialogModule, InputNumberModule, InputTextModule, MuhasebeTesisContextBarComponent, SelectModule, TagModule, ToastModule, ToolbarModule, TooltipModule, TreeTableModule],
     templateUrl: './muhasebe-hesap-plani.html',
     providers: [MessageService, ConfirmationService]
 })
@@ -43,6 +44,11 @@ export class MuhasebeHesapPlaniPage implements OnInit {
     treeRecords: TreeNode<MuhasebeHesapPlaniModel>[] = [];
     model: MuhasebeHesapPlaniModel = this.createEmpty();
     ustHesapSecenekleri: Array<{ label: string; value: number }> = [];
+
+    detayHesapDialogVisible = false;
+    detayHesapSaving = false;
+    detayHesapAna: MuhasebeHesapPlaniModel | null = null;
+    detayHesapAd = '';
 
     ngOnInit(): void {
         this.tesisContext.initialize().subscribe({ error: () => void 0 });
@@ -153,6 +159,42 @@ export class MuhasebeHesapPlaniPage implements OnInit {
                     error: (error: unknown) => this.showError(error)
                 });
             }
+        });
+    }
+
+    openDetayHesapEkle(item: MuhasebeHesapPlaniModel): void {
+        const tesis = this.tesisContext.seciliTesis();
+        if (!tesis) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Tesisi Sec', detail: 'Once bir calisma tesisi secin.' });
+            return;
+        }
+
+        this.detayHesapAna = item;
+        this.detayHesapAd = '';
+        this.detayHesapDialogVisible = true;
+    }
+
+    saveDetayHesap(): void {
+        const ana = this.detayHesapAna;
+        if (!ana?.id) {
+            return;
+        }
+
+        const ad = this.detayHesapAd.trim();
+        if (!ad) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Eksik Bilgi', detail: 'Detay hesap adi zorunludur.' });
+            return;
+        }
+
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        this.detayHesapSaving = true;
+        this.service.createDetayHesap(ana.id, ad, tesisId).pipe(finalize(() => (this.detayHesapSaving = false))).subscribe({
+            next: () => {
+                this.detayHesapDialogVisible = false;
+                this.load();
+                this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Detay hesap olusturuldu.' });
+            },
+            error: (error: unknown) => this.showError(error)
         });
     }
 

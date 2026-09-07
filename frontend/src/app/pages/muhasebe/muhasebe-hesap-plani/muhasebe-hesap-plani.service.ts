@@ -5,6 +5,7 @@ import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/
 import { getApiBaseUrl } from '../../../core/config';
 import {
     CreateMuhasebeHesapPlaniRequest,
+    MuhasebeDetayHesapOlusturRequest,
     MuhasebeHesapPlaniModel,
     UpdateMuhasebeHesapPlaniRequest
 } from './muhasebe-hesap-plani.dto';
@@ -71,6 +72,23 @@ export class MuhasebeHesapPlaniService {
                     return envelope.data;
                 }
                 throw new Error(tryReadApiMessage(envelope) ?? 'Muhasebe hesap olusturulamadi.');
+            })
+        );
+    }
+
+    createDetayHesap(anaHesapId: number, ad: string, tesisId: number | null): Observable<MuhasebeHesapPlaniModel> {
+        let params = new HttpParams();
+        if (tesisId && tesisId > 0) {
+            params = params.set('tesisId', tesisId);
+        }
+
+        const payload: MuhasebeDetayHesapOlusturRequest = { ad };
+        return this.http.post<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${anaHesapId}/detay-hesap`, payload, { params }).pipe(
+            map((envelope) => {
+                if (envelope.success && envelope.data) {
+                    return envelope.data;
+                }
+                throw new Error(tryReadApiMessage(envelope) ?? 'Detay hesap olusturulamadi.');
             })
         );
     }

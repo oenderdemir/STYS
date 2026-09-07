@@ -58,6 +58,15 @@ public class MuhasebeHesapPlaniController : UIController
     public async Task<ActionResult<MuhasebeHesapPlaniDto>> Create([FromBody] CreateMuhasebeHesapPlaniRequest request, CancellationToken cancellationToken)
         => Ok(await _service.AddAsync(_mapper.Map<MuhasebeHesapPlaniDto>(request)));
 
+    [HttpPost("{anaHesapId:int}/detay-hesap")]
+    [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.Manage)]
+    public async Task<ActionResult<MuhasebeHesapPlaniDto>> CreateDetayHesap(
+        int anaHesapId,
+        [FromQuery] int? tesisId,
+        [FromBody] MuhasebeDetayHesapOlusturRequest request,
+        CancellationToken cancellationToken)
+        => Ok(await _service.CreateDetayHesapAsync(anaHesapId, request?.Ad ?? string.Empty, tesisId, cancellationToken));
+
     [HttpPut("{id:int}")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.Manage)]
     public async Task<ActionResult<MuhasebeHesapPlaniDto>> Update(int id, [FromBody] UpdateMuhasebeHesapPlaniRequest request, CancellationToken cancellationToken)

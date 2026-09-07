@@ -25,6 +25,7 @@ public class MuhasebeHesapPlaniService
     private readonly StysAppDbContext _dbContext;
     private readonly IMuhasebeTesisScopeService _tesisScopeService;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly IMuhasebeDetayHesapService _muhasebeDetayHesapService;
 
     public MuhasebeHesapPlaniService(
         IMuhasebeHesapPlaniRepository repository,
@@ -32,13 +33,15 @@ public class MuhasebeHesapPlaniService
         IDistributedCache distributedCache,
         StysAppDbContext dbContext,
         IMuhasebeTesisScopeService tesisScopeService,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        IMuhasebeDetayHesapService muhasebeDetayHesapService)
         : base(repository, mapper)
     {
         _distributedCache = distributedCache;
         _dbContext = dbContext;
         _tesisScopeService = tesisScopeService;
         _currentTenantAccessor = currentTenantAccessor;
+        _muhasebeDetayHesapService = muhasebeDetayHesapService;
     }
 
     public override async Task<MuhasebeHesapPlaniDto?> GetByIdAsync(
@@ -150,6 +153,89 @@ public class MuhasebeHesapPlaniService
             .ToListAsync(cancellationToken);
 
         return await MapTreeLevelAsync(nodes, effectiveTesisIds, cancellationToken);
+    }
+
+    public async Task<MuhasebeHesapPlaniDto> CreateDetayHesapAsync(
+        int anaHesapId,
+        string ad,
+        int? tesisId,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveTesisIds = await _tesisScopeService.GetEffectiveTesisIdsAsync(cancellationToken);
+
+        // 1) Ana hesap doğrulama: read scope'ta görünür, silinmemiş, aktif ve DETAY OLMAYAN parent.
+        var anaHesap = await ApplyReadScope(_dbContext.MuhasebeHesapPlanlari.AsNoTracking(), effectiveTesisIds)
+            .FirstOrDefaultAsync(x => x.Id == anaHesapId && !x.IsDeleted, cancellationToken)
+            ?? throw new BaseException("Ana hesap bulunamadı.", 404);
+
+        if (!anaHesap.AktifMi)
+        {
+            throw new BaseException("Ana hesap pasif olduğu için altına detay hesap eklenemez.", 400);
+        }
+
+        if (anaHesap.DetayHesapMi)
+        {
+            throw new BaseException("Detay hesap altına yeni detay hesap eklenemez.", 400);
+        }
+
+        // 2) Çalışma tesisi çözümü (tesisId istek GÖVDESİNDEN alınmaz).
+        int resolvedTesisId;
+        if (tesisId.HasValue)
+        {
+            await _tesisScopeService.EnsureCanAccessTesisAsync(tesisId.Value, cancellationToken);
+            resolvedTesisId = tesisId.Value;
+        }
+        else if (effectiveTesisIds.Length == 1)
+        {
+            resolvedTesisId = effectiveTesisIds[0];
+        }
+        else if (effectiveTesisIds.Length == 0)
+        {
+            throw new BaseException("Çalışma tesisi bulunamadı. Lütfen önce bir çalışma tesisi seçin.", 400);
+        }
+        else
+        {
+            throw new BaseException("Birden fazla çalışma tesisi mevcut. Lütfen bir çalışma tesisi seçin.", 400);
+        }
+
+        // 3) Ana hesap scope uyumu: global olmalı VEYA çalışma tesisiyle aynı tesis.
+        if (anaHesap.TesisId.HasValue && anaHesap.TesisId.Value != resolvedTesisId)
+        {
+            throw new BaseException("Ana hesap ile çalışma tesisi kapsamı uyumlu değil.", 400);
+        }
+
+        var normalizedAd = (ad ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedAd))
+        {
+            throw new BaseException("Detay hesap adı zorunludur.", 400);
+        }
+
+        // 4) Idempotency: aynı tesis + üst hesap + aynı ad (trim) ile aktif detay hesap varsa onu döndür.
+        var existing = await _dbContext.MuhasebeHesapPlanlari.AsNoTracking()
+            .FirstOrDefaultAsync(x => !x.IsDeleted
+                && x.AktifMi
+                && x.TesisId == resolvedTesisId
+                && x.UstHesapId == anaHesapId
+                && x.DetayHesapMi
+                && x.Ad == normalizedAd, cancellationToken);
+        if (existing is not null)
+        {
+            return Mapper.Map<MuhasebeHesapPlaniDto>(existing);
+        }
+
+        // 5) Merkezi MuhasebeDetayHesapService ile güvenli kod/sayaç üretimi + oluşturma.
+        var sonuc = await _muhasebeDetayHesapService.CreateOrResolveDetayHesapAsync(
+            resolvedTesisId,
+            anaHesap.TamKod,
+            "Manuel",
+            normalizedAd,
+            kaynakId: null,
+            cancellationToken);
+
+        await InvalidateCacheAsync();
+
+        var created = await base.GetByIdAsync(sonuc.MuhasebeHesapPlaniId);
+        return created ?? throw new BaseException("Detay hesap oluşturulamadı.", 500);
     }
 
     private async Task<List<MuhasebeHesapPlaniDto>> MapTreeLevelAsync(

@@ -39,3 +39,12 @@ public class CreateMuhasebeHesapPlaniRequest
 }
 
 public class UpdateMuhasebeHesapPlaniRequest : CreateMuhasebeHesapPlaniRequest;
+
+/// <summary>
+/// "Detay Hesap Ekle" akışı için minimal request. Kod/TamKod/SeviyeNo/TesisId/DetayHesapMi/
+/// HareketGorebilirMi/UstHesapId İSTEMCİDEN ALINMAZ — backend tarafından belirlenir.
+/// </summary>
+public class MuhasebeDetayHesapOlusturRequest
+{
+    public string Ad { get; set; } = string.Empty;
+}

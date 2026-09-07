@@ -4,11 +4,19 @@ export interface MuhasebeHesapPlaniModel {
     tamKod: string;
     ad: string;
     seviyeNo: number;
+    hesapTipi?: number;
+    tesisId?: number | null;
     ustHesapId?: number | null;
     hasChildren?: boolean;
     aktifMi: boolean;
+    detayHesapMi?: boolean;
+    hareketGorebilirMi?: boolean;
     aciklama?: string | null;
 }
 
 export interface CreateMuhasebeHesapPlaniRequest extends Omit<MuhasebeHesapPlaniModel, 'id'> {}
 export interface UpdateMuhasebeHesapPlaniRequest extends Omit<MuhasebeHesapPlaniModel, 'id'> {}
+
+export interface MuhasebeDetayHesapOlusturRequest {
+    ad: string;
+}

@@ -8,7 +8,10 @@ public class CariHareketProfile : Profile
 {
     public CariHareketProfile()
     {
-        CreateMap<CariHareket, CariHareketDto>();
+        CreateMap<CariHareket, CariHareketDto>()
+            .ForMember(d => d.CariKodu, opt => opt.MapFrom(s => s.CariKart != null ? s.CariKart.CariKodu : null))
+            .ForMember(d => d.CariUnvanAdSoyad, opt => opt.MapFrom(s => s.CariKart != null ? s.CariKart.UnvanAdSoyad : null))
+            .ForMember(d => d.CariVergiNoTckn, opt => opt.MapFrom(s => s.CariKart != null ? s.CariKart.VergiNoTckn : null));
         CreateMap<CariHareket, CariHareketDurumOzetDto>()
             .ForMember(x => x.CariHareketId, opt => opt.MapFrom(src => src.Id));
         CreateMap<CariHareketDto, CariHareket>()

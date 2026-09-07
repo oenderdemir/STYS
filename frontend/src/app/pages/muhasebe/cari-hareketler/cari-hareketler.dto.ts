@@ -16,6 +16,10 @@ export interface CariHareketModel {
     kalanTutar?: number;
     iliskiliCariHareketId?: number | null;
     kapandiMi?: boolean;
+    // READ-ONLY cari gösterim alanları (tabloda cari id yerine gösterilir)
+    cariKodu?: string | null;
+    cariUnvanAdSoyad?: string | null;
+    cariVergiNoTckn?: string | null;
 }
 
 export interface CreateCariHareketRequest extends Omit<CariHareketModel, 'id'> {}
@@ -60,4 +64,35 @@ export interface CariHareketDurumOzetModel {
 }
 
 export const HAREKET_DURUMLARI = [{ label: 'Aktif', value: 'Aktif' }, { label: 'Iptal', value: 'Iptal' }];
+
+export const DURUM_FILTRELERI = [{ label: 'Tümü', value: null }, { label: 'Aktif', value: 'Aktif' }, { label: 'İptal', value: 'Iptal' }];
+
+export const KAPAMA_FILTRELERI = [
+    { label: 'Tümü', value: null },
+    { label: 'Açık', value: 'Acik' },
+    { label: 'Kısmi', value: 'Kismi' },
+    { label: 'Kapalı', value: 'Kapali' }
+];
+
+export const KAYNAK_MODUL_FILTRELERI = [
+    { label: 'Tümü', value: null },
+    { label: 'Manuel', value: 'Manuel' },
+    { label: 'Rezervasyon', value: 'Rezervasyon' },
+    { label: 'Tahsilat / Ödeme Belgesi', value: 'TahsilatOdemeBelgesi' },
+    { label: 'Satış Belgesi', value: 'SatisBelgesi' },
+    { label: 'Kantin Satış', value: 'KantinSatis' },
+    { label: 'Stok Hareket', value: 'StokHareket' },
+    { label: 'Cari Hareket', value: 'CariHareket' }
+];
+
+export interface CariHareketFilter {
+    cariArama?: string | null;
+    belgeNo?: string | null;
+    belgeTuru?: string | null;
+    baslangicTarihi?: string | null;
+    bitisTarihi?: string | null;
+    durum?: string | null;
+    kaynakModul?: string | null;
+    kapamaDurumu?: string | null;
+}
 

@@ -4,7 +4,7 @@ import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
 import { toLocalDateTimeString } from '../../../core/utils/date-time.util';
-import { CariBakiyeOzetModel, CariEkstreModel, CariHareketDurumOzetModel, CariHareketModel, CreateCariHareketRequest, UpdateCariHareketRequest } from './cari-hareketler.dto';
+import { CariBakiyeOzetModel, CariEkstreModel, CariHareketDurumOzetModel, CariHareketFilter, CariHareketModel, CreateCariHareketRequest, UpdateCariHareketRequest } from './cari-hareketler.dto';
 
 @Injectable({ providedIn: 'root' })
 export class CariHareketlerService {
@@ -23,13 +23,37 @@ export class CariHareketlerService {
         return this.http.get<ApiResponse<CariHareketModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler`, { params }).pipe(map((envelope) => this.unwrapList(envelope)));
     }
 
-    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null, cariKartId?: number | null): Observable<PagedResponseDto<CariHareketModel>> {
+    getPaged(pageNumber: number, pageSize: number, tesisId?: number | null, cariKartId?: number | null, filter?: CariHareketFilter): Observable<PagedResponseDto<CariHareketModel>> {
         let params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
         if (tesisId && tesisId > 0) {
             params = params.set('tesisId', tesisId);
         }
         if (cariKartId && cariKartId > 0) {
             params = params.set('cariKartId', cariKartId);
+        }
+        if (filter?.cariArama) {
+            params = params.set('cariArama', filter.cariArama);
+        }
+        if (filter?.belgeNo) {
+            params = params.set('belgeNo', filter.belgeNo);
+        }
+        if (filter?.belgeTuru) {
+            params = params.set('belgeTuru', filter.belgeTuru);
+        }
+        if (filter?.baslangicTarihi) {
+            params = params.set('baslangicTarihi', filter.baslangicTarihi);
+        }
+        if (filter?.bitisTarihi) {
+            params = params.set('bitisTarihi', filter.bitisTarihi);
+        }
+        if (filter?.durum) {
+            params = params.set('durum', filter.durum);
+        }
+        if (filter?.kaynakModul) {
+            params = params.set('kaynakModul', filter.kaynakModul);
+        }
+        if (filter?.kapamaDurumu) {
+            params = params.set('kapamaDurumu', filter.kapamaDurumu);
         }
 
         return this.http.get<ApiResponse<PagedResponseDto<CariHareketModel>>>(`${this.apiBaseUrl}/ui/muhasebe/cari-hareketler/paged`, { params }).pipe(map((envelope) => this.unwrapSingle(envelope)));

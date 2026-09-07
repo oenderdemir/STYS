@@ -20,6 +20,44 @@ public class CariHareketDto : BaseRdbmsDto<int>
     public int? KaynakId { get; set; }
     public int? IliskiliCariHareketId { get; set; }
     public bool KapandiMi { get; set; }
+
+    // ── READ-ONLY cari gösterim alanları (Create/Update request'lerinde YOKTUR) ──
+    public string? CariKodu { get; set; }
+    public string? CariUnvanAdSoyad { get; set; }
+    public string? CariVergiNoTckn { get; set; }
+}
+
+/// <summary>
+/// Cari Hareketler paged listesi için dar kapsamlı sunucu-tarafı filtre modeli.
+/// Tüm alanlar opsiyoneldir; boş değer "filtre uygulanmasın" anlamına gelir.
+/// </summary>
+public class CariHareketFilterRequest
+{
+    public int? TesisId { get; set; }
+
+    /// <summary>Exact cari seçimi (mevcut detaylı cari özeti davranışı için korunur).</summary>
+    public int? CariKartId { get; set; }
+
+    /// <summary>CariKodu / UnvanAdSoyad / VergiNoTckn üzerinde case-insensitive arama.</summary>
+    public string? CariArama { get; set; }
+
+    public string? BelgeNo { get; set; }
+
+    public string? BelgeTuru { get; set; }
+
+    /// <summary>Dahil (HareketTarihi >= BaslangicTarihi.Date).</summary>
+    public DateTime? BaslangicTarihi { get; set; }
+
+    /// <summary>Dahil (HareketTarihi < BitisTarihi.Date.AddDays(1)).</summary>
+    public DateTime? BitisTarihi { get; set; }
+
+    /// <summary>null = tümü; "Aktif" | "Iptal".</summary>
+    public string? Durum { get; set; }
+
+    public string? KaynakModul { get; set; }
+
+    /// <summary>null = tümü; "Acik" | "Kismi" | "Kapali".</summary>
+    public string? KapamaDurumu { get; set; }
 }
 
 public class CreateCariHareketRequest

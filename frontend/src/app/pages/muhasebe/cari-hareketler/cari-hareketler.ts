@@ -13,6 +13,7 @@ import { TableModule } from 'primeng/table';
 import { TabsModule } from 'primeng/tabs';
 import { ToastModule } from 'primeng/toast';
 import { ToolbarModule } from 'primeng/toolbar';
+import { TooltipModule } from 'primeng/tooltip';
 import { TagModule } from 'primeng/tag';
 import { LazyLoadPayload, tryReadApiMessage } from '../../../core/api';
 import { UiSeverity } from '../../../core/ui/ui-severity.constants';
@@ -20,13 +21,13 @@ import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
-import { CariBakiyeOzetModel, CariHareketDurumOzetModel, CariHareketModel, CreateCariHareketRequest, HAREKET_DURUMLARI, UpdateCariHareketRequest } from './cari-hareketler.dto';
+import { CariBakiyeOzetModel, CariHareketDurumOzetModel, CariHareketFilter, CariHareketModel, CreateCariHareketRequest, DURUM_FILTRELERI, HAREKET_DURUMLARI, KAPAMA_FILTRELERI, KAYNAK_MODUL_FILTRELERI, UpdateCariHareketRequest } from './cari-hareketler.dto';
 import { CariHareketlerService } from './cari-hareketler.service';
 
 @Component({
     selector: 'app-cari-hareketler-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, TabsModule, TagModule, ToastModule, ToolbarModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
+    imports: [CommonModule, FormsModule, ButtonModule, DialogModule, SelectModule, InputNumberModule, InputTextModule, TableModule, TabsModule, TagModule, ToastModule, ToolbarModule, TooltipModule, MuhasebeTesisSecimDialogComponent, MuhasebeTesisContextBarComponent],
     templateUrl: './cari-hareketler.html',
     providers: [MessageService]
 })
@@ -57,6 +58,20 @@ export class CariHareketlerPage implements OnInit {
     dialogMode: 'create' | 'edit' = 'create';
     model: CariHareketModel = this.createEmpty();
     readonly durumlar = HAREKET_DURUMLARI;
+    readonly durumFiltreleri = DURUM_FILTRELERI;
+    readonly kapamaFiltreleri = KAPAMA_FILTRELERI;
+    readonly kaynakModulFiltreleri = KAYNAK_MODUL_FILTRELERI;
+
+    filter: CariHareketFilter = {
+        cariArama: null,
+        belgeNo: null,
+        belgeTuru: null,
+        baslangicTarihi: null,
+        bitisTarihi: null,
+        durum: null,
+        kaynakModul: null,
+        kapamaDurumu: null
+    };
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -121,7 +136,7 @@ export class CariHareketlerPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId, this.selectedCariKartId).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId, this.selectedCariKartId, this.filter).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -334,6 +349,56 @@ export class CariHareketlerPage implements OnInit {
         }
 
         return (item.kapananTutar ?? 0) > 0 ? 'Kısmi' : 'Açık';
+    }
+
+    filtrele(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    temizle(): void {
+        this.filter = {
+            cariArama: null,
+            belgeNo: null,
+            belgeTuru: null,
+            baslangicTarihi: null,
+            bitisTarihi: null,
+            durum: null,
+            kaynakModul: null,
+            kapamaDurumu: null
+        };
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    cariEtiket(item: CariHareketModel): string {
+        const kod = item.cariKodu?.trim();
+        const ad = item.cariUnvanAdSoyad?.trim();
+        if (kod && ad) {
+            return `${kod} - ${ad}`;
+        }
+        return ad || kod || '';
+    }
+
+    kapamaEtiketi(item: CariHareketModel): string {
+        if (item.kapandiMi) {
+            return 'Kapalı';
+        }
+        return (item.kapananTutar ?? 0) > 0 ? 'Kısmi' : 'Açık';
+    }
+
+    kapamaSeverity(item: CariHareketModel): 'success' | 'info' | 'warn' {
+        if (item.kapandiMi) {
+            return 'success';
+        }
+        return (item.kapananTutar ?? 0) > 0 ? 'info' : 'warn';
+    }
+
+    kaynakEtiketi(item: CariHareketModel): string {
+        if (!item.kaynakModul) {
+            return '-';
+        }
+        return item.kaynakId ? `${item.kaynakModul} #${item.kaynakId}` : item.kaynakModul;
     }
 
     getBakiyeYonuSeverity(yon?: string | null): 'success' | 'info' | 'warn' | 'secondary' {

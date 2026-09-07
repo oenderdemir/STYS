@@ -179,6 +179,51 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
+    /// <summary>Dar kapsamlı sunucu-tarafı filtreli paged sorgu. Filtreler EF Core'a çevrilebilir
+    /// (memory'ye çekilmez); tesis scope'u her zaman uygulanır.</summary>
+    public async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<CariHareketDto>> GetPagedWithFilterAsync(
+        CariHareketFilterRequest filter,
+        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var includeQuery = BuildScopedIncludeQuery(scope, include: null);
+
+        var tesisId = filter.TesisId.HasValue && filter.TesisId.Value > 0 ? filter.TesisId.Value : (int?)null;
+        var cariKartId = filter.CariKartId.HasValue && filter.CariKartId.Value > 0 ? filter.CariKartId.Value : (int?)null;
+        var cariArama = string.IsNullOrWhiteSpace(filter.CariArama) ? null : filter.CariArama.Trim();
+        var belgeNo = string.IsNullOrWhiteSpace(filter.BelgeNo) ? null : filter.BelgeNo.Trim();
+        var belgeTuru = string.IsNullOrWhiteSpace(filter.BelgeTuru) ? null : filter.BelgeTuru.Trim();
+        var startDate = filter.BaslangicTarihi?.Date;
+        var endDateExclusive = filter.BitisTarihi?.Date.AddDays(1);
+        var durum = string.IsNullOrWhiteSpace(filter.Durum) ? null : filter.Durum.Trim();
+        var kaynakModul = string.IsNullOrWhiteSpace(filter.KaynakModul) ? null : filter.KaynakModul.Trim();
+        var kapamaDurumu = string.IsNullOrWhiteSpace(filter.KapamaDurumu) ? null : filter.KapamaDurumu.Trim();
+
+        System.Linq.Expressions.Expression<Func<CariHareket, bool>> predicate = x =>
+            (!tesisId.HasValue || (x.CariKart != null && x.CariKart.TesisId == tesisId.Value))
+            && (!cariKartId.HasValue || x.CariKartId == cariKartId.Value)
+            && (cariArama == null || (x.CariKart != null && (
+                x.CariKart.CariKodu.Contains(cariArama)
+                || x.CariKart.UnvanAdSoyad.Contains(cariArama)
+                || (x.CariKart.VergiNoTckn != null && x.CariKart.VergiNoTckn.Contains(cariArama)))))
+            && (belgeNo == null || (x.BelgeNo != null && x.BelgeNo.Contains(belgeNo)))
+            && (belgeTuru == null || x.BelgeTuru.Contains(belgeTuru))
+            && (!startDate.HasValue || x.HareketTarihi >= startDate.Value)
+            && (!endDateExclusive.HasValue || x.HareketTarihi < endDateExclusive.Value)
+            && (durum == null || x.Durum == durum)
+            && (kaynakModul == null || x.KaynakModul == kaynakModul)
+            && (kapamaDurumu != "Acik" || (!x.KapandiMi && x.KapananTutar <= 0m))
+            && (kapamaDurumu != "Kismi" || (!x.KapandiMi && x.KapananTutar > 0m))
+            && (kapamaDurumu != "Kapali" || x.KapandiMi);
+
+        return await base.GetPagedAsync(
+            request,
+            predicate,
+            includeQuery,
+            q => q.OrderByDescending(x => x.HareketTarihi).ThenByDescending(x => x.Id));
+    }
+
     protected override Task EnrichEntityAsync(CariHareketDto dto, CariHareket entity)
     {
         if (entity.KalanTutar <= 0m && entity.KapananTutar <= 0m)
@@ -273,6 +318,9 @@ public class CariHareketService : BaseRdbmsService<CariHareketDto, CariHareket, 
         return query =>
         {
             var result = include is null ? query : include(query);
+            // Cari gösterim alanları (CariKodu/UnvanAdSoyad/VergiNoTckn) için cari kart navigation
+            // her zaman yüklenir — böylece tablo "cari id" yerine gerçek cari bilgisini gösterir.
+            result = result.Include(x => x.CariKart);
             if (scope.IsScoped)
             {
                 result = result.Where(x =>

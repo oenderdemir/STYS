@@ -17,6 +17,10 @@ export interface TahsilatOdemeBelgesiModel {
     /** Bagli MuhasebeFis'in guncel durumu (Taslak/Onayli/Iptal/TersKayit). muhasebeFisId dolu
      * olsa bile bu deger 'Iptal' ise belge yeniden fislenebilir. */
     muhasebeFisDurumu?: string | null;
+    // READ-ONLY cari gösterim alanları (tabloda cari id yerine gösterilir)
+    cariKodu?: string | null;
+    cariUnvanAdSoyad?: string | null;
+    cariVergiNoTckn?: string | null;
 }
 
 export interface CreateTahsilatOdemeBelgesiRequest extends Omit<TahsilatOdemeBelgesiModel, 'id'> {}
@@ -30,6 +34,14 @@ export interface TahsilatOdemeOzetModel {
     paraBirimi: string;
 }
 
+export interface TahsilatOdemeBelgesiFilter {
+    cariArama?: string | null;
+    belgeNo?: string | null;
+    baslangicTarihi?: string | null;
+    bitisTarihi?: string | null;
+    muhasebeFisDurumu?: string | null;
+}
+
 export const BELGE_TIPLERI = [{ label: 'Tahsilat', value: 'Tahsilat' }, { label: 'Odeme', value: 'Odeme' }];
 export const ODEME_YONTEMLERI = [
     { label: 'Nakit', value: 'Nakit' },
@@ -37,5 +49,13 @@ export const ODEME_YONTEMLERI = [
     { label: 'Havale/EFT', value: 'HavaleEft' },
     { label: 'Odaya Ekle', value: 'OdayaEkle' },
     { label: 'Mahsup', value: 'Mahsup' }
+];
+
+export const MUHASEBE_FIS_FILTRELERI = [
+    { label: 'Tümü', value: null },
+    { label: 'Fiş Oluşturulmadı', value: 'FisYok' },
+    { label: 'Taslak', value: 'Taslak' },
+    { label: 'Onaylı', value: 'Onayli' },
+    { label: 'İptal', value: 'Iptal' }
 ];
 

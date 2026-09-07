@@ -220,6 +220,128 @@ public class TahsilatOdemeBelgesiOwnershipTests
         Assert.Equal("[IsDeleted] = 0 AND [KaynakId] IS NOT NULL", index.GetFilter());
     }
 
+    // ── Sunucu-tarafı filtre (cari arama + muhasebe fişi durumu + tesis scope) ──
+
+    [Fact]
+    public async Task GetPagedWithFilter_CariArama_IsimleFiltreler()
+    {
+        await using var db = CreateDbContext();
+        await SeedBaseAsync(db);
+        await SeedCariAsync(db, 101, 1, "CK-TURAN", "TURAN YAYLA", "11111111111");
+        await SeedCariAsync(db, 102, 1, "CK-ILIMDAR", "İLİMDAR KARAKOÇ", "22222222222");
+        await SeedBelgeAsync(db, 300, "THS-T-1", 101);
+        await SeedBelgeAsync(db, 301, "THS-I-1", 102);
+
+        var service = CreateTahsilatService(db);
+        var result = await service.GetPagedWithFilterAsync(
+            new TahsilatOdemeBelgesiFilterRequest { TesisId = 1, CariArama = "TURAN" },
+            new PagedRequest());
+
+        var belgeNolari = result.Items.Select(x => x.BelgeNo).ToHashSet();
+        Assert.Contains("THS-T-1", belgeNolari);
+        Assert.DoesNotContain("THS-I-1", belgeNolari);
+        Assert.Equal("TURAN YAYLA", result.Items.Single().CariUnvanAdSoyad);
+        Assert.Equal("CK-TURAN", result.Items.Single().CariKodu);
+    }
+
+    [Fact]
+    public async Task GetPagedWithFilter_CariArama_KodVeTcknIleFiltreler()
+    {
+        await using var db = CreateDbContext();
+        await SeedBaseAsync(db);
+        await SeedCariAsync(db, 101, 1, "CK-TURAN", "TURAN YAYLA", "11111111111");
+        await SeedCariAsync(db, 102, 1, "CK-ILIMDAR", "İLİMDAR KARAKOÇ", "22222222222");
+        await SeedBelgeAsync(db, 300, "THS-T-1", 101);
+        await SeedBelgeAsync(db, 301, "THS-I-1", 102);
+
+        var service = CreateTahsilatService(db);
+
+        var byKod = await service.GetPagedWithFilterAsync(
+            new TahsilatOdemeBelgesiFilterRequest { TesisId = 1, CariArama = "CK-ILIMDAR" }, new PagedRequest());
+        Assert.Equal("THS-I-1", byKod.Items.Single().BelgeNo);
+
+        var byTckn = await service.GetPagedWithFilterAsync(
+            new TahsilatOdemeBelgesiFilterRequest { TesisId = 1, CariArama = "11111111111" }, new PagedRequest());
+        Assert.Equal("THS-T-1", byTckn.Items.Single().BelgeNo);
+    }
+
+    [Fact]
+    public async Task GetPagedWithFilter_FisYok_MuhasebeFisIdNullGelir()
+    {
+        await using var db = CreateDbContext();
+        await SeedBaseAsync(db);
+        await SeedCariAsync(db, 101, 1, "CK-TURAN", "TURAN YAYLA", "11111111111");
+        await SeedBelgeAsync(db, 300, "THS-YOK", 101, muhasebeFisId: null);
+        await SeedBelgeAsync(db, 301, "THS-VAR", 101, muhasebeFisId: 999);
+
+        var service = CreateTahsilatService(db);
+        var result = await service.GetPagedWithFilterAsync(
+            new TahsilatOdemeBelgesiFilterRequest { TesisId = 1, MuhasebeFisDurumu = "FisYok" },
+            new PagedRequest());
+
+        var belgeNolari = result.Items.Select(x => x.BelgeNo).ToHashSet();
+        Assert.Contains("THS-YOK", belgeNolari);
+        Assert.DoesNotContain("THS-VAR", belgeNolari);
+    }
+
+    [Fact]
+    public async Task GetPagedWithFilter_TesisVeCariArama_BaskaTesisSizmaz()
+    {
+        await using var db = CreateDbContext();
+        await SeedBaseAsync(db);
+        db.Tesisler.Add(new Tesis { Id = 2, KurumId = 1, IlId = 1, Ad = "Tesis B", Telefon = "03120000000", Adres = "Adres B", AktifMi = true });
+        await SeedCariAsync(db, 101, 1, "CK-TURAN-A", "TURAN A TESISI", "11111111111");
+        await SeedCariAsync(db, 102, 2, "CK-TURAN-B", "TURAN B TESISI", "33333333333");
+        await SeedBelgeAsync(db, 300, "THS-A", 101);
+        await SeedBelgeAsync(db, 301, "THS-B", 102);
+        await db.SaveChangesAsync();
+
+        var service = CreateTahsilatService(db);
+        var result = await service.GetPagedWithFilterAsync(
+            new TahsilatOdemeBelgesiFilterRequest { TesisId = 1, CariArama = "TURAN" },
+            new PagedRequest());
+
+        var belgeNolari = result.Items.Select(x => x.BelgeNo).ToHashSet();
+        Assert.Contains("THS-A", belgeNolari);
+        Assert.DoesNotContain("THS-B", belgeNolari);
+    }
+
+    private static async Task SeedCariAsync(StysAppDbContext db, int id, int tesisId, string cariKodu, string unvanAdSoyad, string? vergiNoTckn)
+    {
+        db.CariKartlar.Add(new CariKart
+        {
+            Id = id,
+            TesisId = tesisId,
+            CariTipi = CariKartTipleri.Musteri,
+            CariKodu = cariKodu,
+            UnvanAdSoyad = unvanAdSoyad,
+            VergiNoTckn = vergiNoTckn,
+            VergiNoTcknNormalized = vergiNoTckn,
+            AktifMi = true,
+            MuhasebeHesapPlaniId = 1
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedBelgeAsync(StysAppDbContext db, int id, string belgeNo, int cariKartId, int? muhasebeFisId = null)
+    {
+        db.TahsilatOdemeBelgeleri.Add(new TahsilatOdemeBelgesi
+        {
+            Id = id,
+            BelgeNo = belgeNo,
+            BelgeTarihi = new DateTime(2026, 8, 24, 10, 0, 0),
+            BelgeTipi = TahsilatOdemeBelgeTipleri.Tahsilat,
+            CariKartId = cariKartId,
+            Tutar = 50,
+            ParaBirimi = "TRY",
+            OdemeYontemi = OdemeYontemleri.Nakit,
+            Durum = TahsilatOdemeBelgeDurumlari.Aktif,
+            KasaBankaHesapId = 100,
+            MuhasebeFisId = muhasebeFisId
+        });
+        await db.SaveChangesAsync();
+    }
+
     private static async Task SeedBaseAsync(StysAppDbContext dbContext)
     {
         dbContext.Iller.Add(new Il { Id = 1, Ad = "Ankara", AktifMi = true });

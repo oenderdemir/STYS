@@ -2263,6 +2263,7 @@ public class KantinSatisServiceTests
         private int _nextValorId = 4000;
 
         public Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<PagedResult<TahsilatOdemeBelgesiDto>> GetPagedWithFilterAsync(TahsilatOdemeBelgesiFilterRequest filter, PagedRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalEtAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalGeriAlAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task ValidateOlusturmaAsync(int cariKartId, string belgeTipi, string odemeYontemi, string durum, DateTime belgeTarihi, int? kapatilacakCariHareketId, bool requireCariMuhasebeHesabi, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -2486,6 +2487,7 @@ public class KantinSatisServiceTests
     private sealed class FailingTahsilatOdemeBelgesiService : ITahsilatOdemeBelgesiService
     {
         public Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<PagedResult<TahsilatOdemeBelgesiDto>> GetPagedWithFilterAsync(TahsilatOdemeBelgesiFilterRequest filter, PagedRequest request, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalEtAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalGeriAlAsync(int id, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task IptalEtManagedSourceWithinCurrentTransactionAsync(int id, string expectedKaynakModul, int expectedKaynakId, CancellationToken cancellationToken = default)

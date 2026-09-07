@@ -21,7 +21,7 @@ import { MuhasebeTesisContextService } from '../services/muhasebe-tesis-context.
 import { MuhasebeTesisSecimDialogComponent } from '../components/muhasebe-tesis-secim-dialog/muhasebe-tesis-secim-dialog.component';
 import { MuhasebeTesisContextBarComponent } from '../components/muhasebe-tesis-context-bar/muhasebe-tesis-context-bar.component';
 import { CariKartlarService } from '../cari-kartlar/cari-kartlar.service';
-import { BELGE_TIPLERI, CreateTahsilatOdemeBelgesiRequest, ODEME_YONTEMLERI, TahsilatOdemeBelgesiModel, TahsilatOdemeOzetModel, UpdateTahsilatOdemeBelgesiRequest } from './tahsilat-odeme-belgeleri.dto';
+import { BELGE_TIPLERI, CreateTahsilatOdemeBelgesiRequest, MUHASEBE_FIS_FILTRELERI, ODEME_YONTEMLERI, TahsilatOdemeBelgesiFilter, TahsilatOdemeBelgesiModel, TahsilatOdemeOzetModel, UpdateTahsilatOdemeBelgesiRequest } from './tahsilat-odeme-belgeleri.dto';
 import { TahsilatOdemeBelgeleriService } from './tahsilat-odeme-belgeleri.service';
 
 @Component({
@@ -55,6 +55,15 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
 
     readonly belgeTipleri = BELGE_TIPLERI;
     readonly odemeYontemleri = ODEME_YONTEMLERI;
+    readonly muhasebeFisFiltreleri = MUHASEBE_FIS_FILTRELERI;
+
+    filter: TahsilatOdemeBelgesiFilter = {
+        cariArama: null,
+        belgeNo: null,
+        baslangicTarihi: null,
+        bitisTarihi: null,
+        muhasebeFisDurumu: null
+    };
 
     private readonly tesisChangeEffect = effect(() => {
         const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
@@ -104,7 +113,7 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
         }
 
         this.loading = true;
-        this.service.getPaged(pageNumber, pageSize, tesisId).pipe(finalize(() => {
+        this.service.getPaged(pageNumber, pageSize, tesisId, this.filter).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -120,6 +129,61 @@ export class TahsilatOdemeBelgeleriPage implements OnInit {
                 this.cdr.detectChanges();
             }
         });
+    }
+
+    filtrele(): void {
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    temizle(): void {
+        this.filter = {
+            cariArama: null,
+            belgeNo: null,
+            baslangicTarihi: null,
+            bitisTarihi: null,
+            muhasebeFisDurumu: null
+        };
+        this.pageNumber = 1;
+        this.load(1, this.pageSize);
+    }
+
+    cariEtiket(item: TahsilatOdemeBelgesiModel): string {
+        const kod = item.cariKodu?.trim();
+        const ad = item.cariUnvanAdSoyad?.trim();
+        if (kod && ad) {
+            return `${kod} - ${ad}`;
+        }
+        return ad || kod || '';
+    }
+
+    muhasebeFisEtiketi(item: TahsilatOdemeBelgesiModel): string {
+        if (!item.muhasebeFisId) {
+            return 'Fiş Oluşturulmadı';
+        }
+        if (item.muhasebeFisDurumu === 'Taslak') {
+            return 'Taslak';
+        }
+        if (item.muhasebeFisDurumu === 'Onayli') {
+            return 'Onaylı';
+        }
+        if (item.muhasebeFisDurumu === 'Iptal') {
+            return 'İptal';
+        }
+        return `Fiş #${item.muhasebeFisId}`;
+    }
+
+    muhasebeFisSeverity(item: TahsilatOdemeBelgesiModel): 'success' | 'info' | 'warn' | 'secondary' {
+        if (!item.muhasebeFisId) {
+            return 'warn';
+        }
+        if (item.muhasebeFisDurumu === 'Onayli') {
+            return 'success';
+        }
+        if (item.muhasebeFisDurumu === 'Iptal') {
+            return 'secondary';
+        }
+        return 'info';
     }
 
     loadOzet(): void {

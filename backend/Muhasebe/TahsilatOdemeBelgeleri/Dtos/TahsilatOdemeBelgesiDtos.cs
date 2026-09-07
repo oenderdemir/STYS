@@ -26,6 +26,34 @@ public class TahsilatOdemeBelgesiDto : BaseRdbmsDto<int>
     /// ThrowIfMuhasebeFisiIslemiEngellerAsync ile ayni "durum bazli, MuhasebeFisId hic sifirlanmaz"
     /// deseni.</summary>
     public string? MuhasebeFisDurumu { get; set; }
+
+    // ── READ-ONLY cari gösterim alanları (Create/Update request'lerinde YOKTUR) ──
+    public string? CariKodu { get; set; }
+    public string? CariUnvanAdSoyad { get; set; }
+    public string? CariVergiNoTckn { get; set; }
+}
+
+/// <summary>
+/// Tahsilat/Ödeme belgeleri paged listesi için dar kapsamlı sunucu-tarafı filtre modeli.
+/// Tüm alanlar opsiyoneldir; boş değer "filtre uygulanmasın" anlamına gelir.
+/// </summary>
+public class TahsilatOdemeBelgesiFilterRequest
+{
+    public int? TesisId { get; set; }
+
+    /// <summary>CariKodu / UnvanAdSoyad / VergiNoTckn üzerinde case-insensitive arama.</summary>
+    public string? CariArama { get; set; }
+
+    public string? BelgeNo { get; set; }
+
+    /// <summary>Dahil (belge tarihi >= BaslangicTarihi.Date).</summary>
+    public DateTime? BaslangicTarihi { get; set; }
+
+    /// <summary>Dahil (belge tarihi < BitisTarihi.Date.AddDays(1)).</summary>
+    public DateTime? BitisTarihi { get; set; }
+
+    /// <summary>null = tümü; "FisYok" | "Taslak" | "Onayli" | "Iptal".</summary>
+    public string? MuhasebeFisDurumu { get; set; }
 }
 
 public class CreateTahsilatOdemeBelgesiRequest

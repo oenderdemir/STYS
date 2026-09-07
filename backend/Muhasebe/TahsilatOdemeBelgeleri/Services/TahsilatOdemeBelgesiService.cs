@@ -392,6 +392,44 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         return await base.GetPagedAsync(request, predicate, includeQuery, orderBy);
     }
 
+    /// <summary>Dar kapsamlı sunucu-tarafı filtreli paged sorgu. Filtreler EF Core'a çevrilebilir
+    /// (memory'ye çekilmez); tesis scope'u her zaman uygulanır.</summary>
+    public async Task<TOD.Platform.Persistence.Rdbms.Paging.PagedResult<TahsilatOdemeBelgesiDto>> GetPagedWithFilterAsync(
+        TahsilatOdemeBelgesiFilterRequest filter,
+        TOD.Platform.Persistence.Rdbms.Paging.PagedRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var scope = await _userAccessScopeService.GetCurrentScopeAsync(cancellationToken);
+        var includeQuery = BuildScopedIncludeQuery(scope, include: null);
+
+        var tesisId = filter.TesisId.HasValue && filter.TesisId.Value > 0 ? filter.TesisId.Value : (int?)null;
+        var cariArama = string.IsNullOrWhiteSpace(filter.CariArama) ? null : filter.CariArama.Trim();
+        var belgeNo = string.IsNullOrWhiteSpace(filter.BelgeNo) ? null : filter.BelgeNo.Trim();
+        var startDate = filter.BaslangicTarihi?.Date;
+        var endDateExclusive = filter.BitisTarihi?.Date.AddDays(1);
+        var fisDurumu = string.IsNullOrWhiteSpace(filter.MuhasebeFisDurumu) ? null : filter.MuhasebeFisDurumu.Trim();
+
+        System.Linq.Expressions.Expression<Func<TahsilatOdemeBelgesi, bool>> predicate = x =>
+            (!tesisId.HasValue || (x.CariKart != null && x.CariKart.TesisId == tesisId.Value))
+            && (cariArama == null || (x.CariKart != null && (
+                x.CariKart.CariKodu.Contains(cariArama)
+                || x.CariKart.UnvanAdSoyad.Contains(cariArama)
+                || (x.CariKart.VergiNoTckn != null && x.CariKart.VergiNoTckn.Contains(cariArama)))))
+            && (belgeNo == null || x.BelgeNo.Contains(belgeNo))
+            && (!startDate.HasValue || x.BelgeTarihi >= startDate.Value)
+            && (!endDateExclusive.HasValue || x.BelgeTarihi < endDateExclusive.Value)
+            && (fisDurumu != "FisYok" || x.MuhasebeFisId == null)
+            && (fisDurumu != "Taslak" || (x.MuhasebeFis != null && x.MuhasebeFis.Durum == MuhasebeFisDurumlari.Taslak))
+            && (fisDurumu != "Onayli" || (x.MuhasebeFis != null && x.MuhasebeFis.Durum == MuhasebeFisDurumlari.Onayli))
+            && (fisDurumu != "Iptal" || (x.MuhasebeFis != null && x.MuhasebeFis.Durum == MuhasebeFisDurumlari.Iptal));
+
+        return await base.GetPagedAsync(
+            request,
+            predicate,
+            includeQuery,
+            q => q.OrderByDescending(x => x.BelgeTarihi).ThenByDescending(x => x.Id));
+    }
+
     /// <summary>
     /// AddAsync ile ayni dogrulama zinciri (cari kart/hesap plani, tesis erisimi, belge/odeme
     /// yontemi/durum gecerliligi, acik muhasebe donemi, kapatilacak cari hareket uygunlugu).
@@ -551,6 +589,9 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             // MuhasebeFisId dolu olsa bile baglantili fisin Durum'u "Iptal" ise belge yeniden
             // fislenebilir kabul edilir (SatisBelgesi'ndeki durum-bazli desenle ayni).
             result = result.Include(x => x.MuhasebeFis);
+            // Cari gösterim alanları (CariKodu/UnvanAdSoyad/VergiNoTckn) için cari kart navigation
+            // her zaman yüklenir — böylece tablo "cari id" yerine gerçek cari bilgisini gösterir.
+            result = result.Include(x => x.CariKart);
             if (scope.IsScoped)
             {
                 result = result.Where(x =>

@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { ApiResponse, PagedResponseDto, tryReadApiMessage } from '../../../core/api';
 import { getApiBaseUrl } from '../../../core/config';
-import { CreateTahsilatOdemeBelgesiRequest, TahsilatOdemeBelgesiModel, TahsilatOdemeOzetModel, UpdateTahsilatOdemeBelgesiRequest } from './tahsilat-odeme-belgeleri.dto';
+import { CreateTahsilatOdemeBelgesiRequest, TahsilatOdemeBelgesiFilter, TahsilatOdemeBelgesiModel, TahsilatOdemeOzetModel, UpdateTahsilatOdemeBelgesiRequest } from './tahsilat-odeme-belgeleri.dto';
 
 @Injectable({ providedIn: 'root' })
 export class TahsilatOdemeBelgeleriService {
@@ -14,11 +14,26 @@ export class TahsilatOdemeBelgeleriService {
         return this.http.get<ApiResponse<TahsilatOdemeBelgesiModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri`).pipe(map(this.unwrapList));
     }
 
-    getPaged(pageNumber: number, pageSize: number, tesisId: number): Observable<PagedResponseDto<TahsilatOdemeBelgesiModel>> {
-        const params = new HttpParams()
+    getPaged(pageNumber: number, pageSize: number, tesisId: number, filter?: TahsilatOdemeBelgesiFilter): Observable<PagedResponseDto<TahsilatOdemeBelgesiModel>> {
+        let params = new HttpParams()
             .set('pageNumber', pageNumber)
             .set('pageSize', pageSize)
             .set('tesisId', tesisId);
+        if (filter?.cariArama) {
+            params = params.set('cariArama', filter.cariArama);
+        }
+        if (filter?.belgeNo) {
+            params = params.set('belgeNo', filter.belgeNo);
+        }
+        if (filter?.baslangicTarihi) {
+            params = params.set('baslangicTarihi', filter.baslangicTarihi);
+        }
+        if (filter?.bitisTarihi) {
+            params = params.set('bitisTarihi', filter.bitisTarihi);
+        }
+        if (filter?.muhasebeFisDurumu) {
+            params = params.set('muhasebeFisDurumu', filter.muhasebeFisDurumu);
+        }
         return this.http.get<ApiResponse<PagedResponseDto<TahsilatOdemeBelgesiModel>>>(`${this.apiBaseUrl}/ui/muhasebe/tahsilat-odeme-belgeleri/paged`, { params }).pipe(map(this.unwrapSingle));
     }
 

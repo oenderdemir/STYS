@@ -1,5 +1,6 @@
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Dtos;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.Muhasebe.TahsilatOdemeBelgeleri.Services;
@@ -8,6 +9,13 @@ public interface ITahsilatOdemeBelgesiService : IBaseRdbmsService<TahsilatOdemeB
 {
     Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default);
     Task IptalEtAsync(int id, CancellationToken cancellationToken = default);
+
+    /// <summary>Dar kapsamlı sunucu-tarafı filtreli paged sorgu (cari arama, belge no, tarih aralığı,
+    /// muhasebe fişi durumu + tesis scope).</summary>
+    Task<PagedResult<TahsilatOdemeBelgesiDto>> GetPagedWithFilterAsync(
+        TahsilatOdemeBelgesiFilterRequest filter,
+        PagedRequest request,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Kantin Satis workflow'u tarafindan satis iptali sirasinda cagrilan kontrollu iptal metodu.

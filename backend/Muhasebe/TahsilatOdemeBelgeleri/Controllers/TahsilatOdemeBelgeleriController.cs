@@ -42,11 +42,11 @@ public class TahsilatOdemeBelgeleriController : UIController
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.View)]
-    public async Task<ActionResult<PagedResult<TahsilatOdemeBelgesiDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(
-            request,
-            predicate: tesisId.HasValue && tesisId.Value > 0 ? x => x.CariKart != null && x.CariKart.TesisId == tesisId.Value : null,
-            orderBy: q => q.OrderByDescending(x => x.BelgeTarihi).ThenByDescending(x => x.Id)));
+    public async Task<ActionResult<PagedResult<TahsilatOdemeBelgesiDto>>> GetPaged(
+        [FromQuery] PagedRequest request,
+        [FromQuery] TahsilatOdemeBelgesiFilterRequest filter,
+        CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedWithFilterAsync(filter ?? new TahsilatOdemeBelgesiFilterRequest(), request, cancellationToken));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.TahsilatOdemeBelgesiYonetimi.View)]

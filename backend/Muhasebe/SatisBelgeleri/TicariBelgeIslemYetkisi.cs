@@ -85,17 +85,41 @@ public static class TicariBelgeIslemYetkisi
     /// SatisFaturasi, AlisFaturasi, SatisIadeFaturasi ve AlisIadeFaturasi desteklenir.
     /// FaturaTaslagi, Proforma, legacy IadeFaturasi VE tanımsız/gelecekte eklenecek herhangi bir
     /// enum değeri (fail-closed - blocklist DEĞİL, allowlist) HER ZAMAN false döner.
+    ///
+    /// Bu (3 parametreli) overload KAYNAK BİLGİSİ TAŞIMAZ; bu nedenle rezervasyon check-out
+    /// istisnası UYGULANMAZ ve FaturaTaslagi her zaman false döner (fail-closed). Kaynak bilgisini
+    /// taşıyan çağrılar source-aware overload'u (aşağıdaki 5 parametreli) kullanmalıdır.
     /// </summary>
     public static bool MuhasebeFisiOlusturulabilirMi(
         TicariBelgeMuhasebeDurumu muhasebeDurumu, int? muhasebeFisId, SatisBelgesiTipi belgeTipi)
+        => MuhasebeFisiOlusturulabilirMi(muhasebeDurumu, muhasebeFisId, belgeTipi, SatisKaynakModulu.Manuel, kaynakTipi: null);
+
+    /// <summary>
+    /// Source-aware overload: rezervasyon check-out akışının ürettiği güvenilir gelir belgesi
+    /// (KaynakModul=Otel, KaynakTipi="RezervasyonCheckout") FaturaTaslagi olmasına rağmen MUHASEBE
+    /// fişi üretebilir. Bu tamamen MUHASEBESEL bir işlemdir — resmî fatura kesilmez, e-Belge/UBL/
+    /// outbox/numaralandırma tetiklenmez, FaturalamaDurumu değiştirilmez. Proforma ve diğer tüm
+    /// FaturaTaslagi kaynakları fail-closed kalır.
+    /// </summary>
+    public static bool MuhasebeFisiOlusturulabilirMi(
+        TicariBelgeMuhasebeDurumu muhasebeDurumu, int? muhasebeFisId, SatisBelgesiTipi belgeTipi,
+        SatisKaynakModulu kaynakModul, string? kaynakTipi)
     {
         if (muhasebeDurumu != TicariBelgeMuhasebeDurumu.Onaylandi || muhasebeFisId.HasValue)
             return false;
 
-        return belgeTipi is SatisBelgesiTipi.SatisFaturasi
+        if (belgeTipi is SatisBelgesiTipi.SatisFaturasi
             or SatisBelgesiTipi.AlisFaturasi
             or SatisBelgesiTipi.SatisIadeFaturasi
-            or SatisBelgesiTipi.AlisIadeFaturasi;
+            or SatisBelgesiTipi.AlisIadeFaturasi)
+            return true;
+
+        // Rezervasyon check-out gelir belgesi istisnası — RezervasyonSatisBelgesiService bu belgeyi
+        // KaynakModul=SatisKaynakModulu.Otel + KaynakTipi="RezervasyonCheckout" ile üretir. Değer
+        // RezervasyonSatisBelgesiService.KaynakTipiRezervasyonCheckout sabitiyle birebir aynıdır.
+        return belgeTipi == SatisBelgesiTipi.FaturaTaslagi
+               && kaynakModul == SatisKaynakModulu.Otel
+               && string.Equals(kaynakTipi, "RezervasyonCheckout", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

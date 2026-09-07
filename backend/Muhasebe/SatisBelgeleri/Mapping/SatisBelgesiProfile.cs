@@ -57,7 +57,7 @@ public class SatisBelgesiProfile : Profile
             .ForMember(dest => dest.IptalEdilebilirMi, opt => opt.MapFrom(src =>
                 TicariBelgeIslemYetkisi.IptalEdilebilirMi(src.TicariDurum, src.FaturalamaDurumu)))
             .ForMember(dest => dest.MuhasebeFisiOlusturulabilirMi, opt => opt.MapFrom(src =>
-                TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(src.MuhasebeDurumu, src.MuhasebeFisId, src.BelgeTipi)));
+                TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(src.MuhasebeDurumu, src.MuhasebeFisId, src.BelgeTipi, src.KaynakModul, src.KaynakTipi)));
 
         CreateMap<SatisBelgesiDto, SatisBelgesi>()
             .ForMember(dest => dest.Satirlar, opt => opt.Ignore())

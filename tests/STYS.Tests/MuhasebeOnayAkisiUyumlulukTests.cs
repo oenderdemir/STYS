@@ -155,4 +155,25 @@ public class MuhasebeOnayAkisiUyumlulukTests : IAsyncLifetime
 
         await SatisBelgesiMuhasebeTestSupport.AssertHicMuhasebeKaydiOlusmadiAsync(dbContext, onaylanan.Id!.Value);
     }
+
+    [IntegrationFact]
+    public async Task RezervasyonCheckoutFaturaTaslagi_OnaylandiysaMuhasebeFisiOlusturulabilirMiTrueOlur()
+    {
+        await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
+        var satisBelgesiService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
+
+        // RezervasyonSatisBelgesiService ile AYNI kaynak işareti: Otel + RezervasyonCheckout.
+        var request = BuildRequest(SatisBelgesiTipi.FaturaTaslagi);
+        request.KaynakModul = SatisKaynakModulu.Otel;
+        request.KaynakTipi = "RezervasyonCheckout";
+
+        var onaylanan = await SatisBelgesiMuhasebeTestSupport.OlusturVeMuhasebeOnaylaAsync(satisBelgesiService, request);
+
+        Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, onaylanan.MuhasebeDurumu);
+        Assert.Null(onaylanan.MuhasebeFisId);
+
+        // Genel FaturaTaslagi'nin aksine, rezervasyon check-out gelir belgesi muhasebe fişi
+        // üretebilir (source-aware istisna).
+        Assert.True(onaylanan.MuhasebeFisiOlusturulabilirMi);
+    }
 }

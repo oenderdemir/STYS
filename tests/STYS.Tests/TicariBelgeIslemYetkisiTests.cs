@@ -67,4 +67,53 @@ public class TicariBelgeIslemYetkisiTests
         Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
             TicariBelgeMuhasebeDurumu.Onaylandi, muhasebeFisId: 42, SatisBelgesiTipi.SatisFaturasi));
     }
+
+    // ── Rezervasyon check-out gelir belgesi (source-aware) istisnası ──
+
+    [Fact]
+    public void MuhasebeFisiOlusturulabilirMi_RezervasyonCheckoutFaturaTaslagi_IstisnaOlarakTrueDoner()
+    {
+        var sonuc = TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Onaylandi, muhasebeFisId: null, SatisBelgesiTipi.FaturaTaslagi,
+            SatisKaynakModulu.Otel, "RezervasyonCheckout");
+
+        Assert.True(sonuc);
+    }
+
+    [Fact]
+    public void MuhasebeFisiOlusturulabilirMi_GenelFaturaTaslagi_KaynakRezervasyonCheckoutDegilseFalseDoner()
+    {
+        // Manuel kaynaklı (kullanıcı) FaturaTaslagi — istisna UYGULANMAZ.
+        Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Onaylandi, muhasebeFisId: null, SatisBelgesiTipi.FaturaTaslagi,
+            SatisKaynakModulu.Manuel, null));
+
+        // Otel kaynaklı ama farklı KaynakTipi (ör. Proforma değil ama başka bir otel taslağı) — istisna UYGULANMAZ.
+        Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Onaylandi, muhasebeFisId: null, SatisBelgesiTipi.FaturaTaslagi,
+            SatisKaynakModulu.Otel, "BasKasiyerTaslagi"));
+
+        // 3 parametreli (kaynak bilgisi taşımayan) overload FaturaTaslagi için fail-closed kalır.
+        Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Onaylandi, muhasebeFisId: null, SatisBelgesiTipi.FaturaTaslagi));
+    }
+
+    [Fact]
+    public void MuhasebeFisiOlusturulabilirMi_RezervasyonCheckoutFaturaTaslagi_OnaylandiDegilseFalseDoner()
+    {
+        Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Onayda, muhasebeFisId: null, SatisBelgesiTipi.FaturaTaslagi,
+            SatisKaynakModulu.Otel, "RezervasyonCheckout"));
+        Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Bekliyor, muhasebeFisId: null, SatisBelgesiTipi.FaturaTaslagi,
+            SatisKaynakModulu.Otel, "RezervasyonCheckout"));
+    }
+
+    [Fact]
+    public void MuhasebeFisiOlusturulabilirMi_RezervasyonCheckoutFaturaTaslagi_FisIdDoluysaFalseDoner()
+    {
+        Assert.False(TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
+            TicariBelgeMuhasebeDurumu.Onaylandi, muhasebeFisId: 99, SatisBelgesiTipi.FaturaTaslagi,
+            SatisKaynakModulu.Otel, "RezervasyonCheckout"));
+    }
 }

@@ -94,7 +94,8 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
         // MuhasebeDurumu=Onaylandi VE MuhasebeFisId boşken desteklenir - FaturaTaslagi, Proforma,
         // legacy IadeFaturasi ve tanımsız enum değerleri burada da (ön kontrolde) reddedilir.
         if (!TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
-                belgeOnOkuma.MuhasebeDurumu, belgeOnOkuma.MuhasebeFisId, belgeOnOkuma.BelgeTipi))
+                belgeOnOkuma.MuhasebeDurumu, belgeOnOkuma.MuhasebeFisId, belgeOnOkuma.BelgeTipi,
+                belgeOnOkuma.KaynakModul, belgeOnOkuma.KaynakTipi))
         {
             if (belgeOnOkuma.MuhasebeFisId.HasValue)
                 throw new BaseException("Bu satış belgesi için daha önce muhasebe fişi oluşturulmuş.", 409);
@@ -172,7 +173,8 @@ public class SatisBelgesiMuhasebeFisService : ISatisBelgesiMuhasebeFisService
                 // merkezi TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi kuralı; ön okumadan
                 // sonra belge tipi/durumu değişmiş olabileceği için burada da tekrar doğrulanır.
                 if (!TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi(
-                        belge.MuhasebeDurumu, belge.MuhasebeFisId, belge.BelgeTipi))
+                        belge.MuhasebeDurumu, belge.MuhasebeFisId, belge.BelgeTipi,
+                        belge.KaynakModul, belge.KaynakTipi))
                 {
                     if (belge.MuhasebeFisId.HasValue)
                         throw new BaseException("Bu satış belgesi için daha önce muhasebe fişi oluşturulmuş.", 409);

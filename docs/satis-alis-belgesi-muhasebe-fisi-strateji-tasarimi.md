@@ -113,7 +113,7 @@ Bu faz için en uygun ayrım, stratejinin yalnızca fiş satırlarını üretmes
 Desteklenmeyen tipler:
 
 - `Proforma` açık hata döner.
-- `FaturaTaslagi` için karar ayrıca netleştirilmelidir; mevcut davranışta doğrudan fiş üretimi hedeflenmiyor.
+- `FaturaTaslagi` için karar: genel (manuel/kullanıcı) FaturaTaslagi fiş ÜRETMEZ (fail-closed). Yalnızca rezervasyon check-out gelir belgesi (`KaynakModul=Otel`, `KaynakTipi=RezervasyonCheckout`) istisna olarak muhasebe fişi üretebilir — bu tamamen muhasebesel bir işlemdir; resmî fatura/e-Belge/UBL/outbox tetiklenmez (bkz. `TicariBelgeIslemYetkisi.MuhasebeFisiOlusturulabilirMi`).
 - Legacy `IadeFaturasi` yeni kayıt için tercih edilmemeli, varsa geriye dönük destek düşünülmelidir.
 
 ## Orchestrator sorumlulukları

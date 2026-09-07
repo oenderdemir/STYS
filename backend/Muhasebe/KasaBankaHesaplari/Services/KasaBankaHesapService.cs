@@ -130,7 +130,7 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         if (entity.MuhasebeHesapPlaniId.HasValue)
         {
             var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
-            if (hesap is not null)
+            if (hesap is { DetayHesapMi: true, HareketGorebilirMi: true } && hesap.TesisId == entity.TesisId && entity.TesisId.HasValue)
             {
                 hesap.Ad = entity.Ad;
                 hesap.TesisId = entity.TesisId;
@@ -159,7 +159,7 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
         if (entity.MuhasebeHesapPlaniId.HasValue)
         {
             var hesap = await _dbContext.MuhasebeHesapPlanlari.FirstOrDefaultAsync(x => x.Id == entity.MuhasebeHesapPlaniId.Value);
-            if (hesap is not null)
+            if (hesap is { DetayHesapMi: true, HareketGorebilirMi: true } && hesap.TesisId == entity.TesisId && entity.TesisId.HasValue)
             {
                 hesap.AktifMi = false;
                 await _dbContext.SaveChangesAsync();
@@ -342,7 +342,7 @@ public class KasaBankaHesapService : BaseRdbmsService<KasaBankaHesapDto, KasaBan
                 throw new BaseException("Kredi karti/POS hesabi kendi kendisine baglanamaz.", 400);
             }
 
-            var bagliBanka = await _dbContext.KasaBankaHesaplari
+            var bagliBanka = await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
                 .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == dto.BagliBankaHesapId.Value);
             if (bagliBanka is null || (bagliBanka.Tip != KasaBankaHesapTipleri.Banka && bagliBanka.Tip != KasaBankaHesapTipleri.DovizHesabi))
             {

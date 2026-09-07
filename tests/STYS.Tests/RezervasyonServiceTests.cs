@@ -38,6 +38,67 @@ namespace STYS.Tests;
 
 public class RezervasyonServiceTests
 {
+    [Fact]
+    public async Task LegacyFinansalHesap_GecersizHesaplarRezervasyonSecimindeGorunmez()
+    {
+        await using var db = CreateDbContext();
+        await SeedSingleRoomFixtureAsync(db, new TimeSpan(14, 0, 0), new TimeSpan(10, 0, 0), 100m);
+        db.Rezervasyonlar.Add(new Rezervasyon { Id = 9800, TesisId = 1 });
+        for (var i = 1; i <= 8; i++)
+        {
+            var plan = new STYS.Muhasebe.MuhasebeHesapPlanlari.Entities.MuhasebeHesapPlani
+            {
+                Id = i, Kod = "100." + i, TamKod = "100." + i, Ad = "Test",
+                AktifMi = i != 4, IsDeleted = i == 3, HareketGorebilirMi = i != 1,
+                DetayHesapMi = i != 1 && i != 5
+            };
+            db.MuhasebeHesapPlanlari.Add(plan);
+            db.KasaBankaHesaplari.Add(new STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap
+            {
+                Id = i, Kod = "Legacy" + i, Ad = "Test", Tip = "NakitKasa", TesisId = i == 1 ? null : 1,
+                AktifMi = i != 6, IsDeleted = i == 7, MuhasebeHesapPlaniId = i == 2 ? null : i == 8 ? 999 : i
+            });
+        }
+        await db.SaveChangesAsync();
+        // Audit initializes new rows as non-deleted; soft-delete only after insertion.
+        db.MuhasebeHesapPlanlari.Local.Single(x => x.Id == 3).IsDeleted = true;
+        db.KasaBankaHesaplari.Local.Single(x => x.Id == 7).IsDeleted = true;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        Assert.Empty(await CreateService(db).GetKasaBankaHesapSecenekleriAsync(9800, "Nakit"));
+    }
+
+    [Fact]
+    public Task LegacyFinansalHesap_GecerliTesisNakitKasasiGorunur()
+        => AssertModernFinansalHesapAsync("NakitKasa", "Nakit");
+
+    [Fact]
+    public Task LegacyFinansalHesap_GecerliTesisBankasiGorunur()
+        => AssertModernFinansalHesapAsync("Banka", "HavaleEft");
+
+    private static async Task AssertModernFinansalHesapAsync(string tip, string odemeTipi)
+    {
+        await using var db = CreateDbContext();
+        await SeedSingleRoomFixtureAsync(db, new TimeSpan(14, 0, 0), new TimeSpan(10, 0, 0), 100m);
+        db.Rezervasyonlar.Add(new Rezervasyon { Id = 9800, TesisId = 1 });
+        for (var i = 1; i <= 2; i++)
+        {
+            db.MuhasebeHesapPlanlari.Add(new STYS.Muhasebe.MuhasebeHesapPlanlari.Entities.MuhasebeHesapPlani
+            {
+                Id = i, TesisId = i, Kod = "100." + i, TamKod = "100." + i, Ad = "Detay",
+                AktifMi = true, HareketGorebilirMi = true, DetayHesapMi = true
+            });
+            db.KasaBankaHesaplari.Add(new STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesap
+            {
+                Id = i, TesisId = i, Kod = "Test" + i, Ad = "Test", Tip = tip,
+                AktifMi = true, MuhasebeHesapPlaniId = i
+            });
+        }
+        await db.SaveChangesAsync();
+        var secenek = Assert.Single(await CreateService(db).GetKasaBankaHesapSecenekleriAsync(9800, odemeTipi));
+        Assert.Equal(1, secenek.Id);
+    }
+
     // Tesisin giris/cikis saatine gore gece sayisi hesaplanip baz/nihai tutar dogru uretilmeli.
     [Fact]
     public async Task HesaplaSenaryoFiyati_TesisSaatineGoreGunSayisiniHesaplar()

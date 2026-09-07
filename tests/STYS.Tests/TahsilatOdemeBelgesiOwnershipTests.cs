@@ -39,6 +39,27 @@ namespace STYS.Tests;
 public class TahsilatOdemeBelgesiOwnershipTests
 {
     [Fact]
+    public async Task LegacyFinansalHesap_AnaHesabaFisOlusturmaReddedilir()
+    {
+        await using var db = CreateDbContext();
+        await SeedBaseAsync(db);
+        var hesap = await db.KasaBankaHesaplari.SingleAsync();
+        hesap.MuhasebeHesapPlaniId = 1;
+        var plan = await db.MuhasebeHesapPlanlari.SingleAsync();
+        plan.DetayHesapMi = false;
+        plan.HareketGorebilirMi = false;
+        await db.SaveChangesAsync();
+        var belge = await SeedTahsilatBelgesiAsync(db, MuhasebeKaynakModulleri.Rezervasyon, 590);
+        var service = new TahsilatOdemeBelgesiMuhasebeFisService(db, CreateMapper(), CreateMuhasebeDonemService(db));
+        var ex = await Assert.ThrowsAsync<BaseException>(() => service.FisOlusturAsync(belge.Id));
+        Assert.Contains("aktif/hareket gorebilir/detay hesap degil", ex.Message);
+        Assert.Empty(await db.MuhasebeFisler.ToListAsync());
+        Assert.Null(belge.MuhasebeFisId);
+        Assert.False(plan.DetayHesapMi);
+        Assert.False(plan.HareketGorebilirMi);
+    }
+
+    [Fact]
     public async Task KantinOwnedTahsilat_GenelUpdateIleDegistirilemez()
     {
         await using var dbContext = CreateDbContext();

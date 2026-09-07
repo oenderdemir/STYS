@@ -141,7 +141,8 @@ public class BankaHareketService : BaseRdbmsService<BankaHareketDto, BankaHareke
 
         if (dto.KasaBankaHesapId.HasValue && dto.KasaBankaHesapId.Value > 0)
         {
-            var hesap = await _kasaBankaHesapRepository.GetByIdAsync(dto.KasaBankaHesapId.Value);
+            var hesap = await _kasaBankaHesapRepository.Where(x => x.Id == dto.KasaBankaHesapId.Value)
+                .YeniIslemIcin().FirstOrDefaultAsync();
             if (hesap is null || !hesap.AktifMi)
             {
                 throw new BaseException("Secilen banka hesabi bulunamadi veya pasif.", 400);

@@ -229,7 +229,7 @@ public sealed class PosTerminalService
             return null;
         }
 
-        var hesap = await _dbContext.KasaBankaHesaplari
+        var hesap = await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
             .Include(x => x.Tesis)
             .FirstOrDefaultAsync(x => x.Id == kasaBankaHesapId.Value && !x.IsDeleted && x.AktifMi && x.Tip == KasaBankaHesapTipleri.KrediKarti, cancellationToken)
             ?? throw new BaseException("Aktif kredi kartı/POS hesabı bulunamadı.", 404);

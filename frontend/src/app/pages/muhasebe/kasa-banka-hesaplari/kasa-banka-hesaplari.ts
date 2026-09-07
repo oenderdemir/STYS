@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { finalize, forkJoin } from 'rxjs';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -429,11 +429,16 @@ export class KasaBankaHesaplariPage implements OnInit {
     }
 
     private refreshBagliBankaSecenekleri(): void {
-        const candidates = this.records
-            .filter((x) => x.id !== this.model.id && (x.tip === 'Banka' || x.tip === 'DovizHesabi') && x.aktifMi)
-            .filter((x) => !this.model.tesisId || x.tesisId === this.model.tesisId)
-            .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
-        this.bagliBankaSecenekleri = candidates;
+        this.bagliBankaSecenekleri = [];
+        forkJoin([this.service.getByTip('Banka', true), this.service.getByTip('DovizHesabi', true)]).subscribe({
+            next: (groups) => {
+                this.bagliBankaSecenekleri = groups.flat()
+                    .filter((x) => x.id !== this.model.id && x.tesisId === this.model.tesisId)
+                    .map((x) => ({ label: `${x.kod} - ${x.ad}`, value: x.id! }));
+                this.cdr.detectChanges();
+            },
+            error: (error: unknown) => this.showError(error)
+        });
     }
 
     private refreshKomisyonGiderHesapSecenekleri(): void {

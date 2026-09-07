@@ -1,3 +1,4 @@
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using STYS.Infrastructure.EntityFramework;
@@ -229,7 +230,7 @@ public class RezervasyonOdemeMuhasebeService : IRezervasyonOdemeMuhasebeService
 
     private async Task EnsureKasaBankaHesabiUygunAsync(int tesisId, int kasaBankaHesapId, string odemeTipi, CancellationToken cancellationToken)
     {
-        var hesap = await _dbContext.KasaBankaHesaplari
+        var hesap = await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => !x.IsDeleted && x.Id == kasaBankaHesapId, cancellationToken);
 

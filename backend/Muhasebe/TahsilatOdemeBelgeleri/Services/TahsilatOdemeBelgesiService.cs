@@ -1,3 +1,4 @@
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using STYS.AccessScope;
@@ -51,6 +52,13 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         _posTahsilatValorSnapshotService = posTahsilatValorSnapshotService;
     }
 
+    private async Task ValidateFinansalHesapAsync(TahsilatOdemeBelgesiDto dto)
+    {
+        if (dto.KasaBankaHesapId.HasValue && !await _dbContext.KasaBankaHesaplari
+                .YeniIslemIcin().AnyAsync(x => x.Id == dto.KasaBankaHesapId.Value))
+            throw new BaseException("Seçilen finansal hesap yeni işlem için geçersiz. Aktif bir detay hesaba bağlı finansal hesap seçin.", 400);
+    }
+
     public async Task<TahsilatOdemeOzetDto> GetGunlukOzetAsync(DateTime gun, int? tesisId, CancellationToken cancellationToken = default)
     {
         var list = await _repository.GetGunlukAsync(gun, cancellationToken);
@@ -102,6 +110,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
         await using var transaction = await _dbContext.Database.BeginTransactionAsync();
         try
         {
+            await ValidateFinansalHesapAsync(dto);
             var entity = Mapper.Map<TahsilatOdemeBelgesi>(dto);
             await _repository.AddAsync(entity);
             await _repository.SaveChangesAsync();
@@ -141,6 +150,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             requireCariMuhasebeHesabi,
             cancellationToken);
 
+        await ValidateFinansalHesapAsync(dto);
         var entity = Mapper.Map<TahsilatOdemeBelgesi>(dto);
         await _repository.AddAsync(entity);
         await _repository.SaveChangesAsync();
@@ -188,6 +198,7 @@ public class TahsilatOdemeBelgesiService : BaseRdbmsService<TahsilatOdemeBelgesi
             throw new BaseException("Cari kapama yapılmış tahsilat/ödeme belgesi güncellenemez.", 400);
         }
 
+        await ValidateFinansalHesapAsync(dto);
         return await base.UpdateAsync(dto);
     }
 

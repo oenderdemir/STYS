@@ -85,7 +85,7 @@ public sealed class PosService : IPosService
 
         var saglayiciKodu = request.SaglayiciKodu.Trim().ToUpperInvariant();
         var saglayici = GetSaglayici(saglayiciKodu);
-        var hesap = await _dbContext.KasaBankaHesaplari.FirstOrDefaultAsync(
+        var hesap = await _dbContext.KasaBankaHesaplari.YeniIslemIcin().FirstOrDefaultAsync(
             x => x.Id == request.KasaBankaHesapId
                  && x.AktifMi
                  && x.Tip == KasaBankaHesapTipleri.KrediKarti,

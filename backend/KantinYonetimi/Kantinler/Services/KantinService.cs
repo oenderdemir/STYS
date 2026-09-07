@@ -292,7 +292,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
     public async Task<List<KantinKasaSecenekDto>> GetNakitKasalarAsync(int tesisId, CancellationToken cancellationToken = default)
     {
         await EnsureTesisAccessAsync(tesisId, cancellationToken);
-        return await _dbContext.KasaBankaHesaplari
+        return await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.TesisId == tesisId && x.AktifMi && x.Tip == KasaBankaHesapTipleri.NakitKasa)
             .OrderBy(x => x.Kod)
@@ -335,7 +335,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
             ? KasaBankaHesapTipleri.KrediKarti
             : KasaBankaHesapTipleri.NakitKasa;
 
-        return await _dbContext.KasaBankaHesaplari
+        return await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.TesisId == tesisId && x.AktifMi && x.Tip == hesapTipi)
             .OrderBy(x => x.Kod)
@@ -464,7 +464,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
 
         if (dto.VarsayilanNakitKasaId.HasValue)
         {
-            var kasa = await _dbContext.KasaBankaHesaplari
+            var kasa = await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == dto.VarsayilanNakitKasaId.Value && !x.IsDeleted, cancellationToken)
                 ?? throw new BaseException("Seçilen varsayılan kasa bulunamadı.", 400);
@@ -487,7 +487,7 @@ public class KantinService : BaseRdbmsService<KantinDto, Kantin, int>, IKantinSe
 
         if (dto.VarsayilanPosHesapId.HasValue)
         {
-            var posHesap = await _dbContext.KasaBankaHesaplari
+            var posHesap = await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == dto.VarsayilanPosHesapId.Value && !x.IsDeleted, cancellationToken)
                 ?? throw new BaseException("Seçilen varsayılan POS hesabı bulunamadı.", 400);

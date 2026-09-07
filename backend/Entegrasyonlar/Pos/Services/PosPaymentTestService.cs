@@ -436,7 +436,7 @@ public sealed class PosPaymentTestService : IPosPaymentTestService
             throw new BaseException("Bu terminal için kredi kartı hesabı eşleştirilmemiş.", 400);
         }
 
-        var hesap = await _db.Set<KasaBankaHesap>().FirstOrDefaultAsync(x =>
+        var hesap = await _db.Set<KasaBankaHesap>().YeniIslemIcin().FirstOrDefaultAsync(x =>
             x.Id == terminal.KasaBankaHesapId.Value
             && x.AktifMi
             && x.Tip == KasaBankaHesapTipleri.KrediKarti, cancellationToken)

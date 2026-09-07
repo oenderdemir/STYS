@@ -1,3 +1,4 @@
+using STYS.Muhasebe.KasaBankaHesaplari.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using System.Data;
@@ -3640,7 +3641,7 @@ public partial class RezervasyonService : IRezervasyonService
             throw new BaseException("Gecersiz odeme tipi.", 400);
         }
 
-        return await _stysDbContext.KasaBankaHesaplari
+        return await _stysDbContext.KasaBankaHesaplari.YeniIslemIcin()
             .Where(x => !x.IsDeleted
                         && x.AktifMi
                         && uygunTipler.Contains(x.Tip)

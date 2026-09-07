@@ -25,7 +25,7 @@ public class KasaBankaHesapRepository : BaseRdbmsRepository<KasaBankaHesap, int>
 
         if (onlyActive)
         {
-            query = query.Where(x => x.AktifMi);
+            query = query.YeniIslemIcin();
         }
 
         return await query

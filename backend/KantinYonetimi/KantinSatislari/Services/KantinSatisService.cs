@@ -753,7 +753,7 @@ WHERE [Id] = {satisId} AND [IsDeleted] = 0")
 
     private async Task<KasaBankaHesap> ResolveValidHesapAsync(int tesisId, int hesapId, string beklenenTip, string odemeLabel, CancellationToken cancellationToken)
     {
-        var hesap = await _dbContext.KasaBankaHesaplari
+        var hesap = await _dbContext.KasaBankaHesaplari.YeniIslemIcin()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == hesapId && !x.IsDeleted, cancellationToken)
             ?? throw new BaseException("Seçilen ödeme hesabı bulunamadı.", 400);

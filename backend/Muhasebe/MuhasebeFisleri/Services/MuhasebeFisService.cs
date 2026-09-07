@@ -2450,6 +2450,13 @@ WHERE [Id] = {tersKayitFis.TersKayitFisId.Value} AND [IsDeleted] = 0")
             if (!hesap.HareketGorebilirMi)
                 throw new BaseException($"{i + 1}. satırda hareket görebilir detay hesap seçilmelidir.", 400);
 
+            if (satir.KasaBankaHesapId.HasValue && !await _dbContext.KasaBankaHesaplari
+                    .Where(STYS.Muhasebe.KasaBankaHesaplari.Entities.KasaBankaHesapUygunluk.YeniIslemIcinGecerli)
+                    .AnyAsync(x => x.Id == satir.KasaBankaHesapId.Value
+                        && x.MuhasebeHesapPlaniId == satir.MuhasebeHesapPlaniId
+                        && (x.TesisId == dto.TesisId || x.TesisId == null), cancellationToken))
+                throw new BaseException($"{i + 1}. satırdaki finansal hesap yeni işlem için geçersiz veya muhasebe hesabıyla uyumsuz.", 400);
+
             // 16. ParaBirimi boşsa TRY
             if (string.IsNullOrWhiteSpace(satir.ParaBirimi))
                 satir.ParaBirimi = "TRY";

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Dtos;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.SatisBelgeleri.Repositories;
@@ -41,6 +42,18 @@ public class SatisBelgesiTaslakOlusturmaService : ISatisBelgesiTaslakOlusturmaSe
         // 1. Erken validasyon (operasyon modülüne anlaşılır hata)
         ValidateRequest(request);
 
+        // 1b. Reserved kaynak koruması: "RezervasyonCheckout" yalnız gerçek rezervasyon gelir
+        // tahakkuku akışı (RezervasyonSatisBelgesiService) tarafından, SERVER-ONLY güven bayrağıyla
+        // üretilebilir. Generic kaynaktan-taslak endpoint'leri bu kaynağı SPOOF EDEMEZ.
+        if (request.KaynakModul == SatisKaynakModulu.Otel
+            && string.Equals(request.KaynakTipi, TicariBelgeIslemYetkisi.RezervasyonCheckoutKaynakTipi, StringComparison.OrdinalIgnoreCase)
+            && !request.RezervasyonCheckoutAkisiMi)
+        {
+            throw new BaseException(
+                "'RezervasyonCheckout' kaynağı yalnız rezervasyon gelir tahakkuku akışı tarafından üretilebilir.",
+                errorCode: 400);
+        }
+
         // 2. Tesis access scope çözümleme ve kontrol
         var resolvedTesisId = await ResolveTesisIdAsync(request.TesisId, cancellationToken);
 
@@ -51,12 +64,12 @@ public class SatisBelgesiTaslakOlusturmaService : ISatisBelgesiTaslakOlusturmaSe
         // 4. CreateSatisBelgesiRequest oluştur
         var createRequest = MapToCreateRequest(request, resolvedTesisId);
 
-        // 5. ISatisBelgesiService.CreateAsync çağır (nihai validasyon orada)
+        // 5. Kaynaklı belge oluştur (manual CreateAsync DEĞİL — kaynak kimliği korunur).
         _logger.LogInformation(
             "Kaynaktan taslak oluşturuluyor: Modül={KaynakModul}, Tip={KaynakTipi}, KaynakId={KaynakId}, TesisId={TesisId}",
             request.KaynakModul, request.KaynakTipi, request.KaynakId, resolvedTesisId);
 
-        var result = await _satisBelgesiService.CreateAsync(createRequest, cancellationToken);
+        var result = await _satisBelgesiService.KaynaktanTaslakOlusturAsync(createRequest, cancellationToken);
 
         _logger.LogInformation(
             "Kaynaktan taslak oluşturuldu: BelgeId={BelgeId}, BelgeNo={BelgeNo}",

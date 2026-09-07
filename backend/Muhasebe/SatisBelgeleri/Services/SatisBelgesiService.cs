@@ -362,6 +362,30 @@ public class SatisBelgesiService : BaseRdbmsService<SatisBelgesiDto, SatisBelges
         CreateSatisBelgesiRequest request,
         CancellationToken cancellationToken = default)
     {
+        // Manuel muhasebe create endpoint'i (POST /ui/muhasebe/satis-belgeleri): kaynak kimliği
+        // İSTEMCİDEN GELMEZ. Otoriter olarak Manuel'e sabitlenir — böylece bir caller kendisini
+        // "Otel + RezervasyonCheckout" gibi gösterip muhasebe-fişi istisnasını elde EDEMEZ.
+        request.KaynakModul = SatisKaynakModulu.Manuel;
+        request.KaynakTipi = null;
+        request.KaynakId = null;
+
+        return await CreateCoreAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// SERVER-ONLY kaynaklı belge oluşturma. Yalnızca operasyon modülleri (otel/restoran/kamp),
+    /// sunucuda doğrulanmış kaynak kimliğiyle çağırır (bkz. SatisBelgesiTaslakOlusturmaService).
+    /// Manuel endpoint'ten FARKLI olarak kaynak kimliği korunur.
+    /// </summary>
+    public async Task<SatisBelgesiDto> KaynaktanTaslakOlusturAsync(
+        CreateSatisBelgesiRequest request,
+        CancellationToken cancellationToken = default)
+        => await CreateCoreAsync(request, cancellationToken);
+
+    private async Task<SatisBelgesiDto> CreateCoreAsync(
+        CreateSatisBelgesiRequest request,
+        CancellationToken cancellationToken)
+    {
         var sw = Stopwatch.StartNew();
         _domainLogger.Started("Accounting.SalesDocument.Create.Started", new
         {

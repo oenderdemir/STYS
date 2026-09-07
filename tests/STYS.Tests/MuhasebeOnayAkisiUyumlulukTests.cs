@@ -157,12 +157,14 @@ public class MuhasebeOnayAkisiUyumlulukTests : IAsyncLifetime
     }
 
     [IntegrationFact]
-    public async Task RezervasyonCheckoutFaturaTaslagi_OnaylandiysaMuhasebeFisiOlusturulabilirMiTrueOlur()
+    public async Task ManuelCreate_OtelRezervasyonCheckoutSpoofu_KaynakManueleSabitlenir()
     {
         await using var dbContext = SatisBelgesiMuhasebeTestSupport.CreateDbContext();
         var satisBelgesiService = SatisBelgesiMuhasebeTestSupport.CreateSatisBelgesiService(dbContext);
 
-        // RezervasyonSatisBelgesiService ile AYNI kaynak işareti: Otel + RezervasyonCheckout.
+        // Manual create endpoint'i (POST /ui/muhasebe/satis-belgeleri) kaynak kimliğini İSTEMCİDEN
+        // almaz; istemci "Otel + RezervasyonCheckout" gönderse bile backend otoriter biçimde Manuel
+        // yazar. Bu yüzden muhasebe-fişi istisnası spoof EDİLEMEZ.
         var request = BuildRequest(SatisBelgesiTipi.FaturaTaslagi);
         request.KaynakModul = SatisKaynakModulu.Otel;
         request.KaynakTipi = "RezervasyonCheckout";
@@ -172,8 +174,11 @@ public class MuhasebeOnayAkisiUyumlulukTests : IAsyncLifetime
         Assert.Equal(TicariBelgeMuhasebeDurumu.Onaylandi, onaylanan.MuhasebeDurumu);
         Assert.Null(onaylanan.MuhasebeFisId);
 
-        // Genel FaturaTaslagi'nin aksine, rezervasyon check-out gelir belgesi muhasebe fişi
-        // üretebilir (source-aware istisna).
-        Assert.True(onaylanan.MuhasebeFisiOlusturulabilirMi);
+        // Spoof başarısız: belge Manuel'e sabitlendiği için FaturaTaslagi istisnası DEVREYE GİRMEZ.
+        Assert.False(onaylanan.MuhasebeFisiOlusturulabilirMi);
+
+        var belge = await dbContext.SatisBelgeleri.AsNoTracking().FirstAsync(x => x.Id == onaylanan.Id!.Value);
+        Assert.Equal(SatisKaynakModulu.Manuel, belge.KaynakModul);
+        Assert.Null(belge.KaynakTipi);
     }
 }

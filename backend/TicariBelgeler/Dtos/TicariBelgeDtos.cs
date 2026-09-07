@@ -133,6 +133,15 @@ public class TicariBelgeTaslakOlusturRequest
     public string KaynakTipi { get; set; } = string.Empty;
     public string KaynakId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// SERVER-ONLY güven bayrağı: yalnız RezervasyonSatisBelgesiService tarafından true yapılır ve
+    /// "RezervasyonCheckout" reserved kaynak tipinin üretilmesine izin verir. İstemciden ASLA
+    /// okunmaz ([JsonIgnore]); böylece manuel/generic kaynaktan-taslak endpoint'leri bu reserved
+    /// kaynağı spoof edemez.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool RezervasyonCheckoutAkisiMi { get; set; }
+
     public int? TesisId { get; set; }
     public int? CariKartId { get; set; }
 

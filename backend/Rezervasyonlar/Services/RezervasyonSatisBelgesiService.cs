@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using STYS.AccessScope;
 using STYS.Muhasebe.Kdv.Entities;
 using STYS.Muhasebe.Kdv.Enums;
+using STYS.Muhasebe.SatisBelgeleri;
 using STYS.Muhasebe.SatisBelgeleri.Enums;
 using STYS.Muhasebe.TahsilatOdemeBelgeleri.Entities;
 using STYS.Rezervasyonlar.Dto;
@@ -28,8 +29,6 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
     private readonly ITicariBelgeService _ticariBelgeService;
     private readonly IRezervasyonCariKartResolver _cariKartResolver;
     private readonly ILogger<RezervasyonSatisBelgesiService> _logger;
-
-    private const string KaynakTipiRezervasyonCheckout = "RezervasyonCheckout";
 
     /// <summary>Ek hizmet ve restoran (OdayaEkle) satırlarında kullanılan varsayılan KDV oranı.
     /// BİLİNEN SINIRLAMA: ne RezervasyonEkHizmet ne de restoran siparişi (OdayaEkle) satır bazında
@@ -110,8 +109,9 @@ public class RezervasyonSatisBelgesiService : IRezervasyonSatisBelgesiService
         var taslakRequest = new TicariBelgeTaslakOlusturRequest
         {
             KaynakModul = SatisKaynakModulu.Otel,
-            KaynakTipi = KaynakTipiRezervasyonCheckout,
+            KaynakTipi = TicariBelgeIslemYetkisi.RezervasyonCheckoutKaynakTipi,
             KaynakId = rezervasyonId.ToString(),
+            RezervasyonCheckoutAkisiMi = true,
             TesisId = rezervasyon.TesisId,
             CariKartId = cariKartId,
             BelgeTarihi = belgeTarihi,

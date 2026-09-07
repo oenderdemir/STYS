@@ -13,6 +13,14 @@ public class SatisBelgesiTaslakOlusturRequest
     public string KaynakTipi { get; set; } = string.Empty;
     public string KaynakId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// SERVER-ONLY güven bayrağı: "RezervasyonCheckout" reserved kaynağının üretilmesine izin verir.
+    /// İstemciden ASLA okunmaz ([JsonIgnore]); yalnız RezervasyonSatisBelgesiService tarafından
+    /// (TicariBelgeTaslakOlusturRequest üzerinden) set edilir.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool RezervasyonCheckoutAkisiMi { get; set; }
+
     public int? TesisId { get; set; }
 
     /// <summary>Belgenin bağlanacağı cari kart. Boş bırakılırsa CreateAsync'in cari kart

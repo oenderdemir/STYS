@@ -16,6 +16,13 @@ namespace STYS.Muhasebe.SatisBelgeleri;
 /// </summary>
 public static class TicariBelgeIslemYetkisi
 {
+    /// <summary>
+    /// Rezervasyon check-out gelir tahakkuku akışının reserved kaynak tipi. Bu değer TEK merkezi
+    /// sabittir: hem RezervasyonSatisBelgesiService (üretici) hem de muhasebe-fişi uygunluk kuralı /
+    /// kaynak-doğrulama guard'ı (tüketici) aynı sabiti kullanır — literal string drift'i önlenir.
+    /// </summary>
+    public const string RezervasyonCheckoutKaynakTipi = "RezervasyonCheckout";
+
     /// <summary>Taslak durumunda YA DA muhasebece reddedilmiş bir belge güncellenebilir.</summary>
     public static bool GuncellenebilirMi(TicariBelgeDurumu ticariDurum, TicariBelgeMuhasebeDurumu muhasebeDurumu)
         => ticariDurum == TicariBelgeDurumu.Taslak
@@ -115,11 +122,10 @@ public static class TicariBelgeIslemYetkisi
             return true;
 
         // Rezervasyon check-out gelir belgesi istisnası — RezervasyonSatisBelgesiService bu belgeyi
-        // KaynakModul=SatisKaynakModulu.Otel + KaynakTipi="RezervasyonCheckout" ile üretir. Değer
-        // RezervasyonSatisBelgesiService.KaynakTipiRezervasyonCheckout sabitiyle birebir aynıdır.
+        // KaynakModul=SatisKaynakModulu.Otel + KaynakTipi=RezervasyonCheckoutKaynakTipi ile üretir.
         return belgeTipi == SatisBelgesiTipi.FaturaTaslagi
                && kaynakModul == SatisKaynakModulu.Otel
-               && string.Equals(kaynakTipi, "RezervasyonCheckout", StringComparison.OrdinalIgnoreCase);
+               && string.Equals(kaynakTipi, RezervasyonCheckoutKaynakTipi, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

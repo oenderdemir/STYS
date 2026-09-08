@@ -10,6 +10,7 @@ import { getApiBaseUrl } from '../../../core/config';
 export interface MuhasebeTesisModel {
     id: number;
     ad: string;
+    kurumId: number;
 }
 
 /** Convenience option shape consumed by p‑select / p‑autocomplete. */
@@ -39,7 +40,7 @@ function readPersistedTesis(): MuhasebeTesisModel | null {
 
 function persistTesis(tesis: MuhasebeTesisModel | null): void {
     if (tesis) {
-        localStorage.setItem(LS_KEY, JSON.stringify({ id: tesis.id, ad: tesis.ad }));
+        localStorage.setItem(LS_KEY, JSON.stringify({ id: tesis.id, ad: tesis.ad, kurumId: tesis.kurumId }));
     } else {
         localStorage.removeItem(LS_KEY);
     }
@@ -116,9 +117,12 @@ export class MuhasebeTesisContextService {
                         // Mevcut localStorage seçimini doğrula
                         const current = this.seciliTesis();
                         if (current) {
-                            const stillExists = list.some(t => t.id === current.id);
-                            if (!stillExists) {
+                            const guncelTesis = list.find(t => t.id === current.id);
+                            if (!guncelTesis) {
                                 this.clearTesis();
+                            } else if (guncelTesis.kurumId !== current.kurumId || guncelTesis.ad !== current.ad) {
+                                this.seciliTesis.set(guncelTesis);
+                                persistTesis(guncelTesis);
                             }
                         }
                     },

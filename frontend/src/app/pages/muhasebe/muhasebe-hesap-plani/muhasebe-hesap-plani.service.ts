@@ -15,8 +15,9 @@ export class MuhasebeHesapPlaniService {
     private readonly http = inject(HttpClient);
     private readonly apiBaseUrl = getApiBaseUrl();
 
-    getTree(): Observable<MuhasebeHesapPlaniModel[]> {
-        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree`).pipe(
+    getTree(tesisId?: number): Observable<MuhasebeHesapPlaniModel[]> {
+        const params = tesisId && tesisId > 0 ? new HttpParams().set('tesisId', tesisId) : undefined;
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -26,8 +27,9 @@ export class MuhasebeHesapPlaniService {
         );
     }
 
-    getTreeRoots(): Observable<MuhasebeHesapPlaniModel[]> {
-        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree/roots`).pipe(
+    getTreeRoots(tesisId: number): Observable<MuhasebeHesapPlaniModel[]> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.get<ApiResponse<MuhasebeHesapPlaniModel[]>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/tree/roots`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -37,8 +39,8 @@ export class MuhasebeHesapPlaniService {
         );
     }
 
-    getTreeChildren(parentId: number | null): Observable<MuhasebeHesapPlaniModel[]> {
-        let params = new HttpParams();
+    getTreeChildren(parentId: number | null, tesisId: number): Observable<MuhasebeHesapPlaniModel[]> {
+        let params = new HttpParams().set('tesisId', tesisId);
         if (parentId !== null && Number.isFinite(parentId)) {
             params = params.set('parentId', parentId);
         }
@@ -53,8 +55,8 @@ export class MuhasebeHesapPlaniService {
         );
     }
 
-    getPaged(pageNumber: number, pageSize: number): Observable<PagedResponseDto<MuhasebeHesapPlaniModel>> {
-        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize);
+    getPaged(pageNumber: number, pageSize: number, tesisId: number): Observable<PagedResponseDto<MuhasebeHesapPlaniModel>> {
+        const params = new HttpParams().set('pageNumber', pageNumber).set('pageSize', pageSize).set('tesisId', tesisId);
         return this.http.get<ApiResponse<PagedResponseDto<MuhasebeHesapPlaniModel>>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/paged`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
@@ -93,8 +95,9 @@ export class MuhasebeHesapPlaniService {
         );
     }
 
-    update(id: number, payload: UpdateMuhasebeHesapPlaniRequest): Observable<MuhasebeHesapPlaniModel> {
-        return this.http.put<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${id}`, payload).pipe(
+    update(id: number, payload: UpdateMuhasebeHesapPlaniRequest, tesisId: number): Observable<MuhasebeHesapPlaniModel> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.put<ApiResponse<MuhasebeHesapPlaniModel>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${id}`, payload, { params }).pipe(
             map((envelope) => {
                 if (envelope.success && envelope.data) {
                     return envelope.data;
@@ -104,8 +107,9 @@ export class MuhasebeHesapPlaniService {
         );
     }
 
-    delete(id: number): Observable<void> {
-        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${id}`).pipe(
+    delete(id: number, tesisId: number): Observable<void> {
+        const params = new HttpParams().set('tesisId', tesisId);
+        return this.http.delete<ApiResponse<unknown>>(`${this.apiBaseUrl}/ui/muhasebe/hesap-plani/${id}`, { params }).pipe(
             map((envelope) => {
                 if (envelope.success) {
                     return;

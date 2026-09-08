@@ -268,6 +268,16 @@ public class TasinirKartServiceTests
             string kaynakAd,
             int? kaynakId = null,
             CancellationToken cancellationToken = default)
+            => CreateOrResolveDetayHesapAsync(tesisId, anaMuhasebeHesapKodu, kaynakTipi, kaynakAd, kaynakId, null, cancellationToken);
+
+        public Task<MuhasebeDetayHesapSonuc> CreateOrResolveDetayHesapAsync(
+            int tesisId,
+            string anaMuhasebeHesapKodu,
+            string kaynakTipi,
+            string kaynakAd,
+            int? kaynakId,
+            int? ustHesapId,
+            CancellationToken cancellationToken)
         {
             return Task.FromResult(new MuhasebeDetayHesapSonuc
             {

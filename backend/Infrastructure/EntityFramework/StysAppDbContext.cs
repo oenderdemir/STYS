@@ -417,6 +417,7 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
+
         });
 
         modelBuilder.Entity<Bina>(entity =>
@@ -970,6 +971,7 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
+
         });
 
         modelBuilder.Entity<TesisMuhasebeci>(entity =>
@@ -2483,20 +2485,32 @@ public class StysAppDbContext : DbContext
             entity.Property(x => x.HareketGorebilirMi).IsRequired();
             entity.HasIndex(x => x.Kod)
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NULL");
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NULL AND [TesisId] IS NULL");
             entity.HasIndex(x => x.TamKod)
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NULL");
-            entity.HasIndex(x => new { x.TesisId, x.Kod })
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NULL AND [TesisId] IS NULL");
+            entity.HasIndex(x => new { x.KurumId, x.Kod })
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
-            entity.HasIndex(x => new { x.TesisId, x.TamKod })
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NOT NULL AND [TesisId] IS NULL");
+            entity.HasIndex(x => new { x.KurumId, x.TamKod })
                 .IsUnique()
-                .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NOT NULL AND [TesisId] IS NULL");
+            entity.HasIndex(x => new { x.KurumId, x.TesisId, x.Kod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NOT NULL AND [TesisId] IS NOT NULL");
+            entity.HasIndex(x => new { x.KurumId, x.TesisId, x.TamKod })
+                .IsUnique()
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NOT NULL AND [TesisId] IS NOT NULL");
             entity.HasIndex(x => x.UstHesapId)
                 .HasFilter("[IsDeleted] = 0 AND [UstHesapId] IS NOT NULL");
+            entity.HasIndex(x => x.KurumId)
+                .HasFilter("[IsDeleted] = 0 AND [KurumId] IS NOT NULL");
             entity.HasIndex(x => x.TesisId)
                 .HasFilter("[IsDeleted] = 0 AND [TesisId] IS NOT NULL");
+
+            entity.HasCheckConstraint(
+                "CK_MuhasebeHesapPlanlari_ScopeKurumTesis",
+                "([TesisId] IS NULL OR [KurumId] IS NOT NULL)");
 
             entity.HasOne(x => x.UstHesap)
                 .WithMany(x => x.AltHesaplar)
@@ -2506,6 +2520,11 @@ public class StysAppDbContext : DbContext
             entity.HasOne(x => x.Tesis)
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Kurum)
+                .WithMany()
+                .HasForeignKey(x => x.KurumId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -3273,6 +3292,7 @@ public class StysAppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.TesisId)
                 .OnDelete(DeleteBehavior.Restrict);
+
         });
 
         modelBuilder.Entity<StokSayim>(entity =>

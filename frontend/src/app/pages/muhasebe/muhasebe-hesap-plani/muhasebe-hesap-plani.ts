@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ConfirmationService, MessageService, TreeNode } from 'primeng/api';
@@ -49,15 +49,39 @@ export class MuhasebeHesapPlaniPage implements OnInit {
     detayHesapSaving = false;
     detayHesapAna: MuhasebeHesapPlaniModel | null = null;
     detayHesapAd = '';
+    private lastTesisId: number | null = null;
+
+    private readonly tesisChangeEffect = effect(() => {
+        const tesisId = this.tesisContext.seciliTesis()?.id ?? null;
+        if (tesisId === this.lastTesisId) {
+            return;
+        }
+
+        this.lastTesisId = tesisId;
+        this.dialogVisible = false;
+        this.detayHesapDialogVisible = false;
+        this.ustHesapSecenekleri = [];
+        this.treeRecords = [];
+
+        if (tesisId) {
+            this.load();
+        }
+    });
 
     ngOnInit(): void {
         this.tesisContext.initialize().subscribe({ error: () => void 0 });
-        setTimeout(() => this.load());
     }
 
     load(): void {
+        const tesis = this.tesisContext.seciliTesis();
+        if (!tesis) {
+            this.treeRecords = [];
+            this.loading = false;
+            return;
+        }
+
         this.loading = true;
-        this.service.getTreeRoots().pipe(finalize(() => {
+        this.service.getTreeRoots(tesis.id).pipe(finalize(() => {
             this.loading = false;
             this.cdr.detectChanges();
         })).subscribe({
@@ -79,7 +103,13 @@ export class MuhasebeHesapPlaniPage implements OnInit {
             return;
         }
 
-        this.service.getTreeChildren(nodeId).subscribe({
+        const tesisId = this.tesisContext.seciliTesis()?.id;
+        if (!tesisId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Tesisi Sec', detail: 'Once bir calisma tesisi secin.' });
+            return;
+        }
+
+        this.service.getTreeChildren(nodeId, tesisId).subscribe({
             next: (items) => {
                 node.children = items.map((item) => this.mapToNode(item));
                 node.leaf = node.children.length === 0;
@@ -119,14 +149,22 @@ export class MuhasebeHesapPlaniPage implements OnInit {
             tamKod: this.model.tamKod.trim(),
             ad: this.model.ad.trim(),
             seviyeNo: this.model.seviyeNo,
+            kurumId: this.model.kurumId ?? null,
+            tesisId: this.model.tesisId ?? null,
             ustHesapId: this.model.ustHesapId ?? null,
             aktifMi: this.model.aktifMi,
             aciklama: this.model.aciklama?.trim() || null
         };
 
+        const tesisId = this.tesisContext.seciliTesis()?.id;
+        if (!tesisId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Tesisi Sec', detail: 'Once bir calisma tesisi secin.' });
+            return;
+        }
+
         this.saving = true;
         const request$ = this.dialogMode === 'edit' && this.model.id
-            ? this.service.update(this.model.id, payload as UpdateMuhasebeHesapPlaniRequest)
+            ? this.service.update(this.model.id, payload as UpdateMuhasebeHesapPlaniRequest, tesisId)
             : this.service.create(payload as CreateMuhasebeHesapPlaniRequest);
 
         request$.pipe(finalize(() => (this.saving = false))).subscribe({
@@ -144,6 +182,12 @@ export class MuhasebeHesapPlaniPage implements OnInit {
             return;
         }
 
+        const tesisId = this.tesisContext.seciliTesis()?.id;
+        if (!tesisId) {
+            this.messageService.add({ severity: UiSeverity.Warn, summary: 'Tesisi Sec', detail: 'Once bir calisma tesisi secin.' });
+            return;
+        }
+
         this.confirmationService.confirm({
             message: 'Kayit silinsin mi?',
             header: 'Onay',
@@ -151,7 +195,7 @@ export class MuhasebeHesapPlaniPage implements OnInit {
             acceptLabel: 'Evet',
             rejectLabel: 'Hayir',
             accept: () => {
-                this.service.delete(item.id!).subscribe({
+                this.service.delete(item.id!, tesisId).subscribe({
                     next: () => {
                         this.load();
                         this.messageService.add({ severity: UiSeverity.Success, summary: 'Basarili', detail: 'Kayit silindi.' });
@@ -199,7 +243,13 @@ export class MuhasebeHesapPlaniPage implements OnInit {
     }
 
     private loadParentOptions(excludeId: number | null = null): void {
-        this.service.getPaged(1, 1000).subscribe({
+        const tesisId = this.tesisContext.seciliTesis()?.id;
+        if (!tesisId) {
+            this.ustHesapSecenekleri = [];
+            return;
+        }
+
+        this.service.getPaged(1, 1000, tesisId).subscribe({
             next: (paged) => {
                 this.ustHesapSecenekleri = (paged.items ?? [])
                     .filter((x) => x.id && x.id !== excludeId)
@@ -226,6 +276,8 @@ export class MuhasebeHesapPlaniPage implements OnInit {
             tamKod: '',
             ad: '',
             seviyeNo: 1,
+            kurumId: null,
+            tesisId: null,
             ustHesapId: null,
             aktifMi: true,
             aciklama: null

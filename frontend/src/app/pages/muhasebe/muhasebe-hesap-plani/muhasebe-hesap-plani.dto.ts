@@ -5,6 +5,7 @@ export interface MuhasebeHesapPlaniModel {
     ad: string;
     seviyeNo: number;
     hesapTipi?: number;
+    kurumId?: number | null;
     tesisId?: number | null;
     ustHesapId?: number | null;
     hasChildren?: boolean;

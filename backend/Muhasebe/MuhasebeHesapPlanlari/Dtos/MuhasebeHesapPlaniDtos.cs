@@ -12,6 +12,7 @@ public class MuhasebeHesapPlaniDto : BaseRdbmsDto<int>
     public string Ad { get; set; } = string.Empty;
     public int SeviyeNo { get; set; }
     public HesapTipi HesapTipi { get; set; }
+    public int? KurumId { get; set; }
     public int? TesisId { get; set; }
     public int? UstHesapId { get; set; }
     public bool HasChildren { get; set; }
@@ -30,6 +31,7 @@ public class CreateMuhasebeHesapPlaniRequest
     public string Ad { get; set; } = string.Empty;
     public int SeviyeNo { get; set; }
     public HesapTipi HesapTipi { get; set; }
+    public int? KurumId { get; set; }
     public int? TesisId { get; set; }
     public int? UstHesapId { get; set; }
     public bool AktifMi { get; set; } = true;

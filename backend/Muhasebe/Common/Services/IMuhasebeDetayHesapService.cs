@@ -17,4 +17,13 @@ public interface IMuhasebeDetayHesapService
         string kaynakAd,
         int? kaynakId = null,
         CancellationToken cancellationToken = default);
+
+    Task<MuhasebeDetayHesapSonuc> CreateOrResolveDetayHesapAsync(
+        int tesisId,
+        string anaMuhasebeHesapKodu,
+        string kaynakTipi,
+        string kaynakAd,
+        int? kaynakId,
+        int? ustHesapId,
+        CancellationToken cancellationToken);
 }

@@ -22,34 +22,34 @@ public class MuhasebeHesapPlaniController : UIController
 
     [HttpGet]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
-    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetList(CancellationToken cancellationToken)
-        => Ok(await _service.GetTreeAsync(cancellationToken));
+    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetList([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeAsync(tesisId, cancellationToken));
 
     [HttpGet("tree")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
-    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTree(CancellationToken cancellationToken)
-        => Ok(await _service.GetTreeAsync(cancellationToken));
+    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTree([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeAsync(tesisId, cancellationToken));
 
     [HttpGet("tree/roots")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
-    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTreeRoots(CancellationToken cancellationToken)
-        => Ok(await _service.GetTreeRootsAsync(cancellationToken));
+    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTreeRoots([FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeRootsAsync(tesisId, cancellationToken));
 
     [HttpGet("tree/children")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
-    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTreeChildren([FromQuery] int? parentId, CancellationToken cancellationToken)
-        => Ok(await _service.GetTreeChildrenAsync(parentId, cancellationToken));
+    public async Task<ActionResult<List<MuhasebeHesapPlaniDto>>> GetTreeChildren([FromQuery] int? parentId, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetTreeChildrenAsync(parentId, tesisId, cancellationToken));
 
     [HttpGet("paged")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
-    public async Task<ActionResult<PagedResult<MuhasebeHesapPlaniDto>>> GetPaged([FromQuery] PagedRequest request, CancellationToken cancellationToken)
-        => Ok(await _service.GetPagedAsync(request, orderBy: q => q.OrderBy(x => x.TamKod).ThenBy(x => x.Id)));
+    public async Task<ActionResult<PagedResult<MuhasebeHesapPlaniDto>>> GetPaged([FromQuery] PagedRequest request, [FromQuery] int? tesisId, CancellationToken cancellationToken)
+        => Ok(await _service.GetPagedAsync(request, tesisId, cancellationToken));
 
     [HttpGet("{id:int}")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.View)]
-    public async Task<ActionResult<MuhasebeHesapPlaniDto>> GetById(int id, CancellationToken cancellationToken)
+    public async Task<ActionResult<MuhasebeHesapPlaniDto>> GetById(int id, [FromQuery] int? tesisId, CancellationToken cancellationToken)
     {
-        var item = await _service.GetByIdAsync(id);
+        var item = await _service.GetByIdAsync(id, tesisId, cancellationToken);
         return item is null ? NotFound() : Ok(item);
     }
 
@@ -69,18 +69,18 @@ public class MuhasebeHesapPlaniController : UIController
 
     [HttpPut("{id:int}")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.Manage)]
-    public async Task<ActionResult<MuhasebeHesapPlaniDto>> Update(int id, [FromBody] UpdateMuhasebeHesapPlaniRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<MuhasebeHesapPlaniDto>> Update(int id, [FromQuery] int? tesisId, [FromBody] UpdateMuhasebeHesapPlaniRequest request, CancellationToken cancellationToken)
     {
         var dto = _mapper.Map<MuhasebeHesapPlaniDto>(request);
         dto.Id = id;
-        return Ok(await _service.UpdateAsync(dto));
+        return Ok(await _service.UpdateAsync(dto, tesisId, cancellationToken));
     }
 
     [HttpDelete("{id:int}")]
     [Permission(StructurePermissions.MuhasebeHesapPlaniYonetimi.Manage)]
-    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(int id, [FromQuery] int? tesisId, CancellationToken cancellationToken)
     {
-        await _service.DeleteAsync(id);
+        await _service.DeleteAsync(id, tesisId, cancellationToken);
         return Ok();
     }
 }

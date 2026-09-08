@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using STYS.Kurumlar.Entities;
 using STYS.Tesisler.Entities;
 using TOD.Platform.Persistence.Rdbms.Entities;
 
@@ -45,6 +46,8 @@ public class MuhasebeHesapPlani : BaseEntity<int>
     [MaxLength(16)]
     public string? AnaHesapKodu { get; set; }
 
+    public int? KurumId { get; set; }
+
     public int? TesisId { get; set; }
 
     public int? UstHesapId { get; set; }
@@ -66,6 +69,7 @@ public class MuhasebeHesapPlani : BaseEntity<int>
     [MaxLength(1024)]
     public string? Aciklama { get; set; }
 
+    public Kurum? Kurum { get; set; }
     public Tesis? Tesis { get; set; }
     public MuhasebeHesapPlani? UstHesap { get; set; }
     public ICollection<MuhasebeHesapPlani> AltHesaplar { get; set; } = [];

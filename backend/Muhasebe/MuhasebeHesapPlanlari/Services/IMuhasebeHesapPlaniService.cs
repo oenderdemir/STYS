@@ -1,5 +1,6 @@
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Dtos;
 using STYS.Muhasebe.MuhasebeHesapPlanlari.Entities;
+using TOD.Platform.Persistence.Rdbms.Paging;
 using TOD.Platform.Persistence.Rdbms.Services;
 
 namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Services;
@@ -7,8 +8,15 @@ namespace STYS.Muhasebe.MuhasebeHesapPlanlari.Services;
 public interface IMuhasebeHesapPlaniService : IBaseRdbmsService<MuhasebeHesapPlaniDto, MuhasebeHesapPlani, int>
 {
     Task<List<MuhasebeHesapPlaniDto>> GetTreeAsync(CancellationToken cancellationToken = default);
+    Task<List<MuhasebeHesapPlaniDto>> GetTreeAsync(int? tesisId, CancellationToken cancellationToken = default);
     Task<List<MuhasebeHesapPlaniDto>> GetTreeRootsAsync(CancellationToken cancellationToken = default);
+    Task<List<MuhasebeHesapPlaniDto>> GetTreeRootsAsync(int? tesisId, CancellationToken cancellationToken = default);
     Task<List<MuhasebeHesapPlaniDto>> GetTreeChildrenAsync(int? parentId, CancellationToken cancellationToken = default);
+    Task<List<MuhasebeHesapPlaniDto>> GetTreeChildrenAsync(int? parentId, int? tesisId, CancellationToken cancellationToken = default);
+    Task<PagedResult<MuhasebeHesapPlaniDto>> GetPagedAsync(PagedRequest request, int? tesisId, CancellationToken cancellationToken = default);
+    Task<MuhasebeHesapPlaniDto?> GetByIdAsync(int id, int? tesisId, CancellationToken cancellationToken = default);
+    Task<MuhasebeHesapPlaniDto> UpdateAsync(MuhasebeHesapPlaniDto dto, int? tesisId, CancellationToken cancellationToken = default);
+    Task DeleteAsync(int id, int? tesisId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ana hesap altında, çalışma tesisi kapsamında güvenli bir DETAY hesap oluşturur.

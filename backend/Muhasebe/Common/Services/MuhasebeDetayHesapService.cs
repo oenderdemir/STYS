@@ -24,6 +24,23 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
         string kaynakAd,
         int? kaynakId = null,
         CancellationToken cancellationToken = default)
+        => await CreateOrResolveDetayHesapAsync(
+            tesisId,
+            anaMuhasebeHesapKodu,
+            kaynakTipi,
+            kaynakAd,
+            kaynakId,
+            ustHesapId: null,
+            cancellationToken);
+
+    public async Task<MuhasebeDetayHesapSonuc> CreateOrResolveDetayHesapAsync(
+        int tesisId,
+        string anaMuhasebeHesapKodu,
+        string kaynakTipi,
+        string kaynakAd,
+        int? kaynakId,
+        int? ustHesapId,
+        CancellationToken cancellationToken)
     {
         if (tesisId <= 0)
         {
@@ -48,12 +65,21 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
 
             try
             {
-                var anaHesap = await GetAnaHesapAsync(anaMuhasebeHesapKodu, kaynakTipi, cancellationToken);
+                var anaHesap = ustHesapId.HasValue
+                    ? await GetAnaHesapByIdAsync(ustHesapId.Value, kaynakTipi, cancellationToken)
+                    : await GetAnaHesapAsync(anaMuhasebeHesapKodu, kaynakTipi, cancellationToken);
 
                 if (anaHesap is null)
                 {
                     throw new BaseException(BuildAnaHesapBulunamadiMesaji(anaMuhasebeHesapKodu, kaynakTipi), 400);
                 }
+
+                var tesisKurumId = await _dbContext.Tesisler
+                    .AsNoTracking()
+                    .Where(x => x.Id == tesisId && x.AktifMi)
+                    .Select(x => (int?)x.KurumId)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    ?? throw new BaseException("Seçilen tesis bulunamadı.", 400);
 
                 var siraNo = await NextSiraNoAsync(tesisId, anaMuhasebeHesapKodu, kaynakTipi, cancellationToken);
                 var kod = BuildDetayKod(anaMuhasebeHesapKodu, siraNo);
@@ -65,6 +91,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
                 {
                     await EnsureNotLinkedToAnotherSourceAsync(existing.Id, existing.Kod, kaynakTipi, kaynakId, cancellationToken);
                     existing.Ad = kaynakAd;
+                    existing.KurumId = tesisKurumId;
                     existing.AktifMi = true;
                     existing.DetayHesapMi = true;
                     existing.HareketGorebilirMi = true;
@@ -85,6 +112,7 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
 
                 var detay = new MuhasebeHesapPlani
                 {
+                    KurumId = tesisKurumId,
                     TesisId = tesisId,
                     Kod = kod,
                     TamKod = kod,
@@ -173,6 +201,20 @@ public class MuhasebeDetayHesapService : IMuhasebeDetayHesapService
         }
 
         throw new BaseException(BuildAnaHesapBulunamadiMesaji(anaMuhasebeHesapKodu, kaynakTipi), 400);
+    }
+
+    private async Task<MuhasebeHesapPlani> GetAnaHesapByIdAsync(int ustHesapId, string kaynakTipi, CancellationToken cancellationToken)
+    {
+        var hesap = await _dbContext.MuhasebeHesapPlanlari
+            .Where(x => !x.IsDeleted && x.AktifMi && x.Id == ustHesapId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (hesap is null)
+        {
+            throw new BaseException($"{kaynakTipi} için ana muhasebe hesabı bulunamadı.", 400);
+        }
+
+        return hesap;
     }
 
     private async Task<int> NextSiraNoAsync(int tesisId, string anaHesapKodu, string kaynakTipi, CancellationToken cancellationToken)

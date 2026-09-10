@@ -16,6 +16,8 @@ public class OdaDto : BaseRdbmsDto<int>
 
     public int KatNo { get; set; }
 
+    public int Kapasite { get; set; }
+
     public bool AktifMi { get; set; } = true;
 
     public ICollection<OdaOzellikDegerDto> OdaOzellikDegerleri { get; set; } = [];

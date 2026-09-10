@@ -19,6 +19,8 @@ public class Oda : BaseEntity<int>
 
     public int KatNo { get; set; }
 
+    public int Kapasite { get; set; } = 1;
+
     public bool AktifMi { get; set; } = true;
 
     [Required]

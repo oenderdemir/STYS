@@ -414,7 +414,7 @@ public class KampRezervasyonService : IKampRezervasyonService
                 OdaNo = x.OdaNo,
                 BinaAdi = x.Bina!.Ad,
                 OdaTipiAdi = x.TesisOdaTipi!.Ad,
-                Kapasite = x.TesisOdaTipi.Kapasite,
+                Kapasite = x.Kapasite,
                 PaylasimliMi = x.TesisOdaTipi.PaylasimliMi
             })
             .OrderBy(x => x.BinaAdi)

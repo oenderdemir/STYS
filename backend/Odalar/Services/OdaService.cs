@@ -51,11 +51,17 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
     {
         Normalize(dto);
         var odaTipi = await EnsureDependenciesAsync(dto);
+        if (dto.Kapasite <= 0)
+        {
+            dto.Kapasite = odaTipi.Kapasite;
+        }
+
+        EnsureValidCapacity(dto.Kapasite);
         await EnsureUniqueActiveRoomNoAsync(dto, null);
         var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
         var defaultFeatureValues = GetDefaultFeatureValuesFromOdaTipi(odaTipi);
         var finalFeatureValues = MergeDefaultAndInputFeatureValues(defaultFeatureValues, normalizedOdaOzellikDegerleri);
-        await ValidateBedCountAsync(finalFeatureValues, odaTipi.Kapasite, odaTipi.PaylasimliMi);
+        await ValidateBedCountAsync(finalFeatureValues, dto.Kapasite, odaTipi.PaylasimliMi);
 
         var entity = Mapper.Map<Oda>(dto);
         entity.OdaOzellikDegerleri = finalFeatureValues
@@ -88,15 +94,17 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
         await EnsureCanAccessBinaAsync(existingEntity.BinaId);
         Normalize(dto);
         var odaTipi = await EnsureDependenciesAsync(dto);
+        EnsureValidCapacity(dto.Kapasite);
         await EnsureUniqueActiveRoomNoAsync(dto, dto.Id.Value);
         var normalizedOdaOzellikDegerleri = await NormalizeAndValidateOdaOzellikDegerleriAsync(dto.OdaOzellikDegerleri);
-        await ValidateBedCountAsync(normalizedOdaOzellikDegerleri, odaTipi.Kapasite, odaTipi.PaylasimliMi);
+        await ValidateBedCountAsync(normalizedOdaOzellikDegerleri, dto.Kapasite, odaTipi.PaylasimliMi);
 
         existingEntity.IsDeleted = false;
         existingEntity.OdaNo = dto.OdaNo;
         existingEntity.BinaId = dto.BinaId;
         existingEntity.TesisOdaTipiId = dto.TesisOdaTipiId;
         existingEntity.KatNo = dto.KatNo;
+        existingEntity.Kapasite = dto.Kapasite;
         existingEntity.AktifMi = dto.AktifMi;
 
         SyncOdaOzellikDegerleri(existingEntity, normalizedOdaOzellikDegerleri);
@@ -175,7 +183,7 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
 
     private async Task ValidateBedCountAsync(
         IReadOnlyCollection<OdaOzellikDegerNormalized> odaOzellikDegerleri,
-        int odaTipiKapasitesi,
+        int odaKapasitesi,
         bool paylasimliMi)
     {
         var yatakSayisi = await GetBedCountFromDynamicFeaturesAsync(odaOzellikDegerleri);
@@ -187,9 +195,9 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
                 throw new BaseException("Paylasimli oda icin yatak sayisi zorunludur.", 400);
             }
 
-            if (yatakSayisi.Value > odaTipiKapasitesi)
+            if (yatakSayisi.Value < odaKapasitesi)
             {
-                throw new BaseException("Yatak sayisi oda tipi kapasitesini asamaz.", 400);
+                throw new BaseException("Paylasimli oda icin yatak sayisi oda kapasitesinden dusuk olamaz.", 400);
             }
 
             return;
@@ -257,6 +265,14 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
 
         dto.OdaNo = dto.OdaNo.Trim();
         dto.OdaOzellikDegerleri ??= [];
+    }
+
+    private static void EnsureValidCapacity(int kapasite)
+    {
+        if (kapasite <= 0)
+        {
+            throw new BaseException("Oda kapasitesi sifirdan buyuk olmalidir.", 400);
+        }
     }
 
     private async Task<List<OdaOzellikDegerNormalized>> NormalizeAndValidateOdaOzellikDegerleriAsync(ICollection<OdaOzellikDegerDto>? odaOzellikDegerleri)

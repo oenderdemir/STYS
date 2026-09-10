@@ -110,7 +110,7 @@ public class OdaMusaitlikRaporService : IOdaMusaitlikRaporService
 
         if (kapasite.HasValue)
         {
-            odaQuery = odaQuery.Where(o => o.TesisOdaTipi!.Kapasite >= kapasite.Value);
+            odaQuery = odaQuery.Where(o => o.Kapasite >= kapasite.Value);
         }
 
         var odalar = await odaQuery
@@ -122,7 +122,7 @@ public class OdaMusaitlikRaporService : IOdaMusaitlikRaporService
                 o.OdaNo,
                 BinaAdi = o.Bina!.Ad,
                 OdaTipiAdi = o.TesisOdaTipi!.Ad,
-                Kapasite = o.TesisOdaTipi.Kapasite
+                Kapasite = o.Kapasite
             })
             .ToListAsync(cancellationToken);
 

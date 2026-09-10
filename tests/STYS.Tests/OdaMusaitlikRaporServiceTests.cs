@@ -334,8 +334,8 @@ public class OdaMusaitlikRaporServiceTests
             AktifMi = true
         });
 
-        dbContext.Odalar.Add(new Oda { Id = 100, OdaNo = "101", BinaId = 10, TesisOdaTipiId = 20, KatNo = 1, AktifMi = true });
-        dbContext.Odalar.Add(new Oda { Id = 101, OdaNo = "102", BinaId = 10, TesisOdaTipiId = 21, KatNo = 1, AktifMi = true });
+        dbContext.Odalar.Add(new Oda { Id = 100, OdaNo = "101", BinaId = 10, TesisOdaTipiId = 20, KatNo = 1, Kapasite = 2, AktifMi = true });
+        dbContext.Odalar.Add(new Oda { Id = 101, OdaNo = "102", BinaId = 10, TesisOdaTipiId = 21, KatNo = 1, Kapasite = 4, AktifMi = true });
 
         await dbContext.SaveChangesAsync();
     }

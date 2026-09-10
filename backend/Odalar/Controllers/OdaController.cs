@@ -39,7 +39,7 @@ public class OdaController : UIController
         var orderBy = BuildOrderBy(sortBy, sortDir);
         if (orderBy is null && !string.IsNullOrWhiteSpace(sortBy))
         {
-            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: odaNo, binaId, tesisOdaTipiId, katNo, aktifMi, id, createdAt.");
+            return BadRequest("Desteklenmeyen siralama kolonu. Desteklenen alanlar: odaNo, binaId, tesisOdaTipiId, katNo, kapasite, aktifMi, id, createdAt.");
         }
 
         var normalizedQuery = query?.Trim();
@@ -128,6 +128,7 @@ public class OdaController : UIController
             "binaid" => desc ? q => q.OrderByDescending(x => x.BinaId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.BinaId).ThenBy(x => x.Id),
             "tesisodatipiid" => desc ? q => q.OrderByDescending(x => x.TesisOdaTipiId).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.TesisOdaTipiId).ThenBy(x => x.Id),
             "katno" => desc ? q => q.OrderByDescending(x => x.KatNo).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.KatNo).ThenBy(x => x.Id),
+            "kapasite" => desc ? q => q.OrderByDescending(x => x.Kapasite).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.Kapasite).ThenBy(x => x.Id),
             "aktifmi" => desc ? q => q.OrderByDescending(x => x.AktifMi).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.AktifMi).ThenBy(x => x.Id),
             "id" => desc ? q => q.OrderByDescending(x => x.Id) : q => q.OrderBy(x => x.Id),
             "createdat" => desc ? q => q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id) : q => q.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),

@@ -115,7 +115,7 @@ public class KampUcretHesaplamaService : IKampUcretHesaplamaService
             .Where(x => x.AktifMi && x.TesisId == tesisId && x.Ad.ToLower() == normalizedSecim.ToLower())
             .Select(x => x.Odalar
                 .Where(o => o.AktifMi && o.TesisOdaTipi != null && o.TesisOdaTipi.AktifMi)
-                .Select(o => o.TesisOdaTipi!.Kapasite))
+                .Select(o => o.Kapasite))
             .FirstOrDefaultAsync(cancellationToken);
 
         var kapasiteListesi = binaKapasiteleri?.ToList() ?? [];

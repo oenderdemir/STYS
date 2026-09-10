@@ -79,7 +79,7 @@ public class OdaDolulukRaporService : IOdaDolulukRaporService
                 OdaNo = o.OdaNo,
                 BinaAdi = o.Bina!.Ad,
                 OdaTipiAdi = o.TesisOdaTipi!.Ad,
-                Kapasite = o.TesisOdaTipi.Kapasite
+                Kapasite = o.Kapasite
             })
             .ToListAsync(cancellationToken);
 

@@ -85,7 +85,7 @@ public class KonaklamaKisiSayisiRaporService : IKonaklamaKisiSayisiRaporService
                 OdaId = o.Id,
                 OdaNo = o.OdaNo,
                 OdaTipiAdi = o.TesisOdaTipi!.Ad,
-                Kapasite = o.TesisOdaTipi.Kapasite
+                Kapasite = o.Kapasite
             })
             .ToListAsync(cancellationToken);
 

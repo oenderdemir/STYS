@@ -630,7 +630,7 @@ public partial class RezervasyonService : IRezervasyonService
             select new
             {
                 OdaId = oda.Id,
-                odaTipi.Kapasite
+                oda.Kapasite
             })
             .ToListAsync(cancellationToken);
 
@@ -1828,7 +1828,7 @@ public partial class RezervasyonService : IRezervasyonService
                     oda.OdaNo,
                     bina.Ad,
                     roomType.Ad,
-                    roomType.Kapasite,
+                    oda.Kapasite,
                     roomType.PaylasimliMi))
             .ToListAsync(cancellationToken);
 
@@ -2062,7 +2062,7 @@ public partial class RezervasyonService : IRezervasyonService
                   && bina.AktifMi
                   && odaTipi.AktifMi
                   && bina.TesisId == request.TesisId
-                  && odaTipi.Kapasite >= request.KisiSayisi
+                  && oda.Kapasite >= request.KisiSayisi
                   && (!request.OdaTipiId.HasValue || request.OdaTipiId.Value <= 0 || oda.TesisOdaTipiId == request.OdaTipiId.Value)
             select new UygunOdaDto
             {
@@ -2072,7 +2072,7 @@ public partial class RezervasyonService : IRezervasyonService
                 BinaAdi = bina.Ad,
                 OdaTipiId = odaTipi.Id,
                 OdaTipiAdi = odaTipi.Ad,
-                Kapasite = odaTipi.Kapasite,
+                Kapasite = oda.Kapasite,
                 PaylasimliMi = odaTipi.PaylasimliMi
             };
 
@@ -2251,7 +2251,7 @@ public partial class RezervasyonService : IRezervasyonService
                 bina.TesisId,
                 bina.Ad,
                 odaTipi.Ad,
-                odaTipi.Kapasite,
+                oda.Kapasite,
                 odaTipi.PaylasimliMi))
             .ToListAsync(cancellationToken);
 
@@ -4107,7 +4107,7 @@ public partial class RezervasyonService : IRezervasyonService
                 bina.TesisId,
                 OdaTipiId = odaTipi.Id,
                 odaTipi.PaylasimliMi,
-                odaTipi.Kapasite
+                oda.Kapasite
             })
             .ToListAsync(cancellationToken);
 
@@ -4993,13 +4993,13 @@ public partial class RezervasyonService : IRezervasyonService
                       && bina.AktifMi
                       && odaTipi.AktifMi
                       && bina.TesisId == tesisId
-                      && odaTipi.Kapasite >= assignment.AyrilanKisiSayisi
+                      && oda.Kapasite >= assignment.AyrilanKisiSayisi
                 select new OdaDegisimRoomInfo(
                     oda.Id,
                     oda.OdaNo,
                     bina.Ad,
                     odaTipi.Ad,
-                    odaTipi.Kapasite,
+                    oda.Kapasite,
                     odaTipi.PaylasimliMi))
             .ToListAsync(cancellationToken);
 
@@ -5898,7 +5898,7 @@ public partial class RezervasyonService : IRezervasyonService
                   && bina.AktifMi
                   && roomType.AktifMi
                   && bina.TesisId == tesisId
-                  && roomType.Kapasite >= 1
+                  && oda.Kapasite >= 1
                   && (!odaTipiId.HasValue || odaTipiId.Value <= 0 || roomType.Id == odaTipiId.Value)
             select new
             {
@@ -5908,7 +5908,7 @@ public partial class RezervasyonService : IRezervasyonService
                 BinaAdi = bina.Ad,
                 OdaTipiId = roomType.Id,
                 OdaTipiAdi = roomType.Ad,
-                roomType.Kapasite,
+                oda.Kapasite,
                 roomType.PaylasimliMi
             })
             .ToListAsync(cancellationToken);
@@ -7062,7 +7062,7 @@ public partial class RezervasyonService : IRezervasyonService
                 x.TemizlikDurumu,
                 OdaTipiId = x.TesisOdaTipiId,
                 OdaTipiAdi = x.TesisOdaTipi!.Ad,
-                Kapasite = x.TesisOdaTipi.Kapasite
+                Kapasite = x.Kapasite
             })
             .ToListAsync(cancellationToken);
 

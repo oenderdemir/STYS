@@ -65,12 +65,20 @@ import { OdaDto } from './oda-yonetimi.dto';
                         optionLabel="ad"
                         optionValue="id"
                         [(ngModel)]="workingModel.tesisOdaTipiId"
+                        (ngModelChange)="onOdaTipiChange()"
                         [showClear]="true"
                         [filter]="true"
                         appendTo="body"
                         class="w-full"
                         [disabled]="isReadOnly || saving"
                     />
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label for="kapasite" class="block font-medium mb-2">Kapasite</label>
+                    <p-inputnumber inputId="kapasite" [(ngModel)]="workingModel.kapasite" [useGrouping]="false" [min]="1" styleClass="w-full" [disabled]="isReadOnly || saving" />
+                    @if (selectedOdaTipiDefaultCapacity) {
+                        <small class="text-color-secondary">Oda tipi varsayilan kapasitesi: {{ selectedOdaTipiDefaultCapacity }}</small>
+                    }
                 </div>
                 <div class="col-span-12">
                     <label class="block font-medium mb-2">Dinamik Oda Ozellikleri</label>
@@ -151,7 +159,7 @@ import { OdaDto } from './oda-yonetimi.dto';
 export class OdaDialog implements OnChanges {
     @Input() visible = false;
     @Input() mode: CrudDialogMode = 'create';
-    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, odaOzellikDegerleri: [], aktifMi: true };
+    @Input() model: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, kapasite: 0, odaOzellikDegerleri: [], aktifMi: true };
     @Input() binalar: BinaDto[] = [];
     @Input() odaTipleri: OdaTipiDto[] = [];
     @Input() odaOzellikleri: OdaOzellikDto[] = [];
@@ -163,7 +171,7 @@ export class OdaDialog implements OnChanges {
     @Output() readonly save = new EventEmitter<OdaDto>();
     @Output() readonly modeChange = new EventEmitter<CrudDialogMode>();
 
-    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, odaOzellikDegerleri: [], aktifMi: true };
+    workingModel: OdaDto = { odaNo: '', binaId: 0, tesisOdaTipiId: 0, katNo: 0, kapasite: 0, odaOzellikDegerleri: [], aktifMi: true };
     readonly booleanFeatureOptions: Array<{ label: string; value: string | null }> = [
         { label: 'Belirtilmedi', value: null },
         { label: 'Evet', value: 'true' },
@@ -237,6 +245,11 @@ export class OdaDialog implements OnChanges {
         return this.mode === 'edit' ? 'Guncelle' : 'Olustur';
     }
 
+    get selectedOdaTipiDefaultCapacity(): number | null {
+        const odaTipi = this.odaTipleri.find((item) => item.id === this.workingModel.tesisOdaTipiId);
+        return odaTipi?.kapasite && odaTipi.kapasite > 0 ? odaTipi.kapasite : null;
+    }
+
     get dialogTitle(): string {
         if (this.mode === 'create') {
             return 'Yeni Oda';
@@ -262,7 +275,8 @@ export class OdaDialog implements OnChanges {
     canSubmit(): boolean {
         return (this.workingModel.odaNo?.trim() ?? '').length > 0
             && !!this.workingModel.binaId
-            && !!this.workingModel.tesisOdaTipiId;
+            && !!this.workingModel.tesisOdaTipiId
+            && (this.workingModel.kapasite ?? 0) > 0;
     }
 
     submit(): void {
@@ -284,6 +298,7 @@ export class OdaDialog implements OnChanges {
             binaId: this.workingModel.binaId,
             tesisOdaTipiId: this.workingModel.tesisOdaTipiId,
             katNo: this.workingModel.katNo,
+            kapasite: this.workingModel.kapasite,
             odaOzellikDegerleri: this.getSanitizedFeatureValues(),
             aktifMi: this.workingModel.aktifMi
         });
@@ -299,6 +314,21 @@ export class OdaDialog implements OnChanges {
         const existsInTesis = this.odaTipleri.some((item) => item.id === this.workingModel.tesisOdaTipiId && item.tesisId === tesisId);
         if (!existsInTesis) {
             this.workingModel.tesisOdaTipiId = 0;
+        }
+    }
+
+    onOdaTipiChange(): void {
+        if (this.mode !== 'create') {
+            return;
+        }
+
+        if ((this.workingModel.kapasite ?? 0) > 0) {
+            return;
+        }
+
+        const defaultCapacity = this.selectedOdaTipiDefaultCapacity;
+        if (defaultCapacity) {
+            this.workingModel.kapasite = defaultCapacity;
         }
     }
 

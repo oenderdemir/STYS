@@ -9979,9 +9979,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasColumnType("bit");
 
                     b.Property<int>("Kapasite")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1);
+                        .HasColumnType("int");
 
                     b.Property<int>("KatNo")
                         .HasColumnType("int");

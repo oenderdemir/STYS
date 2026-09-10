@@ -195,9 +195,9 @@ public class OdaService : BaseRdbmsService<OdaDto, Oda, int>, IOdaService
                 throw new BaseException("Paylasimli oda icin yatak sayisi zorunludur.", 400);
             }
 
-            if (yatakSayisi.Value < odaKapasitesi)
+            if (yatakSayisi.Value > odaKapasitesi)
             {
-                throw new BaseException("Paylasimli oda icin yatak sayisi oda kapasitesinden dusuk olamaz.", 400);
+                throw new BaseException("Yatak sayisi oda kapasitesini asamaz.", 400);
             }
 
             return;

@@ -12,7 +12,7 @@ using STYS.Infrastructure.EntityFramework;
 namespace STYS.Infrastructure.EntityFramework.Migrations
 {
     [DbContext(typeof(StysAppDbContext))]
-    [Migration("20260910081449_AddRoomLevelCapacity")]
+    [Migration("20260910083707_AddRoomLevelCapacity")]
     partial class AddRoomLevelCapacity
     {
         /// <inheritdoc />
@@ -9982,9 +9982,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                         .HasColumnType("bit");
 
                     b.Property<int>("Kapasite")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1);
+                        .HasColumnType("int");
 
                     b.Property<int>("KatNo")
                         .HasColumnType("int");

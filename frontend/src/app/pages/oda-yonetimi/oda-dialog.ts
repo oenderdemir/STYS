@@ -75,7 +75,15 @@ import { OdaDto } from './oda-yonetimi.dto';
                 </div>
                 <div class="col-span-12 md:col-span-6">
                     <label for="kapasite" class="block font-medium mb-2">Kapasite</label>
-                    <p-inputnumber inputId="kapasite" [(ngModel)]="workingModel.kapasite" [useGrouping]="false" [min]="1" styleClass="w-full" [disabled]="isReadOnly || saving" />
+                    <p-inputnumber
+                        inputId="kapasite"
+                        [ngModel]="workingModel.kapasite"
+                        (ngModelChange)="onKapasiteInputChange($event)"
+                        [useGrouping]="false"
+                        [min]="1"
+                        styleClass="w-full"
+                        [disabled]="isReadOnly || saving"
+                    />
                     @if (selectedOdaTipiDefaultCapacity) {
                         <small class="text-color-secondary">Oda tipi varsayilan kapasitesi: {{ selectedOdaTipiDefaultCapacity }}</small>
                     }
@@ -182,6 +190,7 @@ export class OdaDialog implements OnChanges {
         { key: 'number', label: 'Sayisal Ozellikler', icon: 'pi pi-hashtag' },
         { key: 'text', label: 'Metin Ozellikleri', icon: 'pi pi-align-left' }
     ];
+    private kapasiteManuelDegistirildiMi = false;
 
     get visibleOdaOzellikleri(): OdaOzellikDto[] {
         const selectedFeatureIds = new Set((this.workingModel.odaOzellikDegerleri ?? []).map((item) => item.odaOzellikId));
@@ -265,10 +274,12 @@ export class OdaDialog implements OnChanges {
     ngOnChanges(changes: SimpleChanges): void {
         if (changes['model']) {
             this.workingModel = this.cloneModel(this.model);
+            this.kapasiteManuelDegistirildiMi = false;
         }
 
         if (changes['visible'] && this.visible) {
             this.workingModel = this.cloneModel(this.model);
+            this.kapasiteManuelDegistirildiMi = false;
         }
     }
 
@@ -308,12 +319,18 @@ export class OdaDialog implements OnChanges {
         const tesisId = this.getSelectedTesisId();
         if (!tesisId) {
             this.workingModel.tesisOdaTipiId = 0;
+            if (this.mode === 'create' && !this.kapasiteManuelDegistirildiMi) {
+                this.workingModel.kapasite = 0;
+            }
             return;
         }
 
         const existsInTesis = this.odaTipleri.some((item) => item.id === this.workingModel.tesisOdaTipiId && item.tesisId === tesisId);
         if (!existsInTesis) {
             this.workingModel.tesisOdaTipiId = 0;
+            if (this.mode === 'create' && !this.kapasiteManuelDegistirildiMi) {
+                this.workingModel.kapasite = 0;
+            }
         }
     }
 
@@ -322,13 +339,19 @@ export class OdaDialog implements OnChanges {
             return;
         }
 
-        if ((this.workingModel.kapasite ?? 0) > 0) {
+        if (this.kapasiteManuelDegistirildiMi) {
             return;
         }
 
         const defaultCapacity = this.selectedOdaTipiDefaultCapacity;
-        if (defaultCapacity) {
-            this.workingModel.kapasite = defaultCapacity;
+        this.workingModel.kapasite = defaultCapacity ?? 0;
+    }
+
+    onKapasiteInputChange(value: number | null | undefined): void {
+        this.workingModel.kapasite = value ?? 0;
+
+        if (this.mode === 'create') {
+            this.kapasiteManuelDegistirildiMi = true;
         }
     }
 

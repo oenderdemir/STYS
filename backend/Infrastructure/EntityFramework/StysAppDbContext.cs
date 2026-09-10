@@ -528,7 +528,6 @@ public class StysAppDbContext : DbContext
         {
             entity.ToTable("Odalar", "dbo");
             entity.Property(x => x.OdaNo).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.Kapasite).HasDefaultValue(1);
             entity.Property(x => x.TemizlikDurumu)
                 .HasMaxLength(32)
                 .IsRequired()

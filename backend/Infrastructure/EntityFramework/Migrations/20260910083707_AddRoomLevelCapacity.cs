@@ -15,8 +15,7 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 schema: "dbo",
                 table: "Odalar",
                 type: "int",
-                nullable: false,
-                defaultValue: 1);
+                nullable: true);
 
             migrationBuilder.Sql("""
                 UPDATE o
@@ -24,6 +23,22 @@ namespace STYS.Infrastructure.EntityFramework.Migrations
                 FROM dbo.Odalar AS o
                 INNER JOIN dbo.TesisOdaTipleri AS ot ON ot.Id = o.TesisOdaTipiId
                 """);
+
+            migrationBuilder.Sql("""
+                UPDATE dbo.Odalar
+                SET Kapasite = 1
+                WHERE Kapasite IS NULL OR Kapasite <= 0
+                """);
+
+            migrationBuilder.AlterColumn<int>(
+                name: "Kapasite",
+                schema: "dbo",
+                table: "Odalar",
+                type: "int",
+                nullable: false,
+                oldClrType: typeof(int),
+                oldType: "int",
+                oldNullable: true);
         }
 
         /// <inheritdoc />

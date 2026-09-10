@@ -2919,6 +2919,7 @@ public class RezervasyonServiceTests
             BinaId = 10,
             TesisOdaTipiId = 20,
             KatNo = 1,
+            Kapasite = 2,
             AktifMi = true
         });
 
@@ -3014,6 +3015,7 @@ public class RezervasyonServiceTests
             BinaId = 1002,
             TesisOdaTipiId = 21,
             KatNo = 1,
+            Kapasite = 2,
             AktifMi = true
         });
 
@@ -3024,6 +3026,7 @@ public class RezervasyonServiceTests
             BinaId = 1002,
             TesisOdaTipiId = 23,
             KatNo = 1,
+            Kapasite = 3,
             AktifMi = true
         });
 
@@ -3034,6 +3037,7 @@ public class RezervasyonServiceTests
             BinaId = 1002,
             TesisOdaTipiId = 22,
             KatNo = 1,
+            Kapasite = 2,
             AktifMi = true
         });
 
@@ -3219,6 +3223,7 @@ public class RezervasyonServiceTests
             BinaId = 2002,
             TesisOdaTipiId = 301,
             KatNo = 3,
+            Kapasite = 3,
             AktifMi = true
         });
 
@@ -3564,6 +3569,7 @@ public class RezervasyonServiceTests
                 BinaId = 10,
                 TesisOdaTipiId = 20,
                 KatNo = 1,
+                Kapasite = 2,
                 AktifMi = true
             },
             new Oda
@@ -3573,6 +3579,7 @@ public class RezervasyonServiceTests
                 BinaId = 10,
                 TesisOdaTipiId = 21,
                 KatNo = 1,
+                Kapasite = 2,
                 AktifMi = true
             });
 
@@ -3755,17 +3762,17 @@ public class RezervasyonServiceTests
             new OdaTipi { Id = 300, TesisId = 2, OdaSinifiId = 1, Ad = "Standart T2", Kapasite = 2, PaylasimliMi = false, AktifMi = true });
 
         dbContext.Odalar.AddRange(
-            new Oda { Id = 100, OdaNo = "A-101", BinaId = 10, TesisOdaTipiId = 200, KatNo = 1, AktifMi = true },
-            new Oda { Id = 101, OdaNo = "A-102", BinaId = 10, TesisOdaTipiId = 201, KatNo = 1, AktifMi = true },
-            new Oda { Id = 102, OdaNo = "A-103", BinaId = 10, TesisOdaTipiId = 202, KatNo = 1, AktifMi = true },
-            new Oda { Id = 103, OdaNo = "A-104", BinaId = 10, TesisOdaTipiId = 203, KatNo = 1, AktifMi = true },
-            new Oda { Id = 104, OdaNo = "A-105", BinaId = 10, TesisOdaTipiId = 204, KatNo = 1, AktifMi = true },
-            new Oda { Id = 105, OdaNo = "B-201", BinaId = 11, TesisOdaTipiId = 205, KatNo = 2, AktifMi = true },
-            new Oda { Id = 106, OdaNo = "B-202", BinaId = 11, TesisOdaTipiId = 206, KatNo = 2, AktifMi = true },
-            new Oda { Id = 107, OdaNo = "B-203", BinaId = 11, TesisOdaTipiId = 207, KatNo = 2, AktifMi = true },
-            new Oda { Id = 108, OdaNo = "B-204", BinaId = 11, TesisOdaTipiId = 208, KatNo = 2, AktifMi = true },
-            new Oda { Id = 109, OdaNo = "B-205", BinaId = 11, TesisOdaTipiId = 209, KatNo = 2, AktifMi = true },
-            new Oda { Id = 200, OdaNo = "C-101", BinaId = 20, TesisOdaTipiId = 300, KatNo = 1, AktifMi = true });
+            new Oda { Id = 100, OdaNo = "A-101", BinaId = 10, TesisOdaTipiId = 200, KatNo = 1, Kapasite = 1, AktifMi = true },
+            new Oda { Id = 101, OdaNo = "A-102", BinaId = 10, TesisOdaTipiId = 201, KatNo = 1, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 102, OdaNo = "A-103", BinaId = 10, TesisOdaTipiId = 202, KatNo = 1, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 103, OdaNo = "A-104", BinaId = 10, TesisOdaTipiId = 203, KatNo = 1, Kapasite = 3, AktifMi = true },
+            new Oda { Id = 104, OdaNo = "A-105", BinaId = 10, TesisOdaTipiId = 204, KatNo = 1, Kapasite = 4, AktifMi = true },
+            new Oda { Id = 105, OdaNo = "B-201", BinaId = 11, TesisOdaTipiId = 205, KatNo = 2, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 106, OdaNo = "B-202", BinaId = 11, TesisOdaTipiId = 206, KatNo = 2, Kapasite = 4, AktifMi = true },
+            new Oda { Id = 107, OdaNo = "B-203", BinaId = 11, TesisOdaTipiId = 207, KatNo = 2, Kapasite = 1, AktifMi = true },
+            new Oda { Id = 108, OdaNo = "B-204", BinaId = 11, TesisOdaTipiId = 208, KatNo = 2, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 109, OdaNo = "B-205", BinaId = 11, TesisOdaTipiId = 209, KatNo = 2, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 200, OdaNo = "C-101", BinaId = 20, TesisOdaTipiId = 300, KatNo = 1, Kapasite = 2, AktifMi = true });
 
         dbContext.OdaFiyatlari.AddRange(
             new OdaFiyat { Id = 2000, TesisOdaTipiId = 200, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 600m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true },
@@ -6142,12 +6149,12 @@ public class RezervasyonServiceTests
             new OdaTipi { Id = 50, TesisId = 1, OdaSinifiId = 1, Ad = "Cift Ozel", Kapasite = 2, PaylasimliMi = false, AktifMi = true },
             new OdaTipi { Id = 51, TesisId = 1, OdaSinifiId = 1, Ad = "Paylasimli Cift", Kapasite = 2, PaylasimliMi = true, AktifMi = true });
         dbContext.Odalar.AddRange(
-            new Oda { Id = 500, OdaNo = "ORIG", BinaId = 10, TesisOdaTipiId = 50, KatNo = 1, AktifMi = true },
+            new Oda { Id = 500, OdaNo = "ORIG", BinaId = 10, TesisOdaTipiId = 50, KatNo = 1, Kapasite = 2, AktifMi = true },
             // 501, sayisal olarak KUCUK ID'ye sahip ama ERKEK-sabit olacak; 502 BUYUK ID ama
             // KADIN-sabit - "en kucuk ID once" gibi naif bir siralamanin da yanlis sonuc
             // uretmeyecegini dogrulamak icin BILEREK bu sekilde secildi.
-            new Oda { Id = 501, OdaNo = "ERKEK-ODA", BinaId = 10, TesisOdaTipiId = 51, KatNo = 1, AktifMi = true },
-            new Oda { Id = 502, OdaNo = "KADIN-ODA", BinaId = 10, TesisOdaTipiId = 51, KatNo = 1, AktifMi = true });
+            new Oda { Id = 501, OdaNo = "ERKEK-ODA", BinaId = 10, TesisOdaTipiId = 51, KatNo = 1, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 502, OdaNo = "KADIN-ODA", BinaId = 10, TesisOdaTipiId = 51, KatNo = 1, Kapasite = 2, AktifMi = true });
         dbContext.OdaFiyatlari.AddRange(
             new OdaFiyat { Id = 9000, TesisOdaTipiId = 50, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 500m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true },
             new OdaFiyat { Id = 9001, TesisOdaTipiId = 51, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 400m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true });
@@ -7628,7 +7635,7 @@ public class RezervasyonServiceTests
                 join b in dbContext.Binalar on o.BinaId equals b.Id
                 join t in dbContext.OdaTipleri on o.TesisOdaTipiId equals t.Id
                 where o.Id == odaId
-                select new { o.OdaNo, BinaAdi = b.Ad, OdaTipiAdi = t.Ad, t.PaylasimliMi, t.Kapasite })
+                select new { o.OdaNo, BinaAdi = b.Ad, OdaTipiAdi = t.Ad, t.PaylasimliMi, o.Kapasite })
             .SingleAsync();
 
         dbContext.Rezervasyonlar.Add(new Rezervasyon
@@ -7712,7 +7719,7 @@ public class RezervasyonServiceTests
                 join b in dbContext.Binalar on o.BinaId equals b.Id
                 join t in dbContext.OdaTipleri on o.TesisOdaTipiId equals t.Id
                 where o.Id == odaId
-                select new { o.OdaNo, BinaAdi = b.Ad, OdaTipiAdi = t.Ad, t.PaylasimliMi, t.Kapasite })
+                select new { o.OdaNo, BinaAdi = b.Ad, OdaTipiAdi = t.Ad, t.PaylasimliMi, o.Kapasite })
             .SingleAsync();
 
         dbContext.Rezervasyonlar.Add(new Rezervasyon
@@ -7886,8 +7893,8 @@ public class RezervasyonServiceTests
             new OdaTipi { Id = 31, TesisId = 1, OdaSinifiId = 1, Ad = "Tekli", Kapasite = 1, PaylasimliMi = false, AktifMi = true });
 
         dbContext.Odalar.AddRange(
-            new Oda { Id = 101, OdaNo = "P-1", BinaId = 10, TesisOdaTipiId = 30, KatNo = 1, AktifMi = true },
-            new Oda { Id = 102, OdaNo = "T-1", BinaId = 10, TesisOdaTipiId = 31, KatNo = 1, AktifMi = true });
+            new Oda { Id = 101, OdaNo = "P-1", BinaId = 10, TesisOdaTipiId = 30, KatNo = 1, Kapasite = 2, AktifMi = true },
+            new Oda { Id = 102, OdaNo = "T-1", BinaId = 10, TesisOdaTipiId = 31, KatNo = 1, Kapasite = 1, AktifMi = true });
 
         dbContext.OdaFiyatlari.AddRange(
             new OdaFiyat { Id = 3000, TesisOdaTipiId = 30, KonaklamaTipiId = 1, MisafirTipiId = 1, KisiSayisi = 1, Fiyat = 400m, ParaBirimi = "TRY", BaslangicTarihi = new DateTime(2026, 3, 1), BitisTarihi = new DateTime(2026, 3, 31), AktifMi = true },
